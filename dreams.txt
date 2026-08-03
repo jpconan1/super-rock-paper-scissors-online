@@ -1,0 +1,21 @@
+What the game aspires to be:
+
+Super Rock Paper Scissors Online is a collection of 9 'rps-with-a-twist' small games played competitively online with elo. Players play a best-of-three match in any of the 9 current variants through a simple pick/ban system. Games rotate out seasonally. 
+
+Every Sunday there's an automated tournament you can join through the client, and every week's champion is celebrated in the lobby. Maybe they get a space to promote their own project.
+
+The lobby has a community whiteboard users can doodle on and chat with.
+
+The game is 100% free, accessible through web, play store, app store, steam and itch. the core is html css and javascript with a websocket server. Cross play between all platforms.
+
+Roadmap:
+
+Prehistory: We built an alpha version with no architecture or much forethought at all. its available in the old_project folder. theres a ton we can reuse, especially the assets. I've got assets for 5/9 variants mostly done. When pulling from that folder, copy and paste what you want into the new project. i'll delete old_project eventually.
+
+Prototype: Get the shell working and one variant (Kitchen Sink). experiment with a mobile first portrait layout engine that expands to widescreen in a responsive, automatic way. Kitchen Sink is the most complex variant, so if we can get that layout working, we can subtract from it to make the rest.
+
+Alpha: Get a couple variants working online. Whiteboard and lobby set up. Guest accounts only.
+
+Beta: All 9 variants working online. Real accounts. visual and audio polish.
+
+Launch: News feed, Discord server, weekly tournaments, prize structure, more polish.

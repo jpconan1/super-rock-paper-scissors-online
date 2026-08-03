@@ -1,0 +1,140 @@
+@font-face {
+  font-family: 'Architects Daughter';
+  src: url('/ArchitectsDaughter-Regular.ttf') format('truetype');
+  font-display: swap;
+}
+
+:root {
+  font-family: 'Architects Daughter', cursive;
+  color: #171412;
+  background: #e7ddc4 url('/crumpled-paper-background.webp') center / cover fixed;
+  font-synthesis: none;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #app { min-height: 100%; }
+
+body { margin: 0; min-width: 280px; }
+
+button, output { font: inherit; }
+
+.title-screen {
+  min-height: 100svh;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  place-items: center;
+  gap: clamp(0.4rem, 2.5svh, 1.5rem);
+  padding: clamp(1rem, 4vmin, 3rem);
+  overflow: hidden;
+}
+
+.boiling-sprite {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.boiling-sprite__sheet {
+  position: absolute;
+  inset: 0 auto auto 0;
+  display: block;
+  width: 100%;
+  height: 300%;
+  max-width: none;
+  user-select: none;
+  -webkit-user-drag: none;
+  will-change: transform;
+}
+
+.title-screen__logo {
+  width: min(82vw, 32rem);
+  align-self: end;
+}
+
+.title-screen__counter {
+  min-width: 3ch;
+  text-align: center;
+  font-size: clamp(2.3rem, 9vmin, 5rem);
+  line-height: 1;
+}
+
+.game-button {
+  position: relative;
+  width: min(64vw, 16rem);
+  aspect-ratio: 2 / 1;
+  border: 0;
+  padding: 0;
+  color: #171412;
+  background: transparent;
+  cursor: pointer;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  container-type: inline-size;
+}
+
+.game-button:focus-visible {
+  outline: 0.22rem solid #1857a6;
+  outline-offset: 0.35rem;
+  border-radius: 15%;
+}
+
+.game-button__art {
+  position: absolute;
+  inset: 0;
+}
+
+.game-button__juice {
+  position: absolute;
+  z-index: 2;
+  width: 150%;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.game-button__juice[hidden] { display: none; }
+
+.game-button__label {
+  position: absolute;
+  z-index: 3;
+  left: var(--label-x, 50%);
+  top: var(--label-y, 50%);
+  width: var(--label-width, 70%);
+  transform: translate(-50%, -50%);
+  display: block;
+  padding: 0.5em 1em;
+  text-align: center;
+  font-size: clamp(1.25rem, 12cqi, 2rem);
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (orientation: landscape) and (max-height: 600px) {
+  .title-screen {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: 1fr auto;
+    column-gap: clamp(1rem, 5vw, 4rem);
+  }
+  .title-screen__logo { grid-row: 1 / 3; align-self: center; width: min(48vw, 28rem); }
+  .title-screen__counter { align-self: end; }
+  .game-button { align-self: start; width: min(35vw, 14rem); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boiling-sprite__sheet { will-change: auto; }
+}
