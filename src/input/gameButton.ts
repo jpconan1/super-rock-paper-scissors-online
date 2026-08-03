@@ -22,8 +22,8 @@ export interface GameButton {
 }
 
 export function createGameButton(options: GameButtonOptions): GameButton {
-  const depressedSound = createSoundEffect(options.depressedSound ?? '/audio/button-depressed.wav');
-  const releasedSound = createSoundEffect(options.releasedSound ?? '/audio/button-released.wav');
+  const depressedSound = createSoundEffect(options.depressedSound ?? '/audio/button-depressed.mp3');
+  const releasedSound = createSoundEffect(options.releasedSound ?? '/audio/button-released.mp3');
   const element = document.createElement('button');
   element.type = 'button';
   element.className = 'game-button';

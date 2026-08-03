@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "test": "vitest run"
+    "test": "vitest run",
+    "assets:compress-staged": "scripts/compress-staged-assets.sh",
+    "assets:check": "scripts/check-compressed-assets.sh"
   },
   "devDependencies": {
     "typescript": "^5.9.2",
