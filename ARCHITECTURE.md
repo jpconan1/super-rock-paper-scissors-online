@@ -15,7 +15,7 @@ packages/
   protocol/        Validated commands, snapshots, events
   game-core/       Match flow, draft, timers, shared types
   variants/
-    kitchen-sink/
+    fireball-war/   First reference variant
     rock-paper-scissors/
     ...             One isolated module per variant
 
@@ -172,10 +172,10 @@ Spectators are future-ready through delayed/redacted projections, but receive no
 ### Slice 2: arena and harness
 
 - Build presentation layers and responsive arena slots.
-- Build Kitchen Sink fixture states in a variant harness.
+- Build Fireball War fixture states in a variant harness.
 - Prove phone portrait and desktop landscape before adding rules or networking.
 
-### Slice 3: pure Kitchen Sink rules
+### Slice 3: pure Fireball War rules
 
 - Copy and type the useful old rules into an isolated variant module.
 - Add deterministic rule fixtures and public projections.
@@ -184,7 +184,7 @@ Spectators are future-ready through delayed/redacted projections, but receive no
 ### Slice 4: authoritative match prototype
 
 - Add protocol validation, match actor, revisions, timestamps, P1/P2 assignment, command idempotency, and reconnect snapshots.
-- Run two browser clients through Kitchen Sink against the development server.
+- Run two browser clients through Fireball War against the development server.
 
 ### Slice 5: draft and full shell
 
@@ -212,7 +212,7 @@ Spectators are future-ready through delayed/redacted projections, but receive no
 - Duplicated and stale commands resolve at most once.
 - Reconnect works before 30 seconds; late reconnect forfeits.
 - Match snapshots/events reconstruct authoritative state.
-- Layout tests cover phone portrait, landscape, safe areas, long names, zoom, and Kitchen Sink maximum density.
+- Layout tests cover phone portrait, landscape, safe areas, long names, zoom, and each variant's maximum-density fixture.
 - Animation tests cover interruption, rapid snapshots, hidden tabs, wipe ownership, boil disabled, and teardown.
 - Audio tests cover independent settings, bar alignment, cue priority, missing files, and suspended contexts.
 - End-to-end test covers title through completed ranked match with two isolated clients.

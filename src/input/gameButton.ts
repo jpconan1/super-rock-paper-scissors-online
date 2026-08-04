@@ -2,6 +2,7 @@ import type { BoilClock } from '../animation/boilClock';
 import { createSoundEffect } from '../audio/soundEffect';
 import { createBoilingSprite } from '../renderer/boilingSprite';
 import { detectSheetTextAnchor } from '../renderer/textAnchorDetector';
+import { setControlDisabled } from './controlDisabled';
 import { GameButtonState, type GameButtonVisual } from './gameButtonState';
 
 export interface GameButtonOptions {
@@ -18,6 +19,7 @@ export interface GameButtonOptions {
 
 export interface GameButton {
   element: HTMLButtonElement;
+  setDisabled(disabled: boolean): void;
   destroy(): void;
 }
 
@@ -71,6 +73,7 @@ export function createGameButton(options: GameButtonOptions): GameButton {
 
   let activePointer: number | null = null;
   let keyboardHeld = false;
+  let disabled = false;
 
   const isInside = (event: PointerEvent) => {
     const rect = element.getBoundingClientRect();
@@ -79,7 +82,7 @@ export function createGameButton(options: GameButtonOptions): GameButton {
   };
 
   const onPointerDown = (event: PointerEvent) => {
-    if (activePointer !== null || event.button !== 0 || !state.press()) return;
+    if (disabled || activePointer !== null || event.button !== 0 || !state.press()) return;
     depressedSound.play();
     activePointer = event.pointerId;
     element.setPointerCapture(event.pointerId);
@@ -105,7 +108,7 @@ export function createGameButton(options: GameButtonOptions): GameButton {
     state.cancel();
   };
   const onKeyDown = (event: KeyboardEvent) => {
-    if ((event.key !== ' ' && event.key !== 'Enter') || event.repeat || keyboardHeld) return;
+    if (disabled || (event.key !== ' ' && event.key !== 'Enter') || event.repeat || keyboardHeld) return;
     keyboardHeld = state.press();
     if (keyboardHeld) {
       depressedSound.play();
@@ -135,6 +138,16 @@ export function createGameButton(options: GameButtonOptions): GameButton {
 
   return {
     element,
+    setDisabled(nextDisabled) {
+      if (disabled === nextDisabled) return;
+      disabled = nextDisabled;
+      if (disabled) {
+        activePointer = null;
+        keyboardHeld = false;
+        state.cancel();
+      }
+      setControlDisabled(element, disabled);
+    },
     destroy() {
       state.destroy();
       depressedSound.destroy();

@@ -27,7 +27,7 @@ export function setBoilEnabled(
 
 export function createBoilToggle(clock: BoilClock): BoilToggle {
   const toggle = createToggleButton({
-    label: 'BOIL',
+    label: 'Toggle Boil Animation',
     pressed: clock.isEnabled(),
     onChange: (enabled) => setBoilEnabled(enabled, clock),
     offSheet: '/interactive-elements/generic-buttons/toggle2-off-sheet.webp',

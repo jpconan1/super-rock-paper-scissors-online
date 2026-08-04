@@ -2,6 +2,7 @@ import type { BoilClock } from '../animation/boilClock';
 import { createSoundEffect } from '../audio/soundEffect';
 import { createBoilingSprite } from '../renderer/boilingSprite';
 import { detectSheetTextAnchor } from '../renderer/textAnchorDetector';
+import { setControlDisabled } from './controlDisabled';
 import { ToggleButtonState, type ToggleButtonVisual } from './toggleButtonState';
 
 export interface ToggleButtonOptions {
@@ -20,6 +21,7 @@ export interface ToggleButtonOptions {
 export interface ToggleButton {
   element: HTMLButtonElement;
   setPressed(pressed: boolean): void;
+  setDisabled(disabled: boolean): void;
   destroy(): void;
 }
 
@@ -76,18 +78,20 @@ export function createToggleButton(options: ToggleButtonOptions): ToggleButton {
   });
 
   let suppressClick = false;
+  let disabled = false;
   const onPointerDown = (event: PointerEvent) => {
-    if (event.button !== 0) return;
+    if (disabled || event.button !== 0) return;
     suppressClick = true;
     state.toggle();
     event.preventDefault();
   };
   const onKeyDown = (event: KeyboardEvent) => {
-    if ((event.key !== ' ' && event.key !== 'Enter') || event.repeat) return;
+    if (disabled || (event.key !== ' ' && event.key !== 'Enter') || event.repeat) return;
     state.toggle();
     event.preventDefault();
   };
   const onClick = () => {
+    if (disabled) return;
     if (suppressClick) {
       suppressClick = false;
       return;
@@ -101,6 +105,11 @@ export function createToggleButton(options: ToggleButtonOptions): ToggleButton {
   return {
     element,
     setPressed: (pressed) => state.setPressed(pressed),
+    setDisabled(nextDisabled) {
+      disabled = nextDisabled;
+      if (disabled) suppressClick = false;
+      setControlDisabled(element, disabled);
+    },
     destroy() {
       element.removeEventListener('pointerdown', onPointerDown);
       element.removeEventListener('keydown', onKeyDown);

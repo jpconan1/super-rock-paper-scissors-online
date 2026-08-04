@@ -9,7 +9,7 @@ export interface SoundToggle {
 
 export function createSoundToggle(clock: BoilClock): SoundToggle {
   const toggle = createToggleButton({
-    label: 'SOUND',
+    label: 'Toggle Sound',
     pressed: isSoundEnabled(),
     onChange: setSoundEnabled,
     offSheet: '/interactive-elements/generic-buttons/toggle1-off-sheet.webp',

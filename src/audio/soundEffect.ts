@@ -1,6 +1,19 @@
+import { musicManifest, type MusicBase, type MusicTopper } from './musicManifest';
+import { MusicTransport } from './musicTransport';
+
 export interface SoundEffect {
   play(): void;
   destroy(): void;
+}
+
+export interface MusicLoop {
+  destroy(): void;
+}
+
+export interface AudioState {
+  enabled: boolean;
+  musicVolume: number;
+  sfxVolume: number;
 }
 
 interface CachedSound {
@@ -10,8 +23,18 @@ interface CachedSound {
 
 const sounds = new Map<string, CachedSound>();
 let context: AudioContext | undefined;
+let masterGain: GainNode | undefined;
+let musicGain: GainNode | undefined;
+let sfxGain: GainNode | undefined;
+let interruptGain: GainNode | undefined;
+let musicTransport: MusicTransport | undefined;
 let unlockListenersInstalled = false;
 let muted = true;
+let musicVolume = 1;
+let sfxVolume = 1;
+let requestedBase: MusicBase = 'drums-bass';
+let requestedTopper: MusicTopper = 'none';
+const stateListeners = new Set<(state: AudioState) => void>();
 
 const unlockEvents = ['pointerdown', 'touchstart', 'keydown'] as const;
 
@@ -42,16 +65,49 @@ function installUnlockListeners(): void {
 }
 
 export function isSoundEnabled(): boolean {
-  return !muted && context?.state === 'running';
+  return !muted;
+}
+
+export function getMusicVolume(): number { return musicVolume; }
+export function getSfxVolume(): number { return sfxVolume; }
+
+function clampVolume(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
+function notifyState(): void {
+  const state = { enabled: !muted, musicVolume, sfxVolume };
+  for (const listener of stateListeners) listener(state);
+}
+
+export function subscribeAudioState(listener: (state: AudioState) => void): () => void {
+  stateListeners.add(listener);
+  listener({ enabled: !muted, musicVolume, sfxVolume });
+  return () => stateListeners.delete(listener);
+}
+
+export function setMusicVolume(value: number): void {
+  musicVolume = clampVolume(value);
+  if (musicGain) musicGain.gain.value = musicVolume;
+  notifyState();
+}
+
+export function setSfxVolume(value: number): void {
+  sfxVolume = clampVolume(value);
+  if (sfxGain) sfxGain.gain.value = sfxVolume;
+  notifyState();
 }
 
 export async function setSoundEnabled(enabled: boolean): Promise<boolean> {
   muted = !enabled;
+  if (masterGain) masterGain.gain.value = enabled ? 1 : 0;
+  notifyState();
   if (!enabled) return false;
 
   const audioContext = getContext();
   if (!audioContext || audioContext.state === 'closed') {
     muted = true;
+    notifyState();
     return false;
   }
 
@@ -64,11 +120,18 @@ export async function setSoundEnabled(enabled: boolean): Promise<boolean> {
     warmup.start();
 
     if (audioContext.state !== 'running') await audioContext.resume();
-    if (audioContext.state !== 'running') return false;
+    if (audioContext.state !== 'running') {
+      muted = true;
+      notifyState();
+      return false;
+    }
 
+    ensureMusicTransport()?.tick();
+    notifyState();
     return true;
   } catch {
     muted = true;
+    notifyState();
     return false;
   }
 }
@@ -83,6 +146,19 @@ function getContext(): AudioContext | undefined {
 
   try {
     context = new AudioContextConstructor({ latencyHint: 'interactive' });
+    masterGain = context.createGain();
+    masterGain.gain.value = muted ? 0 : 1;
+    masterGain.connect(context.destination);
+    musicGain = context.createGain();
+    musicGain.gain.value = musicVolume;
+    musicGain.connect(masterGain);
+    sfxGain = context.createGain();
+    sfxGain.gain.value = sfxVolume;
+    sfxGain.connect(masterGain);
+    interruptGain = context.createGain();
+    // Stings participate in musical transport, but their loudness is an SFX
+    // setting. The transport gates only the underlying music during playback.
+    interruptGain.connect(sfxGain);
     installUnlockListeners();
   } catch {
     // Some browsers do not permit an AudioContext until the first interaction.
@@ -113,12 +189,57 @@ function loadSound(src: string, audioContext: AudioContext): CachedSound {
   return sound;
 }
 
+async function loadAudioBuffer(src: string, audioContext: AudioContext): Promise<AudioBuffer> {
+  const sound = loadSound(src, audioContext);
+  await sound.loading;
+  if (!sound.buffer) throw new Error(`Could not decode sound: ${src}`);
+  return sound.buffer;
+}
+
+function ensureMusicTransport(): MusicTransport | undefined {
+  const audioContext = context;
+  if (musicTransport || !audioContext || !musicGain || !interruptGain) return musicTransport;
+  musicTransport = new MusicTransport({
+    context: audioContext,
+    output: musicGain,
+    interruptOutput: interruptGain,
+    manifest: musicManifest,
+    load: (src) => loadAudioBuffer(src, audioContext),
+  });
+  musicTransport.setBase(requestedBase);
+  musicTransport.setTopper(requestedTopper);
+  return musicTransport;
+}
+
+export function setMusicBase(base: MusicBase): void {
+  requestedBase = base;
+  ensureMusicTransport()?.setBase(base);
+}
+
+export function setMusicTopper(topper: MusicTopper): void {
+  requestedTopper = topper;
+  ensureMusicTransport()?.setTopper(topper);
+}
+
+export function preloadMusic(group: string): Promise<void> {
+  return ensureMusicTransport()?.preload(group) ?? Promise.resolve();
+}
+
+export function playMusicInterrupt(id: string): Promise<boolean> {
+  return ensureMusicTransport()?.playInterrupt(id) ?? Promise.resolve(false);
+}
+
+export function getMusicPhaseSeconds(): number {
+  return musicTransport?.phaseSeconds ?? 0;
+}
+
 function createFallbackPool(src: string, size = 4): HTMLAudioElement[] {
   if (typeof Audio === 'undefined') return [];
 
   const pool = Array.from({ length: size }, () => {
     const audio = new Audio(src);
     audio.preload = 'auto';
+    audio.volume = sfxVolume;
     return audio;
   });
   return pool;
@@ -138,6 +259,7 @@ export function createSoundEffect(src: string): SoundEffect {
     nextFallback = (index + 1) % fallbackPool.length;
 
     try {
+      audio.volume = sfxVolume;
       audio.currentTime = 0;
       void audio.play().catch(() => {});
     } catch {}
@@ -166,7 +288,7 @@ export function createSoundEffect(src: string): SoundEffect {
         try {
           const voice = audioContext.createBufferSource();
           voice.buffer = sound.buffer!;
-          voice.connect(audioContext.destination);
+          voice.connect(sfxGain ?? audioContext.destination);
           voice.start();
         } catch {
           playFallback();
@@ -191,4 +313,12 @@ export function createSoundEffect(src: string): SoundEffect {
       }
     },
   };
+}
+
+export function createMusicLoop(src: string): MusicLoop {
+  // Compatibility shim for prototype callers. Music is app-owned now, so
+  // destroying a screen handle intentionally does not stop the transport.
+  const base = (Object.entries(musicManifest.bases).find(([, track]) => track.src === src)?.[0] ?? 'drums-bass') as MusicBase;
+  setMusicBase(base);
+  return { destroy() {} };
 }

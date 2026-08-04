@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "test": "vitest run",
     "assets:compress-staged": "scripts/compress-staged-assets.sh",
-    "assets:check": "scripts/check-compressed-assets.sh"
+    "assets:check": "scripts/check-compressed-assets.sh && node scripts/validate-music-assets.mjs",
+    "audio:check": "node scripts/validate-music-assets.mjs"
   },
   "devDependencies": {
     "typescript": "^5.9.2",

@@ -25,6 +25,10 @@ while IFS= read -r -d '' path; do
       echo "compressed $path -> $out"
       converted=1
       ;;
+    assets/audio/music-loops/*.wav)
+      # Loop masters keep exact sample boundaries. Never run them through MP3.
+      continue
+      ;;
     assets/*.wav)
       [ -f "$path" ] || continue
       out="${path%.wav}.mp3"

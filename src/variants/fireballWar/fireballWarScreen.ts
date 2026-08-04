@@ -1,8 +1,8 @@
 import type { BoilClock } from '../../animation/boilClock';
 import { createGameButton, type GameButton } from '../../input/gameButton';
+import { createScaleBox, observeStackedScaleBoxes } from '../../layout/scaleBox';
 import { createLocalFireballMatch, type FireballWarSnapshot } from '../../match/localFireballMatch';
 import { createBoilingSprite, type BoilingSprite } from '../../renderer/boilingSprite';
-import { createArena } from '../../renderer/arena';
 import { playStarburstWipe } from '../../renderer/starburstWipe';
 import { resolveFireballWarScene } from './presentation';
 import { FIREBALL_WAR_MAX_CHARGE, type FireballMove, type PlayerId } from './rules';
@@ -32,15 +32,16 @@ export function mountFireballWarScreen(
   onExit: () => void,
 ): () => void {
   const authority = createLocalFireballMatch();
-  const arena = createArena({
-    variantClass: 'fireball-war',
-    labelId: 'fireball-war-title',
-    variables: {
-      '--arena-max-width': '96rem',
-      '--arena-scene-max-width': '34rem',
-    },
-  });
-  const screen = arena.grid;
+  const screen = document.createElement('section');
+  screen.className = 'fireball-war';
+  screen.setAttribute('aria-labelledby', 'fireball-war-title');
+  const topBox = createScaleBox(704, 144, 'fireball-war__top-box');
+  const centerBox = createScaleBox(544, 420, 'fireball-war__center-box');
+  const bottomBox = createScaleBox(704, 144, 'fireball-war__bottom-box');
+  const top = document.createElement('div');
+  top.className = 'fireball-war__top';
+  const center = document.createElement('div');
+  center.className = 'fireball-war__center';
 
   const title = document.createElement('h1');
   title.id = 'fireball-war-title';
@@ -88,14 +89,18 @@ export function mountFireballWarScreen(
     actions.append(button.element);
   }
 
-  screen.append(exit);
-  arena.set('title', title);
-  arena.set('p1', p1Panel.element);
-  arena.set('p2', p2Panel.element);
-  arena.set('scene', scene.element);
-  arena.set('status', status);
-  arena.set('actions', actions);
-  container.replaceChildren(arena.element);
+  top.append(exit, title, p1Panel.element, p2Panel.element);
+  center.append(scene.element, status);
+  topBox.content.append(top);
+  centerBox.content.append(center);
+  bottomBox.content.append(actions);
+  screen.append(topBox.element, centerBox.element, bottomBox.element);
+  container.replaceChildren(screen);
+  const stopLayout = observeStackedScaleBoxes(screen, {
+    top: topBox,
+    center: centerBox,
+    bottom: bottomBox,
+  }, 12);
 
   function render(next: FireballWarSnapshot): void {
     snapshot = next;
@@ -117,7 +122,7 @@ export function mountFireballWarScreen(
       status.textContent = status.value;
     }
     for (const [move, button] of buttons) {
-      button.element.disabled = busy || !next.legalMoves.includes(move);
+      button.setDisabled(busy || !next.legalMoves.includes(move));
     }
   }
 
@@ -144,12 +149,13 @@ export function mountFireballWarScreen(
 
   return () => {
     destroyed = true;
+    stopLayout();
     exit.removeEventListener('click', handleExit);
     for (const button of buttons.values()) button.destroy();
     p1Panel.destroy();
     p2Panel.destroy();
     scene.destroy();
-    arena.destroy();
+    screen.remove();
   };
 }
 
