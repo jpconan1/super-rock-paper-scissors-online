@@ -1,8 +1,11 @@
 import type { BoilClock } from '../animation/boilClock';
 import { createGameButton } from '../input/gameButton';
+import { createSoundToggle } from '../input/soundToggle';
+import { createTextEntry, isNonBlankText } from '../input/textEntry';
 import { createBoilingSprite } from '../renderer/boilingSprite';
+import { generateRandomName, replaceWithRandomName } from './randomName';
 
-export function mountTitleScreen(container: HTMLElement, clock: BoilClock): () => void {
+export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPlay: () => void): () => void {
   const screen = document.createElement('section');
   screen.className = 'title-screen';
   screen.setAttribute('aria-labelledby', 'title-screen-heading');
@@ -18,33 +21,59 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock): () =
     className: 'title-screen__logo',
     alt: 'Super Rock Paper Scissors Online',
   });
+  const soundToggle = createSoundToggle(clock);
 
-  let count = 1;
-  const counter = document.createElement('output');
-  counter.className = 'title-screen__counter';
-  counter.value = String(count);
-  counter.textContent = String(count);
-  counter.setAttribute('aria-live', 'polite');
-
-  const button = createGameButton({
-    label: 'ADD ONE',
-    onActivate() {
-      count += 1;
-      counter.value = String(count);
-      counter.textContent = String(count);
-    },
-    upSheet: '/interactive-elements/generic-up-sheet.webp',
-    betweenSheet: '/interactive-elements/generic-between-sheet.webp',
-    depressedSheet: '/interactive-elements/generic-depressed-sheet.webp',
-    juiceSheet: '/interactive-elements/button-juice-sheet.webp',
+  const nameEntry = createTextEntry({
+    label: 'Player name',
+    value: generateRandomName(),
+    maxLength: 24,
+    autocomplete: 'nickname',
+    validate: isNonBlankText,
+    sheet: '/interactive-elements/text-entry/text-frame-sheet.webp',
     clock,
   });
 
-  screen.append(heading, logo.element, counter, button.element);
+  const randomName = createGameButton({
+    label: 'RANDOM NAME',
+    onActivate: () => replaceWithRandomName(nameEntry.input),
+    upSheet: '/interactive-elements/generic-buttons/generic2-up-sheet.webp',
+    betweenSheet: '/interactive-elements/generic-buttons/generic2-between-sheet.webp',
+    depressedSheet: '/interactive-elements/generic-buttons/generic2-sheet.webp',
+    juiceSheet: '/interactive-elements/generic-buttons/button-juice-sheet.webp',
+    clock,
+  });
+  randomName.element.classList.add('title-screen__random-name');
+
+  const entryControls = document.createElement('div');
+  entryControls.className = 'title-screen__entry-controls';
+  entryControls.append(nameEntry.element, randomName.element);
+
+  const play = () => {
+    if (!nameEntry.validate()) {
+      nameEntry.focus();
+      return;
+    }
+    onPlay();
+  };
+
+  const button = createGameButton({
+    label: 'PLAY',
+    onActivate: play,
+    upSheet: '/interactive-elements/generic-buttons/button1-up-sheet.webp',
+    betweenSheet: '/interactive-elements/generic-buttons/button1-between-sheet.webp',
+    depressedSheet: '/interactive-elements/generic-buttons/button1-depressed-sheet.webp',
+    juiceSheet: '/interactive-elements/generic-buttons/button-juice-sheet.webp',
+    clock,
+  });
+
+  screen.append(heading, logo.element, soundToggle.element, entryControls, button.element);
   container.replaceChildren(screen);
 
   return () => {
     logo.destroy();
+    soundToggle.destroy();
+    randomName.destroy();
+    nameEntry.destroy();
     button.destroy();
     screen.remove();
   };

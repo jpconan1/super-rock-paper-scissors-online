@@ -10,16 +10,19 @@ const FRAME_COUNT = 3;
 const BRIGHTNESS_THRESHOLD = 200;
 const ALPHA_THRESHOLD = 128;
 
-export function detectSheetTextAnchor(src: string): Promise<TextAnchor> {
-  const cached = cache.get(src);
+type SurfaceDetection = 'bright' | 'colored' | 'opaque';
+
+export function detectSheetTextAnchor(src: string, surface: SurfaceDetection = 'bright'): Promise<TextAnchor> {
+  const cacheKey = `${surface}:${src}`;
+  const cached = cache.get(cacheKey);
   if (cached) return cached;
 
-  const result = loadAndDetect(src).catch(() => centeredAnchor());
-  cache.set(src, result);
+  const result = loadAndDetect(src, surface).catch(() => centeredAnchor());
+  cache.set(cacheKey, result);
   return result;
 }
 
-async function loadAndDetect(src: string): Promise<TextAnchor> {
+async function loadAndDetect(src: string, surface: SurfaceDetection): Promise<TextAnchor> {
   const image = await loadImage(src);
   if (image.naturalHeight % FRAME_COUNT !== 0) return centeredAnchor();
 
@@ -31,7 +34,7 @@ async function loadAndDetect(src: string): Promise<TextAnchor> {
   context.drawImage(image, 0, 0);
 
   const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
-  return detectBrightTextAnchor(pixels, canvas.width, canvas.height, FRAME_COUNT) ?? centeredAnchor();
+  return detectTextAnchor(pixels, canvas.width, canvas.height, FRAME_COUNT, surface) ?? centeredAnchor();
 }
 
 export function detectBrightTextAnchor(
@@ -39,6 +42,34 @@ export function detectBrightTextAnchor(
   sheetWidth: number,
   sheetHeight: number,
   frameCount = FRAME_COUNT,
+): TextAnchor | null {
+  return detectTextAnchor(pixels, sheetWidth, sheetHeight, frameCount, 'bright');
+}
+
+export function detectOpaqueTextAnchor(
+  pixels: Uint8ClampedArray,
+  sheetWidth: number,
+  sheetHeight: number,
+  frameCount = FRAME_COUNT,
+): TextAnchor | null {
+  return detectTextAnchor(pixels, sheetWidth, sheetHeight, frameCount, 'opaque');
+}
+
+export function detectColoredTextAnchor(
+  pixels: Uint8ClampedArray,
+  sheetWidth: number,
+  sheetHeight: number,
+  frameCount = FRAME_COUNT,
+): TextAnchor | null {
+  return detectTextAnchor(pixels, sheetWidth, sheetHeight, frameCount, 'colored');
+}
+
+function detectTextAnchor(
+  pixels: Uint8ClampedArray,
+  sheetWidth: number,
+  sheetHeight: number,
+  frameCount: number,
+  surface: SurfaceDetection,
 ): TextAnchor | null {
   const frameHeight = sheetHeight / frameCount;
   if (!Number.isInteger(frameHeight) || pixels.length !== sheetWidth * sheetHeight * 4) return null;
@@ -57,7 +88,10 @@ export function detectBrightTextAnchor(
         const green = pixels[offset + 1] ?? 0;
         const blue = pixels[offset + 2] ?? 0;
         const alpha = pixels[offset + 3] ?? 0;
-        if (alpha <= ALPHA_THRESHOLD || (red + green + blue) / 3 <= BRIGHTNESS_THRESHOLD) continue;
+        if (alpha <= ALPHA_THRESHOLD) continue;
+        if (surface === 'bright' && (red + green + blue) / 3 <= BRIGHTNESS_THRESHOLD) continue;
+        if (surface === 'colored' && (Math.max(red, green, blue) - Math.min(red, green, blue) <= 30
+          || Math.max(red, green, blue) <= 70)) continue;
         left = Math.min(left, x);
         right = Math.max(right, x);
         top = Math.min(top, y);
