@@ -1,9 +1,10 @@
 import type { BoilClock } from '../animation/boilClock';
+import { createBoilToggle } from '../input/boilToggle';
 import { createGameButton } from '../input/gameButton';
 import { createSoundToggle } from '../input/soundToggle';
 import { createTextEntry, isNonBlankText } from '../input/textEntry';
 import { createBoilingSprite } from '../renderer/boilingSprite';
-import { generateRandomName, replaceWithRandomName } from './randomName';
+import { generateRandomName } from './randomName';
 
 export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPlay: () => void): () => void {
   const screen = document.createElement('section');
@@ -22,6 +23,7 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
     alt: 'Super Rock Paper Scissors Online',
   });
   const soundToggle = createSoundToggle(clock);
+  const boilToggle = createBoilToggle(clock);
 
   const nameEntry = createTextEntry({
     label: 'Player name',
@@ -35,7 +37,10 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
 
   const randomName = createGameButton({
     label: 'RANDOM NAME',
-    onActivate: () => replaceWithRandomName(nameEntry.input),
+    onActivate: () => {
+      nameEntry.setValue(generateRandomName());
+      nameEntry.focus();
+    },
     upSheet: '/interactive-elements/generic-buttons/generic2-up-sheet.webp',
     betweenSheet: '/interactive-elements/generic-buttons/generic2-between-sheet.webp',
     depressedSheet: '/interactive-elements/generic-buttons/generic2-sheet.webp',
@@ -43,10 +48,6 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
     clock,
   });
   randomName.element.classList.add('title-screen__random-name');
-
-  const entryControls = document.createElement('div');
-  entryControls.className = 'title-screen__entry-controls';
-  entryControls.append(nameEntry.element, randomName.element);
 
   const play = () => {
     if (!nameEntry.validate()) {
@@ -56,8 +57,8 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
     onPlay();
   };
 
-  const button = createGameButton({
-    label: 'PLAY',
+  const enterLobby = createGameButton({
+    label: 'ENTER LOBBY',
     onActivate: play,
     upSheet: '/interactive-elements/generic-buttons/button1-up-sheet.webp',
     betweenSheet: '/interactive-elements/generic-buttons/button1-between-sheet.webp',
@@ -66,15 +67,32 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
     clock,
   });
 
-  screen.append(heading, logo.element, soundToggle.element, entryControls, button.element);
+  const primaryActions = document.createElement('div');
+  primaryActions.className = 'title-screen__primary-actions';
+  primaryActions.append(randomName.element, enterLobby.element);
+
+  const toggles = document.createElement('div');
+  toggles.className = 'title-screen__toggles';
+  toggles.append(soundToggle.element, boilToggle.element);
+
+  const onNameKeyDown = (event: KeyboardEvent) => {
+    if (event.key !== 'Enter' || event.isComposing) return;
+    event.preventDefault();
+    play();
+  };
+  nameEntry.input.addEventListener('keydown', onNameKeyDown);
+
+  screen.append(heading, logo.element, primaryActions, nameEntry.element, toggles);
   container.replaceChildren(screen);
 
   return () => {
     logo.destroy();
     soundToggle.destroy();
+    boilToggle.destroy();
     randomName.destroy();
+    nameEntry.input.removeEventListener('keydown', onNameKeyDown);
     nameEntry.destroy();
-    button.destroy();
+    enterLobby.destroy();
     screen.remove();
   };
 }

@@ -44,4 +44,23 @@ describe('BoilClock', () => {
     clock.destroy();
     vi.useRealTimers();
   });
+
+  test('globally disables boiling, resets the frame, and resumes', () => {
+    vi.useFakeTimers();
+    const clock = new BoilClock(fakeDocument());
+    const frames: number[] = [];
+    clock.subscribe((frame) => frames.push(frame));
+    vi.advanceTimersByTime(BOIL_FRAME_MS * 2);
+
+    clock.setEnabled(false);
+    vi.advanceTimersByTime(BOIL_FRAME_MS * 3);
+    expect(clock.isEnabled()).toBe(false);
+    expect(frames).toEqual([0, 1, 2, 0]);
+
+    clock.setEnabled(true);
+    vi.advanceTimersByTime(BOIL_FRAME_MS);
+    expect(frames).toEqual([0, 1, 2, 0, 1]);
+    clock.destroy();
+    vi.useRealTimers();
+  });
 });

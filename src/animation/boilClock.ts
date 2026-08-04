@@ -14,6 +14,7 @@ export class BoilClock {
 
   constructor(
     private readonly documentRef: Pick<Document, 'hidden' | 'addEventListener' | 'removeEventListener'> = document,
+    private enabled = true,
   ) {
     this.handleVisibilityChange = this.handleVisibilityChange.bind(this);
     this.documentRef.addEventListener('visibilitychange', this.handleVisibilityChange);
@@ -28,6 +29,20 @@ export class BoilClock {
       this.subscribers.delete(subscriber);
       this.syncTimer();
     };
+  }
+
+  isEnabled(): boolean {
+    return this.enabled;
+  }
+
+  setEnabled(enabled: boolean): void {
+    if (this.enabled === enabled) return;
+    this.enabled = enabled;
+    if (!enabled) {
+      this.frame = 0;
+      for (const subscriber of this.subscribers) subscriber(this.frame);
+    }
+    this.syncTimer();
   }
 
   destroy(): void {
@@ -46,7 +61,7 @@ export class BoilClock {
   }
 
   private syncTimer(): void {
-    if (this.documentRef.hidden || this.subscribers.size === 0) this.stop();
+    if (!this.enabled || this.documentRef.hidden || this.subscribers.size === 0) this.stop();
     else this.start();
   }
 
