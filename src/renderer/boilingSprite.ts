@@ -22,6 +22,7 @@ export interface BoilingSpriteOptions {
   clock: BoilClock;
   className?: string;
   alt?: string;
+  onFrameSize?(size: SheetDimensions, src: string): void;
 }
 
 export interface BoilingSprite {
@@ -55,8 +56,13 @@ export function createBoilingSprite(options: BoilingSpriteOptions): BoilingSprit
     const revision = ++sourceRevision;
     image.onload = () => {
       if (revision !== sourceRevision) return;
-      const frameSize = getVerticalSheetFrameSize({ width: image.naturalWidth, height: image.naturalHeight });
-      element.style.aspectRatio = `${frameSize.width} / ${frameSize.height}`;
+      try {
+        const frameSize = getVerticalSheetFrameSize({ width: image.naturalWidth, height: image.naturalHeight });
+        element.style.aspectRatio = `${frameSize.width} / ${frameSize.height}`;
+        options.onFrameSize?.(frameSize, src);
+      } catch {
+        element.style.removeProperty('aspect-ratio');
+      }
     };
     image.src = src;
   }

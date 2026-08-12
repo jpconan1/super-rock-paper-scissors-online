@@ -6,7 +6,7 @@ The game uses fixed logical compositions that scale uniformly to fit the availab
 
 - `src/layout/scaleBox.ts` contains the pure sizing functions, DOM wrappers, and resize observers.
 - `src/styles.css` contains `.scale-box`, `.scale-box__content`, and screen composition styles.
-- `test/scaleBox.test.ts` covers fitting and stacked-layout priority.
+- `test/scaleBox.test.ts` covers fitting and responsive layout selection.
 
 ## Single scale box
 
@@ -29,19 +29,18 @@ It never upscales. Call `stopLayout()` when unmounting the screen.
 
 The title screen is one scale box, centered horizontally and vertically. Its `.title-screen__composition` fills the box with `width: 100%` and `height: 100%`.
 
-## Stacked game layout
+## Responsive game layouts
 
-Fireball War uses three independent logical boxes:
+Fireball War uses the same DOM in two authored logical compositions:
 
-```txt
-top:    title, back button, player information
-center: scene and status
-bottom: action buttons
-```
+- `square`: `704 × 704`, selected at host aspect ratios of `3 / 4` or wider.
+- `portrait`: `390 × 704`, selected below `3 / 4`.
 
-`observeStackedScaleBoxes()` fits all three. Width limits apply independently. When vertical space becomes tight, the center shrinks first. If top and bottom still cannot fit, both shrink together. CSS pins top and bottom to their edges while auto margins center the scene in remaining space.
+`observeResponsiveScaleBox` selects the layout from the host's available width and height, updates the scale box's logical dimensions, and reports the selected named layout. Fireball War writes that name to `data-layout` on its composition; CSS uses it to change slot coordinates without recreating sprites, controls, or event handlers.
 
-Portrait and landscape use the same stack. Safe-area padding belongs to `.app-viewport`; scale boxes measure the remaining content area.
+Future variants should provide an ordered set of named `ResponsiveScaleBoxLayout` definitions and keep one element tree across modes. Use deliberate fixed coordinate maps rather than fluid interpolation. Safe-area padding belongs to `.app-viewport`; the scale box measures the remaining content area.
+
+The layout is edited directly in the variant's CSS. There is no layout-authoring tool, interpolation layer, stacked-panel system, or shared base-layout abstraction. Extract common layout structure only after the square and portrait compositions are approved.
 
 ## Adding content safely
 
@@ -49,7 +48,7 @@ Add elements inside a box's `.content` composition. Keep all artwork, gaps, and 
 
 If content needs more room, change the dimensions passed to `createScaleBox()`. Do not duplicate those pixel dimensions on the child composition; use `width: 100%` and `height: 100%`. This keeps TypeScript as the single source of truth.
 
-Do not add viewport-relative sizing such as `vw`, `vh`, or responsive media-query rearrangement inside a logical composition. Use fixed logical sizes there and let the scale box perform responsiveness.
+Do not add viewport-relative sizing such as `vw` or `vh` inside a logical composition. Use fixed logical sizes for each named layout and let the responsive scale box select and scale them.
 
 Decorative overflow is clipped at the scale-box boundary. Include room for button juice, shadows, or animation overshoot in the logical canvas when those effects must remain visible.
 

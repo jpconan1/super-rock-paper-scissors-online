@@ -1,5 +1,8 @@
 import { describe, expect, test } from 'vitest';
-import { fitScaleBox, fitStackedScaleBoxes } from '../src/layout/scaleBox';
+import {
+  fitScaleBox,
+  selectResponsiveScaleBoxLayout,
+} from '../src/layout/scaleBox';
 
 describe('scale box fitting', () => {
   test('never upscales', () => {
@@ -24,31 +27,32 @@ describe('scale box fitting', () => {
   });
 });
 
-describe('stacked scale boxes', () => {
-  const dimensions = {
-    top: { width: 400, height: 100 },
-    center: { width: 400, height: 300 },
-    bottom: { width: 400, height: 100 },
-  };
+describe('responsive scale-box layouts', () => {
+  const layouts = [
+    { name: 'square', width: 704, height: 704, minAspectRatio: 3 / 4 },
+    { name: 'portrait', width: 390, height: 704, minAspectRatio: 0 },
+  ] as const;
 
-  test('shrinks center before fixed regions', () => {
-    const result = fitStackedScaleBoxes({ ...dimensions, availableWidth: 400, availableHeight: 350, gap: 10 });
-    expect(result.top.scale).toBe(1);
-    expect(result.bottom.scale).toBe(1);
-    expect(result.center.scale).toBeCloseTo(130 / 300);
+  test.each([
+    [749, 1000, 'portrait'],
+    [750, 1000, 'square'],
+    [1200, 700, 'square'],
+    [390, 844, 'portrait'],
+  ])('selects %s x %s as %s', (width, height, expected) => {
+    expect(selectResponsiveScaleBoxLayout(layouts, width, height).name).toBe(expected);
   });
 
-  test('shrinks top and bottom together after center is exhausted', () => {
-    const result = fitStackedScaleBoxes({ ...dimensions, availableWidth: 400, availableHeight: 170, gap: 10 });
-    expect(result.center.scale).toBe(0);
-    expect(result.top.scale).toBe(0.75);
-    expect(result.bottom.scale).toBe(0.75);
+  test('fits using the dimensions of the selected layout', () => {
+    const layout = selectResponsiveScaleBoxLayout(layouts, 390, 844);
+    expect(fitScaleBox({
+      logicalWidth: layout.width,
+      logicalHeight: layout.height,
+      availableWidth: 390,
+      availableHeight: 844,
+    })).toEqual({ scale: 1, width: 390, height: 704 });
   });
 
-  test('applies independent width ceilings before vertical priority', () => {
-    const result = fitStackedScaleBoxes({ ...dimensions, availableWidth: 200, availableHeight: 1000, gap: 10 });
-    expect(result.top.scale).toBe(0.5);
-    expect(result.center.scale).toBe(0.5);
-    expect(result.bottom.scale).toBe(0.5);
+  test('requires at least one layout', () => {
+    expect(() => selectResponsiveScaleBoxLayout([], 390, 844)).toThrow(/At least one/);
   });
 });

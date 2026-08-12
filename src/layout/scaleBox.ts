@@ -11,6 +11,29 @@ export interface ScaleBoxResult {
   height: number;
 }
 
+export interface ResponsiveScaleBoxLayout<TName extends string = string> {
+  name: TName;
+  width: number;
+  height: number;
+  /** Use this layout when the host width / height reaches this value. */
+  minAspectRatio: number;
+}
+
+export function selectResponsiveScaleBoxLayout<TName extends string>(
+  layouts: readonly ResponsiveScaleBoxLayout<TName>[],
+  availableWidth: number,
+  availableHeight: number,
+): ResponsiveScaleBoxLayout<TName> {
+  if (layouts.length === 0) throw new Error('At least one responsive scale-box layout is required.');
+  const width = Math.max(0, Number.isFinite(availableWidth) ? availableWidth : 0);
+  const height = Math.max(0, Number.isFinite(availableHeight) ? availableHeight : 0);
+  const aspectRatio = height === 0 ? Number.POSITIVE_INFINITY : width / height;
+  return [...layouts]
+    .sort((a, b) => b.minAspectRatio - a.minAspectRatio)
+    .find((layout) => aspectRatio >= layout.minAspectRatio)
+    ?? layouts.reduce((lowest, layout) => layout.minAspectRatio < lowest.minAspectRatio ? layout : lowest);
+}
+
 export function fitScaleBox(input: ScaleBoxInput): ScaleBoxResult {
   const { logicalWidth, logicalHeight, availableWidth, availableHeight } = input;
   if (![logicalWidth, logicalHeight].every((value) => Number.isFinite(value) && value > 0)) {
@@ -22,69 +45,12 @@ export function fitScaleBox(input: ScaleBoxInput): ScaleBoxResult {
   return { scale, width: logicalWidth * scale, height: logicalHeight * scale };
 }
 
-export interface StackBoxDimensions {
-  width: number;
-  height: number;
-}
-
-export interface StackedScaleInput {
-  availableWidth: number;
-  availableHeight: number;
-  gap: number;
-  top: StackBoxDimensions;
-  center: StackBoxDimensions;
-  bottom: StackBoxDimensions;
-}
-
-export interface StackedScaleResult {
-  top: ScaleBoxResult;
-  center: ScaleBoxResult;
-  bottom: ScaleBoxResult;
-  gap: number;
-}
-
-/** Fit width first, consume the center next, then shrink top and bottom together. */
-export function fitStackedScaleBoxes(input: StackedScaleInput): StackedScaleResult {
-  const availableWidth = Math.max(0, input.availableWidth);
-  const availableHeight = Math.max(0, input.availableHeight);
-  const requestedGap = Math.max(0, input.gap);
-  const topWidthScale = Math.min(1, availableWidth / input.top.width);
-  const centerWidthScale = Math.min(1, availableWidth / input.center.width);
-  const bottomWidthScale = Math.min(1, availableWidth / input.bottom.width);
-  const gap = Math.min(requestedGap, availableHeight / 2);
-  const contentHeight = Math.max(0, availableHeight - gap * 2);
-  const fixedHeight = input.top.height * topWidthScale + input.bottom.height * bottomWidthScale;
-  const centerHeight = input.center.height * centerWidthScale;
-
-  let topScale = topWidthScale;
-  let bottomScale = bottomWidthScale;
-  let centerScale = Math.min(centerWidthScale, Math.max(0, contentHeight - fixedHeight) / input.center.height);
-
-  if (fixedHeight > contentHeight) {
-    centerScale = 0;
-    const sharedScale = contentHeight / fixedHeight;
-    topScale *= sharedScale;
-    bottomScale *= sharedScale;
-  }
-
-  const result = (dimensions: StackBoxDimensions, scale: number): ScaleBoxResult => ({
-    scale,
-    width: dimensions.width * scale,
-    height: dimensions.height * scale,
-  });
-  return {
-    top: result(input.top, topScale),
-    center: result(input.center, centerScale),
-    bottom: result(input.bottom, bottomScale),
-    gap,
-  };
-}
-
 export interface ScaleBox {
   element: HTMLDivElement;
   content: HTMLDivElement;
   logicalWidth: number;
   logicalHeight: number;
+  setLogicalSize(width: number, height: number): void;
   apply(result: ScaleBoxResult): void;
 }
 
@@ -97,17 +63,27 @@ export function createScaleBox(logicalWidth: number, logicalHeight: number, clas
   content.style.height = `${logicalHeight}px`;
   element.append(content);
 
-  return {
+  const box: ScaleBox = {
     element,
     content,
     logicalWidth,
     logicalHeight,
+    setLogicalSize(width, height) {
+      if (![width, height].every((value) => Number.isFinite(value) && value > 0)) {
+        throw new Error('Logical scale-box dimensions must be positive finite numbers.');
+      }
+      box.logicalWidth = width;
+      box.logicalHeight = height;
+      content.style.width = `${width}px`;
+      content.style.height = `${height}px`;
+    },
     apply(result) {
       element.style.width = `${result.width}px`;
       element.style.height = `${result.height}px`;
       content.style.setProperty('--scale-box-scale', `${result.scale}`);
     },
   };
+  return box;
 }
 
 export function observeScaleBox(host: HTMLElement, box: ScaleBox): () => void {
@@ -123,24 +99,26 @@ export function observeScaleBox(host: HTMLElement, box: ScaleBox): () => void {
   return () => observer.disconnect();
 }
 
-export function observeStackedScaleBoxes(
+export function observeResponsiveScaleBox<TName extends string>(
   host: HTMLElement,
-  boxes: { top: ScaleBox; center: ScaleBox; bottom: ScaleBox },
-  gap: number,
+  box: ScaleBox,
+  layouts: readonly ResponsiveScaleBoxLayout<TName>[],
+  onLayoutChange: (layout: ResponsiveScaleBoxLayout<TName>) => void,
 ): () => void {
+  let activeName: TName | undefined;
   const fit = () => {
-    const result = fitStackedScaleBoxes({
+    const layout = selectResponsiveScaleBoxLayout(layouts, host.clientWidth, host.clientHeight);
+    if (layout.name !== activeName) {
+      activeName = layout.name;
+      box.setLogicalSize(layout.width, layout.height);
+      onLayoutChange(layout);
+    }
+    box.apply(fitScaleBox({
+      logicalWidth: layout.width,
+      logicalHeight: layout.height,
       availableWidth: host.clientWidth,
       availableHeight: host.clientHeight,
-      gap,
-      top: { width: boxes.top.logicalWidth, height: boxes.top.logicalHeight },
-      center: { width: boxes.center.logicalWidth, height: boxes.center.logicalHeight },
-      bottom: { width: boxes.bottom.logicalWidth, height: boxes.bottom.logicalHeight },
-    });
-    boxes.top.apply(result.top);
-    boxes.center.apply(result.center);
-    boxes.bottom.apply(result.bottom);
-    host.style.setProperty('--scale-stack-gap', `${result.gap}px`);
+    }));
   };
   const observer = new ResizeObserver(fit);
   observer.observe(host);

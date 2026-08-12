@@ -283,10 +283,12 @@ input {
   user-select: none;
 }
 
+.toggle-button--baked-label .toggle-button__label { display: none; }
+
 .game-button {
   position: relative;
   width: min(64vw, 16rem);
-  aspect-ratio: 2 / 1;
+  aspect-ratio: 2;
   border: 0;
   padding: 0;
   color: #171412;
@@ -311,10 +313,10 @@ input {
 .game-button__juice {
   position: absolute;
   z-index: 2;
-  width: 150%;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
+  inset: -25%;
+  width: auto;
+  height: auto;
+  aspect-ratio: auto !important;
 }
 
 .game-button__juice[hidden] { display: none; }
@@ -397,130 +399,210 @@ input {
 .fireball-war {
   width: 100%;
   height: 100%;
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  gap: var(--scale-stack-gap, 12px);
+  display: grid;
+  place-items: center;
   overflow: hidden;
 }
 
-.fireball-war__center-box { margin-block: auto; }
-
-.fireball-war__top,
-.fireball-war__center {
+.fireball-war__composition {
+  position: relative;
   width: 100%;
   height: 100%;
 }
 
-.fireball-war__top {
-  position: relative;
-  display: grid;
-  grid-template:
-    'title title' 64px
-    'p1 p2' 80px
-    / 1fr 1fr;
-  align-items: center;
-  column-gap: 32px;
-  padding-inline: 24px;
-}
-
-.fireball-war__center {
-  display: grid;
-  grid-template-rows: minmax(0, 380px) 40px;
-  place-items: center;
-}
-
-.fireball-war__title {
-  grid-area: title;
-  margin: 0;
-  text-align: center;
-  font-size: 3.6rem;
-  line-height: 0.9;
-}
-
-.fireball-war__exit {
+.fireball-war__slot {
   position: absolute;
-  z-index: 5;
-  top: 10px;
-  left: 10px;
-  border: 0.15rem solid currentColor;
-  border-radius: 0.2rem;
-  padding: 0.2rem 0.5rem;
-  color: inherit;
-  background: #e7ddc4;
-  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.fireball-war__player {
-  min-width: 0;
-  text-align: center;
-}
+.fireball-war__slot--p1-info { left: 18px; top: 24px; width: 220px; height: 54px; justify-content: flex-start; }
+.fireball-war__slot--turn { left: 272px; top: 8px; width: 160px; height: 96px; }
+.fireball-war__slot--p2-info { right: 18px; top: 24px; width: 220px; height: 54px; justify-content: flex-end; }
+.fireball-war__slot--p1-move { left: 18px; top: 150px; width: 160px; height: 80px; }
+.fireball-war__slot--scene { left: 176px; top: 112px; width: 352px; height: 176px; }
+.fireball-war__slot--p2-move { right: 18px; top: 150px; width: 160px; height: 80px; }
+.fireball-war__slot--p1-resources { left: 18px; top: 244px; width: 160px; height: 64px; }
+.fireball-war__slot--p2-resources { right: 18px; top: 244px; width: 160px; height: 64px; }
+.fireball-war__slot--controls { left: 0; bottom: 8px; width: 704px; height: 376px; }
 
-.fireball-war__player--p1 { grid-area: p1; }
-.fireball-war__player--p2 { grid-area: p2; }
-
-.fireball-war__player h2 {
-  margin: 0 0 0.2rem;
-  overflow: hidden;
-  font-size: 1.4rem;
+.fireball-war__player-info {
+  width: 100%;
+  display: grid;
+  align-items: center;
+  padding-inline: 8px;
+  font-size: 28px;
   line-height: 1;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.fireball-war__player-info--p2 { text-align: right; }
+
+.fireball-war__turn { width: 160px; }
+.fireball-war__scene { width: 352px; }
+.fireball-war__previous-move { width: 160px; }
+
+.fireball-war__previous-move {
+  position: relative;
+  display: block;
+  aspect-ratio: 2 / 1;
+}
+
+.fireball-war__previous-move-art { position: absolute; inset: 0; }
+
 .fireball-war__resources {
+  width: 148px;
   display: flex;
+  align-items: center;
   justify-content: center;
-  gap: 0.45rem;
 }
 
 .fireball-war__resource {
   position: relative;
-  width: 4rem;
-  aspect-ratio: 1;
+  width: 60px;
+  height: 60px;
+  flex: none;
+  margin-inline: -9px;
 }
 
 .fireball-war__resource > * { position: absolute; inset: 0; width: 100%; }
 .fireball-war__resource > img { height: 100%; object-fit: contain; }
 .fireball-war__resource > img[hidden] { display: none; }
 
-.fireball-war__scene {
-  justify-self: center;
-  width: 34rem;
-  max-height: 100%;
-  transition: none;
+.fireball-war__controls {
+  position: relative;
+  width: 704px;
+  height: 376px;
+  flex: none;
 }
 
-.fireball-war__scene.is-mirrored { transform: scaleX(-1); }
-
-.fireball-war__status {
-  min-height: 1.2em;
-  overflow: hidden;
-  text-align: center;
-  width: 100%;
-  font-size: 1.15rem;
-  line-height: 1;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.fireball-war__controls > .game-button {
+  position: absolute;
+  z-index: 1;
+  width: var(--fw-button-native-width);
 }
 
-.fireball-war__actions {
+.game-button--baked-label .game-button__label { display: none; }
+
+.fireball-war__control--charge {
+  --fw-button-native-width: 136px;
+  left: 72%;
+  bottom: 18px;
+  transform: translateX(-50%);
+}
+
+.fireball-war__control--fireball {
+  --fw-button-native-width: 160px;
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
+}
+
+.fireball-war__control--block {
+  --fw-button-native-width: 128px;
+  left: 28%;
+  bottom: 18px;
+  transform: translateX(-50%);
+}
+
+.fireball-war__arrow {
+  position: absolute;
+  z-index: 0;
+}
+
+.fireball-war__arrow--fireball-block {
+  width: min(9.25%, 32.5px);
+  left: 38%;
+  top: 29%;
+}
+
+.fireball-war__arrow--fireball-charge {
+  width: min(9.25%, 32.5px);
+  right: 38%;
+  top: 29%;
+}
+
+.fireball-war__arrow--charge-block {
+  width: min(18.25%, 64px);
+  left: 50%;
+  bottom: 10%;
+  transform: translateX(-50%);
+}
+
+.fireball-war__tool-rail {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  justify-items: center;
-  align-items: center;
-  gap: 1rem;
-  padding-inline: 8px;
+  pointer-events: none;
 }
 
-.fireball-war__actions .game-button {
-  width: 14rem;
+.fireball-war__tool-rail .game-button {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: auto;
 }
+
+.fireball-war__tool--rules-button { right: 0; width: 128px; }
+.fireball-war__tool--burger-button { left: 0; width: 64px; }
+
+.fireball-war__composition[data-layout='portrait'] .fireball-war__slot--p1-info {
+  left: 8px; top: 102px; width: 180px; height: 44px;
+}
+.fireball-war__composition[data-layout='portrait'] .fireball-war__slot--turn {
+  left: 115px; top: 4px; width: 160px; height: 96px;
+}
+.fireball-war__composition[data-layout='portrait'] .fireball-war__slot--p2-info {
+  right: 8px; top: 102px; width: 180px; height: 44px;
+}
+.fireball-war__composition[data-layout='portrait'] .fireball-war__slot--scene {
+  left: 19px; top: 148px; width: 352px; height: 176px;
+}
+.fireball-war__composition[data-layout='portrait'] .fireball-war__slot--p1-move {
+  left: 12px; top: 326px; width: 160px; height: 80px;
+}
+.fireball-war__composition[data-layout='portrait'] .fireball-war__slot--p2-move {
+  right: 12px; top: 326px; width: 160px; height: 80px;
+}
+.fireball-war__composition[data-layout='portrait'] .fireball-war__slot--p1-resources {
+  left: 12px; top: 400px; width: 160px; height: 64px;
+}
+.fireball-war__composition[data-layout='portrait'] .fireball-war__slot--p2-resources {
+  right: 12px; top: 400px; width: 160px; height: 64px;
+}
+.fireball-war__composition[data-layout='portrait'] .fireball-war__slot--controls {
+  left: 0; bottom: 4px; width: 390px; height: 236px;
+}
+.fireball-war__composition[data-layout='portrait'] .fireball-war__controls {
+  width: 390px;
+  height: 236px;
+}
+.fireball-war__composition[data-layout='portrait'] .fireball-war__control--fireball {
+  left: 50%; top: 0;
+}
+.fireball-war__composition[data-layout='portrait'] .fireball-war__control--block {
+  left: 25%; bottom: 50px;
+}
+.fireball-war__composition[data-layout='portrait'] .fireball-war__control--charge {
+  left: 75%; bottom: 50px;
+}
+.fireball-war__composition[data-layout='portrait'] .fireball-war__arrow--fireball-block {
+  left: 35%; top: 31%;
+}
+.fireball-war__composition[data-layout='portrait'] .fireball-war__arrow--fireball-charge {
+  right: 35%; top: 31%;
+}
+.fireball-war__composition[data-layout='portrait'] .fireball-war__arrow--charge-block {
+  bottom: 22%;
+}
+.fireball-war__composition[data-layout='portrait'] .fireball-war__tool-rail .game-button {
+  top: auto;
+  bottom: 0;
+  transform: none;
+}
+.fireball-war__composition[data-layout='portrait'] .fireball-war__tool--rules-button { width: 112px; }
 
 .starburst-wipe {
   position: fixed;

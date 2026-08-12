@@ -1,6 +1,6 @@
 import type { BoilClock } from '../animation/boilClock';
 import { createSoundEffect } from '../audio/soundEffect';
-import { createBoilingSprite } from '../renderer/boilingSprite';
+import { createBoilingSprite, type SheetDimensions } from '../renderer/boilingSprite';
 import { detectSheetTextAnchor } from '../renderer/textAnchorDetector';
 import { setControlDisabled } from './controlDisabled';
 import { GameButtonState, type GameButtonVisual } from './gameButtonState';
@@ -11,7 +11,7 @@ export interface GameButtonOptions {
   upSheet: string;
   betweenSheet: string;
   depressedSheet: string;
-  juiceSheet: string;
+  juiceSheet?: string;
   clock: BoilClock;
   depressedSound?: string;
   releasedSound?: string;
@@ -23,6 +23,16 @@ export interface GameButton {
   destroy(): void;
 }
 
+const DEFAULT_ASPECT_RATIO = 2;
+const DEFAULT_JUICE_SHEET = '/interactive-elements/generic-buttons/button-juice-sheet.webp';
+
+export function getButtonFrameAspectRatio(size: SheetDimensions | null): number {
+  if (!size || !Number.isFinite(size.width) || !Number.isFinite(size.height) || size.width <= 0 || size.height <= 0) {
+    return DEFAULT_ASPECT_RATIO;
+  }
+  return size.width / size.height;
+}
+
 export function createGameButton(options: GameButtonOptions): GameButton {
   const depressedSound = createSoundEffect(options.depressedSound ?? '/audio/button-depressed.mp3');
   const releasedSound = createSoundEffect(options.releasedSound ?? '/audio/button-released.mp3');
@@ -31,8 +41,29 @@ export function createGameButton(options: GameButtonOptions): GameButton {
   element.className = 'game-button';
   element.setAttribute('aria-label', options.label);
 
-  const art = createBoilingSprite({ src: options.upSheet, clock: options.clock, className: 'game-button__art' });
-  const juice = createBoilingSprite({ src: options.juiceSheet, clock: options.clock, className: 'game-button__juice' });
+  let frameGeometry: SheetDimensions | null = null;
+  const art = createBoilingSprite({
+    src: options.upSheet,
+    clock: options.clock,
+    className: 'game-button__art',
+    onFrameSize(size, src) {
+      if (frameGeometry) {
+        if (size.width !== frameGeometry.width || size.height !== frameGeometry.height) {
+          console.error(
+            `Game button sheet geometry mismatch: expected ${frameGeometry.width}x${frameGeometry.height}, received ${size.width}x${size.height} from ${src}.`,
+          );
+        }
+        return;
+      }
+      frameGeometry = size;
+      element.style.aspectRatio = String(getButtonFrameAspectRatio(size));
+    },
+  });
+  const juice = createBoilingSprite({
+    src: options.juiceSheet ?? DEFAULT_JUICE_SHEET,
+    clock: options.clock,
+    className: 'game-button__juice',
+  });
   juice.element.hidden = true;
 
   const label = document.createElement('span');

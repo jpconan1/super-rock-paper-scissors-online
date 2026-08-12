@@ -69,7 +69,6 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
     upSheet: '/interactive-elements/generic-buttons/generic2-up-sheet.webp',
     betweenSheet: '/interactive-elements/generic-buttons/generic2-between-sheet.webp',
     depressedSheet: '/interactive-elements/generic-buttons/generic2-sheet.webp',
-    juiceSheet: '/interactive-elements/generic-buttons/button-juice-sheet.webp',
     clock,
   });
   randomName.element.classList.add('title-screen__random-name');
@@ -88,7 +87,6 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
     upSheet: '/interactive-elements/generic-buttons/button1-up-sheet.webp',
     betweenSheet: '/interactive-elements/generic-buttons/button1-between-sheet.webp',
     depressedSheet: '/interactive-elements/generic-buttons/button1-depressed-sheet.webp',
-    juiceSheet: '/interactive-elements/generic-buttons/button-juice-sheet.webp',
     clock,
   });
 

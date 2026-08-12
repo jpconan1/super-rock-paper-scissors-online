@@ -30,12 +30,13 @@ export function createBoilToggle(clock: BoilClock): BoilToggle {
     label: 'Toggle Boil Animation',
     pressed: clock.isEnabled(),
     onChange: (enabled) => setBoilEnabled(enabled, clock),
-    offSheet: '/interactive-elements/generic-buttons/toggle2-off-sheet.webp',
-    betweenSheet: '/interactive-elements/generic-buttons/toggle2-between-sheet.webp',
-    onSheet: '/interactive-elements/generic-buttons/toggle2-on-sheet.webp',
+    offSheet: '/interactive-elements/toggle-boil-off-sheet.webp',
+    betweenSheet: '/interactive-elements/toggle-boil-between-sheet.webp',
+    onSheet: '/interactive-elements/toggle-boil-on-sheet.webp',
     juiceSheet: '/interactive-elements/generic-buttons/button-juice-sheet.webp',
     clock,
   });
+  toggle.element.classList.add('toggle-button--baked-label');
 
   return { element: toggle.element, destroy: toggle.destroy };
 }

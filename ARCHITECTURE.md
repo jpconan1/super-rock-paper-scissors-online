@@ -36,7 +36,7 @@ Every variant supplies:
 
 - Stable ID, rules version, display metadata, asset manifest, moves, and timing defaults.
 - Pure deterministic rules: initial state, legal commands, validation, turn resolution, winner detection, and public-state projection.
-- Client presentation: responsive layout descriptor, scene resolver, animation timelines, and semantic audio cues.
+- Client presentation: two authored compositions, scene resolver, animation timelines, and semantic audio cues.
 - Contract fixtures covering move interactions and special phases.
 
 Variants never own shell navigation, sockets, matchmaking, rating, global DOM queries, or database access.
@@ -89,11 +89,11 @@ Presentation state stays separate from match state. Server timestamps govern pac
 
 Use DOM/CSS for accessible controls and responsive game UI. Use canvas for the whiteboard and effects that genuinely need pixels.
 
-- One responsive arena exposes semantic regions: scene, P1/P2 identity, scores, counters, resources, actions, extras, modal, and transition overlay.
-- CSS Grid and container queries provide mobile-first portrait layout and widescreen expansion.
-- Variant descriptors choose slots, groups, ordering, constraints, and small CSS-variable overrides.
-- Avoid duplicated portrait/landscape coordinate maps.
-- Complex variant-only UI mounts in declared extension slots.
+- Each game screen keeps one semantic DOM tree across its layout modes.
+- Two fixed logical compositions are authored directly: `704 × 704` square and `390 × 704` portrait.
+- The square composition is selected at host aspect ratios of `3 / 4` or wider; portrait is selected below that boundary.
+- A scale box uniformly fits the selected composition without upscaling. Explicit CSS coordinate maps position elements in each composition.
+- Common and variant-specific regions will be extracted only after both Fireball War compositions are approved.
 - A variant harness previews every state at useful phone, tablet, desktop, safe-area, and text-size combinations.
 
 Renderer services include:
@@ -169,9 +169,10 @@ Spectators are future-ready through delayed/redacted projections, but receive no
 - Add independent music/SFX settings and global boil setting.
 - Replace direct button audio file paths with semantic cue IDs without changing behavior.
 
-### Slice 2: arena and harness
+### Slice 2: authored compositions and harness
 
-- Build presentation layers and responsive arena slots.
+- Perfect Fireball War's square and portrait compositions through direct CSS iteration.
+- Extract the approved common regions into the base layout, leaving Fireball War-specific regions in the variant.
 - Build Fireball War fixture states in a variant harness.
 - Prove phone portrait and desktop landscape before adding rules or networking.
 
@@ -222,7 +223,7 @@ Spectators are future-ready through delayed/redacted projections, but receive no
 
 - Roadmap-ready spine; small playable implementation slices.
 - DOM/CSS renderer with selective canvas.
-- CSS layout primitives plus per-variant descriptors.
+- Two authored fixed compositions with a shared semantic DOM tree.
 - Node authoritative server plus Supabase.
 - Online competitive play plus local development adapter.
 - Exactly nine active variants per season.

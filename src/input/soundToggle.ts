@@ -12,12 +12,13 @@ export function createSoundToggle(clock: BoilClock): SoundToggle {
     label: 'Toggle Sound',
     pressed: isSoundEnabled(),
     onChange: setSoundEnabled,
-    offSheet: '/interactive-elements/generic-buttons/toggle1-off-sheet.webp',
-    betweenSheet: '/interactive-elements/generic-buttons/toggle1-between-sheet.webp',
-    onSheet: '/interactive-elements/generic-buttons/toggle1-on-sheet.webp',
+    offSheet: '/interactive-elements/toggle-sound-off-sheet.webp',
+    betweenSheet: '/interactive-elements/toggle-sound-between-sheet.webp',
+    onSheet: '/interactive-elements/toggle-sound-on-sheet.webp',
     juiceSheet: '/interactive-elements/generic-buttons/button-juice-sheet.webp',
     clock,
   });
+  toggle.element.classList.add('toggle-button--baked-label');
 
   return {
     element: toggle.element,
