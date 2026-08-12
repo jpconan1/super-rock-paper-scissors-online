@@ -29,14 +29,14 @@ describe('scale box fitting', () => {
 
 describe('responsive scale-box layouts', () => {
   const layouts = [
-    { name: 'square', width: 704, height: 704, minAspectRatio: 3 / 4 },
-    { name: 'portrait', width: 390, height: 704, minAspectRatio: 0 },
+    { name: 'landscape', width: 705, height: 540, minAspectRatio: 1 },
+    { name: 'portrait', width: 390, height: 705, minAspectRatio: 0 },
   ] as const;
 
   test.each([
-    [749, 1000, 'portrait'],
-    [750, 1000, 'square'],
-    [1200, 700, 'square'],
+    [999, 1000, 'portrait'],
+    [1000, 1000, 'landscape'],
+    [1200, 700, 'landscape'],
     [390, 844, 'portrait'],
   ])('selects %s x %s as %s', (width, height, expected) => {
     expect(selectResponsiveScaleBoxLayout(layouts, width, height).name).toBe(expected);
@@ -49,7 +49,7 @@ describe('responsive scale-box layouts', () => {
       logicalHeight: layout.height,
       availableWidth: 390,
       availableHeight: 844,
-    })).toEqual({ scale: 1, width: 390, height: 704 });
+    })).toEqual({ scale: 1, width: 390, height: 705 });
   });
 
   test('requires at least one layout', () => {

@@ -11,11 +11,11 @@ const FIREBALL_WAR_BUTTON_ROOT = '/interactive-elements/fireball-war';
 const INTERACTIVE_ROOT = '/interactive-elements';
 
 type Move = 'charge' | 'block' | 'fireball';
-type FireballWarLayoutName = 'square' | 'portrait';
+type FireballWarLayoutName = 'landscape' | 'portrait';
 
 export const FIREBALL_WAR_LAYOUTS: readonly ResponsiveScaleBoxLayout<FireballWarLayoutName>[] = [
-  { name: 'square', width: 704, height: 704, minAspectRatio: 3 / 4 },
-  { name: 'portrait', width: 390, height: 704, minAspectRatio: 0 },
+  { name: 'landscape', width: 705, height: 540, minAspectRatio: 1 },
+  { name: 'portrait', width: 390, height: 705, minAspectRatio: 0 },
 ];
 
 const MOVE_ART: Record<Move, { up: string; between: string; depressed: string }> = {
@@ -58,17 +58,24 @@ export function mountFireballWarScreen(
     return element;
   };
 
-  const playerInfo = (text: string, side: 'p1' | 'p2') => {
+  const playerInfo = (side: 'p1' | 'p2') => {
     const info = document.createElement('div');
     info.className = `fireball-war__player-info fireball-war__player-info--${side}`;
-    const label = document.createElement('strong');
-    label.textContent = text;
-    info.append(label);
+    const lines = [
+      `${side === 'p1' ? 'P1 · YOU' : 'P2 · RIVAL'}`,
+      'Elo 1500 (Bronze)',
+      'Platform: Web',
+    ];
+    for (const [index, text] of lines.entries()) {
+      const line = document.createElement(index === 0 ? 'strong' : 'span');
+      line.textContent = text;
+      info.append(line);
+    }
     return info;
   };
 
-  slot('fireball-war__slot--p1-info').append(playerInfo('P1 · YOU', 'p1'));
-  slot('fireball-war__slot--p2-info').append(playerInfo('P2 · RIVAL', 'p2'));
+  slot('fireball-war__slot--p1-info').append(playerInfo('p1'));
+  slot('fireball-war__slot--p2-info').append(playerInfo('p2'));
 
   const turn = createBoilingSprite({
     src: '/visual-elements/time-counters/turn1-sheet.webp',
@@ -79,9 +86,48 @@ export function mountFireballWarScreen(
   sprites.push(turn);
   slot('fireball-war__slot--turn').append(turn.element);
 
+  const winsLabel = () => {
+    const label = createBoilingSprite({
+      src: '/visual-elements/win-couters/wins_label_sheet.webp',
+      clock,
+      className: 'fireball-war__wins-label',
+      alt: 'Wins',
+    });
+    sprites.push(label);
+    return label.element;
+  };
+  slot('fireball-war__slot--p1-wins-label').append(winsLabel());
+  slot('fireball-war__slot--p2-wins-label').append(winsLabel());
+
+  const winCounter = (side: 'p1' | 'p2', wins: number) => {
+    const counter = createBoilingSprite({
+      src: `/visual-elements/win-couters/ft3-win-counter-${wins}-sheet.webp`,
+      clock,
+      className: 'fireball-war__win-counter',
+      alt: `${side === 'p1' ? 'P1' : 'P2'} wins: ${wins}`,
+    });
+    sprites.push(counter);
+    return counter.element;
+  };
+  slot('fireball-war__slot--p1-wins').append(winCounter('p1', 1));
+  slot('fireball-war__slot--p2-wins').append(winCounter('p2', 0));
+
+  const pickedLabel = (side: 'p1' | 'p2') => {
+    const label = createBoilingSprite({
+      src: `/visual-elements/${side === 'p1' ? 'you_picked_sheet' : 'they_picked_sheet'}.webp`,
+      clock,
+      className: 'fireball-war__picked-label',
+      alt: side === 'p1' ? 'You picked' : 'They picked',
+    });
+    sprites.push(label);
+    return label.element;
+  };
+  slot('fireball-war__slot--p1-picked').append(pickedLabel('p1'));
+  slot('fireball-war__slot--p2-picked').append(pickedLabel('p2'));
+
   const previousMove = (move: Move) => {
     const display = document.createElement('output');
-    display.className = 'fireball-war__previous-move';
+    display.className = `fireball-war__previous-move fireball-war__previous-move--${move}`;
     display.setAttribute('aria-label', `Previous move: ${titleCase(move)}`);
     const art = createBoilingSprite({
       src: MOVE_ART[move].depressed,
@@ -165,8 +211,7 @@ export function mountFireballWarScreen(
   createControl('Charge', 'fireball-war__control--charge', MOVE_ART.charge);
   const rail = document.createElement('div');
   rail.className = 'fireball-war__tool-rail';
-  controls.append(rail);
-  const createTool = (label: string, assetName: 'rules-button' | 'burger-button') => {
+  const createTool = (label: string, assetName: 'rulebook-button' | 'burger-button') => {
     const button = createGameButton({
       label,
       onActivate: () => {},
@@ -183,8 +228,9 @@ export function mountFireballWarScreen(
     buttons.push(button);
     rail.append(button.element);
   };
-  createTool('Rules', 'rules-button');
+  createTool('Rules', 'rulebook-button');
   createTool('Menu', 'burger-button');
+  composition.append(rail);
   slot('fireball-war__slot--controls').append(controls);
 
   scaleBox.content.append(composition);

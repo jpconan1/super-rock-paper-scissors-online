@@ -90,8 +90,8 @@ Presentation state stays separate from match state. Server timestamps govern pac
 Use DOM/CSS for accessible controls and responsive game UI. Use canvas for the whiteboard and effects that genuinely need pixels.
 
 - Each game screen keeps one semantic DOM tree across its layout modes.
-- Two fixed logical compositions are authored directly: `704 × 704` square and `390 × 704` portrait.
-- The square composition is selected at host aspect ratios of `3 / 4` or wider; portrait is selected below that boundary.
+- Two fixed logical compositions are authored directly: `705 × 540` landscape and `390 × 705` portrait.
+- The landscape composition is selected when the host is square or wider; portrait is selected when the host is taller than wide.
 - A scale box uniformly fits the selected composition without upscaling. Explicit CSS coordinate maps position elements in each composition.
 - Common and variant-specific regions will be extracted only after both Fireball War compositions are approved.
 - A variant harness previews every state at useful phone, tablet, desktop, safe-area, and text-size combinations.
@@ -171,7 +171,7 @@ Spectators are future-ready through delayed/redacted projections, but receive no
 
 ### Slice 2: authored compositions and harness
 
-- Perfect Fireball War's square and portrait compositions through direct CSS iteration.
+- Perfect Fireball War's landscape and portrait compositions through direct CSS iteration.
 - Extract the approved common regions into the base layout, leaving Fireball War-specific regions in the variant.
 - Build Fireball War fixture states in a variant harness.
 - Prove phone portrait and desktop landscape before adding rules or networking.

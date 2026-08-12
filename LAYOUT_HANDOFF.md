@@ -17,7 +17,7 @@ screen.append(box.element);
 const stopLayout = observeScaleBox(screen, box);
 ```
 
-`704 × 704` is the logical design canvas. The inner content remains that size. The outer wrapper receives the actual scaled width and height, so CSS layout understands its visible footprint and does not center an oversized invisible box.
+The dimensions passed to `createScaleBox` define that screen's logical design canvas. The inner content remains that size. The outer wrapper receives the actual scaled width and height, so CSS layout understands its visible footprint and does not center an oversized invisible box.
 
 The scale is:
 
@@ -33,14 +33,14 @@ The title screen is one scale box, centered horizontally and vertically. Its `.t
 
 Fireball War uses the same DOM in two authored logical compositions:
 
-- `square`: `704 × 704`, selected at host aspect ratios of `3 / 4` or wider.
-- `portrait`: `390 × 704`, selected below `3 / 4`.
+- `landscape`: `705 × 540`, selected when the host is square or wider.
+- `portrait`: `390 × 705`, selected when the host is taller than wide.
 
 `observeResponsiveScaleBox` selects the layout from the host's available width and height, updates the scale box's logical dimensions, and reports the selected named layout. Fireball War writes that name to `data-layout` on its composition; CSS uses it to change slot coordinates without recreating sprites, controls, or event handlers.
 
 Future variants should provide an ordered set of named `ResponsiveScaleBoxLayout` definitions and keep one element tree across modes. Use deliberate fixed coordinate maps rather than fluid interpolation. Safe-area padding belongs to `.app-viewport`; the scale box measures the remaining content area.
 
-The layout is edited directly in the variant's CSS. There is no layout-authoring tool, interpolation layer, stacked-panel system, or shared base-layout abstraction. Extract common layout structure only after the square and portrait compositions are approved.
+The layout is edited directly in the variant's CSS. There is no layout-authoring tool, interpolation layer, stacked-panel system, or shared base-layout abstraction. Extract common layout structure only after the landscape and portrait compositions are approved.
 
 ## Adding content safely
 
