@@ -337,6 +337,32 @@ input {
   user-select: none;
 }
 
+.loading-screen {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  overflow: hidden;
+}
+
+.loading-screen__start {
+  width: min(80vw, 32rem);
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.loading-screen__start:disabled { cursor: default; }
+
+.loading-screen__start:focus-visible {
+  outline: 0.22rem solid #1857a6;
+  outline-offset: 0.35rem;
+  border-radius: 12%;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -349,54 +375,7 @@ input {
   border: 0;
 }
 
-.arena-viewport {
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  container: arena / size;
-}
-
-.arena {
-  position: relative;
-  isolation: isolate;
-  width: min(100%, var(--arena-max-width, 96rem));
-  min-height: 100%;
-  margin-inline: auto;
-  display: grid;
-  grid-template:
-    'title title' auto
-    'p1 p2' auto
-    'scene scene' minmax(0, 1fr)
-    'status status' auto
-    'actions actions' auto
-    / minmax(0, 1fr) minmax(0, 1fr);
-  align-items: center;
-  gap: clamp(0.25rem, 1.4svh, 0.8rem) clamp(0.5rem, 3vw, 2rem);
-  min-width: 0;
-  overflow-x: clip;
-  padding: clamp(0.75rem, 2.5vmin, 2rem);
-}
-
-.arena__slot { min-width: 0; }
-.arena__slot--title { grid-area: title; }
-.arena__slot--p1 { grid-area: p1; }
-.arena__slot--p2 { grid-area: p2; }
-.arena__slot--scene { grid-area: scene; }
-.arena__slot--status { grid-area: status; }
-.arena__slot--resources { grid-area: resources; }
-.arena__slot--actions { grid-area: actions; }
-.arena__slot--extras { grid-area: extras; }
-
-.arena__slot--modal,
-.arena__slot--transition {
-  position: fixed;
-  inset: 0;
-}
-
-.arena__slot--modal { z-index: 90; }
-.arena__slot--transition { z-index: 100; }
-
-.fireball-war {
+.game-layout-screen {
   width: 100%;
   height: 100%;
   display: grid;
@@ -404,42 +383,43 @@ input {
   overflow: hidden;
 }
 
-.fireball-war__composition {
-  --fireball-war-control-height: calc(540px / 3);
+.game-layout {
+  --game-layout-edge-margin: 12px;
   position: relative;
   width: 100%;
   height: 100%;
 }
 
-.fireball-war__slot {
+.game-layout__slot {
   position: absolute;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.fireball-war__slot--p1-info { left: 0; top: 78px; width: 190px; height: 72px; }
-.fireball-war__slot--turn { left: calc(50% - 80px); top: 8px; width: 160px; height: 96px; }
-.fireball-war__slot--p2-info { right: 0; top: 78px; width: 190px; height: 72px; }
-.fireball-war__slot--p1-wins-label { left: 187px; top: 0; width: 96px; height: 48px; }
-.fireball-war__slot--p2-wins-label { right: 187px; top: 0; width: 96px; height: 48px; }
-.fireball-war__slot--p1-wins { left: 203px; top: 44px; width: 64px; height: 64px; }
-.fireball-war__slot--p2-wins { right: 203px; top: 44px; width: 64px; height: 64px; }
-.fireball-war__slot--p1-picked { left: 34px; top: 174px; width: 128px; height: 64px; }
-.fireball-war__slot--p2-picked { right: 23px; top: 174px; width: 150px; height: 64px; }
-.fireball-war__slot--p1-move { left: 18px; top: 222px; width: 160px; height: 80px; }
-.fireball-war__slot--scene { left: calc(50% - 176px); top: 150px; width: 352px; height: 176px; }
-.fireball-war__slot--p2-move { right: 18px; top: 222px; width: 160px; height: 80px; }
-.fireball-war__slot--p1-resources { left: 18px; top: 300px; width: 160px; height: 60px; }
-.fireball-war__slot--p2-resources { right: 18px; top: 300px; width: 160px; height: 60px; }
-.fireball-war__slot--controls {
+.game-layout__slot--p1-info { left: var(--game-layout-edge-margin); top: 120px; width: 190px; height: 72px; }
+.game-layout__slot--turn { left: calc(50% - 80px); top: 0; width: 160px; height: 96px; }
+.game-layout__slot--p2-info { right: var(--game-layout-edge-margin); top: 120px; width: 190px; height: 72px; }
+.game-layout__slot--p1-wins-label { left: 150.25px; top: 0; width: 96px; height: 48px; }
+.game-layout__slot--p2-wins-label { right: 150.25px; top: 0; width: 96px; height: 48px; }
+.game-layout__slot--p1-wins { left: 166.25px; top: 44px; width: 64px; height: 64px; }
+.game-layout__slot--p2-wins { right: 166.25px; top: 44px; width: 64px; height: 64px; }
+.game-layout__slot--p1-picked { left: 28px; top: 204px; width: 128px; height: 64px; }
+.game-layout__slot--p2-picked { right: 17px; top: 204px; width: 150px; height: 64px; }
+.game-layout__slot--scene { left: calc(50% - 176px); top: 135px; width: 352px; height: 176px; }
+
+.fireball-war .game-layout__slot--p1-move { left: var(--game-layout-edge-margin); top: 252px; width: 160px; height: 80px; }
+.fireball-war .game-layout__slot--p2-move { right: var(--game-layout-edge-margin); top: 252px; width: 160px; height: 80px; }
+.fireball-war .game-layout__slot--p1-resources { left: var(--game-layout-edge-margin); top: 344px; width: 160px; height: 60px; }
+.fireball-war .game-layout__slot--p2-resources { right: var(--game-layout-edge-margin); top: 344px; width: 160px; height: 60px; }
+.fireball-war .game-layout__slot--controls {
   left: 0;
-  bottom: 0;
-  width: 705px;
-  height: var(--fireball-war-control-height);
+  bottom: var(--game-layout-edge-margin);
+  width: 100%;
+  height: 190px;
 }
 
-.fireball-war__player-info {
+.game-layout__player-info {
   width: 100%;
   display: grid;
   align-items: center;
@@ -449,16 +429,16 @@ input {
   white-space: nowrap;
 }
 
-.fireball-war__player-info--p2 { text-align: right; }
+.game-layout__player-info--p2 { text-align: right; }
 
-.fireball-war__slot--p1-info .fireball-war__player-info { text-align: left; }
-.fireball-war__slot--p2-info .fireball-war__player-info { text-align: right; }
+.game-layout__slot--p1-info .game-layout__player-info { text-align: left; }
+.game-layout__slot--p2-info .game-layout__player-info { text-align: right; }
 
-.fireball-war__turn { width: 200px; flex: none; }
-.fireball-war__wins-label { width: 96px; }
-.fireball-war__win-counter { width: 64px; }
-.fireball-war__picked-label { width: 100%; }
-.fireball-war__scene { width: 352px; }
+.game-layout__turn { width: 200px; flex: none; }
+.game-layout__wins-label { width: 96px; }
+.game-layout__win-counter { width: 64px; }
+.game-layout__picked-label { width: 100%; }
+.game-layout__scene { width: 352px; }
 .fireball-war__previous-move { width: 160px; }
 
 .fireball-war__previous-move {
@@ -488,11 +468,12 @@ input {
 .fireball-war__resource > * { position: absolute; inset: 0; width: 100%; }
 .fireball-war__resource > img { height: 100%; object-fit: contain; }
 .fireball-war__resource > img[hidden] { display: none; }
+.game-layout__slot--p2-resources .fireball-war__resources { transform: scaleX(-1); }
 
 .fireball-war__controls {
   position: relative;
-  width: 100%;
-  height: 100%;
+  width: 390px;
+  height: 190px;
   flex: none;
 }
 
@@ -507,7 +488,7 @@ input {
 .fireball-war__control--charge {
   --fw-button-native-width: 136px;
   left: calc(50% + 102.5px);
-  bottom: 5px;
+  bottom: 0;
   transform: translateX(-50%);
 }
 
@@ -521,7 +502,7 @@ input {
 .fireball-war__control--block {
   --fw-button-native-width: 128px;
   left: calc(50% - 102.5px);
-  bottom: 5px;
+  bottom: 0;
   transform: translateX(-50%);
 }
 
@@ -533,23 +514,23 @@ input {
 .fireball-war__arrow--fireball-block {
   width: 32.5px;
   left: calc(50% - 58.5px);
-  top: calc(31% + 8px);
+  top: 81px;
 }
 
 .fireball-war__arrow--fireball-charge {
   width: 32.5px;
   right: calc(50% - 58.5px);
-  top: calc(31% + 8px);
+  top: 81px;
 }
 
 .fireball-war__arrow--charge-block {
   width: 64px;
   left: 50%;
-  bottom: calc(22% - 5px);
+  bottom: 23px;
   transform: translateX(-50%);
 }
 
-.fireball-war__tool-rail {
+.game-layout__tool-rail {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -557,99 +538,79 @@ input {
   pointer-events: none;
 }
 
-.fireball-war__tool-rail .game-button {
+.game-layout__tool-rail .game-button {
   position: absolute;
-  top: 0;
+  top: var(--game-layout-edge-margin);
   pointer-events: auto;
 }
 
-.fireball-war__tool--rulebook-button { right: 0; width: 64px; }
-.fireball-war__tool--burger-button { left: 0; width: 64px; }
+.game-layout__tool--rulebook-button { right: var(--game-layout-edge-margin); width: 64px; }
+.game-layout__tool--burger-button { left: var(--game-layout-edge-margin); width: 64px; }
 
-.fireball-war__composition[data-layout='portrait'] .fireball-war__slot--p1-info {
-  left: 8px; top: 96px; width: 180px; height: 52px;
+.game-layout[data-layout='portrait'] .game-layout__slot--p1-info {
+  left: var(--game-layout-edge-margin); top: 98px; width: 180px; height: 52px;
 }
-.fireball-war__composition[data-layout='portrait'] {
-  --fireball-war-control-height: 235px;
+.game-layout[data-layout='portrait'] .game-layout__slot--turn {
+  left: 115px; top: 0; width: 160px; height: 96px;
 }
-.fireball-war__composition[data-layout='portrait'] .fireball-war__slot--turn {
-  left: 115px; top: 4px; width: 160px; height: 96px;
+.game-layout[data-layout='portrait'] .game-layout__slot--p2-info {
+  right: var(--game-layout-edge-margin); top: 98px; width: 180px; height: 52px;
 }
-.fireball-war__composition[data-layout='portrait'] .fireball-war__slot--p2-info {
-  right: 8px; top: 96px; width: 180px; height: 52px;
-}
-.fireball-war__composition[data-layout='portrait'] .fireball-war__player-info {
+.game-layout[data-layout='portrait'] .game-layout__player-info {
   font-size: 15px;
   line-height: 1.05;
 }
-.fireball-war__composition[data-layout='portrait'] .fireball-war__turn { width: 150px; }
-.fireball-war__composition[data-layout='portrait'] .fireball-war__wins-label { width: 72px; }
-.fireball-war__composition[data-layout='portrait'] .fireball-war__win-counter { width: 48px; }
-.fireball-war__composition[data-layout='portrait'] .fireball-war__slot--p1-info .fireball-war__player-info {
+.game-layout[data-layout='portrait'] .game-layout__turn { width: 150px; }
+.game-layout[data-layout='portrait'] .game-layout__wins-label { width: 72px; }
+.game-layout[data-layout='portrait'] .game-layout__win-counter { width: 48px; }
+.game-layout[data-layout='portrait'] .game-layout__slot--p1-info .game-layout__player-info {
   text-align: left;
 }
-.fireball-war__composition[data-layout='portrait'] .fireball-war__slot--p2-info .fireball-war__player-info {
+.game-layout[data-layout='portrait'] .game-layout__slot--p2-info .game-layout__player-info {
   text-align: right;
 }
-.fireball-war__composition[data-layout='portrait'] .fireball-war__slot--p1-wins {
-  left: 72px; top: 38px;
+.game-layout[data-layout='portrait'] .game-layout__slot--p1-wins {
+  left: 90px; top: 26px;
 }
-.fireball-war__composition[data-layout='portrait'] .fireball-war__slot--p2-wins {
-  right: 72px; top: 38px;
+.game-layout[data-layout='portrait'] .game-layout__slot--p2-wins {
+  right: 90px; top: 26px;
 }
-.fireball-war__composition[data-layout='portrait'] .fireball-war__slot--p1-wins-label {
-  left: 56px; top: 0;
+.game-layout[data-layout='portrait'] .game-layout__slot--p1-wins-label {
+  left: 74px; top: 0;
 }
-.fireball-war__composition[data-layout='portrait'] .fireball-war__slot--p2-wins-label {
-  right: 56px; top: 0;
+.game-layout[data-layout='portrait'] .game-layout__slot--p2-wins-label {
+  right: 74px; top: 0;
 }
-.fireball-war__composition[data-layout='portrait'] .fireball-war__slot--p1-picked {
-  left: 44px; top: 312px; width: 96px; height: 48px;
+.game-layout[data-layout='portrait'] .game-layout__slot--p1-picked {
+  left: 24px; top: 162px; width: 96px; height: 48px;
 }
-.fireball-war__composition[data-layout='portrait'] .fireball-war__slot--p2-picked {
-  right: 35.75px; top: 312px; width: 112.5px; height: 48px;
+.game-layout[data-layout='portrait'] .game-layout__slot--p2-picked {
+  right: 15.75px; top: 162px; width: 112.5px; height: 48px;
 }
-.fireball-war__composition[data-layout='portrait'] .fireball-war__slot--scene {
-  left: 19px; top: 148px; width: 352px; height: 176px;
+.game-layout[data-layout='portrait'] .game-layout__slot--scene {
+  left: 19px; top: 270px; width: 352px; height: 176px;
 }
-.fireball-war__composition[data-layout='portrait'] .fireball-war__slot--p1-move {
-  left: 32px; top: 348px; width: 120px; height: 60px;
+.fireball-war .game-layout[data-layout='portrait'] .game-layout__slot--p1-move {
+  left: var(--game-layout-edge-margin); top: 198px; width: 120px; height: 60px;
 }
-.fireball-war__composition[data-layout='portrait'] .fireball-war__slot--p2-move {
-  right: 32px; top: 348px; width: 120px; height: 60px;
+.fireball-war .game-layout[data-layout='portrait'] .game-layout__slot--p2-move {
+  right: var(--game-layout-edge-margin); top: 198px; width: 120px; height: 60px;
 }
-.fireball-war__composition[data-layout='portrait'] .fireball-war__slot--p1-resources {
-  left: 32px; top: 406.5px; width: 120px; height: 45px;
+.fireball-war .game-layout[data-layout='portrait'] .game-layout__slot--p1-resources {
+  left: 32px; top: 446px; width: 120px; height: 45px;
 }
-.fireball-war__composition[data-layout='portrait'] .fireball-war__slot--p2-resources {
-  right: 32px; top: 406.5px; width: 120px; height: 45px;
+.fireball-war .game-layout[data-layout='portrait'] .game-layout__slot--p2-resources {
+  right: 32px; top: 446px; width: 120px; height: 45px;
 }
-.fireball-war__composition[data-layout='portrait'] .fireball-war__previous-move { width: 120px; }
-.fireball-war__composition[data-layout='portrait'] .fireball-war__previous-move--charge .fireball-war__previous-move-art {
+.fireball-war .game-layout[data-layout='portrait'] .fireball-war__previous-move { width: 120px; }
+.fireball-war .game-layout[data-layout='portrait'] .fireball-war__previous-move--charge .fireball-war__previous-move-art {
   transform: translateY(-15px);
 }
-.fireball-war__composition[data-layout='portrait'] .fireball-war__resources { width: 111px; }
-.fireball-war__composition[data-layout='portrait'] .fireball-war__resource {
+.fireball-war .game-layout[data-layout='portrait'] .fireball-war__resources { width: 111px; }
+.fireball-war .game-layout[data-layout='portrait'] .fireball-war__resource {
   width: 45px;
   height: 45px;
   margin-inline: -6.75px;
-}
-.fireball-war__composition[data-layout='portrait'] .fireball-war__slot--controls {
-  width: 390px;
-}
-.fireball-war__composition[data-layout='portrait'] .fireball-war__control--fireball {
-  top: 0;
-}
-.fireball-war__composition[data-layout='portrait'] .fireball-war__control--block,
-.fireball-war__composition[data-layout='portrait'] .fireball-war__control--charge {
-  bottom: 45px;
-}
-.fireball-war__composition[data-layout='portrait'] .fireball-war__arrow--fireball-block,
-.fireball-war__composition[data-layout='portrait'] .fireball-war__arrow--fireball-charge {
-  top: calc(31% + 8px);
-}
-.fireball-war__composition[data-layout='portrait'] .fireball-war__arrow--charge-block {
-  bottom: calc(22% - 5px);
 }
 
 .starburst-wipe {

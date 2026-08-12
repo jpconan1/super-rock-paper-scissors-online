@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "super-rps-online",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-08-12",
+  "durable_objects": {
+    "bindings": [
+      { "name": "MATCHES", "class_name": "MatchObject" },
+      { "name": "MATCHMAKER", "class_name": "MatchmakerObject" },
+      { "name": "LOBBY", "class_name": "LobbyObject" },
+      { "name": "WHITEBOARD", "class_name": "WhiteboardObject" }
+    ]
+  },
+  "migrations": [{
+    "tag": "v1",
+    "new_sqlite_classes": ["MatchObject", "MatchmakerObject", "LobbyObject", "WhiteboardObject"]
+  }],
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "super-rps",
+    "database_id": "replace-with-cloudflare-d1-id",
+    "migrations_dir": "worker/migrations"
+  }]
+}

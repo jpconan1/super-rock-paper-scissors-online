@@ -5,15 +5,23 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && npm run worker:check && vite build",
     "test": "vitest run",
+    "worker:check": "tsc -p worker/tsconfig.json",
+    "worker:dev": "wrangler dev",
+    "worker:deploy": "wrangler deploy",
+    "menu:deploy": "wrangler deploy --config wrangler.menu.jsonc",
+    "d1:migrate:local": "wrangler d1 migrations apply super-rps --local",
+    "d1:migrate:remote": "wrangler d1 migrations apply super-rps --remote",
     "assets:compress-staged": "scripts/compress-staged-assets.sh",
     "assets:check": "scripts/check-compressed-assets.sh && node scripts/validate-music-assets.mjs",
     "audio:check": "node scripts/validate-music-assets.mjs"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260812.1",
     "typescript": "^5.9.2",
     "vite": "^7.1.2",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "wrangler": "^4.122.0"
   }
 }

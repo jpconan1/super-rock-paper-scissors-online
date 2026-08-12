@@ -28,6 +28,7 @@ export interface BoilingSpriteOptions {
 export interface BoilingSprite {
   element: HTMLDivElement;
   setSource(src: string): void;
+  whenReady(): Promise<void>;
   setFrame(frame: BoilFrame): void;
   destroy(): void;
 }
@@ -46,6 +47,7 @@ export function createBoilingSprite(options: BoilingSpriteOptions): BoilingSprit
 
   let frame: BoilFrame = 0;
   let sourceRevision = 0;
+  let ready: Promise<void> = Promise.resolve();
 
   function setFrame(nextFrame: BoilFrame): void {
     frame = nextFrame;
@@ -54,17 +56,26 @@ export function createBoilingSprite(options: BoilingSpriteOptions): BoilingSprit
 
   function setSource(src: string): void {
     const revision = ++sourceRevision;
-    image.onload = () => {
-      if (revision !== sourceRevision) return;
-      try {
-        const frameSize = getVerticalSheetFrameSize({ width: image.naturalWidth, height: image.naturalHeight });
-        element.style.aspectRatio = `${frameSize.width} / ${frameSize.height}`;
-        options.onFrameSize?.(frameSize, src);
-      } catch {
-        element.style.removeProperty('aspect-ratio');
-      }
-    };
-    image.src = src;
+    ready = new Promise<void>((resolve, reject) => {
+      image.onload = () => {
+        if (revision !== sourceRevision) return;
+        try {
+          const frameSize = getVerticalSheetFrameSize({ width: image.naturalWidth, height: image.naturalHeight });
+          element.style.aspectRatio = `${frameSize.width} / ${frameSize.height}`;
+          options.onFrameSize?.(frameSize, src);
+          const decoding = image.decode?.();
+          if (decoding) void decoding.catch(() => {}).finally(resolve);
+          else resolve();
+        } catch (error) {
+          element.style.removeProperty('aspect-ratio');
+          reject(error);
+        }
+      };
+      image.onerror = () => {
+        if (revision === sourceRevision) reject(new Error(`Could not load sprite: ${src}`));
+      };
+      image.src = src;
+    });
   }
 
   setSource(options.src);
@@ -73,10 +84,12 @@ export function createBoilingSprite(options: BoilingSpriteOptions): BoilingSprit
   return {
     element,
     setSource,
+    whenReady: () => ready,
     setFrame,
     destroy() {
       sourceRevision++;
       image.onload = null;
+      image.onerror = null;
       unsubscribe();
       element.remove();
     },

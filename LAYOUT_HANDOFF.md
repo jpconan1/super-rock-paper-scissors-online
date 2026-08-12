@@ -5,8 +5,9 @@ The game uses fixed logical compositions that scale uniformly to fit the availab
 ## Core files
 
 - `src/layout/scaleBox.ts` contains the pure sizing functions, DOM wrappers, and resize observers.
+- `src/layout/gameLayout.ts` contains the canonical shared game composition, fixed common regions, and variant-content contract.
 - `src/styles.css` contains `.scale-box`, `.scale-box__content`, and screen composition styles.
-- `test/scaleBox.test.ts` covers fitting and responsive layout selection.
+- `test/scaleBox.test.ts` covers fitting and responsive layout selection; `test/gameLayout.test.ts` covers the shared composition contract.
 
 ## Single scale box
 
@@ -31,16 +32,16 @@ The title screen is one scale box, centered horizontally and vertically. Its `.t
 
 ## Responsive game layouts
 
-Fireball War uses the same DOM in two authored logical compositions:
+The shared game layout uses the same DOM in two authored logical compositions, proven first by Fireball War:
 
 - `landscape`: `705 × 540`, selected when the host is square or wider.
 - `portrait`: `390 × 705`, selected when the host is taller than wide.
 
 `observeResponsiveScaleBox` selects the layout from the host's available width and height, updates the scale box's logical dimensions, and reports the selected named layout. Fireball War writes that name to `data-layout` on its composition; CSS uses it to change slot coordinates without recreating sprites, controls, or event handlers.
 
-Future variants should provide an ordered set of named `ResponsiveScaleBoxLayout` definitions and keep one element tree across modes. Use deliberate fixed coordinate maps rather than fluid interpolation. Safe-area padding belongs to `.app-viewport`; the scale box measures the remaining content area.
+Future variants provide an ordered set of named `ResponsiveScaleBoxLayout` definitions and keep one element tree across modes. Use deliberate fixed coordinate maps rather than fluid interpolation. Safe-area padding belongs to `.app-viewport`; the scale box measures the remaining content area.
 
-The layout is edited directly in the variant's CSS. There is no layout-authoring tool, interpolation layer, stacked-panel system, or shared base-layout abstraction. Extract common layout structure only after the landscape and portrait compositions are approved.
+`createGameLayout` owns system buttons, player information, common labels, and the fixed-size turn, win-counter, and scene slots. A variant supplies artwork for those fixed slots plus its own move-history icons, resources, and controls. Shared coordinates use neutral `.game-layout__*` rules; variant CSS owns only the geometry of variant-specific content. There is no interpolation layer or stacked-panel system.
 
 ## Adding content safely
 

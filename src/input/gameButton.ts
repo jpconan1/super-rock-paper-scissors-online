@@ -1,4 +1,5 @@
 import type { BoilClock } from '../animation/boilClock';
+import { assetLoader } from '../assets/assetLoader';
 import { createSoundEffect } from '../audio/soundEffect';
 import { createBoilingSprite, type SheetDimensions } from '../renderer/boilingSprite';
 import { detectSheetTextAnchor } from '../renderer/textAnchorDetector';
@@ -41,24 +42,33 @@ export function createGameButton(options: GameButtonOptions): GameButton {
   element.className = 'game-button';
   element.setAttribute('aria-label', options.label);
 
+  const sheets: Record<GameButtonVisual, string> = {
+    up: options.upSheet,
+    between: options.betweenSheet,
+    depressed: options.depressedSheet,
+  };
   let frameGeometry: SheetDimensions | null = null;
-  const art = createBoilingSprite({
-    src: options.upSheet,
-    clock: options.clock,
-    className: 'game-button__art',
-    onFrameSize(size, src) {
-      if (frameGeometry) {
-        if (size.width !== frameGeometry.width || size.height !== frameGeometry.height) {
-          console.error(
-            `Game button sheet geometry mismatch: expected ${frameGeometry.width}x${frameGeometry.height}, received ${size.width}x${size.height} from ${src}.`,
-          );
+  const arts = Object.fromEntries(Object.entries(sheets).map(([visual, src]) => {
+    const art = createBoilingSprite({
+      src,
+      clock: options.clock,
+      className: `game-button__art game-button__art--${visual}`,
+      onFrameSize(size, loadedSrc) {
+        if (frameGeometry) {
+          if (size.width !== frameGeometry.width || size.height !== frameGeometry.height) {
+            console.error(
+              `Game button sheet geometry mismatch: expected ${frameGeometry.width}x${frameGeometry.height}, received ${size.width}x${size.height} from ${loadedSrc}.`,
+            );
+          }
+          return;
         }
-        return;
-      }
-      frameGeometry = size;
-      element.style.aspectRatio = String(getButtonFrameAspectRatio(size));
-    },
-  });
+        frameGeometry = size;
+        element.style.aspectRatio = String(getButtonFrameAspectRatio(size));
+      },
+    });
+    art.element.style.visibility = visual === 'up' ? 'visible' : 'hidden';
+    return [visual, art];
+  })) as Record<GameButtonVisual, ReturnType<typeof createBoilingSprite>>;
   const juice = createBoilingSprite({
     src: options.juiceSheet ?? DEFAULT_JUICE_SHEET,
     clock: options.clock,
@@ -69,13 +79,8 @@ export function createGameButton(options: GameButtonOptions): GameButton {
   const label = document.createElement('span');
   label.className = 'game-button__label';
   label.textContent = options.label;
-  element.append(juice.element, art.element, label);
-
-  const sheets: Record<GameButtonVisual, string> = {
-    up: options.upSheet,
-    between: options.betweenSheet,
-    depressed: options.depressedSheet,
-  };
+  element.append(juice.element, ...Object.values(arts).map((art) => art.element), label);
+  const artLease = assetLoader.retainUrls(Object.values(sheets));
   let currentVisual: GameButtonVisual = 'up';
 
   function applyDetectedAnchor(visual: GameButtonVisual): void {
@@ -94,7 +99,9 @@ export function createGameButton(options: GameButtonOptions): GameButton {
     },
     render(view) {
       currentVisual = view.visual;
-      art.setSource(sheets[view.visual]);
+      for (const [visual, art] of Object.entries(arts)) {
+        art.element.style.visibility = visual === view.visual ? 'visible' : 'hidden';
+      }
       juice.element.hidden = view.juiceOpacity === 0;
       juice.element.style.opacity = String(view.juiceOpacity);
       element.dataset.state = view.visual;
@@ -104,7 +111,18 @@ export function createGameButton(options: GameButtonOptions): GameButton {
 
   let activePointer: number | null = null;
   let keyboardHeld = false;
-  let disabled = false;
+  let requestedDisabled = false;
+  let assetsReady = false;
+  let destroyed = false;
+  const isDisabled = () => requestedDisabled || !assetsReady;
+  setControlDisabled(element, true);
+  void Promise.all([artLease.ready, ...Object.values(arts).map((art) => art.whenReady())]).then(() => {
+    if (destroyed) return;
+    assetsReady = true;
+    setControlDisabled(element, requestedDisabled);
+  }).catch((error) => {
+    console.error(`Could not prepare button art for ${options.label}.`, error);
+  });
 
   const isInside = (event: PointerEvent) => {
     const rect = element.getBoundingClientRect();
@@ -113,7 +131,7 @@ export function createGameButton(options: GameButtonOptions): GameButton {
   };
 
   const onPointerDown = (event: PointerEvent) => {
-    if (disabled || activePointer !== null || event.button !== 0 || !state.press()) return;
+    if (isDisabled() || activePointer !== null || event.button !== 0 || !state.press()) return;
     depressedSound.play();
     activePointer = event.pointerId;
     element.setPointerCapture(event.pointerId);
@@ -139,7 +157,7 @@ export function createGameButton(options: GameButtonOptions): GameButton {
     state.cancel();
   };
   const onKeyDown = (event: KeyboardEvent) => {
-    if (disabled || (event.key !== ' ' && event.key !== 'Enter') || event.repeat || keyboardHeld) return;
+    if (isDisabled() || (event.key !== ' ' && event.key !== 'Enter') || event.repeat || keyboardHeld) return;
     keyboardHeld = state.press();
     if (keyboardHeld) {
       depressedSound.play();
@@ -170,20 +188,22 @@ export function createGameButton(options: GameButtonOptions): GameButton {
   return {
     element,
     setDisabled(nextDisabled) {
-      if (disabled === nextDisabled) return;
-      disabled = nextDisabled;
-      if (disabled) {
+      if (requestedDisabled === nextDisabled) return;
+      requestedDisabled = nextDisabled;
+      if (requestedDisabled) {
         activePointer = null;
         keyboardHeld = false;
         state.cancel();
       }
-      setControlDisabled(element, disabled);
+      setControlDisabled(element, isDisabled());
     },
     destroy() {
+      destroyed = true;
+      artLease.release();
       state.destroy();
       depressedSound.destroy();
       releasedSound.destroy();
-      art.destroy();
+      for (const art of Object.values(arts)) art.destroy();
       juice.destroy();
       element.remove();
     },

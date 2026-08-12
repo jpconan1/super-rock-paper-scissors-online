@@ -68,6 +68,20 @@ export function isSoundEnabled(): boolean {
   return !muted;
 }
 
+export function primeAudioFromGesture(): void {
+  const audioContext = getContext();
+  if (!audioContext || audioContext.state === 'closed') return;
+  try {
+    const warmup = audioContext.createBufferSource();
+    warmup.buffer = audioContext.createBuffer(1, 1, audioContext.sampleRate);
+    warmup.connect(audioContext.destination);
+    warmup.start();
+    if (audioContext.state !== 'running') void audioContext.resume().catch(() => {});
+  } catch {
+    // A later control gesture gets another chance to unlock audio.
+  }
+}
+
 export function getMusicVolume(): number { return musicVolume; }
 export function getSfxVolume(): number { return sfxVolume; }
 

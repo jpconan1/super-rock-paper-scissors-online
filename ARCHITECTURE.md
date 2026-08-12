@@ -1,237 +1,110 @@
 # Super RPS Online Architecture
 
-This is the project north star, not one giant implementation task. Build it in small, playable slices. Every slice must preserve working input, animation, audio, and tests.
+This is the technical north star. `dreams.txt` describes the product vision. Exact draft, ban, scoring, and timeout rules remain product decisions and are not invented here.
 
-## System spine
-
-Target structure:
+## System shape
 
 ```text
-apps/
-  client/          Browser game, shell, renderer, audio
-  server/          HTTP/WebSocket authoritative server
-
-packages/
-  protocol/        Validated commands, snapshots, events
-  game-core/       Match flow, draft, timers, shared types
-  variants/
-    fireball-war/   First reference variant
-    rock-paper-scissors/
-    ...             One isolated module per variant
-
-tools/
-  variant-harness/ Preview states, viewports, animation, audio
-  asset-checker/   Validate sheets, loop metadata, missing assets
+browser
+  AppController -> shell screens + VariantPresentation
+       | WebSocket commands / snapshots / timed events
+Cloudflare Worker
+  auth + validation + routing + rate limits
+       |
+  Match DO (one per match) -> bundled VariantRules
+  Matchmaker DO            -> one logical queue
+  Lobby DO                 -> presence + chat
+  Whiteboard DO            -> batched drawing operations
+       |
+  D1 -> seasons, slot manifests, identities, ratings, summaries
+  R2 -> future large replay and whiteboard archives
 ```
 
-- Client never determines competitive outcomes, timers, P1/P2, draft order, legal results, score, or rating.
-- Server runs matches as isolated in-memory actors with serialized command queues.
-- Supabase provides Postgres, future authentication, storage, migrations, leaderboards, seasons, reports, and tournament records.
-- Browser is the initial target. Preserve seams for later wrappers without choosing them now.
-- `old-project` is salvage material only. Copy useful assets and rules into the new project; never import it.
+The browser never decides competitive outcomes, timers, legal actions, score, player sides, or rating. A match stops advancing when its authoritative connection is unavailable.
 
-## Variant boundary
+## Client controller
 
-Every variant supplies:
-
-- Stable ID, rules version, display metadata, asset manifest, moves, and timing defaults.
-- Pure deterministic rules: initial state, legal commands, validation, turn resolution, winner detection, and public-state projection.
-- Client presentation: two authored compositions, scene resolver, animation timelines, and semantic audio cues.
-- Contract fixtures covering move interactions and special phases.
-
-Variants never own shell navigation, sockets, matchmaking, rating, global DOM queries, or database access.
-
-A build-time registry contains deployed variants. A Supabase season record activates exactly nine unique deployed IDs. Each match pins its season, roster, variant versions, and server RNG seed.
-
-The client lazy-loads presentation modules. The server loads rule modules before assigning a match. A local development adapter may run the same pure rules for tests and the variant harness, but it is not ranked authority.
-
-## Protocol and match flow
-
-Use runtime-validated, versioned WebSocket messages.
-
-```ts
-interface ClientCommand<TType extends string, TPayload> {
-  protocolVersion: number;
-  commandId: string;
-  matchId: string;
-  expectedRevision: number;
-  type: TType;
-  payload: TPayload;
-}
-```
-
-Server messages contain personalized snapshots, monotonic revisions, absolute timestamps, semantic transition cues, and stable event IDs. Opponent secrets are removed server-side.
-
-- Server securely randomizes canonical P1/P2. Both clients show P1 and P2 on the same sides.
-- Each player picks one distinct variant. Games use server-recorded pick order.
-- At 1-1, private simultaneous bans leave one tiebreaker.
-- Final best-of-three result updates one global rating.
-- New seasons softly compress ratings toward baseline while preserving history.
-- Disconnect reserves a seat for 30 seconds. Reconnect receives current authoritative state and skips obsolete presentation.
-- Resolved turns are persisted before their revision is broadcast. Periodic snapshots permit recovery.
-- Result, rating change, and match completion commit atomically.
-
-## Client shell
-
-The cancellable shell flow is:
+`AppController` owns boot, navigation, menus, matchmaking screens, connection state, reconnect UI, settings, audio, asset loading, transitions, and variant lifetime. Its flow is cancellable:
 
 ```text
-boot -> title -> guest session -> lobby -> matchmaking
--> match found -> draft -> scoreboard -> variant game
--> between games -> result -> lobby
+boot -> title -> guest -> lobby -> matchmaking -> match found
+-> draft -> scoreboard -> game -> between games -> result -> lobby
 ```
 
-The shell owns connection, session, navigation, overlays, settings, asset loading, errors, reconnect UI, and variant lifetime. A mounted variant receives only its authoritative projection, allowed command sender, renderer services, audio cue service, and cancellation signal.
+The controller understands only `slot-1` through `slot-9` and a universal presentation contract. It preloads, mounts, updates, and unmounts the presentation registered for a slot. It contains no variant IDs, moves, rules, or outcome branches.
 
-Presentation state stays separate from match state. Server timestamps govern pacing. Clients animate locally and snap forward when late; the server does not wait for animation acknowledgements.
+Presentation state is disposable. Immediate button feedback is local, but authoritative changes arrive as personalized snapshots and semantic timed events. Each event has a stable ID plus absolute start/end timestamps. A late client seeks to the current point; reconnect skips expired presentation. The server never waits for animation acknowledgements.
 
-## Renderer and layout
+## Server authority
 
-Use DOM/CSS for accessible controls and responsive game UI. Use canvas for the whiteboard and effects that genuinely need pixels.
+The Worker accepts public HTTP/WebSocket traffic, authenticates guest resume tokens, validates envelopes, applies connection/user rate limits, and routes requests to Durable Objects.
 
-- Each game screen keeps one semantic DOM tree across its layout modes.
-- Two fixed logical compositions are authored directly: `705 × 540` landscape and `390 × 705` portrait.
-- The landscape composition is selected when the host is square or wider; portrait is selected when the host is taller than wide.
-- A scale box uniformly fits the selected composition without upscaling. Explicit CSS coordinate maps position elements in each composition.
-- Common and variant-specific regions will be extracted only after both Fireball War compositions are approved.
-- A variant harness previews every state at useful phone, tablet, desktop, safe-area, and text-size combinations.
+One SQLite-backed Match Durable Object is the atom of match coordination. It owns canonical P1/P2, selection flow, game order, timers, disconnect grace, revisions, command idempotency, private choices, scores, and final result. Important state and an append-only accepted-command/event log are written to its local storage before broadcast. Hibernatable WebSockets and alarms allow idle matches to sleep and deadlines to survive restarts.
 
-Renderer services include:
+Matchmaking, lobby/chat, and whiteboard use separate Durable Objects. They begin as one logical instance each for alpha traffic, behind routing interfaces that permit later sharding. Chat and drawing are validated, bounded, and rate-limited; drawing points are batched.
 
-- One visibility-aware boil clock shared by every boiling element.
-- Validated sprite metadata.
-- Runtime button text-anchor detection remains intentional: detect once per sheet, cache it, and fall back to center when detection fails.
-- Cancellable timelines with final-state commits.
-- Fixed screen, modal, effects, and mandatory-wipe layers.
-- Persistent global boil toggle. Wipes remain mandatory.
-- Critical-shell and per-variant asset preloading with failure fallback and cache versions.
+## Slots and variants
 
-## Input components
+The public match protocol identifies nine opaque `SlotId` values. A D1 season manifest maps each slot to a stable variant ID and rules version. A season is valid only when all nine distinct slots resolve to compatible modules in the deployed registry.
 
-The current game button is the first real shared component and should be preserved.
+Executable code is bundled and reviewed at deployment. Configuration selects registered code; neither client nor server downloads executable game modules from season data.
 
-It belongs in the client renderer/input layer, not inside a variant. Its responsibilities are:
+Each variant has two independent adapters:
 
-- Pointer, touch, and keyboard interaction.
-- Press, between, release, cancel, and juice animation states.
-- Boiling artwork supplied by the shared boil clock.
-- Accessible native button semantics and label.
-- Semantic `activate()` callback only. It must not decide game legality or outcomes.
-- Semantic press/release SFX cues routed through the audio service.
+- `VariantRules`: pure deterministic initialization, command validation/resolution, player projection, and game-result reporting.
+- `VariantPresentation`: client asset preload, mount, authoritative render/event handling, command emission, and teardown.
 
-Shell screens and variants configure its label and artwork. A variant may request a command when it activates; the server still accepts or rejects that command. Immediate press animation and sound are safe client feedback and do not count as predicting gameplay.
+The Match Director knows only the rules contract. The AppController knows only the presentation contract. Server rules never import DOM, artwork, audio, sockets, D1, or shell code. Client presentation never decides whether a command is legal or who won.
 
-The existing iPhone audio-unlock work is foundation code, not throwaway prototype code. Preserve its exact user-gesture behavior while the audio API grows around it.
+## Protocol
 
-## Audio
+Client commands contain `protocolVersion`, `commandId`, `matchId`, `expectedRevision`, `type`, and `payload`. Accepted commands increment one monotonic match revision. Duplicate IDs return the prior authoritative state; stale revisions are rejected without mutation.
 
-Create one Web Audio engine with independent music and SFX buses.
+Server snapshots contain the recipient's redacted projection, revision, current server time, phase deadline when applicable, and semantic events. Opponent secrets are removed before serialization. Reconnect authenticates the reserved seat and receives a fresh snapshot rather than replaying obsolete visuals.
 
-- The first intentional Play gesture unlocks audio and enables both channels.
-- Music and SFX choices persist independently.
-- Shell, buttons, and variants emit semantic cues instead of file paths.
-- Music manifests define BPM, bar length, loop boundaries, stems, intensity states, fades, weights, and transition rules.
-- One scheduler aligns compatible stems on the same audio clock and changes them at legal musical boundaries.
-- Game state controls intensity. Optional layers use client-local RNG.
-- Support gain ramps, crossfades, voice limits, priority, pooling, ducking, visibility changes, and mobile unlock recovery.
-- Missing stems degrade gracefully.
+Semantic events include lifecycle meaning such as `ready`, `reveal`, `score`, `wipe`, and `game-start`; they do not describe animation frames. The client owns rendering, seeking, cancellation, accessibility, and reduced-motion behavior.
 
-The current sound implementation should evolve behind a stable service rather than be replaced wholesale. First split its setting into `musicEnabled` and `sfxEnabled`; then route button sounds through cue IDs while retaining the working fallback pool and iPhone unlock path.
+## Persistence
 
-## Server services
+Match DO SQLite stores active authoritative state, processed command IDs, deadlines, and compact events. D1 stores guest/player identity, seasons, nine-slot manifests, completed-match summaries, ratings, and leaderboards.
 
-The Node TypeScript server separates:
+Match completion crosses two storage systems, so it is retryable rather than pretending to be one distributed transaction. Every completion has a unique result ID. One D1 transaction inserts that result and applies both rating changes exactly once; conflict on the result ID is a successful no-op. The Match DO records finalization status and retries safely.
 
-- Authentication, heartbeat, rate limits, resume tokens, and protocol negotiation.
-- Lobby presence, public chat, whiteboard operations, challenges, and matchmaking.
-- Match actors, draft, timers, variants, disconnect handling, persistence, and rating finalization.
-- Season roster/configuration.
-- Later tournament orchestration using the same match APIs.
-
-Start with one regional process. Hide room ownership and persistence behind interfaces so multiple processes, leases, and pub/sub can be added later.
-
-There is one logical lobby. Chat and drawing payloads are validated, bounded, and rate-limited. Whiteboard history uses compact operations, periodic flattened snapshots, and trimming. Moderation/reporting remains a future boundary.
-
-Supabase stores players, seasons, active variants, matches, events, snapshots, ratings, leaderboard entries, tournaments, and champion features. Alpha guests use signed resumable tokens and remain disposable.
-
-Spectators are future-ready through delayed/redacted projections, but receive no prototype/alpha UI.
+Large replay archives and historical whiteboards move to R2 only when retention requires it.
 
 ## Delivery slices
 
-### Slice 0: current interaction foundation
+1. Preserve the current title, layout, animation, audio, and input foundation.
+2. Establish shared protocol, slot-manifest, variant contracts, AppController, and deterministic Match Director.
+3. Split one existing variant into pure rules and client presentation; drive fixtures through a local harness.
+4. Run two clients through one Match DO with persisted revisions, idempotent commands, alarms, and reconnect.
+5. Add matchmaking and the generic nine-slot shell. Implement draft/ban only after its exact rules are supplied.
+6. Add D1 identity, season, manifest, result, rating, and leaderboard migrations plus idempotent finalization.
+7. Add bounded lobby/chat and whiteboard Durable Objects.
+8. Move each remaining variant through the same contract suite. Refuse invalid seasons.
+9. Later: accounts, moderation, tournaments, platform wrappers, spectators, and R2 archives.
 
-- Keep the working title screen, boiling sprite, animation player, button state machine, iPhone-safe SFX, and tests green.
-- Add a short manual iPhone smoke-test checklist so audio regressions are caught early.
+## Required verification
 
-### Slice 1: client service boundaries
-
-- Introduce app-owned renderer, input, settings, and audio service interfaces around current code.
-- Add independent music/SFX settings and global boil setting.
-- Replace direct button audio file paths with semantic cue IDs without changing behavior.
-
-### Slice 2: authored compositions and harness
-
-- Perfect Fireball War's landscape and portrait compositions through direct CSS iteration.
-- Extract the approved common regions into the base layout, leaving Fireball War-specific regions in the variant.
-- Build Fireball War fixture states in a variant harness.
-- Prove phone portrait and desktop landscape before adding rules or networking.
-
-### Slice 3: pure Fireball War rules
-
-- Copy and type the useful old rules into an isolated variant module.
-- Add deterministic rule fixtures and public projections.
-- Connect harness buttons through a local adapter.
-
-### Slice 4: authoritative match prototype
-
-- Add protocol validation, match actor, revisions, timestamps, P1/P2 assignment, command idempotency, and reconnect snapshots.
-- Run two browser clients through Fireball War against the development server.
-
-### Slice 5: draft and full shell
-
-- Add guest session, lobby, matchmaking, variant draft, scoreboard, between-game, and results states.
-- Add mandatory wipes through the presentation director.
-
-### Slice 6: persistence and community
-
-- Add Supabase schema, match event/snapshot persistence, Elo transaction, season roster, chat, and bounded whiteboard.
-
-### Slice 7: nine variants
-
-- Move one variant at a time through the same contract suite.
-- Publish a season only when exactly nine compatible modules pass validation.
-
-### Later
-
-- Accounts, moderation, tournaments, champion/news surfaces, scaling, platform packaging, and spectator UI.
-
-## Verification rules
-
-- Variant determinism and contract tests.
-- Registry rejects duplicate, missing, incompatible, or non-nine season rosters.
-- Two clients agree on P1/P2, sides, draft, score, deadlines, and results.
-- Duplicated and stale commands resolve at most once.
-- Reconnect works before 30 seconds; late reconnect forfeits.
-- Match snapshots/events reconstruct authoritative state.
-- Layout tests cover phone portrait, landscape, safe areas, long names, zoom, and each variant's maximum-density fixture.
-- Animation tests cover interruption, rapid snapshots, hidden tabs, wipe ownership, boil disabled, and teardown.
-- Audio tests cover independent settings, bar alignment, cue priority, missing files, and suspended contexts.
-- End-to-end test covers title through completed ranked match with two isolated clients.
-- Load tests cover WebSocket limits, matchmaking, lobby bursts, match actors, and database slowdown.
+- Any registered slot loads without controller or director variant branches.
+- Registry rejects missing, duplicate, unknown, or rules-incompatible mappings.
+- Identical rules state, command sequence, and seed produce identical results.
+- Both clients agree on public state while receiving only their allowed secrets.
+- Duplicate/stale commands never resolve twice.
+- Match state and deadlines survive Durable Object eviction/restart.
+- Reconnect restores current state and skips expired animation cues.
+- Repeated or interrupted D1 finalization changes Elo once.
+- Loss of authority freezes progress and exposes recoverable reconnect UI.
+- End-to-end coverage eventually spans title through a completed multi-game match and return to lobby.
 
 ## Locked decisions
 
-- Roadmap-ready spine; small playable implementation slices.
-- DOM/CSS renderer with selective canvas.
-- Two authored fixed compositions with a shared semantic DOM tree.
-- Node authoritative server plus Supabase.
-- Online competitive play plus local development adapter.
-- Exactly nine active variants per season.
-- Canonical, randomly assigned P1/P2.
-- Client-personalized music variation.
-- Mandatory wipes; optional global boiling.
-- Web-only release initially.
-- Future-ready spectating.
-- One global Elo with seasonal soft reset.
-- One logical lobby.
-- Disposable alpha guests.
+- Browser-first, turn-based, authoritative online play.
+- Cloudflare Workers + Durable Objects + D1; R2 later.
+- Exactly nine season-configured opaque slots.
+- Bundled executable variant registry; no runtime code download.
+- Separate server rules and client presentation modules.
+- Timed semantic server cues; local cancellable animation.
+- One global Elo with idempotent result finalization.
+- One logical alpha matchmaking queue, lobby, and whiteboard, with sharding seams.
+- Exact match selection and ban flow remains deliberately unspecified.
