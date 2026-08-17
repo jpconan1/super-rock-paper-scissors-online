@@ -2,6 +2,7 @@ import { AnimationPlayer } from '../animation/animationPlayer';
 import { BOIL_FRAME_MS, type BoilClock } from '../animation/boilClock';
 import { BOIL_FRAME_COUNT, createBoilingSprite } from './boilingSprite';
 import type { CoveredSwap, WipeTransition } from './wipeTransition';
+import { createMenuCanvas, type MenuCanvas } from '../layout/menuLayout';
 
 export const CURTAIN_FRAME_MS = 84;
 export const CURTAIN_CLOSED_HOLD_MS = BOIL_FRAME_MS * BOIL_FRAME_COUNT;
@@ -27,9 +28,6 @@ const PORTRAIT_ASSETS: CurtainAssetSet = [
   '/wipes/curtains/portrait/frame2-sheet.webp',
   '/wipes/curtains/portrait/closed-sheet.webp',
 ];
-
-const OPEN_CURTAIN_LEFT = '/wipes/curtains/portrait/left-sheet.webp';
-const OPEN_CURTAIN_RIGHT = '/wipes/curtains/portrait/right-sheet.webp';
 
 export interface CurtainWipeOptions {
   landscapeAssets?: CurtainAssetSet;
@@ -57,13 +55,13 @@ export class CurtainWipe implements WipeTransition {
   private readonly layer: HTMLDivElement;
   private readonly foreground: HTMLDivElement;
   private readonly sprite;
-  private readonly decorationSprites;
+  private readonly decorationSprite;
+  private readonly canvas: MenuCanvas;
   private readonly player: AnimationPlayer<number>;
   private readonly landscapeAssets: CurtainAssetSet;
   private readonly portraitAssets: CurtainAssetSet;
   private readonly frameDurationMs: number;
   private readonly closedHoldMs: number;
-  private readonly resizeObserver?: ResizeObserver;
   private currentPosition = 0;
   private layout: CurtainLayout;
   private state: CurtainWipeState = 'open';
@@ -81,40 +79,47 @@ export class CurtainWipe implements WipeTransition {
 
     this.layer = document.createElement('div');
     this.layer.className = 'curtain-wipe';
+    this.canvas = createMenuCanvas(this.layer, 'curtain-wipe', (layout) => {
+      this.layout = layout;
+      this.sprite?.setSource(this.sourceFor(this.currentPosition));
+      this.decorationSprite?.setSource(this.sourceFor(0));
+      this.syncLayer();
+    });
     this.sprite = createBoilingSprite({
       src: this.sourceFor(0),
       clock,
       className: 'curtain-wipe__sprite',
     });
-    const leftDecoration = createBoilingSprite({
-      src: OPEN_CURTAIN_LEFT,
+    this.decorationSprite = createBoilingSprite({
+      src: this.sourceFor(0),
       clock,
-      className: 'curtain-wipe__decoration-sprite curtain-wipe__decoration-sprite--left',
+      className: 'curtain-wipe__decoration-sprite',
     });
-    const rightDecoration = createBoilingSprite({
-      src: OPEN_CURTAIN_RIGHT,
-      clock,
-      className: 'curtain-wipe__decoration-sprite curtain-wipe__decoration-sprite--right',
-    });
-    this.decorationSprites = [leftDecoration, rightDecoration] as const;
     const decoration = document.createElement('div');
     decoration.className = 'curtain-wipe__decoration';
-    decoration.append(leftDecoration.element, rightDecoration.element);
+    decoration.append(this.decorationSprite.element);
     this.foreground = document.createElement('div');
     this.foreground.className = 'curtain-wipe__foreground';
-    this.layer.append(this.sprite.element, decoration, this.foreground);
+    this.canvas.composition.append(this.sprite.element, decoration, this.foreground);
     host.append(this.layer);
 
     this.player = new AnimationPlayer<number>({ commit: (position) => this.commitPosition(position) });
     this.syncLayer();
-    if (typeof ResizeObserver !== 'undefined') {
-      this.resizeObserver = new ResizeObserver(() => this.updateLayout());
-      this.resizeObserver.observe(host);
-    }
   }
 
   getState(): CurtainWipeState { return this.state; }
   getLayout(): CurtainLayout { return this.layout; }
+
+  viewportRectToCanvasRect(rect: DOMRect): Readonly<{ left: number; top: number; width: number; height: number }> {
+    const canvasRect = this.canvas.box.element.getBoundingClientRect();
+    const scale = canvasRect.width / this.canvas.box.logicalWidth || 1;
+    return {
+      left: (rect.left - canvasRect.left) / scale,
+      top: (rect.top - canvasRect.top) / scale,
+      width: rect.width / scale,
+      height: rect.height / scale,
+    };
+  }
 
   setOpenDecoration(enabled: boolean): void {
     this.decorateWhenOpen = enabled;
@@ -159,14 +164,23 @@ export class CurtainWipe implements WipeTransition {
 
   clearForeground(): void { this.foreground.replaceChildren(); }
 
+  hideImmediately(): void {
+    if (this.destroyed) return;
+    this.player.cancel(0);
+    this.currentPosition = 0;
+    this.state = 'open';
+    this.clearForeground();
+    this.syncLayer();
+  }
+
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
     this.player.cancel();
-    this.resizeObserver?.disconnect();
+    this.canvas.destroy();
     this.clearForeground();
     this.sprite.destroy();
-    for (const decorationSprite of this.decorationSprites) decorationSprite.destroy();
+    this.decorationSprite.destroy();
     this.layer.remove();
   }
 
@@ -186,10 +200,7 @@ export class CurtainWipe implements WipeTransition {
   }
 
   private resetOpen(): void {
-    this.player.cancel(0);
-    this.state = 'open';
-    this.clearForeground();
-    this.syncLayer();
+    this.hideImmediately();
   }
 
   private holdClosed(signal?: AbortSignal): Promise<void> {
@@ -209,14 +220,6 @@ export class CurtainWipe implements WipeTransition {
     });
   }
 
-  private updateLayout(): void {
-    const next = selectCurtainLayout(this.host.clientWidth, this.host.clientHeight);
-    if (next === this.layout) return;
-    this.layout = next;
-    this.sprite.setSource(this.sourceFor(this.currentPosition));
-    this.syncLayer();
-  }
-
   private commitPosition(position: number): void {
     this.currentPosition = position;
     this.sprite.setSource(this.sourceFor(position));
@@ -233,7 +236,7 @@ export class CurtainWipe implements WipeTransition {
   }
 
   private syncLayer(): void {
-    const decoratedOpen = this.state === 'open' && this.decorateWhenOpen && this.layout === 'landscape';
+    const decoratedOpen = this.state === 'open' && this.decorateWhenOpen;
     this.layer.hidden = this.state === 'open' && !decoratedOpen;
     this.layer.dataset.state = this.state;
     this.layer.dataset.layout = this.layout;

@@ -10,6 +10,26 @@ describe('scale box fitting', () => {
       .toEqual({ scale: 1, width: 400, height: 300 });
   });
 
+  test('upscales when an explicit maximum allows it', () => {
+    expect(fitScaleBox({
+      logicalWidth: 960,
+      logicalHeight: 540,
+      availableWidth: 1920,
+      availableHeight: 1080,
+      maxScale: Number.POSITIVE_INFINITY,
+    })).toEqual({ scale: 2, width: 1920, height: 1080 });
+  });
+
+  test('respects a finite upscale cap', () => {
+    expect(fitScaleBox({
+      logicalWidth: 960,
+      logicalHeight: 540,
+      availableWidth: 1920,
+      availableHeight: 1080,
+      maxScale: 1.5,
+    })).toEqual({ scale: 1.5, width: 1440, height: 810 });
+  });
+
   test.each([
     [320, 800, 0.8],
     [1000, 150, 0.5],

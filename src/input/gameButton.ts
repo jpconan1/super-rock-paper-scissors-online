@@ -49,29 +49,25 @@ export function createGameButton(options: GameButtonOptions): GameButton {
     depressed: options.depressedSheet,
   };
   let frameGeometry: SheetDimensions | null = null;
-  const arts = Object.fromEntries(Object.entries(sheets).map(([visual, src]) => {
-    const art = createBoilingSprite({
-      src,
-      clock: options.clock,
-      className: `game-button__art game-button__art--${visual}`,
-      onFrameSize(size, loadedSrc) {
-        if (frameGeometry) {
-          if (size.width !== frameGeometry.width || size.height !== frameGeometry.height) {
-            console.error(
-              `Game button sheet geometry mismatch: expected ${frameGeometry.width}x${frameGeometry.height}, received ${size.width}x${size.height} from ${loadedSrc}.`,
-            );
-          }
-          return;
+  const art = createBoilingSprite({
+    src: sheets.up,
+    clock: options.clock,
+    className: 'game-button__art',
+    onFrameSize(size, loadedSrc) {
+      if (frameGeometry) {
+        if (size.width !== frameGeometry.width || size.height !== frameGeometry.height) {
+          console.error(
+            `Game button sheet geometry mismatch: expected ${frameGeometry.width}x${frameGeometry.height}, received ${size.width}x${size.height} from ${loadedSrc}.`,
+          );
         }
-        frameGeometry = size;
-        element.style.aspectRatio = String(getButtonFrameAspectRatio(size));
-        element.style.setProperty('--game-button-art-width', `${size.width}px`);
-        element.style.setProperty('--game-button-art-height', `${size.height}px`);
-      },
-    });
-    art.element.style.visibility = visual === 'up' ? 'visible' : 'hidden';
-    return [visual, art];
-  })) as Record<GameButtonVisual, ReturnType<typeof createBoilingSprite>>;
+        return;
+      }
+      frameGeometry = size;
+      element.style.aspectRatio = String(getButtonFrameAspectRatio(size));
+      element.style.setProperty('--game-button-art-width', `${size.width}px`);
+      element.style.setProperty('--game-button-art-height', `${size.height}px`);
+    },
+  });
   const juice = createBoilingSprite({
     src: options.juiceSheet ?? DEFAULT_JUICE_SHEET,
     clock: options.clock,
@@ -82,7 +78,7 @@ export function createGameButton(options: GameButtonOptions): GameButton {
   const label = document.createElement('span');
   label.className = 'game-button__label';
   label.textContent = options.label;
-  element.append(juice.element, ...Object.values(arts).map((art) => art.element), label);
+  element.append(juice.element, art.element, label);
   const artLease = assetLoader.retainUrls(Object.values(sheets));
   let currentVisual: GameButtonVisual = 'up';
 
@@ -101,10 +97,8 @@ export function createGameButton(options: GameButtonOptions): GameButton {
       options.onActivate();
     },
     render(view) {
+      if (view.visual !== currentVisual) art.setSource(sheets[view.visual]);
       currentVisual = view.visual;
-      for (const [visual, art] of Object.entries(arts)) {
-        art.element.style.visibility = visual === view.visual ? 'visible' : 'hidden';
-      }
       juice.element.hidden = view.juiceOpacity === 0;
       juice.element.style.opacity = String(view.juiceOpacity);
       element.dataset.state = view.visual;
@@ -119,7 +113,7 @@ export function createGameButton(options: GameButtonOptions): GameButton {
   let destroyed = false;
   const isDisabled = () => requestedDisabled || !assetsReady;
   setControlDisabled(element, true);
-  void Promise.all([artLease.ready, ...Object.values(arts).map((art) => art.whenReady())]).then(() => {
+  void Promise.all([artLease.ready, art.whenReady()]).then(() => {
     if (destroyed) return;
     assetsReady = true;
     setControlDisabled(element, requestedDisabled);
@@ -210,7 +204,7 @@ export function createGameButton(options: GameButtonOptions): GameButton {
       state.destroy();
       depressedSound.destroy();
       releasedSound.destroy();
-      for (const art of Object.values(arts)) art.destroy();
+      art.destroy();
       juice.destroy();
       element.remove();
     },

@@ -12,7 +12,7 @@ const FIREBALL_WAR_BUTTON_ROOT = '/interactive-elements/fireball-war';
 type FireballWarLayoutName = 'landscape' | 'portrait';
 
 export const FIREBALL_WAR_LAYOUTS: readonly ResponsiveScaleBoxLayout<FireballWarLayoutName>[] = [
-  { name: 'landscape', width: 705, height: 540, minAspectRatio: 1 },
+  { name: 'landscape', width: 960, height: 540, minAspectRatio: 1 },
   { name: 'portrait', width: 390, height: 705, minAspectRatio: 0 },
 ];
 

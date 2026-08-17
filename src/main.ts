@@ -1,6 +1,6 @@
 import './styles.css';
 import { AppController } from './app/appController';
-import { LocalShellSessionAdapter } from './app/shellSessionAdapter';
+import { WebSocketShellSessionAdapter } from './app/shellSessionAdapter';
 import { BoilClock } from './animation/boilClock';
 import { isBoilEnabled } from './input/boilToggle';
 import { createClientSeasonManifest } from './variants/clientSeasonManifest';
@@ -13,7 +13,7 @@ const clock = new BoilClock(document, isBoilEnabled());
 const controller = new AppController(app, {
   clock,
   season: createClientSeasonManifest(clock),
-  session: new LocalShellSessionAdapter(),
+  session: new WebSocketShellSessionAdapter(new URLSearchParams(location.search).get('server') ?? location.origin),
 });
 
 void controller.start().catch((error) => console.error('Could not start game.', error));

@@ -1,6 +1,5 @@
 import type { BoilClock } from '../animation/boilClock';
 import type { ClientVariantDescriptor, SeasonClientManifest } from '../core/variant';
-import { createPlaceholderPresentation } from './placeholder/placeholderPresentation';
 
 const TEMPORARY_RULES = Object.freeze({
   rps: ['Pick rock, paper, or scissors.', 'Rock beats scissors, scissors beats paper, and paper beats rock.'],
@@ -14,20 +13,24 @@ const TEMPORARY_RULES = Object.freeze({
   taptapshoot: ['Follow the rhythm, then choose your attack.', 'Timing and prediction decide the exchange.'],
 } satisfies Record<string, readonly string[]>);
 
-function placeholder(variantId: string, title: string, buttonAssetKey: keyof typeof TEMPORARY_RULES): ClientVariantDescriptor {
+function placeholder(variantId: string, title: string, buttonAssetKey: keyof typeof TEMPORARY_RULES, clock: BoilClock): ClientVariantDescriptor {
   return {
     variantId,
     rulesVersion: 1,
     title,
     buttonAssetKey,
     rulesCopy: TEMPORARY_RULES[buttonAssetKey],
-    loadPresentation: async () => createPlaceholderPresentation(title),
+    assetBundleId: 'variant:fireball-war',
+    loadPresentation: async () => {
+      const { createDummyPresentation } = await import('./dummy/dummyPresentation');
+      return createDummyPresentation(clock);
+    },
   };
 }
 
 export function createClientSeasonManifest(clock: BoilClock): SeasonClientManifest {
   const fireballWar: ClientVariantDescriptor = {
-    variantId: 'fireball-war',
+    variantId: 'dummy-fireball-war',
     rulesVersion: 1,
     title: 'Fireball War',
     buttonAssetKey: 'fireballwar',
@@ -35,22 +38,22 @@ export function createClientSeasonManifest(clock: BoilClock): SeasonClientManife
     thumbnail: '/variants/fireball-war/cbf-standoff-sheet.webp',
     assetBundleId: 'variant:fireball-war',
     loadPresentation: async () => {
-      const { createFireballWarPresentation } = await import('./fireballWar/fireballWarPresentation');
-      return createFireballWarPresentation(clock);
+      const { createDummyPresentation } = await import('./dummy/dummyPresentation');
+      return createDummyPresentation(clock);
     },
   };
   return {
     seasonId: 'local-alpha',
     slots: [
-      { slotId: 'slot-1', variant: placeholder('rock-paper-scissors', 'Rock Paper Scissors', 'rps') },
-      { slotId: 'slot-2', variant: placeholder('dragon-spear', 'Dragon Spear', 'dragonspear') },
-      { slotId: 'slot-3', variant: placeholder('pick-two', 'Pick Two', 'picktwo') },
-      { slotId: 'slot-4', variant: placeholder('gun-knife-fist', 'Gun Knife Fist', 'gkf') },
-      { slotId: 'slot-5', variant: placeholder('kitchen-sink', 'Kitchen Sink', 'kitchensink') },
+      { slotId: 'slot-1', variant: placeholder('dummy-rps', 'Rock Paper Scissors', 'rps', clock) },
+      { slotId: 'slot-2', variant: placeholder('dummy-dragon-spear', 'Dragon Spear', 'dragonspear', clock) },
+      { slotId: 'slot-3', variant: placeholder('dummy-pick-two', 'Pick Two', 'picktwo', clock) },
+      { slotId: 'slot-4', variant: placeholder('dummy-gkf', 'Gun Knife Fist', 'gkf', clock) },
+      { slotId: 'slot-5', variant: placeholder('dummy-kitchen-sink', 'Kitchen Sink', 'kitchensink', clock) },
       { slotId: 'slot-6', variant: fireballWar },
-      { slotId: 'slot-7', variant: placeholder('rps-rpg', 'RPS RPG', 'rpg') },
-      { slotId: 'slot-8', variant: placeholder('rps-poker', 'RPS Poker', 'poker') },
-      { slotId: 'slot-9', variant: placeholder('tap-tap-shoot', 'Tap Tap Shoot', 'taptapshoot') },
+      { slotId: 'slot-7', variant: placeholder('dummy-rps-rpg', 'RPS RPG', 'rpg', clock) },
+      { slotId: 'slot-8', variant: placeholder('dummy-rps-poker', 'RPS Poker', 'poker', clock) },
+      { slotId: 'slot-9', variant: placeholder('dummy-tap-tap-shoot', 'Tap Tap Shoot', 'taptapshoot', clock) },
     ],
   };
 }

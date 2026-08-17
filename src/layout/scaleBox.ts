@@ -3,6 +3,8 @@ export interface ScaleBoxInput {
   logicalHeight: number;
   availableWidth: number;
   availableHeight: number;
+  /** Largest permitted scale. Defaults to 1 so existing gameplay never upscales. */
+  maxScale?: number;
 }
 
 export interface ScaleBoxResult {
@@ -41,7 +43,9 @@ export function fitScaleBox(input: ScaleBoxInput): ScaleBoxResult {
   }
   const width = Math.max(0, Number.isFinite(availableWidth) ? availableWidth : 0);
   const height = Math.max(0, Number.isFinite(availableHeight) ? availableHeight : 0);
-  const scale = Math.min(1, width / logicalWidth, height / logicalHeight);
+  const maxScale = input.maxScale === undefined ? 1 : input.maxScale;
+  if (!(maxScale > 0)) throw new Error('Maximum scale must be positive.');
+  const scale = Math.min(maxScale, width / logicalWidth, height / logicalHeight);
   return { scale, width: logicalWidth * scale, height: logicalHeight * scale };
 }
 
@@ -86,12 +90,15 @@ export function createScaleBox(logicalWidth: number, logicalHeight: number, clas
   return box;
 }
 
-export function observeScaleBox(host: HTMLElement, box: ScaleBox): () => void {
+export interface ScaleBoxFitOptions { maxScale?: number }
+
+export function observeScaleBox(host: HTMLElement, box: ScaleBox, options: ScaleBoxFitOptions = {}): () => void {
   const fit = () => box.apply(fitScaleBox({
     logicalWidth: box.logicalWidth,
     logicalHeight: box.logicalHeight,
     availableWidth: host.clientWidth,
     availableHeight: host.clientHeight,
+    maxScale: options.maxScale,
   }));
   const observer = new ResizeObserver(fit);
   observer.observe(host);
@@ -104,6 +111,7 @@ export function observeResponsiveScaleBox<TName extends string>(
   box: ScaleBox,
   layouts: readonly ResponsiveScaleBoxLayout<TName>[],
   onLayoutChange: (layout: ResponsiveScaleBoxLayout<TName>) => void,
+  options: ScaleBoxFitOptions = {},
 ): () => void {
   let activeName: TName | undefined;
   const fit = () => {
@@ -118,6 +126,7 @@ export function observeResponsiveScaleBox<TName extends string>(
       logicalHeight: layout.height,
       availableWidth: host.clientWidth,
       availableHeight: host.clientHeight,
+      maxScale: options.maxScale,
     }));
   };
   const observer = new ResizeObserver(fit);

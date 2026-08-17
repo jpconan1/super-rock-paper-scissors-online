@@ -4,6 +4,11 @@ import type { AssetBundleId } from '../assets/assetBundleTypes';
 
 export type PlayerId = 'p1' | 'p2';
 
+export interface VariantGameResult {
+  winner: PlayerId;
+  scores: Record<PlayerId, number>;
+}
+
 export interface DeterministicContext {
   random(): number;
   now: number;

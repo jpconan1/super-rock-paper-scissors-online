@@ -3,9 +3,10 @@ import type { ClientVariantDescriptor } from '../core/variant';
 import type { SlotId } from '../core/slots';
 import type { CurtainWipe } from '../renderer/curtainWipe';
 import { createBoilingSprite } from '../renderer/boilingSprite';
-import { createScaleBox, observeResponsiveScaleBox, type ResponsiveScaleBoxLayout } from '../layout/scaleBox';
+import { createMenuCanvas, MENU_LAYOUTS } from '../layout/menuLayout';
 import { createVariantDetail, type VariantDetail } from './variantDetail';
 import { createVariantGrid, type VariantGrid, type VariantGridItemState } from './variantGrid';
+import { createGameButton } from '../input/gameButton';
 
 export type VariantSelectMode = 'computer' | 'online-pick' | 'ban' | 'tutorial' | 'showcase';
 
@@ -18,6 +19,7 @@ export interface VariantSelectScreenOptions {
   states?: ReadonlyMap<SlotId, VariantGridItemState>;
   onBack: () => void;
   onConfirm: (slot: SlotId) => void;
+  showBack?: boolean;
 }
 
 export interface VariantSelectScreen {
@@ -25,12 +27,7 @@ export interface VariantSelectScreen {
   destroy(): void;
 }
 
-type VariantSelectLayoutName = 'landscape' | 'portrait';
-
-export const VARIANT_SELECT_LAYOUTS: readonly ResponsiveScaleBoxLayout<VariantSelectLayoutName>[] = [
-  { name: 'landscape', width: 960, height: 540, minAspectRatio: 1 },
-  { name: 'portrait', width: 540, height: 960, minAspectRatio: 0 },
-];
+export const VARIANT_SELECT_LAYOUTS = MENU_LAYOUTS;
 
 export function mountVariantSelectScreen(options: VariantSelectScreenOptions): VariantSelectScreen {
   const lifecycle = new AbortController();
@@ -38,9 +35,8 @@ export function mountVariantSelectScreen(options: VariantSelectScreenOptions): V
   element.className = 'variant-select-screen';
   element.dataset.mode = options.mode ?? 'showcase';
   element.setAttribute('aria-label', 'Choose Variant');
-  const scaleBox = createScaleBox(VARIANT_SELECT_LAYOUTS[0]!.width, VARIANT_SELECT_LAYOUTS[0]!.height, 'variant-select-screen__scale-box');
-  const composition = document.createElement('div');
-  composition.className = 'variant-select-screen__composition';
+  const canvas = createMenuCanvas(element, 'variant-select-screen');
+  const composition = canvas.composition;
   const header = createBoilingSprite({
     src: options.mode === 'ban'
       ? '/visual-elements/variant-screen/ban-variant-header-sheet.webp'
@@ -49,7 +45,21 @@ export function mountVariantSelectScreen(options: VariantSelectScreenOptions): V
     className: 'variant-select-screen__header',
     alt: options.mode === 'ban' ? 'Ban Variant' : 'Pick Variant',
   });
-  const items = [...options.variants].map(([slot, variant]) => ({ slot, variant, state: options.states?.get(slot) }));
+  const banSprites: ReturnType<typeof createBoilingSprite>[] = [];
+  const banTimers: number[] = [];
+  const items = [...options.variants].map(([slot, variant]) => {
+    const state = options.states?.get(slot);
+    if (!state?.banned || state.overlay) return { slot, variant, state };
+    const mark = createBoilingSprite({
+      src: '/visual-elements/ban-animation/frame-1_sheet.webp', clock: options.clock,
+      className: 'variant-ban-mark', alt: 'Banned',
+    });
+    banSprites.push(mark);
+    for (let frame = 2; frame <= 8; frame++) banTimers.push(window.setTimeout(() => {
+      mark.setSource(`/visual-elements/ban-animation/${frame === 8 ? 'x' : `frame-${frame}`}_sheet.webp`);
+    }, (frame - 1) * 58));
+    return { slot, variant, state: { ...state, overlay: mark.element } };
+  });
   let selected: SlotId | undefined;
   let detail: VariantDetail | undefined;
   let foregroundCleanup: (() => void) | undefined;
@@ -59,21 +69,20 @@ export function mountVariantSelectScreen(options: VariantSelectScreenOptions): V
   let confirmed = false;
 
   const grid: VariantGrid = createVariantGrid(items, options.clock, (slot) => void select(slot));
-  const back = document.createElement('button');
-  back.type = 'button';
-  back.className = 'shell-action variant-select-screen__back';
-  back.textContent = 'Back';
-  back.addEventListener('click', options.onBack);
-  composition.append(header.element, grid.element, back);
-  scaleBox.content.append(composition);
-  element.append(scaleBox.element);
-  options.container.replaceChildren(element);
-  const stopLayout = observeResponsiveScaleBox(element, scaleBox, VARIANT_SELECT_LAYOUTS, (layout) => {
-    composition.dataset.layout = layout.name;
+  const back = createGameButton({
+    label: 'Back', onActivate: options.onBack, clock: options.clock,
+    upSheet: '/interactive-elements/menu-buttons/back-button-w-up-sheet.webp',
+    betweenSheet: '/interactive-elements/menu-buttons/back-button-w-between-sheet.webp',
+    depressedSheet: '/interactive-elements/menu-buttons/back-button-w-depressed-sheet.webp',
   });
+  back.element.classList.add('variant-select-screen__back', 'game-button--baked-label');
+  back.element.hidden = options.showBack === false;
+  composition.append(header.element, grid.element, back.element);
+  options.container.replaceChildren(element);
 
   async function select(slot: SlotId): Promise<void> {
-    if (selected || lifecycle.signal.aborted || options.mode === 'ban') return;
+    if (selected || lifecycle.signal.aborted) return;
+    if (options.mode === 'ban') { options.onConfirm(slot); return; }
     const descriptor = options.variants.get(slot);
     const source = grid.getButton(slot);
     if (!descriptor || !source) return;
@@ -93,7 +102,7 @@ export function mountVariantSelectScreen(options: VariantSelectScreenOptions): V
     selectedButton.classList.add('variant-select-foreground__button');
     selectedButton.tabIndex = -1;
     const positionSelectedButton = () => {
-      const rect = placeholder.getBoundingClientRect();
+      const rect = options.curtain.viewportRectToCanvasRect(placeholder.getBoundingClientRect());
       selectedButton.style.left = `${rect.left}px`;
       selectedButton.style.top = `${rect.top}px`;
       selectedButton.style.width = `${rect.width}px`;
@@ -156,14 +165,17 @@ export function mountVariantSelectScreen(options: VariantSelectScreenOptions): V
     element,
     destroy() {
       lifecycle.abort();
-      stopLayout();
+      canvas.destroy();
       selectedResizeObserver?.disconnect();
       if (selectedPositioner) globalThis.removeEventListener('resize', selectedPositioner);
       foregroundCleanup?.();
       detail?.destroy();
       grid.destroy();
+      back.destroy();
       selectedPlaceholder?.remove();
       header.destroy();
+      for (const timer of banTimers) window.clearTimeout(timer);
+      for (const sprite of banSprites) sprite.destroy();
       element.remove();
     },
   };

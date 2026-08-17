@@ -1,11 +1,19 @@
 import type { VariantRules } from './variant';
-import { fireballWarRules } from '../variants/fireballWar/fireballWarRules';
+import { dummyRules } from '../variants/dummy/dummyRules';
+import { SLOT_IDS, type SlotId } from './slots';
 
 export type ServerVariantRules = VariantRules<unknown, unknown, unknown, unknown>;
 
 const registry = new Map<string, ServerVariantRules>([
-  [fireballWarRules.variantId, fireballWarRules as ServerVariantRules],
+  [dummyRules.variantId, dummyRules as ServerVariantRules],
 ]);
+const slotRegistry = new Map<SlotId, ServerVariantRules>(SLOT_IDS.map((slot) => [slot, dummyRules as ServerVariantRules]));
+
+export function getServerVariantForSlot(slotId: SlotId): ServerVariantRules {
+  const rules = slotRegistry.get(slotId);
+  if (!rules) throw new Error(`No variant is registered for ${slotId}.`);
+  return rules;
+}
 
 export function getServerVariant(variantId: string, rulesVersion?: number): ServerVariantRules {
   const rules = registry.get(variantId);

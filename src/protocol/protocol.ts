@@ -1,5 +1,8 @@
 export const PROTOCOL_VERSION = 1 as const;
 
+import type { SlotId } from '../core/slots';
+import type { PlayerId, VariantGameResult } from '../core/variant';
+
 export interface ClientCommand<TPayload = unknown> {
   protocolVersion: typeof PROTOCOL_VERSION;
   commandId: string;
@@ -9,7 +12,9 @@ export interface ClientCommand<TPayload = unknown> {
   payload: TPayload;
 }
 
-export type SemanticEventType = 'ready' | 'reveal' | 'score' | 'wipe' | 'game-start';
+export type SemanticEventType =
+  | 'match-found' | 'pick-confirmed' | 'game-start' | 'ready'
+  | 'reveal' | 'score' | 'scoreboard' | 'bans-locked' | 'match-complete' | 'wipe';
 
 export interface TimedSemanticEvent<TPayload = unknown> {
   id: string;
@@ -28,6 +33,31 @@ export interface ServerSnapshot<TProjection = unknown> {
   projection: TProjection;
   events: readonly TimedSemanticEvent[];
 }
+
+export type MatchPhase = 'match-found' | 'selecting' | 'scoreboard' | 'playing' | 'banning' | 'final-scoreboard' | 'complete';
+export interface MatchPlayer { name: string; platform: string; rating: number }
+export interface CompletedGame extends VariantGameResult { slotId: SlotId }
+export interface MatchProjection {
+  phase: MatchPhase;
+  self: PlayerId;
+  players: Record<PlayerId, MatchPlayer>;
+  picks: Partial<Record<PlayerId, SlotId>>;
+  pickOrder: readonly SlotId[];
+  games: readonly CompletedGame[];
+  activeSlot?: SlotId;
+  ownMove?: unknown;
+  ready: Record<PlayerId, boolean>;
+  unavailableSlots: readonly SlotId[];
+  ownBans: readonly SlotId[];
+  opponentBanCount: number;
+  bansLocked: boolean;
+  winner?: PlayerId;
+}
+
+export type MatchCommandPayload =
+  | { type: 'select-slot'; slotId: SlotId }
+  | { type: 'toggle-ban'; slotId: SlotId }
+  | { type: 'variant-command'; slotId: SlotId; command: unknown };
 
 export function parseClientCommand(value: unknown): ClientCommand {
   if (!isRecord(value)) throw new Error('Command must be an object.');

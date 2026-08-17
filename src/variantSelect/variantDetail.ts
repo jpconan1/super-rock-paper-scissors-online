@@ -27,13 +27,15 @@ export function createVariantDetail(variant: ClientVariantDescriptor, clock: Boi
   const actions = document.createElement('div');
   actions.className = 'variant-detail__actions';
   const back = createGameButton({ label: 'Back', onActivate: onBack, clock,
-    upSheet: '/interactive-elements/generic-buttons/generic2-up-sheet.webp',
-    betweenSheet: '/interactive-elements/generic-buttons/generic2-between-sheet.webp',
-    depressedSheet: '/interactive-elements/generic-buttons/generic2-sheet.webp' });
+    upSheet: '/interactive-elements/menu-buttons/back-button-w-up-sheet.webp',
+    betweenSheet: '/interactive-elements/menu-buttons/back-button-w-between-sheet.webp',
+    depressedSheet: '/interactive-elements/menu-buttons/back-button-w-depressed-sheet.webp' });
+  back.element.classList.add('game-button--baked-label');
   const play = createGameButton({ label: 'Play', onActivate: onPlay, clock,
-    upSheet: '/interactive-elements/generic-buttons/generic3-up-sheet.webp',
-    betweenSheet: '/interactive-elements/generic-buttons/generic3-between-sheet.webp',
-    depressedSheet: '/interactive-elements/generic-buttons/generic3-depressed-sheet.webp' });
+    upSheet: '/interactive-elements/menu-buttons/variant-play-button-up-sheet.webp',
+    betweenSheet: '/interactive-elements/menu-buttons/variant-play-button-between-sheet.webp',
+    depressedSheet: '/interactive-elements/menu-buttons/variant-play-button-depressed-sheet.webp' });
+  play.element.classList.add('game-button--baked-label');
   actions.append(back.element, play.element);
   panel.append(copy, actions);
   element.append(panel);

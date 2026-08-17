@@ -5,10 +5,10 @@ Elements: Enter Lobby, Random Name buttons, sound toggle, animation toggle, musi
 
 The onply place you can go from the title screen is the lobby.
 
-Lobby - The game's main menu.
+Lobby - The game's main menu. it has the curtain decoration.
 Elements: Whiteboard with its makers and eraser, Chat bar, Chat button, Ready to Play toggle, Tutorial button, Settings button, Play vs Computer button, Show Players button and Player List slideout.
 
-Variant screen - used whenever the user picks a variant, in Play vs Computer, online matches and the tutorial. This screen arranges each variant with their custom buttons in a 3x3 grid. This screen has a trickey effect: when a variant is sleceted, the curtains close behind it, leaving the depressed variant button and the rules text for that variant ni the foreground with the closed curtain now acting as bg. This screen needs to act slightly diffrently every place it shows up: play vs computer, its got diffuculty buttons. first picks in a match, it has to indicate what the other player selected. in the ban stage of the match, it forgoes the curtain effect till all other variants have been banned, in the tutorial it needs its custom behavior. 
+Variant screen - used whenever the user picks a variant, in Play vs Computer, online matches and the tutorial. always has the curtain decoration. This screen arranges each variant with their custom buttons in a 3x3 grid. This screen has a trickey effect: when a variant is sleceted, the curtains close behind it, leaving the depressed variant button and the rules text for that variant ni the foreground with the closed curtain now acting as bg. This screen needs to act slightly diffrently every place it shows up: play vs computer, its got diffuculty buttons. first picks in a match, it has to indicate what the other player selected. in the ban stage of the match, it forgoes the curtain effect till all other variants have been banned, in the tutorial it needs its custom behavior. 
 
 Match Flow:
 
@@ -18,7 +18,7 @@ each player selects one variant. it has the full closed-curtains rule display be
 
 if they select diffrent variants, whatever was picked first is played first. but first, we curtain wipe to the scoreboard screen,
 
-Scoreboard screen - this appears between games. itll show up once before the first game with the first two variants, showing their order, with blank scores.
+Scoreboard screen - this appears between games. its got curtains. itll show up once before the first game with the first two variants, showing their order, with blank scores.
 
 the server loads the first variant. they play the game, eventually reporting a score.
 

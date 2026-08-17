@@ -1,10 +1,10 @@
 # Layout System Handoff
 
-The game uses fixed logical compositions that scale uniformly to fit the available screen. Elements inside a composition keep normal fixed coordinates and sizes. The scale box handles responsiveness around them.
+The game uses fixed logical compositions that scale uniformly to fit the available screen. Gameplay keeps its existing variant-specific sizes. Menu screens use shared `960 × 540` landscape and `540 × 960` portrait canvases.
 
 ## Core files
 
-- `src/layout/scaleBox.ts` contains the pure sizing functions, DOM wrappers, and resize observers.
+- `src/layout/scaleBox.ts` contains the pure sizing functions, DOM wrappers, and resize observers; `src/layout/menuLayout.ts` defines the shared menu canvases.
 - `src/layout/gameLayout.ts` contains the canonical shared game composition, fixed common regions, and variant-content contract.
 - `src/styles.css` contains `.scale-box`, `.scale-box__content`, and screen composition styles.
 - `test/scaleBox.test.ts` covers fitting and responsive layout selection; `test/gameLayout.test.ts` covers the shared composition contract.
@@ -26,15 +26,15 @@ The scale is:
 min(1, available width / logical width, available height / logical height)
 ```
 
-It never upscales. Call `stopLayout()` when unmounting the screen.
+It defaults to no upscaling. Menu screens explicitly allow contain-upscaling so they fill large displays. Call `stopLayout()` when unmounting the screen.
 
-The title screen is one scale box, centered horizontally and vertically. Its `.title-screen__composition` fills the box with `width: 100%` and `height: 100%`.
+Title, lobby, variant select, scoreboard, and menu curtain layers use the same responsive menu canvas. Their child geometry is authored separately for `[data-layout='landscape']` and `[data-layout='portrait']`.
 
 ## Responsive game layouts
 
 The shared game layout uses the same DOM in two authored logical compositions, proven first by Fireball War:
 
-- `landscape`: `705 × 540`, selected when the host is square or wider.
+- `landscape`: `960 × 540`, selected when the host is square or wider.
 - `portrait`: `390 × 705`, selected when the host is taller than wide.
 
 `observeResponsiveScaleBox` selects the layout from the host's available width and height, updates the scale box's logical dimensions, and reports the selected named layout. Fireball War writes that name to `data-layout` on its composition; CSS uses it to change slot coordinates without recreating sprites, controls, or event handlers.

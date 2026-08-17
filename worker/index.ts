@@ -2,6 +2,8 @@ import { DurableObject } from 'cloudflare:workers';
 import { parseClientCommand, PROTOCOL_VERSION, type ClientCommand } from '../src/protocol/protocol';
 import { getServerVariant } from '../src/core/serverVariantRegistry';
 import type { TimedSemanticEvent } from '../src/protocol/protocol';
+import { acceptMatchCommand, advanceMatchDeadline, createOnlineMatch, projectOnlineMatch, type OnlineMatchState } from '../src/core/onlineMatch';
+import type { MatchCommandPayload, MatchPlayer } from '../src/protocol/protocol';
 
 interface Env {
   MATCHES: DurableObjectNamespace<MatchObject>;
@@ -12,18 +14,9 @@ interface Env {
 }
 
 type Seat = 'p1' | 'p2';
-interface MatchRecord {
-  matchId: string;
-  revision: number;
-  variantId: string;
-  rulesVersion: number;
-  gameState: unknown;
-  events: readonly TimedSemanticEvent[];
-  seed: number;
+interface MatchRecord extends OnlineMatchState {
   tokens: Record<Seat, string>;
-  processed: string[];
   accepted: Array<{ revision: number; seat: Seat; command: ClientCommand }>;
-  deadlineAt?: number;
 }
 interface SocketAttachment { seat: Seat }
 
@@ -35,23 +28,18 @@ export class MatchObject extends DurableObject<Env> {
     ctx.blockConcurrencyWhile(async () => { this.record = await ctx.storage.get<MatchRecord>('match'); });
   }
 
-  async initialize(matchId: string, variantId = 'fireball-war'): Promise<{ matchId: string; seats: Record<Seat, string> }> {
+  async initialize(matchId: string, players?: Record<Seat, MatchPlayer>): Promise<{ matchId: string; seats: Record<Seat, string> }> {
     if (!this.record) {
-      const rules = getServerVariant(variantId);
       const seed = crypto.getRandomValues(new Uint32Array(1))[0]!;
-      this.record = {
-        matchId,
-        revision: 0,
-        variantId: rules.variantId,
-        rulesVersion: rules.rulesVersion,
-        gameState: rules.initialize(deterministicContext(seed, Date.now())),
-        events: [],
-        seed,
+      this.record = Object.assign(createOnlineMatch(matchId, players ?? {
+        p1: { name: 'Player 1', platform: 'Web', rating: 1500 },
+        p2: { name: 'Player 2', platform: 'Web', rating: 1500 },
+      }, seed, Date.now()), {
         tokens: { p1: token(), p2: token() },
-        processed: [],
         accepted: [],
-      };
+      });
       await this.ctx.storage.put('match', this.record);
+      await this.scheduleAlarm();
     }
     return { matchId: this.record.matchId, seats: this.record.tokens };
   }
@@ -84,15 +72,18 @@ export class MatchObject extends DurableObject<Env> {
         socket.send(JSON.stringify({ type: 'stale', snapshot: this.snapshot(attachment.seat) }));
         return;
       }
-      const rules = getServerVariant(this.record.variantId, this.record.rulesVersion);
-      const nextRevision = this.record.revision + 1;
-      const resolution = rules.resolve(this.record.gameState, attachment.seat, command.payload, deterministicContext(this.record.seed + nextRevision, Date.now()));
-      this.record.gameState = resolution.state;
-      this.record.events = (resolution.events ?? []).map((event, index) => ({ ...event, id: `${this.record!.matchId}:${nextRevision}:${index}` }));
-      this.record.revision++;
-      this.record.processed.push(command.commandId);
+      const status = acceptMatchCommand(this.record, attachment.seat, {
+        commandId: command.commandId,
+        expectedRevision: command.expectedRevision,
+        payload: command.payload as MatchCommandPayload,
+      }, Date.now());
+      if (status !== 'accepted') {
+        socket.send(JSON.stringify({ type: status, snapshot: this.snapshot(attachment.seat) }));
+        return;
+      }
       this.record.accepted.push({ revision: this.record.revision, seat: attachment.seat, command });
       await this.ctx.storage.put('match', this.record);
+      await this.scheduleAlarm();
       this.broadcast();
     } catch (error) {
       socket.send(JSON.stringify({ type: 'error', message: error instanceof Error ? error.message : 'Invalid command.' }));
@@ -100,16 +91,14 @@ export class MatchObject extends DurableObject<Env> {
   }
 
   async alarm(): Promise<void> {
-    if (!this.record?.deadlineAt || this.record.deadlineAt > Date.now()) return;
-    this.record.deadlineAt = undefined;
+    if (!this.record || !advanceMatchDeadline(this.record, Date.now())) return;
     await this.ctx.storage.put('match', this.record);
+    await this.scheduleAlarm();
     this.broadcast();
   }
 
   private snapshot(seat: Seat) {
-    const projection = this.record
-      ? getServerVariant(this.record.variantId, this.record.rulesVersion).project(this.record.gameState, seat)
-      : undefined;
+    const projection = this.record ? projectOnlineMatch(this.record, seat) : undefined;
     return {
       protocolVersion: PROTOCOL_VERSION,
       matchId: this.record?.matchId,
@@ -127,21 +116,46 @@ export class MatchObject extends DurableObject<Env> {
       if (attachment) socket.send(JSON.stringify({ type: 'snapshot', snapshot: this.snapshot(attachment.seat) }));
     }
   }
+
+  private async scheduleAlarm(): Promise<void> {
+    if (this.record?.deadlineAt) await this.ctx.storage.setAlarm(this.record.deadlineAt);
+  }
 }
 
-interface QueueEntry { guestId: string; queuedAt: number }
+interface QueueEntry { guestId: string; name: string; queuedAt: number }
+interface MatchTicket { matchId: string; seat: Seat; token: string }
 
 export class MatchmakerObject extends DurableObject<Env> {
-  async enqueue(guestId: string): Promise<{ status: 'waiting' } | { status: 'matched'; opponentId: string }> {
+  async enqueue(guestId: string, name: string): Promise<{ status: 'waiting' } | ({ status: 'matched' } & MatchTicket)> {
+    const ticket = await this.ctx.storage.get<MatchTicket>(`ticket:${guestId}`);
+    if (ticket) {
+      await this.ctx.storage.delete(`ticket:${guestId}`);
+      return { status: 'matched', ...ticket };
+    }
     const queue = (await this.ctx.storage.get<QueueEntry[]>('queue')) ?? [];
     const opponent = queue.find((entry) => entry.guestId !== guestId);
     if (!opponent) {
-      if (!queue.some((entry) => entry.guestId === guestId)) queue.push({ guestId, queuedAt: Date.now() });
+      if (!queue.some((entry) => entry.guestId === guestId)) queue.push({ guestId, name, queuedAt: Date.now() });
       await this.ctx.storage.put('queue', queue);
       return { status: 'waiting' };
     }
     await this.ctx.storage.put('queue', queue.filter((entry) => entry.guestId !== opponent.guestId));
-    return { status: 'matched', opponentId: opponent.guestId };
+    const id = this.env.MATCHES.newUniqueId();
+    const matchId = id.toString();
+    const initialized = await this.env.MATCHES.get(id).initialize(matchId, {
+      p1: { name: opponent.name, platform: 'Web', rating: 1500 },
+      p2: { name, platform: 'Web', rating: 1500 },
+    });
+    const first: MatchTicket = { matchId, seat: 'p1', token: initialized.seats.p1 };
+    const second: MatchTicket = { matchId, seat: 'p2', token: initialized.seats.p2 };
+    await this.ctx.storage.put(`ticket:${opponent.guestId}`, first);
+    return { status: 'matched', ...second };
+  }
+
+  async cancel(guestId: string): Promise<void> {
+    const queue = (await this.ctx.storage.get<QueueEntry[]>('queue')) ?? [];
+    await this.ctx.storage.put('queue', queue.filter((entry) => entry.guestId !== guestId));
+    await this.ctx.storage.delete(`ticket:${guestId}`);
   }
 }
 
@@ -186,11 +200,22 @@ export async function finalizeMatch(db: D1Database, result: {
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
+    if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders() });
     const url = new URL(request.url);
     if (url.pathname === '/health') return json({ ok: true });
     if (url.pathname === '/matches' && request.method === 'POST') {
       const id = env.MATCHES.newUniqueId();
       return json(await env.MATCHES.get(id).initialize(id.toString()), 201);
+    }
+    if (url.pathname === '/matchmaking' && request.method === 'POST') {
+      const body = await request.json<{ guestId?: string; name?: string }>();
+      if (!body.guestId || !body.name) return json({ error: 'guestId and name are required.' }, 400);
+      return json(await env.MATCHMAKER.getByName('global').enqueue(body.guestId, body.name));
+    }
+    if (url.pathname === '/matchmaking' && request.method === 'DELETE') {
+      const guestId = url.searchParams.get('guestId');
+      if (guestId) await env.MATCHMAKER.getByName('global').cancel(guestId);
+      return new Response(null, { status: 204 });
     }
     const match = url.pathname.match(/^\/matches\/([a-f0-9]+)$/);
     if (match?.[1]) return env.MATCHES.get(env.MATCHES.idFromString(match[1])).fetch(request);
@@ -203,16 +228,8 @@ export default {
 function token(): string { return crypto.randomUUID(); }
 function isSeat(value: string | null): value is Seat { return value === 'p1' || value === 'p2'; }
 function json(value: unknown, status = 200): Response {
-  return Response.json(value, { status, headers: { 'cache-control': 'no-store' } });
+  return Response.json(value, { status, headers: { 'cache-control': 'no-store', ...corsHeaders() } });
 }
-
-function deterministicContext(seed: number, now: number) {
-  let value = seed >>> 0;
-  return {
-    now,
-    random: () => {
-      value = (value * 1664525 + 1013904223) >>> 0;
-      return value / 0x1_0000_0000;
-    },
-  };
+function corsHeaders(): Record<string, string> {
+  return { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET,POST,DELETE,OPTIONS', 'access-control-allow-headers': 'content-type' };
 }
