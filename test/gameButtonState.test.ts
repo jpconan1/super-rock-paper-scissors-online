@@ -68,4 +68,16 @@ describe('GameButtonState', () => {
     await vi.advanceTimersByTimeAsync(BUTTON_FRAME_MS);
     expect(activate).toHaveBeenCalledTimes(2);
   });
+
+  test('can be externally locked in the depressed frame', () => {
+    const { state, views, activate } = setup();
+    state.setLockedDepressed(true);
+    expect(views.at(-1)).toEqual({ visual: 'depressed', juiceOpacity: 0 });
+    expect(state.press()).toBe(false);
+    state.release();
+    expect(activate).not.toHaveBeenCalled();
+    state.setLockedDepressed(false);
+    expect(views.at(-1)).toEqual({ visual: 'up', juiceOpacity: 0 });
+    expect(state.press()).toBe(true);
+  });
 });

@@ -37,6 +37,7 @@ export const FIREBALL_WAR_MOVE_ART: Record<FireballWarMove, { up: string; betwee
 export function mountFireballWarScreen(
   container: HTMLElement,
   clock: BoilClock,
+  onMove: (move: FireballWarMove) => void = () => {},
 ): () => void {
   const sprites: BoilingSprite[] = [];
   const buttons: GameButton[] = [];
@@ -94,10 +95,10 @@ export function mountFireballWarScreen(
   createArrow('arrow-red-downright-sheet.webp', 'fireball-war__arrow--fireball-charge');
   createArrow('arrow-blue-left-sheet.webp', 'fireball-war__arrow--charge-block');
 
-  const createControl = (label: string, className: string, art = FIREBALL_WAR_MOVE_ART.charge) => {
+  const createControl = (move: FireballWarMove, label: string, className: string, art = FIREBALL_WAR_MOVE_ART.charge) => {
     const button = createGameButton({
       label,
-      onActivate: () => {},
+      onActivate: () => onMove(move),
       upSheet: art.up,
       betweenSheet: art.between,
       depressedSheet: art.depressed,
@@ -107,9 +108,9 @@ export function mountFireballWarScreen(
     buttons.push(button);
     controls.append(button.element);
   };
-  createControl('Fireball', 'fireball-war__control--fireball', FIREBALL_WAR_MOVE_ART.fireball);
-  createControl('Block', 'fireball-war__control--block', FIREBALL_WAR_MOVE_ART.block);
-  createControl('Charge', 'fireball-war__control--charge', FIREBALL_WAR_MOVE_ART.charge);
+  createControl('fireball', 'Fireball', 'fireball-war__control--fireball', FIREBALL_WAR_MOVE_ART.fireball);
+  createControl('block', 'Block', 'fireball-war__control--block', FIREBALL_WAR_MOVE_ART.block);
+  createControl('charge', 'Charge', 'fireball-war__control--charge', FIREBALL_WAR_MOVE_ART.charge);
 
   const layout = createGameLayout({
     container,

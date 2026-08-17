@@ -11,4 +11,5 @@ describe('startup loading screen', () => {
     expect(readyPromptSource(true)).toBe('/loading/tap_msg-sheet.webp');
     expect(readyPromptSource(false)).toBe('/loading/click_msg-sheet.webp');
   });
+
 });

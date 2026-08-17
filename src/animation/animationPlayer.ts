@@ -17,8 +17,8 @@ export class AnimationPlayer<T> {
   private readonly unschedule: typeof globalThis.clearTimeout;
 
   constructor(private readonly options: AnimationPlayerOptions<T>) {
-    this.schedule = options.setTimeout ?? globalThis.setTimeout;
-    this.unschedule = options.clearTimeout ?? globalThis.clearTimeout;
+    this.schedule = options.setTimeout ?? ((handler, timeout, ...arguments_) => globalThis.setTimeout(handler, timeout, ...arguments_));
+    this.unschedule = options.clearTimeout ?? ((timer) => globalThis.clearTimeout(timer));
   }
 
   play(frames: readonly LogicalAnimationFrame<T>[], finalValue?: T): Promise<void> {

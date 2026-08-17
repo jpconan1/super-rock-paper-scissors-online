@@ -17,7 +17,8 @@ export async function runLoadingScreen(
   container: HTMLElement,
   clock: BoilClock,
   loadShared: Promise<void>,
-): Promise<void> {
+  preserveUntilReplaced = false,
+): Promise<() => void> {
   const screen = document.createElement('section');
   screen.className = 'loading-screen';
   screen.setAttribute('aria-label', 'Loading');
@@ -52,8 +53,15 @@ export async function runLoadingScreen(
 
   portrait.removeEventListener('change', updatePrompt);
   loadingArt.release();
-  art.destroy();
-  screen.remove();
+  let cleaned = false;
+  const cleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    art.destroy();
+    screen.remove();
+  };
+  if (!preserveUntilReplaced) cleanup();
+  return cleanup;
 }
 
 function wait(milliseconds: number): Promise<void> {

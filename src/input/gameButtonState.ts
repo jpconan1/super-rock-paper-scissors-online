@@ -22,6 +22,7 @@ export class GameButtonState {
   private destroyed = false;
   private visual: GameButtonVisual = 'up';
   private juiceOpacity = 0;
+  private lockedDepressed = false;
   private readonly wait: (milliseconds: number, signal: AbortSignal) => Promise<void>;
 
   constructor(private readonly options: GameButtonStateOptions) {
@@ -30,7 +31,7 @@ export class GameButtonState {
   }
 
   press(): boolean {
-    if (this.destroyed || this.interaction) return false;
+    if (this.destroyed || this.interaction || this.lockedDepressed) return false;
     this.interaction = new AbortController();
     this.held = true;
     this.eligible = true;
@@ -68,6 +69,14 @@ export class GameButtonState {
   destroy(): void {
     this.destroyed = true;
     this.cancel();
+  }
+
+  setLockedDepressed(locked: boolean): void {
+    if (this.destroyed || this.lockedDepressed === locked) return;
+    this.cancel();
+    this.lockedDepressed = locked;
+    this.visual = locked ? 'depressed' : 'up';
+    this.render();
   }
 
   private startJuiceFade(): void {

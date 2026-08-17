@@ -3,10 +3,12 @@ import { AppController } from '../src/app/appController';
 import type { VariantPresentation } from '../src/core/variant';
 import { PROTOCOL_VERSION } from '../src/protocol/protocol';
 
+const lease = () => ({ ready: Promise.resolve(), release: vi.fn() });
+
 describe('AppController', () => {
   test('loads opaque slots through the presentation contract', async () => {
     const presentation: VariantPresentation<unknown, unknown> = {
-      preload: vi.fn(async () => undefined),
+      preload: vi.fn(async () => lease()),
       mount: vi.fn(),
       render: vi.fn(),
       unmount: vi.fn(),
@@ -22,7 +24,7 @@ describe('AppController', () => {
   test('aborts and unmounts the active presentation', async () => {
     let signal: AbortSignal | undefined;
     const presentation: VariantPresentation<unknown, unknown> = {
-      preload: async () => undefined,
+      preload: async () => lease(),
       mount: (context) => { signal = context.signal; },
       render: vi.fn(),
       unmount: vi.fn(),

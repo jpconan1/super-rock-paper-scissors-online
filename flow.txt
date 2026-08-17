@@ -1,0 +1,52 @@
+Menu Flow: Menus always transition with the curtain wipe. 
+
+Title Screen - This is the screen with the logo on it.
+Elements: Enter Lobby, Random Name buttons, sound toggle, animation toggle, music slider, sound slider.
+
+The onply place you can go from the title screen is the lobby.
+
+Lobby - The game's main menu.
+Elements: Whiteboard with its makers and eraser, Chat bar, Chat button, Ready to Play toggle, Tutorial button, Settings button, Play vs Computer button, Show Players button and Player List slideout.
+
+Variant screen - used whenever the user picks a variant, in Play vs Computer, online matches and the tutorial. This screen arranges each variant with their custom buttons in a 3x3 grid. This screen has a trickey effect: when a variant is sleceted, the curtains close behind it, leaving the depressed variant button and the rules text for that variant ni the foreground with the closed curtain now acting as bg. This screen needs to act slightly diffrently every place it shows up: play vs computer, its got diffuculty buttons. first picks in a match, it has to indicate what the other player selected. in the ban stage of the match, it forgoes the curtain effect till all other variants have been banned, in the tutorial it needs its custom behavior. 
+
+Match Flow:
+
+when two players are matched, the curtains close and display the match info over the closed curtain. who v who and their platforms and elos. the curtains open to the variant select screen.
+
+each player selects one variant. it has the full closed-curtains rule display behavior. when the first player selects a variant, it becomes circled for the other player. the second player can select the same variant or a diffrent one.
+
+if they select diffrent variants, whatever was picked first is played first. but first, we curtain wipe to the scoreboard screen,
+
+Scoreboard screen - this appears between games. itll show up once before the first game with the first two variants, showing their order, with blank scores.
+
+the server loads the first variant. they play the game, eventually reporting a score.
+
+curtain wipe to scorebaord, showing the result of game 1. 
+
+the server loads the second variant. they play the game, eventually reporting a score.
+
+curtain wipe to scorebaord, showing the results of both games. 
+
+from here, if one player has won both games, the match is over and we skip to the end of the match flow.
+
+but if each player has won one game, we need a tiebreaker variant.
+
+If both players selected the same variant, we skip the ban phase and simply play that variant for a third time to tiebreak. they obiously like it.
+
+ban phase: first, we curtain wipe back to the variant select screen. this time, each player has 3 bans. they click variants to ban them with a special ban animation. the already played variants are pre-banned. the curtain doesnt draw and the rules dont show; bans are one click. you can click your own bans again to unban them before you're locked in. the bans are not done in turns, its a simultanious free for all. the sixth ban is the only irreversible one, once a player places it the bans are locked. 3 + 3 + 2 = 8, leaving a final variant that will be the tiebreaker. th curtains close behind it and we burst wipe to the final game.
+
+the server loads the tiebreaker variant. they play the game, eventually reporting a score.
+
+match ends and awards elo. Back to lobby.
+
+Tutorial:
+Simulated online game thats scripted with slides of text highlighting and explaining elements. it starts in Gun Knife Fist always, and scripts a win. then the player picks a variant, and the cpu scripts a loss. then we show the tiebreak flow, and the player gets a fair fight.
+
+Play vs Computer: 
+Doesnt do the whole match flow. You can simply pick a variant and play a game vs the computer. each variant has an easy mode, where the computer picks evenly between their legal moves, and hard, where the computer picks moves based on a nash analysis. we show how likly the computer is to pick each move based on the nash/gamestate to help the curious player learn.
+
+Whiteboard: serves as a chatroom and doodle canvas. users can type in chat and itll appear on the whiteboard as text, and the whiteboard will display a msg when people join the lobby or ready up for a match. the whiteboard has a unique community moderation feature: an eraser that any user can pick up and erase your bullshit with. Nothing is immune from being erased by others.
+
+
+

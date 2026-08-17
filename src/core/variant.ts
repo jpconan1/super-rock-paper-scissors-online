@@ -1,5 +1,6 @@
 import type { SlotId } from './slots';
 import type { TimedSemanticEvent } from '../protocol/protocol';
+import type { AssetBundleId } from '../assets/assetBundleTypes';
 
 export type PlayerId = 'p1' | 'p2';
 
@@ -28,8 +29,13 @@ export interface VariantPresentationContext<TCommand> {
   send(command: TCommand): void;
 }
 
+export interface PresentationAssetLease {
+  readonly ready: Promise<void>;
+  release(): void;
+}
+
 export interface VariantPresentation<TProjection, TCommand> {
-  preload(): Promise<void>;
+  preload(): Promise<PresentationAssetLease>;
   mount(context: VariantPresentationContext<TCommand>): void;
   render(projection: TProjection, events: readonly TimedSemanticEvent[], serverTime: number): void;
   unmount(): void;
@@ -37,3 +43,26 @@ export interface VariantPresentation<TProjection, TCommand> {
 
 export type PresentationLoader = () => Promise<VariantPresentation<unknown, unknown>>;
 export type PresentationRegistry = ReadonlyMap<SlotId, PresentationLoader>;
+
+export interface ClientVariantDescriptor {
+  readonly variantId: string;
+  readonly rulesVersion: number;
+  readonly title: string;
+  /** Basename used by the shared variant-button artwork triplet. */
+  readonly buttonAssetKey: string;
+  /** Temporary presentation copy. Game design owns the final wording. */
+  readonly rulesCopy: readonly string[];
+  readonly thumbnail?: string;
+  readonly assetBundleId?: AssetBundleId;
+  readonly loadPresentation: PresentationLoader;
+}
+
+export interface SeasonClientSlot {
+  readonly slotId: SlotId;
+  readonly variant: ClientVariantDescriptor;
+}
+
+export interface SeasonClientManifest {
+  readonly seasonId: string;
+  readonly slots: readonly SeasonClientSlot[];
+}

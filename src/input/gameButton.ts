@@ -21,6 +21,7 @@ export interface GameButtonOptions {
 export interface GameButton {
   element: HTMLButtonElement;
   setDisabled(disabled: boolean): void;
+  setLockedDepressed(locked: boolean): void;
   destroy(): void;
 }
 
@@ -64,6 +65,8 @@ export function createGameButton(options: GameButtonOptions): GameButton {
         }
         frameGeometry = size;
         element.style.aspectRatio = String(getButtonFrameAspectRatio(size));
+        element.style.setProperty('--game-button-art-width', `${size.width}px`);
+        element.style.setProperty('--game-button-art-height', `${size.height}px`);
       },
     });
     art.element.style.visibility = visual === 'up' ? 'visible' : 'hidden';
@@ -196,6 +199,10 @@ export function createGameButton(options: GameButtonOptions): GameButton {
         state.cancel();
       }
       setControlDisabled(element, isDisabled());
+    },
+    setLockedDepressed(locked) {
+      state.setLockedDepressed(locked);
+      element.setAttribute('aria-pressed', String(locked));
     },
     destroy() {
       destroyed = true;

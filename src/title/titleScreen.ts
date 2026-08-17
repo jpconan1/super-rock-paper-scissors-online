@@ -19,7 +19,9 @@ import { createBoilingSprite } from '../renderer/boilingSprite';
 import { generateRandomName } from './randomName';
 import { createVolumeSlider } from './volumeSlider';
 
-export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPlay: () => void): () => void {
+export type TitleScreenMount = (() => void) & { readonly ready: Promise<void> };
+
+export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPlay: (playerName: string) => void): TitleScreenMount {
   const screen = document.createElement('section');
   screen.className = 'title-screen';
   screen.setAttribute('aria-labelledby', 'title-screen-heading');
@@ -78,7 +80,7 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
       nameEntry.focus();
       return;
     }
-    onPlay();
+    onPlay(nameEntry.input.value.trim());
   };
 
   const enterLobby = createGameButton({
@@ -135,7 +137,7 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
   container.replaceChildren(screen);
   const stopLayout = observeScaleBox(screen, scaleBox);
 
-  return () => {
+  const cleanup = (() => {
     stopLayout();
     logo.destroy();
     soundToggle.destroy();
@@ -148,5 +150,7 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
     nameEntry.destroy();
     enterLobby.destroy();
     screen.remove();
-  };
+  }) as TitleScreenMount;
+  Object.defineProperty(cleanup, 'ready', { value: logo.whenReady() });
+  return cleanup;
 }
