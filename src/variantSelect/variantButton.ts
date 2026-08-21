@@ -9,9 +9,16 @@ export interface VariantButtonOptions {
   disabled?: boolean;
   lockedDepressed?: boolean;
   overlay?: Node;
+  sheets?: VariantButtonSheets;
 }
 
-export function variantButtonSheets(assetKey: string) {
+export interface VariantButtonSheets {
+  upSheet: string;
+  betweenSheet: string;
+  depressedSheet: string;
+}
+
+export function variantButtonSheets(assetKey: string): VariantButtonSheets {
   const base = `/interactive-elements/variant-buttons/${assetKey}`;
   const separator = assetKey === 'picktwo' ? '_' : '-';
   return {
@@ -21,17 +28,22 @@ export function variantButtonSheets(assetKey: string) {
   } as const;
 }
 
+export function resolveVariantButtonSheets(assetKey: string, sheets?: VariantButtonSheets): VariantButtonSheets {
+  return sheets ?? variantButtonSheets(assetKey);
+}
+
 export function createVariantButton(options: VariantButtonOptions): GameButton {
   const button = createGameButton({
     label: options.variant.title,
     onActivate: options.onActivate,
     clock: options.clock,
-    ...variantButtonSheets(options.variant.buttonAssetKey),
+    lockedDepressed: options.lockedDepressed,
+    activateAtReleaseStart: true,
+    ...resolveVariantButtonSheets(options.variant.buttonAssetKey, options.sheets),
   });
   button.element.classList.add('variant-button', 'game-button--baked-label');
   button.element.dataset.variantId = options.variant.variantId;
   button.setDisabled(Boolean(options.disabled));
-  button.setLockedDepressed(Boolean(options.lockedDepressed));
   if (options.overlay) {
     const overlay = document.createElement('span');
     overlay.className = 'variant-button__overlay';

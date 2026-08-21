@@ -1,30 +1,35 @@
 import type { BoilClock } from '../../animation/boilClock';
 import { assetLoader, type AssetLease } from '../../assets/assetLoader';
 import type { VariantPresentation } from '../../core/variant';
-import type { MatchProjection } from '../../protocol/protocol';
-import { mountFireballWarScreen } from '../fireballWar/fireballWarScreen';
-import type { DummyMove } from './dummyRules';
+import type { DummyMove, DummyProjection } from './dummyRules';
 import { mountReadyWaiting, type ReadyWaitingController } from '../../renderer/readyWaiting';
+import { mountDummyScreen } from './dummyScreen';
 
-export function createDummyPresentation(clock: BoilClock): VariantPresentation<MatchProjection, DummyMove> {
+export function createDummyPresentation(clock: BoilClock): VariantPresentation<DummyProjection, DummyMove> {
   let cleanup: (() => void) | undefined;
   let ready: ReadyWaitingController | undefined;
   let root: HTMLElement | undefined;
   return {
     async preload(): Promise<AssetLease> {
-      const lease = assetLoader.preloadBundle('variant:fireball-war');
+      const lease = assetLoader.retainUrls([
+        '/variants/dummy/scenes/dummy-scene.png',
+        '/variants/dummy/scenes/split-scenes/dummy-scene-p1-rdy.png',
+        '/variants/dummy/scenes/split-scenes/dummy-scene-p2-rdy.png',
+      ]);
       await lease.ready;
       return lease;
     },
     mount({ container, send }) {
-      cleanup = mountFireballWarScreen(container, clock, send);
-      root = container.querySelector<HTMLElement>('.fireball-war') ?? undefined;
-      if (root) ready = mountReadyWaiting(root, clock);
+      cleanup = mountDummyScreen(container, clock, () => send('advance'));
+      root = container.querySelector<HTMLElement>('.dummy-game') ?? undefined;
+      const scene = root?.querySelector<HTMLElement>('.game-layout__slot--scene');
+      if (scene) ready = mountReadyWaiting(scene, clock);
     },
     render(projection, events, serverTime) {
+      if (!projection?.ready || (projection.self !== 'p1' && projection.self !== 'p2')) return;
       const ownReady = projection.ready[projection.self];
       root?.classList.toggle('dummy-game--locked', ownReady);
-      for (const button of root?.querySelectorAll<HTMLButtonElement>('.fireball-war__controls button') ?? []) button.disabled = ownReady;
+      for (const button of root?.querySelectorAll<HTMLButtonElement>('.dummy-game__controls button') ?? []) button.disabled = ownReady;
       ready?.render(projection, events, serverTime);
     },
     unmount() { ready?.destroy(); ready = undefined; cleanup?.(); cleanup = undefined; root = undefined; },

@@ -13,6 +13,8 @@ export interface GameButtonOptions {
   betweenSheet: string;
   depressedSheet: string;
   juiceSheet?: string;
+  lockedDepressed?: boolean;
+  activateAtReleaseStart?: boolean;
   clock: BoilClock;
   depressedSound?: string;
   releasedSound?: string;
@@ -50,7 +52,7 @@ export function createGameButton(options: GameButtonOptions): GameButton {
   };
   let frameGeometry: SheetDimensions | null = null;
   const art = createBoilingSprite({
-    src: sheets.up,
+    src: sheets[options.lockedDepressed ? 'depressed' : 'up'],
     clock: options.clock,
     className: 'game-button__art',
     onFrameSize(size, loadedSrc) {
@@ -92,6 +94,8 @@ export function createGameButton(options: GameButtonOptions): GameButton {
   }
 
   const state = new GameButtonState({
+    lockedDepressed: options.lockedDepressed,
+    activateAtReleaseStart: options.activateAtReleaseStart,
     activate() {
       releasedSound.play();
       options.onActivate();
@@ -111,6 +115,7 @@ export function createGameButton(options: GameButtonOptions): GameButton {
   let requestedDisabled = false;
   let assetsReady = false;
   let destroyed = false;
+  if (options.lockedDepressed) element.setAttribute('aria-pressed', 'true');
   const isDisabled = () => requestedDisabled || !assetsReady;
   setControlDisabled(element, true);
   void Promise.all([artLease.ready, art.whenReady()]).then(() => {

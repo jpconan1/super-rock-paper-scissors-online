@@ -1,0 +1,524 @@
+{
+  "schemaVersion": 1,
+  "id": "lobby",
+  "title": "Lobby",
+  "kind": "screen",
+  "canvases": {
+    "landscape": {
+      "width": 960,
+      "height": 540,
+      "minAspectRatio": 1
+    },
+    "portrait": {
+      "width": 540,
+      "height": 960,
+      "minAspectRatio": 0
+    }
+  },
+  "copy": {
+    "heading": "Lobby",
+    "chat": "Chat",
+    "showPlayers": "Show Players",
+    "playerList": "Player List",
+    "back": "Back",
+    "computer": "Play vs Computer",
+    "tutorial": "Tutorial",
+    "ready": "Ready to Play",
+    "settings": "Settings",
+    "scoreboard": "Scoreboard"
+  },
+  "elements": [
+    {
+      "id": "header",
+      "type": "sprite",
+      "layer": 5,
+      "protected": true,
+      "assets": {
+        "src": "/lobby/header-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 326,
+          "y": -2,
+          "width": 307,
+          "height": 114.8774193548,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 120,
+          "y": 70,
+          "width": 307,
+          "height": 114.8774193548,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "whiteboard",
+      "type": "group",
+      "protected": true,
+      "assets": {
+        "src": "/lobby/whiteboard.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 270,
+          "y": 92,
+          "width": 420,
+          "height": 311
+        },
+        "portrait": {
+          "x": 25,
+          "y": 240,
+          "width": 492,
+          "height": 364
+        }
+      }
+    },
+    {
+      "id": "player-name",
+      "type": "dynamic-text",
+      "protected": true,
+      "layouts": {
+        "landscape": {
+          "x": 318,
+          "y": 134,
+          "width": 180,
+          "height": 28
+        },
+        "portrait": {
+          "x": 73,
+          "y": 282,
+          "width": 180,
+          "height": 28
+        }
+      }
+    },
+    {
+      "id": "black-marker",
+      "type": "sprite",
+      "protected": true,
+      "assets": {
+        "src": "/lobby/black-marker-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 362.5,
+          "y": 387.5,
+          "width": 35.5,
+          "height": 7,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 133.3571428571,
+          "y": 585.8585209003,
+          "width": 41.5857142857,
+          "height": 8.192926045,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "red-marker",
+      "type": "sprite",
+      "protected": true,
+      "assets": {
+        "src": "/lobby/red-marker-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 400,
+          "y": 387.5,
+          "width": 35.5,
+          "height": 7,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 177.2857142857,
+          "y": 585.8585209003,
+          "width": 41.5857142857,
+          "height": 8.192926045,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "blue-marker",
+      "type": "sprite",
+      "protected": true,
+      "assets": {
+        "src": "/lobby/blue-marker-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 437.5,
+          "y": 387.5,
+          "width": 35.5,
+          "height": 7,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 221.2142857143,
+          "y": 585.8585209003,
+          "width": 41.5857142857,
+          "height": 8.192926045,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "green-marker",
+      "type": "sprite",
+      "protected": true,
+      "assets": {
+        "src": "/lobby/green-marker-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 512.5,
+          "y": 387.5,
+          "width": 35.5,
+          "height": 7,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 309.0714285714,
+          "y": 585.8585209003,
+          "width": 41.5857142857,
+          "height": 8.192926045,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "purple-marker",
+      "type": "sprite",
+      "protected": true,
+      "assets": {
+        "src": "/lobby/purple-marker-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 475,
+          "y": 387.5,
+          "width": 35.5,
+          "height": 7,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 265.1428571429,
+          "y": 585.8585209003,
+          "width": 41.5857142857,
+          "height": 8.192926045,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "eraser",
+      "type": "sprite",
+      "protected": true,
+      "assets": {
+        "src": "/lobby/eraser-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 555,
+          "y": 384,
+          "width": 33.5,
+          "height": 11.5,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 358.8571428571,
+          "y": 581.7620578778,
+          "width": 39.2428571429,
+          "height": 13.459807074,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "chat-input",
+      "type": "text-entry",
+      "protected": true,
+      "behavior": "lobby-chat",
+      "assets": {
+        "src": "/interactive-elements/text-entry/text-frame-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 250,
+          "y": 404,
+          "width": 359,
+          "height": 52
+        },
+        "portrait": {
+          "x": 36,
+          "y": 610,
+          "width": 367,
+          "height": 52
+        }
+      }
+    },
+    {
+      "id": "chat-button",
+      "type": "button",
+      "protected": true,
+      "assets": {
+        "up": "/interactive-elements/menu-buttons/chat-button-up-sheet.webp",
+        "between": "/interactive-elements/menu-buttons/chat-button-between-sheet.webp",
+        "depressed": "/interactive-elements/menu-buttons/chat-button-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 614,
+          "y": 404,
+          "width": 96,
+          "height": 48
+        },
+        "portrait": {
+          "x": 408,
+          "y": 610,
+          "width": 96,
+          "height": 48
+        }
+      }
+    },
+    {
+      "id": "roster-toggle",
+      "type": "toggle",
+      "layer": 21,
+      "protected": true,
+      "behavior": "toggle-roster",
+      "assets": {
+        "off": "/interactive-elements/toggle-list-off-sheet.webp",
+        "between": "/interactive-elements/toggle-list-between-sheet.webp",
+        "on": "/interactive-elements/toggle-list-on-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 715,
+          "y": 385,
+          "width": 165,
+          "height": 82.5,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 355,
+          "y": 840,
+          "width": 165,
+          "height": 82.5,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "back",
+      "type": "button",
+      "protected": true,
+      "assets": {
+        "up": "/interactive-elements/menu-buttons/back-button-w-up-sheet.webp",
+        "between": "/interactive-elements/menu-buttons/back-button-w-between-sheet.webp",
+        "depressed": "/interactive-elements/menu-buttons/back-button-w-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 90,
+          "y": 464,
+          "width": 148,
+          "height": 74
+        },
+        "portrait": {
+          "x": 35,
+          "y": 845,
+          "width": 148,
+          "height": 74
+        }
+      }
+    },
+    {
+      "id": "computer",
+      "type": "button",
+      "protected": true,
+      "assets": {
+        "up": "/interactive-elements/menu-buttons/vscomputer-button-w-up-sheet.webp",
+        "between": "/interactive-elements/menu-buttons/vscomputer-button-w-between-sheet.webp",
+        "depressed": "/interactive-elements/menu-buttons/vscomputer-button-w-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 248,
+          "y": 464,
+          "width": 148,
+          "height": 74
+        },
+        "portrait": {
+          "x": 115,
+          "y": 760,
+          "width": 148,
+          "height": 74
+        }
+      }
+    },
+    {
+      "id": "tutorial",
+      "type": "button",
+      "protected": true,
+      "assets": {
+        "up": "/interactive-elements/menu-buttons/tutorial-button-up-sheet.webp",
+        "between": "/interactive-elements/menu-buttons/tutorial-button-between-sheet.webp",
+        "depressed": "/interactive-elements/menu-buttons/tutorial-button-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 560,
+          "y": 465,
+          "width": 148,
+          "height": 74
+        },
+        "portrait": {
+          "x": 275,
+          "y": 760,
+          "width": 148,
+          "height": 74
+        }
+      }
+    },
+    {
+      "id": "ready",
+      "type": "toggle",
+      "protected": true,
+      "assets": {
+        "off": "/interactive-elements/matchmaking-toggle-up-sheet.webp",
+        "between": "/interactive-elements/matchmaking-toggle-between-sheet.webp",
+        "on": "/interactive-elements/matchmaking-toggle-down-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 405,
+          "y": 465,
+          "width": 148,
+          "height": 74
+        },
+        "portrait": {
+          "x": 195,
+          "y": 675,
+          "width": 148,
+          "height": 74
+        }
+      }
+    },
+    {
+      "id": "settings",
+      "type": "button",
+      "protected": true,
+      "assets": {
+        "up": "/interactive-elements/menu-buttons/settings-button-up-sheet.webp",
+        "between": "/interactive-elements/menu-buttons/settings-button-between-sheet.webp",
+        "depressed": "/interactive-elements/menu-buttons/settings-button-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 722,
+          "y": 464,
+          "width": 148,
+          "height": 74
+        },
+        "portrait": {
+          "x": 200,
+          "y": 845,
+          "width": 148,
+          "height": 74
+        }
+      }
+    },
+    {
+      "id": "roster",
+      "type": "group",
+      "layer": 20,
+      "protected": true,
+      "layouts": {
+        "landscape": {
+          "x": 714,
+          "y": 92,
+          "width": 230,
+          "height": 372
+        },
+        "portrait": {
+          "x": 240,
+          "y": 210,
+          "width": 290,
+          "height": 460
+        }
+      }
+    },
+    {
+      "id": "scoreboard-preview",
+      "type": "button",
+      "layer": 22,
+      "protected": true,
+      "behavior": "preview-scoreboard",
+      "layouts": {
+        "landscape": {
+          "x": 840,
+          "y": 8,
+          "width": 110,
+          "height": 42
+        },
+        "portrait": {
+          "x": 416,
+          "y": 92,
+          "width": 110,
+          "height": 42
+        }
+      }
+    },
+    {
+      "id": "curtain-left",
+      "type": "decoration",
+      "layer": 30,
+      "assets": {
+        "src": "/wipes/curtains/portrait/left-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 0,
+          "y": 0,
+          "width": 0,
+          "height": 0
+        },
+        "portrait": {
+          "x": -60,
+          "y": 0,
+          "width": 215,
+          "height": 405.64453124999994,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "curtain-right",
+      "type": "decoration",
+      "layer": 30,
+      "assets": {
+        "src": "/wipes/curtains/portrait/right-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 960,
+          "y": 0,
+          "width": 0,
+          "height": 0
+        },
+        "portrait": {
+          "x": 385,
+          "y": 0,
+          "width": 215,
+          "height": 405.64453124999994,
+          "aspectLock": true
+        }
+      }
+    }
+  ]
+}

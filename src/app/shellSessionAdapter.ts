@@ -25,9 +25,11 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
   private playerName = '';
   private readonly guestId = sessionStorage.getItem('super-rps-guest') ?? crypto.randomUUID();
   private pollTimer?: ReturnType<typeof setTimeout>;
+  private matchmakingRequest?: AbortController;
+  private matchmakingGeneration = 0;
   private socket?: WebSocket;
   private latest?: ServerSnapshot;
-  private stopped = false;
+  private stopped = true;
   private ticket?: { matchId: string; seat: string; token: string };
   private intentionallyClosed = false;
 
@@ -40,10 +42,31 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
     listener.connection('connected');
     return () => { if (this.listener === listener) this.listener = undefined; };
   }
-  async enterLobby(playerName: string): Promise<void> { this.playerName = playerName; this.listener?.connection('connected'); }
-  startMatchmaking(): void { this.stopped = false; this.intentionallyClosed = false; void this.pollMatchmaking(); }
+  async enterLobby(playerName: string): Promise<void> {
+    this.playerName = playerName;
+    try {
+      const response = await fetch(`${this.baseUrl}/health`, { cache: 'no-store' });
+      if (!response.ok) throw new Error(`Server health check failed: ${response.status}`);
+      const health = await response.json() as { ok?: boolean };
+      if (health.ok !== true) throw new Error('Server health check returned an invalid response.');
+      this.listener?.connection('connected');
+    } catch {
+      this.listener?.connection('offline');
+    }
+  }
+  startMatchmaking(): void {
+    if (!this.stopped) return;
+    this.stopped = false;
+    this.intentionallyClosed = false;
+    const generation = ++this.matchmakingGeneration;
+    void this.pollMatchmaking(generation);
+  }
   cancelMatchmaking(): void {
+    if (this.stopped && !this.pollTimer && !this.matchmakingRequest) return;
     this.stopped = true;
+    this.matchmakingGeneration++;
+    this.matchmakingRequest?.abort();
+    this.matchmakingRequest = undefined;
     if (this.pollTimer) clearTimeout(this.pollTimer);
     this.pollTimer = undefined;
     void fetch(`${this.baseUrl}/matchmaking?guestId=${encodeURIComponent(this.guestId)}`, { method: 'DELETE' }).catch(() => {});
@@ -58,20 +81,34 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
   leaveMatch(): void { this.intentionallyClosed = true; this.socket?.close(); this.socket = undefined; this.latest = undefined; this.ticket = undefined; }
   destroy(): void { this.cancelMatchmaking(); this.leaveMatch(); this.listener = undefined; }
 
-  private async pollMatchmaking(): Promise<void> {
-    if (this.stopped) return;
+  private async pollMatchmaking(generation: number): Promise<void> {
+    if (this.stopped || generation !== this.matchmakingGeneration) return;
+    const request = new AbortController();
+    this.matchmakingRequest = request;
     try {
       const response = await fetch(`${this.baseUrl}/matchmaking`, {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ guestId: this.guestId, name: this.playerName || 'Guest' }),
+        signal: request.signal,
       });
       if (!response.ok) throw new Error(`Matchmaking failed: ${response.status}`);
       const result = await response.json() as { status: 'waiting' } | { status: 'matched'; matchId: string; seat: string; token: string };
+      if (this.stopped || generation !== this.matchmakingGeneration) return;
+      this.listener?.connection('connected');
       if (result.status === 'matched') { this.stopped = true; this.connect(result.matchId, result.seat, result.token); return; }
-      this.pollTimer = setTimeout(() => void this.pollMatchmaking(), 750);
-    } catch {
+      this.pollTimer = setTimeout(() => {
+        this.pollTimer = undefined;
+        void this.pollMatchmaking(generation);
+      }, 750);
+    } catch (error) {
+      if (request.signal.aborted || this.stopped || generation !== this.matchmakingGeneration) return;
       this.listener?.connection('reconnecting');
-      this.pollTimer = setTimeout(() => void this.pollMatchmaking(), 1_500);
+      this.pollTimer = setTimeout(() => {
+        this.pollTimer = undefined;
+        void this.pollMatchmaking(generation);
+      }, 1_500);
+    } finally {
+      if (this.matchmakingRequest === request) this.matchmakingRequest = undefined;
     }
   }
 

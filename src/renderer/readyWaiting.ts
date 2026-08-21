@@ -1,16 +1,20 @@
 import type { BoilClock } from '../animation/boilClock';
-import type { MatchProjection, TimedSemanticEvent } from '../protocol/protocol';
+import type { TimedSemanticEvent } from '../protocol/protocol';
+import type { PlayerId } from '../core/variant';
 import { createBoilingSprite, type BoilingSprite } from './boilingSprite';
 import { createSoundEffect } from '../audio/soundEffect';
+import { playStarburstWipe } from './starburstWipe';
 
 const STEP_MS = 58;
 const DOTS_DELAY_MS = 1_156;
 const DOT_MS = 1_000;
 
 export interface ReadyWaitingController {
-  render(projection: MatchProjection, events: readonly TimedSemanticEvent[], serverTime: number): void;
+  render(projection: ReadyProjection, events: readonly TimedSemanticEvent[], serverTime: number): void;
   destroy(): void;
 }
+
+interface ReadyProjection { self: PlayerId; ready: Record<PlayerId, boolean> }
 
 export interface ReadyWaitingVisual { readyAsset: string; split: boolean; dots?: 1 | 2 | 3 }
 
@@ -29,9 +33,12 @@ export function mountReadyWaiting(container: HTMLElement, clock: BoilClock): Rea
   layer.className = 'ready-waiting';
   const ready = createBoilingSprite({ src: '/visual-elements/ready-waiting/1_sheet.webp', clock, className: 'ready-waiting__ready', alt: 'Ready' });
   const dots = createBoilingSprite({ src: '/visual-elements/ready-waiting/waiting1_sheet.webp', clock, className: 'ready-waiting__dots', alt: 'Waiting' });
-  const split = createBoilingSprite({ src: '/variants/fireball-war/split-scenes/cbf_standoff_p1_is_ready_sheet.webp', clock, className: 'ready-waiting__split', alt: '' });
+  const split = document.createElement('img');
+  split.className = 'ready-waiting__split';
+  split.alt = '';
+  split.draggable = false;
   const sound = createSoundEffect('/audio/ready.mp3');
-  layer.append(split.element, ready.element, dots.element);
+  layer.append(split, ready.element, dots.element);
   container.append(layer);
   let readyEvent: TimedSemanticEvent | undefined;
   let timer = 0;
@@ -40,9 +47,11 @@ export function mountReadyWaiting(container: HTMLElement, clock: BoilClock): Rea
   let readySource = '';
   let dotsSource = '';
   let splitSource = '';
+  let shownEarly: 'p1' | 'p2' | undefined;
+  const wipeAbort = new AbortController();
   const reducedMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 
-  const paint = (projection: MatchProjection, serverTime: number) => {
+  const paint = (projection: ReadyProjection, serverTime: number) => {
     if (destroyed) return;
     const early = projection.ready.p1 !== projection.ready.p2
       ? (projection.ready.p1 ? 'p1' : 'p2') : undefined;
@@ -51,10 +60,10 @@ export function mountReadyWaiting(container: HTMLElement, clock: BoilClock): Rea
     const elapsed = Math.max(0, serverTime - readyEvent.startsAt);
     const visual = getReadyWaitingVisual(elapsed, reducedMotion);
     const nextReady = `/visual-elements/ready-waiting/${visual.readyAsset}_sheet.webp`;
-    const nextSplit = `/variants/fireball-war/split-scenes/cbf_standoff_${early}_is_ready_sheet.webp`;
+    const nextSplit = `/variants/dummy/scenes/split-scenes/dummy-scene-${early}-rdy.png`;
     if (readySource !== nextReady) ready.setSource(readySource = nextReady);
-    if (splitSource !== nextSplit) split.setSource(splitSource = nextSplit);
-    split.element.hidden = !visual.split;
+    if (splitSource !== nextSplit) split.src = splitSource = nextSplit;
+    split.hidden = !visual.split;
     dots.element.hidden = visual.dots === undefined;
     if (visual.dots !== undefined) {
       const nextDots = `/visual-elements/ready-waiting/waiting${visual.dots}_sheet.webp`;
@@ -72,10 +81,19 @@ export function mountReadyWaiting(container: HTMLElement, clock: BoilClock): Rea
         sound.play();
       }
       if (projection.ready.p1 === projection.ready.p2) readyEvent = undefined;
+      const early = projection.ready.p1 !== projection.ready.p2
+        ? (projection.ready.p1 ? 'p1' : 'p2') : undefined;
+      if (early && early !== shownEarly) {
+        shownEarly = early;
+        void playStarburstWipe(container, clock, () => {
+          split.src = splitSource = `/variants/dummy/scenes/split-scenes/dummy-scene-${early}-rdy.png`;
+          split.hidden = false;
+        }, wipeAbort.signal);
+      }
       paint(projection, serverTime);
     },
     destroy() {
-      destroyed = true; window.clearTimeout(timer); sound.destroy(); ready.destroy(); dots.destroy(); split.destroy(); layer.remove();
+      destroyed = true; wipeAbort.abort(); window.clearTimeout(timer); sound.destroy(); ready.destroy(); dots.destroy(); layer.remove();
     },
   };
 }

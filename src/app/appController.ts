@@ -12,11 +12,13 @@ import { CurtainWipe } from '../renderer/curtainWipe';
 import { mountVariantSelectScreen } from '../variantSelect/variantSelectScreen';
 import { mountScoreboardScreen } from '../scoreboard/scoreboardScreen';
 import type { ShellSessionAdapter } from './shellSessionAdapter';
-import { mountErrorScreen, mountLobbyScreen, mountMatchFoundScreen, mountMatchmakingScreen, showConnectionModal } from './shellScreens';
+import { mountErrorScreen, mountLobbyScreen, mountMatchFoundScreen, showConnectionModal, type LobbyScreenMount } from './shellScreens';
 import { createGameButton, type GameButton } from '../input/gameButton';
+import { MatchFlowDirector, statesForMatch } from './matchFlowDirector';
+import type { VariantSelectScreen } from '../variantSelect/variantSelectScreen';
 
 export type ConnectionState = 'connected' | 'reconnecting' | 'offline';
-export type ShellDestination = 'title' | 'lobby' | 'matchmaking' | 'match-found' | 'slot-picker' | 'scoreboard' | 'gameplay';
+export type ShellDestination = 'title' | 'lobby' | 'match-found' | 'slot-picker' | 'scoreboard' | 'gameplay';
 
 export interface AppControllerOptions {
   readonly clock: BoilClock;
@@ -46,6 +48,10 @@ export class AppController {
   private screenReady: Promise<void> = Promise.resolve();
   private curtain?: CurtainWipe;
   private gameplayLeaveButton?: GameButton;
+  private matchmakingActive = false;
+  private lobbyScreen?: LobbyScreenMount;
+  private variantSelectScreen?: VariantSelectScreen;
+  private matchFlowDirector?: MatchFlowDirector;
 
   constructor(private readonly container: HTMLElement, private readonly optionsOrRegistry: AppControllerOptions | PresentationRegistry) {
     if (!isControllerOptions(optionsOrRegistry)) {
@@ -60,6 +66,13 @@ export class AppController {
       this.modalLayer = layers.modal;
       this.transitionLayer = layers.transition;
       this.variants = validateClientSeason(optionsOrRegistry.season);
+      this.matchFlowDirector = new MatchFlowDirector({
+        slots: [...this.variants.keys()],
+        present: (projection) => this.syncMatchScreen(projection),
+        presentTiebreaker: (projection) => this.presentTiebreaker(projection),
+        getPicker: () => this.variantSelectScreen,
+        onError: (error) => this.showError(error),
+      });
     }
   }
 
@@ -79,6 +92,9 @@ export class AppController {
   }
 
   async navigate(destination: ShellDestination, animated = true): Promise<void> {
+    if (this.destination === 'lobby' && destination !== 'lobby' && destination !== 'match-found') {
+      this.setMatchmaking(false);
+    }
     const revision = ++this.loadRevision;
     this.lifecycle?.abort();
     this.lifecycle = new AbortController();
@@ -117,7 +133,9 @@ export class AppController {
     });
     presentation.mount({ container: this.screenLayer, signal: this.lifecycle.signal, send: emit });
     this.timeline = new AnimationTimeline(({ event }) => {
-      if (this.latestSnapshot) presentation.render(this.latestSnapshot.projection, [event], Date.now());
+      if (this.latestSnapshot) {
+        presentation.render(variantProjection(this.latestSnapshot.projection), [event], Date.now());
+      }
     });
   }
 
@@ -125,9 +143,9 @@ export class AppController {
     if (isControllerOptions(this.optionsOrRegistry) && this.connectionState !== 'connected') return;
     if (this.latestSnapshot?.matchId === snapshot.matchId && snapshot.revision < this.latestSnapshot.revision) return;
     this.latestSnapshot = snapshot;
-    if (isMatchProjection(snapshot.projection)) void this.syncMatchScreen(snapshot.projection);
+    if (isMatchProjection(snapshot.projection)) this.matchFlowDirector?.receiveSnapshot(snapshot as ServerSnapshot<MatchProjection>);
     if (this.mounted) {
-      this.mounted.render(snapshot.projection, snapshot.events, snapshot.serverTime);
+      this.mounted.render(variantProjection(snapshot.projection), snapshot.events, snapshot.serverTime);
       this.timeline?.schedule(snapshot.events, snapshot.serverTime);
     }
   }
@@ -138,7 +156,8 @@ export class AppController {
     this.connectionState = state;
     this.modalCleanup?.();
     this.modalCleanup = undefined;
-    if (state !== 'connected') {
+    this.lobbyScreen?.setConnectionState(state);
+    if (state !== 'connected' && this.destination !== 'lobby') {
       this.timeline?.cancel(true);
       this.modalCleanup = showConnectionModal(this.modalLayer, state);
     }
@@ -157,6 +176,8 @@ export class AppController {
     this.unsubscribeSession = undefined;
     this.curtain?.destroy();
     this.curtain = undefined;
+    this.setMatchmaking(false);
+    this.matchFlowDirector?.cancel();
     if (isControllerOptions(this.optionsOrRegistry)) this.optionsOrRegistry.session.destroy();
   }
 
@@ -171,39 +192,43 @@ export class AppController {
       this.screenReady = title.ready;
     } else if (destination === 'lobby') {
       this.screenReady = Promise.resolve();
-      options.session.cancelMatchmaking();
-      this.screenCleanup = mountLobbyScreen(
+      this.modalCleanup?.();
+      this.modalCleanup = undefined;
+      const lobby = mountLobbyScreen(
         this.screenLayer,
         options.clock,
         this.playerName,
-        () => void this.navigate('matchmaking'),
+        this.matchmakingActive,
+        (active) => this.setMatchmaking(active),
+        () => void this.navigate('slot-picker'),
+        () => {},
         () => void this.navigate('scoreboard'),
       );
-    } else if (destination === 'matchmaking') {
-      this.screenCleanup = mountMatchmakingScreen(this.screenLayer, options.clock, () => void this.navigate('lobby'));
-      options.session.startMatchmaking();
+      lobby.setConnectionState(this.connectionState);
+      this.lobbyScreen = lobby;
+      this.screenCleanup = lobby;
     } else if (destination === 'match-found') {
       const projection = this.matchProjection;
       if (!projection) throw new Error('Match information is unavailable.');
       this.screenCleanup = mountMatchFoundScreen(this.screenLayer, projection);
     } else if (destination === 'slot-picker') {
       const projection = this.matchProjection;
-      const states = projection ? new Map([...this.variants.keys()].map((slot) => [slot, {
-        disabled: projection.phase === 'banning' && projection.unavailableSlots.includes(slot),
-        pickedByOpponent: projection.picks[projection.self === 'p1' ? 'p2' : 'p1'] === slot,
-        banned: projection.phase === 'banning' && projection.unavailableSlots.includes(slot),
-      }])) : undefined;
+      const states = projection ? statesForMatch(projection, [...this.variants.keys()]) : undefined;
       const screen = mountVariantSelectScreen({
         container: this.screenLayer,
         variants: this.variants,
         clock: options.clock,
         curtain: this.getCurtain(),
-        mode: projection?.phase === 'banning' ? 'ban' : 'online-pick',
+        mode: projection?.phase === 'banning' ? 'ban' : projection ? 'online-pick' : 'computer',
         states,
         showBack: !projection,
         onConfirm: (slot) => projection?.phase === 'banning' ? options.session.toggleBan(slot) : options.session.selectSlot(slot),
+        onDetailOpened: () => this.matchFlowDirector?.detailOpened(),
+        onDetailClosed: () => this.matchFlowDirector?.detailClosed(),
+        onLocalConfirm: () => this.matchFlowDirector?.localConfirm(),
         onBack: () => void this.navigate('lobby'),
       });
+      this.variantSelectScreen = screen;
       this.screenCleanup = () => screen.destroy();
     } else if (destination === 'scoreboard') {
       this.screenCleanup = mountScoreboardScreen({
@@ -252,9 +277,21 @@ export class AppController {
     } catch (error) { if (!signal.aborted) this.showError(error); }
   }
 
+  private async presentTiebreaker(projection: MatchProjection): Promise<void> {
+    if (!projection.activeSlot) return;
+    const signal = this.lifecycle?.signal;
+    await this.getCurtain().close(signal);
+    if (signal?.aborted) return;
+    await waitFor(750, signal);
+    if (signal?.aborted) return;
+    await this.openGameplay(projection.activeSlot);
+  }
+
   private clearScreen(): void {
     this.screenCleanup?.();
     this.screenCleanup = undefined;
+    this.lobbyScreen = undefined;
+    this.variantSelectScreen = undefined;
     this.clearPresentation();
     this.screenLayer.replaceChildren?.();
   }
@@ -289,17 +326,31 @@ export class AppController {
     return isMatchProjection(this.latestSnapshot?.projection) ? this.latestSnapshot.projection : undefined;
   }
 
+  private setMatchmaking(active: boolean): void {
+    if (this.matchmakingActive === active) return;
+    this.matchmakingActive = active;
+    if (active) this.options.session.startMatchmaking();
+    else this.options.session.cancelMatchmaking();
+  }
+
   private async syncMatchScreen(projection: MatchProjection): Promise<void> {
     if (projection.phase === 'match-found') {
+      this.matchmakingActive = false;
       if (this.destination !== 'match-found') await this.navigate('match-found');
       return;
     }
     if (projection.phase === 'selecting') {
-      if (projection.picks[projection.self] && this.destination === 'slot-picker') return;
+      if (this.destination === 'slot-picker') {
+        this.variantSelectScreen?.update(statesForMatch(projection, [...this.variants.keys()]));
+        return;
+      }
       await this.navigate('slot-picker');
       return;
     }
-    if (projection.phase === 'banning') { await this.navigate('slot-picker'); return; }
+    if (projection.phase === 'banning') {
+      if (this.destination === 'slot-picker') return;
+      await this.navigate('slot-picker'); return;
+    }
     if (projection.phase === 'scoreboard' || projection.phase === 'final-scoreboard') {
       if (this.destination !== 'scoreboard') await this.navigate('scoreboard');
       return;
@@ -335,6 +386,19 @@ function nextFrame(): Promise<void> {
   return new Promise((resolve) => requestAnimationFrame(() => resolve()));
 }
 
+function waitFor(milliseconds: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal?.aborted) return resolve();
+    const timer = setTimeout(done, milliseconds);
+    signal?.addEventListener('abort', done, { once: true });
+    function done() { clearTimeout(timer); signal?.removeEventListener('abort', done); resolve(); }
+  });
+}
+
 function isMatchProjection(value: unknown): value is MatchProjection {
   return typeof value === 'object' && value !== null && 'phase' in value && 'players' in value && 'self' in value;
+}
+
+function variantProjection(projection: unknown): unknown {
+  return isMatchProjection(projection) ? projection.variant : projection;
 }

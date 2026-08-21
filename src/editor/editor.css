@@ -1,0 +1,46 @@
+@import '../styles.css';
+
+html, body, #editor { width: 100%; height: 100%; overflow: hidden; }
+body { user-select: none; background: #201f1c; font: 14px/1.25 system-ui, sans-serif; color: #eee; }
+.layout-editor { display: grid; grid-template: 48px minmax(0,1fr) / 250px minmax(360px,1fr) 310px; width: 100%; height: 100%; }
+.editor-toolbar { grid-column: 1/-1; display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-bottom: 1px solid #555; background: #2b2a27; }
+.editor-toolbar .dirty { color: #ffc35b; font-weight: 800; }
+.editor-panel { min-height: 0; overflow: auto; padding: 10px; background: #292825; }
+.editor-tree { border-right: 1px solid #555; }
+.editor-inspector { border-left: 1px solid #555; }
+.editor-stage { position: relative; display: grid; min-width: 0; min-height: 0; padding: 58px 24px 24px; overflow: auto; place-items: center; background: #181816; }
+.editor-zoom { position: absolute; z-index: 10000; top: 10px; left: 50%; display: flex; align-items: center; gap: 8px; min-width: 300px; padding: 6px 10px; border: 1px solid #555; border-radius: 5px; background: #2b2a27; transform: translateX(-50%); }
+.editor-zoom input { width: 190px; }
+.editor-zoom output { min-width: 42px; text-align: right; }
+.editor-canvas-shell { position: relative; flex: none; }
+.editor-canvas { position: absolute; top: 0; left: 0; overflow: hidden; color: #171412; background: #e7ddc4 url('/crumpled-paper-background.webp') center/cover; transform-origin: top left; touch-action: none; }
+.editor-node { position: absolute; outline: 1px dashed transparent; touch-action: none; }
+.editor-node.boiling-sprite { pointer-events: auto; }
+.editor-node.boiling-sprite > .boiling-sprite__sheet { pointer-events: none; }
+.editor-node:hover { outline-color: #66b7ff; }
+.editor-node.is-selected { outline: 2px solid #20a5ff; outline-offset: 1px; }
+.editor-node.is-selected::after { position: absolute; right: -6px; bottom: -6px; width: 10px; height: 10px; border: 1px solid white; background: #20a5ff; content: ''; cursor: nwse-resize; }
+.editor-node > img:not(.boiling-sprite__sheet) { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+.editor-node--group, .editor-node--collection { border: 1px dashed rgba(30,100,190,.55); }
+.editor-node--text-entry { border: 3px solid #211d19; background: rgba(255,255,255,.6); }
+.editor-node--text, .editor-node--dynamic-text { display: grid; padding: 4px; place-items: center; font-family: 'Architects Daughter'; }
+.editor-curtain-decoration { position: absolute; z-index: 9000; inset: 0; overflow: hidden; pointer-events: none; }
+.editor-closed-curtain { position: absolute; z-index: 0; inset: 0; overflow: hidden; pointer-events: none; }
+.editor-variant-rules { display: grid; align-content: center; gap: 0.8rem; padding: 24px; text-align: center; }
+.editor-variant-rules p { margin: 0; font-family: 'Architects Daughter'; font-size: 22px; line-height: 1.12; }
+.editor-variant-rules .variant-detail__lead { color: #ac3235; font-size: 30px; }
+.editor-tree-row { display: grid; grid-template-columns: 1fr auto; gap: 5px; margin-bottom: 3px; }
+.editor-tree-row button { overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.editor-tree-row.is-selected button:first-child { background: #1676ad; color: white; }
+.editor-panel h2 { margin: 6px 0 10px; font-size: 15px; }
+.editor-panel label { display: grid; gap: 3px; margin: 7px 0; }
+.editor-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.editor-panel input, .editor-panel select, .editor-panel textarea, .editor-toolbar select, .editor-toolbar button, .editor-panel button { min-height: 30px; border: 1px solid #666; border-radius: 3px; padding: 4px 7px; background: #f5f1e8; color: #191816; font: inherit; }
+.editor-panel textarea { min-height: 72px; resize: vertical; }
+.editor-rules-row { display: grid; grid-template-columns: 1fr auto auto; gap: 4px; margin: 5px 0; }
+.editor-rules-row textarea { min-height: 55px; }
+.editor-guide { position: absolute; z-index: 9999; background: #ff2da9; pointer-events: none; }
+.editor-guide--x { top: 0; bottom: 0; width: 1px; }
+.editor-guide--y { right: 0; left: 0; height: 1px; }
+.editor-status { margin-left: auto; color: #bcb8ae; }
+.editor-assets { max-height: 150px; overflow: auto; font-size: 11px; }

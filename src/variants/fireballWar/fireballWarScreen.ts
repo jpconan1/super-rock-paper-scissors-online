@@ -4,6 +4,8 @@ import { createGameLayout } from '../../layout/gameLayout';
 import type { ResponsiveScaleBoxLayout } from '../../layout/scaleBox';
 import { createBoilingSprite, type BoilingSprite } from '../../renderer/boilingSprite';
 import type { FireballWarMove } from './fireballWarTypes';
+import { getLayoutDocument } from '../../layout/layoutDocuments';
+import { applyConfiguredElement } from '../../layout/layoutRuntime';
 
 export type { FireballWarMove } from './fireballWarTypes';
 
@@ -39,6 +41,9 @@ export function mountFireballWarScreen(
   clock: BoilClock,
   onMove: (move: FireballWarMove) => void = () => {},
 ): () => void {
+  const layoutDocument = getLayoutDocument('variant-fireball-war');
+  const configured = (id: string) => layoutDocument.elements.find((element) => element.id === id)!;
+  const orientation: FireballWarLayoutName = matchMedia('(orientation: portrait)').matches ? 'portrait' : 'landscape';
   const sprites: BoilingSprite[] = [];
   const buttons: GameButton[] = [];
 
@@ -80,37 +85,41 @@ export function mountFireballWarScreen(
   const controls = document.createElement('div');
   controls.className = 'fireball-war__controls';
 
-  const createArrow = (assetName: string, className: string) => {
+  const createArrow = (id: string, className: string) => {
+    const config = configured(id);
     const arrow = createBoilingSprite({
-      src: `/visual-elements/arrows/${assetName}`,
+      src: config.assets!.src!,
       clock,
       className: `fireball-war__arrow ${className}`,
       alt: '',
     });
     sprites.push(arrow);
+    applyConfiguredElement(arrow.element, config, orientation);
     controls.append(arrow.element);
   };
 
-  createArrow('arrow-blue-upright-sheet.webp', 'fireball-war__arrow--fireball-block');
-  createArrow('arrow-red-downright-sheet.webp', 'fireball-war__arrow--fireball-charge');
-  createArrow('arrow-blue-left-sheet.webp', 'fireball-war__arrow--charge-block');
+  createArrow('arrow-fireball-block', 'fireball-war__arrow--fireball-block');
+  createArrow('arrow-fireball-charge', 'fireball-war__arrow--fireball-charge');
+  createArrow('arrow-charge-block', 'fireball-war__arrow--charge-block');
 
-  const createControl = (move: FireballWarMove, label: string, className: string, art = FIREBALL_WAR_MOVE_ART.charge) => {
+  const createControl = (move: FireballWarMove, label: string, className: string) => {
+    const config = configured(move);
     const button = createGameButton({
       label,
       onActivate: () => onMove(move),
-      upSheet: art.up,
-      betweenSheet: art.between,
-      depressedSheet: art.depressed,
+      upSheet: config.assets!.up!,
+      betweenSheet: config.assets!.between!,
+      depressedSheet: config.assets!.depressed!,
       clock,
     });
     button.element.classList.add(className, 'game-button--baked-label');
+    applyConfiguredElement(button.element, config, orientation);
     buttons.push(button);
     controls.append(button.element);
   };
-  createControl('fireball', 'Fireball', 'fireball-war__control--fireball', FIREBALL_WAR_MOVE_ART.fireball);
-  createControl('block', 'Block', 'fireball-war__control--block', FIREBALL_WAR_MOVE_ART.block);
-  createControl('charge', 'Charge', 'fireball-war__control--charge', FIREBALL_WAR_MOVE_ART.charge);
+  createControl('fireball', 'Fireball', 'fireball-war__control--fireball');
+  createControl('block', 'Block', 'fireball-war__control--block');
+  createControl('charge', 'Charge', 'fireball-war__control--charge');
 
   const layout = createGameLayout({
     container,
@@ -127,7 +136,7 @@ export function mountFireballWarScreen(
       turn: { src: '/visual-elements/time-counters/turn1-sheet.webp', alt: 'Turn 1' },
       p1Wins: { src: '/visual-elements/win-couters/ft3-win-counter-1-sheet.webp', alt: 'P1 wins: 1' },
       p2Wins: { src: '/visual-elements/win-couters/ft3-win-counter-0-sheet.webp', alt: 'P2 wins: 0' },
-      scene: { src: '/variants/fireball-war/cbf-standoff-sheet.webp', alt: 'The two fighters face each other.' },
+      scene: { src: configured('scene-art').assets!.src!, alt: configured('scene-art').alt! },
     },
     variantContent: {
       'p1-move': previousMove('charge'),

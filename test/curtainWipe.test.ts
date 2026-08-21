@@ -3,10 +3,16 @@ import {
   CURTAIN_CLOSED_HOLD_MS,
   CURTAIN_FRAME_MS,
   curtainAnimationFrames,
+  curtainOpenAsset,
   selectCurtainLayout,
 } from '../src/renderer/curtainWipe';
 
 describe('curtain wipe', () => {
+  test('exposes the same open decoration art used by the editor preview', () => {
+    expect(curtainOpenAsset('landscape')).toBe('/wipes/curtains/curtains-open-sheet.webp');
+    expect(curtainOpenAsset('portrait')).toBe('/wipes/curtains/portrait/frame6-sheet.webp');
+  });
+
   test('closes and opens in semantic artwork order', () => {
     expect(curtainAnimationFrames('closed', 5)).toEqual({
       frames: [0, 0.25, 0.5, 0.75],

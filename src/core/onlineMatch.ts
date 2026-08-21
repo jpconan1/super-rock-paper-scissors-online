@@ -64,11 +64,12 @@ export function acceptMatchCommand(state: OnlineMatchState, player: PlayerId, mu
     case 'toggle-ban': {
       if (state.phase !== 'banning' || state.bansLocked) throw new Error('Bans cannot be changed now.');
       const slotId = mutation.payload.slotId;
-      if (!isSlotId(slotId) || unavailable(state).includes(slotId)) throw new Error('Slot is unavailable.');
+      if (!isSlotId(slotId)) throw new Error('Unknown slot.');
       const own = state.bans[player];
       const index = own.indexOf(slotId);
       if (index >= 0) own.splice(index, 1);
       else {
+        if (unavailable(state).includes(slotId)) throw new Error('Slot is unavailable.');
         if (own.length >= 3) throw new Error('Ban quota reached.');
         const opponent = state.bans[player === 'p1' ? 'p2' : 'p1'];
         if (opponent.includes(slotId)) throw new Error('Slot already banned.');
@@ -79,7 +80,7 @@ export function acceptMatchCommand(state: OnlineMatchState, player: PlayerId, mu
         const remaining = SLOT_IDS.find((slot) => !unavailable(state).includes(slot));
         if (!remaining) throw new Error('No tiebreaker remains.');
         add('bans-locked', 600, { slotId: remaining });
-        enterScoreboard(state, remaining, now, 'scoreboard', add);
+        startGame(state, remaining, now, nextRevision, add);
       }
       break;
     }
@@ -112,7 +113,8 @@ export function advanceMatchDeadline(state: OnlineMatchState, now: number): bool
   state.deadlineAt = undefined;
   state.events = [];
   if (state.phase === 'match-found') state.phase = 'selecting';
-  else if (state.phase === 'scoreboard') startGame(state, state.activeSlot!, now, nextRevision);
+  else if (state.phase === 'scoreboard' && state.activeSlot) startGame(state, state.activeSlot, now, nextRevision);
+  else if (state.phase === 'scoreboard') state.phase = 'banning';
   else if (state.phase === 'final-scoreboard') state.phase = 'complete';
   else return false;
   state.revision = nextRevision;
@@ -121,13 +123,12 @@ export function advanceMatchDeadline(state: OnlineMatchState, now: number): bool
 
 export function projectOnlineMatch(state: OnlineMatchState, viewer: PlayerId): MatchProjection {
   const variant = state.gameState && state.activeSlot
-    ? getServerVariantForSlot(state.activeSlot).project(state.gameState, viewer) as { ownMove?: unknown; ready: Record<PlayerId, boolean> }
+    ? getServerVariantForSlot(state.activeSlot).project(state.gameState, viewer)
     : undefined;
   return {
     phase: state.phase, self: viewer, players: state.players, picks: state.picks, pickOrder: state.pickOrder,
     games: state.games, ...(state.activeSlot ? { activeSlot: state.activeSlot } : {}),
-    ...(variant?.ownMove ? { ownMove: variant.ownMove } : {}),
-    ready: variant?.ready ?? { p1: false, p2: false }, unavailableSlots: unavailable(state),
+    ...(variant === undefined ? {} : { variant }), unavailableSlots: unavailable(state),
     ownBans: state.bans[viewer], opponentBanCount: state.bans[viewer === 'p1' ? 'p2' : 'p1'].length,
     bansLocked: state.bansLocked, ...(state.winner ? { winner: state.winner } : {}),
   };
@@ -147,11 +148,24 @@ function enterScoreboard(
   add('scoreboard', SCOREBOARD_HOLD_MS, { nextSlot, final: phase === 'final-scoreboard' });
 }
 
-function startGame(state: OnlineMatchState, slot: SlotId, now: number, revision: number): void {
+function startGame(
+  state: OnlineMatchState,
+  slot: SlotId,
+  now: number,
+  revision: number,
+  add?: (type: TimedSemanticEvent['type'], duration: number, payload?: unknown) => void,
+): void {
   state.phase = 'playing';
   state.activeSlot = slot;
-  state.gameState = getServerVariantForSlot(slot).initialize(randomContext(mixSeed(state.seed, revision), now));
-  state.events = [event(state.matchId, revision, 0, 'game-start', now, now + 600, { slotId: slot })];
+  const wins = gameWins(state.games);
+  state.gameState = getServerVariantForSlot(slot).initialize({
+    ...randomContext(mixSeed(state.seed, revision), now),
+    gameNumber: state.games.length + 1,
+    matchWins: wins,
+  });
+  state.deadlineAt = undefined;
+  if (add) add('game-start', 600, { slotId: slot });
+  else state.events = [event(state.matchId, revision, 0, 'game-start', now, now + 600, { slotId: slot })];
 }
 
 function finishGame(
@@ -171,15 +185,22 @@ function finishGame(
   }
   if (state.games.length === 2) {
     if (state.pickOrder[0] === state.pickOrder[1]) return enterScoreboard(state, state.pickOrder[0]!, now, 'scoreboard', add);
-    state.phase = 'banning';
+    state.phase = 'scoreboard';
     state.activeSlot = undefined;
     state.gameState = undefined;
-    state.deadlineAt = undefined;
+    state.deadlineAt = now + SCOREBOARD_HOLD_MS;
+    add('scoreboard', SCOREBOARD_HOLD_MS, { next: 'banning' });
     return;
   }
   state.winner = wins.p1 > wins.p2 ? 'p1' : 'p2';
   add('match-complete', SCOREBOARD_HOLD_MS, { winner: state.winner });
   enterScoreboard(state, state.activeSlot!, now, 'final-scoreboard', add);
+}
+
+function gameWins(games: readonly CompletedGame[]): Record<PlayerId, number> {
+  const wins = { p1: 0, p2: 0 };
+  for (const game of games) wins[game.winner]++;
+  return wins;
 }
 
 function unavailable(state: OnlineMatchState): SlotId[] {

@@ -1,0 +1,388 @@
+{
+  "schemaVersion": 1,
+  "id": "variant-select",
+  "title": "Variant Select",
+  "kind": "screen",
+  "canvases": {
+    "landscape": {
+      "width": 960,
+      "height": 540,
+      "minAspectRatio": 1
+    },
+    "portrait": {
+      "width": 540,
+      "height": 960,
+      "minAspectRatio": 0
+    }
+  },
+  "copy": {
+    "heading": "Choose Variant",
+    "pickAlt": "Pick Variant",
+    "banAlt": "Ban Variant",
+    "back": "Back",
+    "play": "Play"
+  },
+  "elements": [
+    {
+      "id": "header",
+      "type": "sprite",
+      "layer": 2,
+      "protected": true,
+      "assets": {
+        "up": "/visual-elements/variant-screen/pick-variant-header-sheet.webp",
+        "depressed": "/visual-elements/variant-screen/ban-variant-header-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 270.5,
+          "y": 8,
+          "width": 419,
+          "height": 74.940381558,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 60,
+          "y": 125,
+          "width": 419,
+          "height": 74.940381558,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "slot-1",
+      "type": "button",
+      "protected": true,
+      "label": "Rock Paper Scissors",
+      "assets": {
+        "up": "/interactive-elements/variant-buttons/rps-up-sheet.webp",
+        "between": "/interactive-elements/variant-buttons/rps-between-sheet.webp",
+        "depressed": "/interactive-elements/variant-buttons/rps-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 185,
+          "y": 110,
+          "width": 218,
+          "height": 86,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": -10,
+          "y": 255,
+          "width": 218,
+          "height": 86,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "slot-2",
+      "type": "button",
+      "protected": true,
+      "label": "Dragon Spear",
+      "assets": {
+        "up": "/interactive-elements/variant-buttons/dragonspear-up-sheet.webp",
+        "between": "/interactive-elements/variant-buttons/dragonspear-between-sheet.webp",
+        "depressed": "/interactive-elements/variant-buttons/dragonspear-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 380,
+          "y": 100,
+          "width": 218,
+          "height": 86,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 170,
+          "y": 230,
+          "width": 218,
+          "height": 86,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "slot-3",
+      "type": "button",
+      "protected": true,
+      "label": "Pick Two",
+      "assets": {
+        "up": "/interactive-elements/variant-buttons/picktwo_up-sheet.webp",
+        "between": "/interactive-elements/variant-buttons/picktwo_between-sheet.webp",
+        "depressed": "/interactive-elements/variant-buttons/picktwo_depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 560,
+          "y": 130,
+          "width": 218,
+          "height": 86,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 330,
+          "y": 275,
+          "width": 218,
+          "height": 86,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "slot-4",
+      "type": "button",
+      "protected": true,
+      "label": "Gun Knife Fist",
+      "assets": {
+        "up": "/interactive-elements/variant-buttons/gkf-up-sheet.webp",
+        "between": "/interactive-elements/variant-buttons/gkf-between-sheet.webp",
+        "depressed": "/interactive-elements/variant-buttons/gkf-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 370,
+          "y": 405,
+          "width": 218,
+          "height": 86,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 170,
+          "y": 595,
+          "width": 218,
+          "height": 86,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "slot-5",
+      "type": "button",
+      "protected": true,
+      "label": "Kitchen Sink",
+      "assets": {
+        "up": "/interactive-elements/variant-buttons/kitchensink-up-sheet.webp",
+        "between": "/interactive-elements/variant-buttons/kitchensink-between-sheet.webp",
+        "depressed": "/interactive-elements/variant-buttons/kitchensink-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 375,
+          "y": 235,
+          "width": 218,
+          "height": 86,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 165,
+          "y": 385,
+          "width": 218,
+          "height": 86,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "slot-6",
+      "type": "button",
+      "protected": true,
+      "label": "Fireball War",
+      "assets": {
+        "up": "/interactive-elements/variant-buttons/fireballwar-up-sheet.webp",
+        "between": "/interactive-elements/variant-buttons/fireballwar-between-sheet.webp",
+        "depressed": "/interactive-elements/variant-buttons/fireballwar-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 565,
+          "y": 355,
+          "width": 218,
+          "height": 86,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 335,
+          "y": 645,
+          "width": 218,
+          "height": 86,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "slot-7",
+      "type": "button",
+      "protected": true,
+      "label": "RPS RPG",
+      "assets": {
+        "up": "/interactive-elements/variant-buttons/rpg-up-sheet.webp",
+        "between": "/interactive-elements/variant-buttons/rpg-between-sheet.webp",
+        "depressed": "/interactive-elements/variant-buttons/rpg-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 195,
+          "y": 375,
+          "width": 218,
+          "height": 86,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 0,
+          "y": 620,
+          "width": 218,
+          "height": 86,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "slot-8",
+      "type": "button",
+      "protected": true,
+      "label": "RPS Poker",
+      "assets": {
+        "up": "/interactive-elements/variant-buttons/poker-up-sheet.webp",
+        "between": "/interactive-elements/variant-buttons/poker-between-sheet.webp",
+        "depressed": "/interactive-elements/variant-buttons/poker-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 185,
+          "y": 235,
+          "width": 218,
+          "height": 86,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": -15,
+          "y": 445,
+          "width": 218,
+          "height": 86,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "slot-9",
+      "type": "button",
+      "protected": true,
+      "label": "Tap Tap Shoot",
+      "assets": {
+        "up": "/interactive-elements/variant-buttons/taptapshoot-up-sheet.webp",
+        "between": "/interactive-elements/variant-buttons/taptapshoot-between-sheet.webp",
+        "depressed": "/interactive-elements/variant-buttons/taptapshoot-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 560,
+          "y": 245,
+          "width": 218,
+          "height": 86,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 330,
+          "y": 445,
+          "width": 218,
+          "height": 86,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "back",
+      "type": "button",
+      "protected": true,
+      "behavior": "back",
+      "label": "Back",
+      "assets": {
+        "up": "/interactive-elements/menu-buttons/back-button-w-up-sheet.webp",
+        "between": "/interactive-elements/menu-buttons/back-button-w-between-sheet.webp",
+        "depressed": "/interactive-elements/menu-buttons/back-button-w-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 35,
+          "y": 450,
+          "width": 148,
+          "height": 42
+        },
+        "portrait": {
+          "x": 210,
+          "y": 860,
+          "width": 148,
+          "height": 42
+        }
+      }
+    },
+    {
+      "id": "curtain-left",
+      "type": "decoration",
+      "layer": 30,
+      "assets": {
+        "src": "/wipes/curtains/portrait/left-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 0,
+          "y": 0,
+          "width": 0,
+          "height": 0
+        },
+        "portrait": {
+          "x": -60,
+          "y": 5,
+          "width": 215,
+          "height": 405.64453124999994,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "curtain-right",
+      "type": "decoration",
+      "layer": 30,
+      "assets": {
+        "src": "/wipes/curtains/portrait/right-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 960,
+          "y": 0,
+          "width": 0,
+          "height": 0
+        },
+        "portrait": {
+          "x": 380,
+          "y": 0,
+          "width": 215,
+          "height": 405.64453124999994,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "rules-panel",
+      "type": "group",
+      "layer": 2,
+      "protected": true,
+      "layouts": {
+        "landscape": {
+          "x": 184,
+          "y": 52,
+          "width": 592,
+          "height": 436
+        },
+        "portrait": {
+          "x": 24,
+          "y": 102,
+          "width": 492,
+          "height": 756
+        }
+      }
+    }
+  ]
+}

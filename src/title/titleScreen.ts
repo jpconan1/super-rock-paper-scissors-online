@@ -16,6 +16,11 @@ import { createMenuCanvas } from '../layout/menuLayout';
 import { createBoilingSprite } from '../renderer/boilingSprite';
 import { generateRandomName } from './randomName';
 import { createVolumeSlider } from './volumeSlider';
+import { getLayoutDocument } from '../layout/layoutDocuments';
+import { applyDocumentLayout } from '../layout/layoutRuntime';
+
+const TITLE_LAYOUT = getLayoutDocument('title');
+const titleElement = (id: string) => TITLE_LAYOUT.elements.find((element) => element.id === id)!;
 
 export type TitleScreenMount = (() => void) & { readonly ready: Promise<void> };
 
@@ -24,19 +29,22 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
   screen.className = 'title-screen';
   screen.setAttribute('aria-labelledby', 'title-screen-heading');
 
-  const canvas = createMenuCanvas(screen, 'title-screen');
+  let layoutName: 'landscape' | 'portrait' = 'landscape';
+  const bindings: { id: string; element: HTMLElement }[] = [];
+  const applyLayout = () => applyDocumentLayout(TITLE_LAYOUT, layoutName, bindings);
+  const canvas = createMenuCanvas(screen, 'title-screen', (name) => { layoutName = name; applyLayout(); });
   const composition = canvas.composition;
 
   const heading = document.createElement('h1');
   heading.id = 'title-screen-heading';
   heading.className = 'visually-hidden';
-  heading.textContent = 'Super Rock Paper Scissors Online';
+  heading.textContent = TITLE_LAYOUT.copy!.heading!;
 
   const logo = createBoilingSprite({
-    src: '/LOGO_sheet.webp',
+    src: titleElement('logo').assets!.src!,
     clock,
     className: 'title-screen__logo',
-    alt: 'Super Rock Paper Scissors Online',
+    alt: titleElement('logo').alt!,
   });
   const soundToggle = createSoundToggle(clock);
   const boilToggle = createBoilToggle(clock);
@@ -50,24 +58,24 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
   });
 
   const nameEntry = createTextEntry({
-    label: 'Player name',
+    label: TITLE_LAYOUT.copy!.nameLabel!,
     value: generateRandomName(),
     maxLength: 24,
     autocomplete: 'nickname',
     validate: isNonBlankText,
-    sheet: '/interactive-elements/text-entry/text-frame-sheet.webp',
+    sheet: titleElement('name-entry').assets!.src!,
     clock,
   });
 
   const randomName = createGameButton({
-    label: 'Random Name',
+    label: TITLE_LAYOUT.copy!.randomName!,
     onActivate: () => {
       nameEntry.setValue(generateRandomName());
       nameEntry.focus();
     },
-    upSheet: '/interactive-elements/menu-buttons/name-button-up-sheet.webp',
-    betweenSheet: '/interactive-elements/menu-buttons/name-button-between-sheet.webp',
-    depressedSheet: '/interactive-elements/menu-buttons/name-button-depressed-sheet.webp',
+    upSheet: titleElement('random-name').assets!.up!,
+    betweenSheet: titleElement('random-name').assets!.between!,
+    depressedSheet: titleElement('random-name').assets!.depressed!,
     clock,
   });
   randomName.element.classList.add('title-screen__random-name', 'game-button--baked-label');
@@ -81,22 +89,14 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
   };
 
   const enterLobby = createGameButton({
-    label: 'Enter Lobby',
+    label: TITLE_LAYOUT.copy!.enterLobby!,
     onActivate: play,
-    upSheet: '/interactive-elements/menu-buttons/lobby-button-up-sheet.webp',
-    betweenSheet: '/interactive-elements/menu-buttons/lobby-button-between-sheet.webp',
-    depressedSheet: '/interactive-elements/menu-buttons/lobby-button-depressed-sheet.webp',
+    upSheet: titleElement('enter-lobby').assets!.up!,
+    betweenSheet: titleElement('enter-lobby').assets!.between!,
+    depressedSheet: titleElement('enter-lobby').assets!.depressed!,
     clock,
   });
   enterLobby.element.classList.add('game-button--baked-label');
-
-  const primaryActions = document.createElement('div');
-  primaryActions.className = 'title-screen__primary-actions';
-  primaryActions.append(randomName.element, enterLobby.element);
-
-  const toggles = document.createElement('div');
-  toggles.className = 'title-screen__toggles';
-  toggles.append(soundToggle.element, musicVolume.element, sfxVolume.element, boilToggle.element);
 
   const onNameKeyDown = (event: KeyboardEvent) => {
     if (event.key !== 'Enter' || event.isComposing) return;
@@ -105,7 +105,15 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
   };
   nameEntry.input.addEventListener('keydown', onNameKeyDown);
 
-  composition.append(logo.element, primaryActions, nameEntry.element, toggles);
+  composition.append(logo.element, randomName.element, enterLobby.element, nameEntry.element,
+    soundToggle.element, musicVolume.element, sfxVolume.element, boilToggle.element);
+  bindings.push(
+    { id: 'logo', element: logo.element }, { id: 'random-name', element: randomName.element },
+    { id: 'enter-lobby', element: enterLobby.element }, { id: 'name-entry', element: nameEntry.element },
+    { id: 'sound-toggle', element: soundToggle.element }, { id: 'music-slider', element: musicVolume.element },
+    { id: 'sfx-slider', element: sfxVolume.element }, { id: 'boil-toggle', element: boilToggle.element },
+  );
+  applyLayout();
   screen.append(heading);
   container.replaceChildren(screen);
 

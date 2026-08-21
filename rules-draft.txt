@@ -1,0 +1,67 @@
+Rock Paper Scissors – Easy
+The schoolyard classic. You know how this one goes.
+
+- Rock beats Scissors
+- Scissors beats Paper
+- Paper beats Rock
+
+Played first-to-five.
+
+
+
+Rock Paper Scissors Dragon Spear – Easy
+RPS with a trump card. The Dragon beats Rock, Paper and Scissors, but loses to Spear—and once your Dragon is speared, it's gone for the rest of the game. Rock, Paper and Scissors all win against Spear.
+
+Shamelessly stolen from [this blog post](https://medium.com/theuglymonster/rock-paper-scissors-is-no-fun-add-a-mighty-dragon-a-magical-spear-to-it-13a3868bd505).
+
+Played first-to-three.
+
+
+
+Rock Paper Scissors Pick Two – Easy
+Two steps every turn: first, each player simultaneously picks two unique moves. Then, each player simultaneously removes one. The resulting RPS matchup is resolved for a winner.
+
+Step one still has just three moves:
+- Rock + Paper
+- Paper + Scissors
+- Scissors + Rock
+
+If both players pick the same pair, the round resolves as a tie.
+
+In step two, one player will always have an advantage. Can you work out how to prove it?
+
+Played first-to-six. Wins score two points, and ties score one.
+
+
+
+Fireball War – Medium
+Two ways to win: build 3 Bars OR land a Fireball on your opponent. Both players start with one Bar.
+
+- Fireball wins the round if it hits, but costs one Bar. You can't use Fireball if you don't have a Bar.
+- Charge adds one Bar, but leaves you open to Fireball.
+- Block negates Fireball.
+
+If you manage to build three Bars, you automatically Super Attack your opponent and win the round.
+
+Played first-to-three.
+
+
+
+Gun Knife Fist – Medium
+RPS with HP. Each player starts with 3.
+
+- Fist beats Gun. Deals 1 damage.
+- Knife beats Fist. Deals 2 damage.
+- Gun beats Knife. Deals a lethal 3 damage.
+
+Played first-to-three. Rounds end when one player takes three or more accumulated damage.
+
+Rock Paper Poker – Medium
+RPS betting game. Play against the house, and try to bluff your opponent.
+
+Tap Tap Shoot – Medium
+Five-move resource game. Get an advantage, then mix up your opponent.
+
+RPS RPG – Medium
+
+Kitchen Sink! – Hard

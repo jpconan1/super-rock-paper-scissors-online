@@ -12,6 +12,10 @@ export interface VariantGameResult {
 export interface DeterministicContext {
   random(): number;
   now: number;
+  /** One-based game number within the enclosing match, when available. */
+  gameNumber?: number;
+  /** Completed-game wins before this game starts, when available. */
+  matchWins?: Readonly<Record<PlayerId, number>>;
 }
 
 export interface VariantResolution<TState> {

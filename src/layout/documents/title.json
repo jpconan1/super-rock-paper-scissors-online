@@ -1,0 +1,206 @@
+{
+  "schemaVersion": 1,
+  "id": "title",
+  "title": "Title Screen",
+  "kind": "screen",
+  "canvases": {
+    "landscape": {
+      "width": 960,
+      "height": 540,
+      "minAspectRatio": 1
+    },
+    "portrait": {
+      "width": 540,
+      "height": 960,
+      "minAspectRatio": 0
+    }
+  },
+  "copy": {
+    "heading": "Super Rock Paper Scissors Online",
+    "nameLabel": "Player name",
+    "randomName": "Random Name",
+    "enterLobby": "Enter Lobby"
+  },
+  "elements": [
+    {
+      "id": "logo",
+      "type": "sprite",
+      "layer": 1,
+      "protected": true,
+      "assets": {
+        "src": "/LOGO_sheet.webp"
+      },
+      "alt": "Super Rock Paper Scissors Online",
+      "layouts": {
+        "landscape": {
+          "x": 333,
+          "y": 0,
+          "width": 294,
+          "height": 211.3125,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 90,
+          "y": 36,
+          "width": 360,
+          "height": 258.75,
+          "aspectLock": true
+        }
+      },
+      "visible": true
+    },
+    {
+      "id": "name-entry",
+      "type": "text-entry",
+      "protected": true,
+      "behavior": "player-name",
+      "assets": {
+        "src": "/interactive-elements/text-entry/text-frame-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 195,
+          "y": 350,
+          "width": 560,
+          "height": 60
+        },
+        "portrait": {
+          "x": 30,
+          "y": 575,
+          "width": 480,
+          "height": 60
+        }
+      }
+    },
+    {
+      "id": "random-name",
+      "type": "button",
+      "protected": true,
+      "behavior": "random-name",
+      "assets": {
+        "up": "/interactive-elements/menu-buttons/name-button-up-sheet.webp",
+        "between": "/interactive-elements/menu-buttons/name-button-between-sheet.webp",
+        "depressed": "/interactive-elements/menu-buttons/name-button-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 290,
+          "y": 230,
+          "width": 184,
+          "height": 92
+        },
+        "portrait": {
+          "x": 45,
+          "y": 700,
+          "width": 184,
+          "height": 92
+        }
+      }
+    },
+    {
+      "id": "enter-lobby",
+      "type": "button",
+      "protected": true,
+      "behavior": "enter-lobby",
+      "assets": {
+        "up": "/interactive-elements/menu-buttons/lobby-button-up-sheet.webp",
+        "between": "/interactive-elements/menu-buttons/lobby-button-between-sheet.webp",
+        "depressed": "/interactive-elements/menu-buttons/lobby-button-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 505,
+          "y": 230,
+          "width": 184,
+          "height": 92
+        },
+        "portrait": {
+          "x": 305,
+          "y": 700,
+          "width": 184,
+          "height": 92
+        }
+      }
+    },
+    {
+      "id": "sound-toggle",
+      "type": "toggle",
+      "protected": true,
+      "behavior": "toggle-sound",
+      "layouts": {
+        "landscape": {
+          "x": 140,
+          "y": 435,
+          "width": 158,
+          "height": 79
+        },
+        "portrait": {
+          "x": 95,
+          "y": 315,
+          "width": 170,
+          "height": 85
+        }
+      }
+    },
+    {
+      "id": "music-slider",
+      "type": "volume-slider",
+      "protected": true,
+      "behavior": "music-volume",
+      "layouts": {
+        "landscape": {
+          "x": 310,
+          "y": 435,
+          "width": 158,
+          "height": 79
+        },
+        "portrait": {
+          "x": 275,
+          "y": 435,
+          "width": 170,
+          "height": 85
+        }
+      }
+    },
+    {
+      "id": "sfx-slider",
+      "type": "volume-slider",
+      "protected": true,
+      "behavior": "sfx-volume",
+      "layouts": {
+        "landscape": {
+          "x": 485,
+          "y": 435,
+          "width": 158,
+          "height": 79
+        },
+        "portrait": {
+          "x": 95,
+          "y": 430,
+          "width": 170,
+          "height": 85
+        }
+      }
+    },
+    {
+      "id": "boil-toggle",
+      "type": "toggle",
+      "protected": true,
+      "behavior": "toggle-animation",
+      "layouts": {
+        "landscape": {
+          "x": 660,
+          "y": 440,
+          "width": 158,
+          "height": 79
+        },
+        "portrait": {
+          "x": 270,
+          "y": 320,
+          "width": 170,
+          "height": 85
+        }
+      }
+    }
+  ]
+}

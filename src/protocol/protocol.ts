@@ -45,8 +45,8 @@ export interface MatchProjection {
   pickOrder: readonly SlotId[];
   games: readonly CompletedGame[];
   activeSlot?: SlotId;
-  ownMove?: unknown;
-  ready: Record<PlayerId, boolean>;
+  /** Opaque projection owned by the active variant. */
+  variant?: unknown;
   unavailableSlots: readonly SlotId[];
   ownBans: readonly SlotId[];
   opponentBanCount: number;

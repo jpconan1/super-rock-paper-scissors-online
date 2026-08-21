@@ -24,10 +24,10 @@ The browser never decides competitive outcomes, timers, legal actions, score, pl
 
 ## Client controller
 
-`AppController` owns boot, navigation, menus, matchmaking screens, connection state, reconnect UI, settings, audio, asset loading, transitions, and variant lifetime. Its flow is cancellable:
+`AppController` owns boot, navigation, menus, background matchmaking state, connection state, reconnect UI, settings, audio, asset loading, transitions, and variant lifetime. Its flow is cancellable:
 
 ```text
-boot -> title -> guest -> lobby -> matchmaking -> match found
+boot -> title -> guest -> lobby (background queue) -> match found
 -> draft -> scoreboard -> game -> between games -> result -> lobby
 ```
 

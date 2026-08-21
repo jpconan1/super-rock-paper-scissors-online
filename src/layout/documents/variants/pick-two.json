@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "id": "variant-pick-two",
+  "title": "Pick Two",
+  "kind": "variant",
+  "canvases": {
+    "landscape": {
+      "width": 960,
+      "height": 540,
+      "minAspectRatio": 1
+    },
+    "portrait": {
+      "width": 390,
+      "height": 705,
+      "minAspectRatio": 0
+    }
+  },
+  "copy": {
+    "variantId": "dummy-pick-two",
+    "buttonAssetKey": "picktwo",
+    "assetBundleId": "variant:fireball-war",
+    "buttonLabel": "Pick Two",
+    "rulesLabel": "Pick Two rules"
+  },
+  "rules": {
+    "lead": "Two steps every turn.\nThe resulting RPS matchup is resolved for a winner.",
+    "paragraphs": [
+      "First, each player simultaneously picks two unique moves. ",
+      "Then, each player simultaneously removes one. ",
+      "Step one still has just three moves:",
+      "- Rock + Paper",
+      "- Paper + Scissors",
+      "- Scissors + Rock",
+      "If both players pick the same pair, the round resolves as a tie.",
+      "In step two, one player will always have an advantage. Can you work out how to prove it?",
+      "Played first-to-six. Wins score two points, and ties score one."
+    ]
+  },
+  "elements": []
+}

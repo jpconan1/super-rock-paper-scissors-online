@@ -8,6 +8,8 @@ export interface GameButtonView {
 export interface GameButtonStateOptions {
   render(view: GameButtonView): void;
   activate(): void;
+  lockedDepressed?: boolean;
+  activateAtReleaseStart?: boolean;
   wait?: (milliseconds: number, signal: AbortSignal) => Promise<void>;
 }
 
@@ -20,13 +22,15 @@ export class GameButtonState {
   private held = false;
   private eligible = false;
   private destroyed = false;
-  private visual: GameButtonVisual = 'up';
+  private visual: GameButtonVisual;
   private juiceOpacity = 0;
-  private lockedDepressed = false;
+  private lockedDepressed: boolean;
   private readonly wait: (milliseconds: number, signal: AbortSignal) => Promise<void>;
 
   constructor(private readonly options: GameButtonStateOptions) {
     this.wait = options.wait ?? abortableWait;
+    this.lockedDepressed = Boolean(options.lockedDepressed);
+    this.visual = this.lockedDepressed ? 'depressed' : 'up';
     this.render();
   }
 
@@ -52,6 +56,12 @@ export class GameButtonState {
     this.held = false;
     const shouldActivate = this.eligible;
     const signal = this.interaction.signal;
+    if (shouldActivate && this.options.activateAtReleaseStart) {
+      this.options.activate();
+      if (signal.aborted || this.destroyed || this.lockedDepressed) return;
+      void this.runRelease(signal, false);
+      return;
+    }
     void this.runRelease(signal, shouldActivate);
   }
 

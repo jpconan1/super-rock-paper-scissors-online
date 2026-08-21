@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "id": "variant-detail-dragon-spear",
+  "title": "Closed Curtain · Dragon Spear",
+  "kind": "screen",
+  "canvases": {
+    "landscape": {
+      "width": 960,
+      "height": 540,
+      "minAspectRatio": 1
+    },
+    "portrait": {
+      "width": 540,
+      "height": 960,
+      "minAspectRatio": 0
+    }
+  },
+  "copy": {
+    "variantDocumentId": "variant-dragon-spear",
+    "slotId": "slot-2"
+  },
+  "elements": [
+    {
+      "id": "selected-button",
+      "type": "button",
+      "protected": true,
+      "binding": "selected-variant-button",
+      "layouts": {
+        "landscape": {
+          "x": 380,
+          "y": 100,
+          "width": 218,
+          "height": 86
+        },
+        "portrait": {
+          "x": 170,
+          "y": 230,
+          "width": 218,
+          "height": 86
+        }
+      }
+    },
+    {
+      "id": "rules-copy",
+      "type": "text",
+      "protected": true,
+      "binding": "variant-rules",
+      "layer": 2,
+      "layouts": {
+        "landscape": {
+          "x": 80,
+          "y": 130,
+          "width": 580,
+          "height": 245
+        },
+        "portrait": {
+          "x": 85,
+          "y": 365,
+          "width": 370,
+          "height": 390
+        }
+      }
+    }
+  ]
+}

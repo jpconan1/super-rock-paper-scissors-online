@@ -29,6 +29,10 @@ const PORTRAIT_ASSETS: CurtainAssetSet = [
   '/wipes/curtains/portrait/closed-sheet.webp',
 ];
 
+export function curtainOpenAsset(layout: CurtainLayout): string {
+  return (layout === 'portrait' ? PORTRAIT_ASSETS : LANDSCAPE_ASSETS)[0]!;
+}
+
 export interface CurtainWipeOptions {
   landscapeAssets?: CurtainAssetSet;
   portraitAssets?: CurtainAssetSet;

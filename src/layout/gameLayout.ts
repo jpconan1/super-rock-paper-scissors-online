@@ -6,6 +6,8 @@ import {
   observeResponsiveScaleBox,
   type ResponsiveScaleBoxLayout,
 } from './scaleBox';
+import { getLayoutDocument } from './layoutDocuments';
+import { applyDocumentLayout } from './layoutRuntime';
 
 const INTERACTIVE_ROOT = '/interactive-elements';
 
@@ -38,6 +40,7 @@ export interface GameLayoutPlayer {
 export interface GameLayoutArtwork {
   src: string;
   alt: string;
+  boiling?: boolean;
 }
 
 export type GameLayoutVariantContent = Readonly<Pick<Record<GameLayoutSlotName, HTMLElement>,
@@ -101,11 +104,21 @@ export function createGameLayout<TLayoutName extends string>(
   const slots = createGameLayoutSlots(composition);
   const sprites: BoilingSprite[] = [];
   const buttons: GameButton[] = [];
+  const layoutDocument = getLayoutDocument('game-parent');
 
   slots['p1-info'].append(createPlayerInfo(options.players.p1, 'p1'));
   slots['p2-info'].append(createPlayerInfo(options.players.p2, 'p2'));
 
   const addSprite = (slot: GameLayoutSlotName, artwork: GameLayoutArtwork, className: string) => {
+    if (artwork.boiling === false) {
+      const image = document.createElement('img');
+      image.className = className;
+      image.src = artwork.src;
+      image.alt = artwork.alt;
+      image.draggable = false;
+      slots[slot].append(image);
+      return;
+    }
     const sprite = createBoilingSprite({ ...artwork, clock: options.clock, className });
     sprites.push(sprite);
     slots[slot].append(sprite.element);
@@ -114,15 +127,17 @@ export function createGameLayout<TLayoutName extends string>(
   addSprite('p1-wins', options.artwork.p1Wins, 'game-layout__win-counter');
   addSprite('p2-wins', options.artwork.p2Wins, 'game-layout__win-counter');
   addSprite('scene', options.artwork.scene, 'game-layout__scene');
-  addSprite('p1-wins-label', { src: '/visual-elements/win-couters/wins_label_sheet.webp', alt: 'Wins' }, 'game-layout__wins-label');
-  addSprite('p2-wins-label', { src: '/visual-elements/win-couters/wins_label_sheet.webp', alt: 'Wins' }, 'game-layout__wins-label');
-  addSprite('p1-picked', { src: '/visual-elements/you_picked_sheet.webp', alt: 'You picked' }, 'game-layout__picked-label');
-  addSprite('p2-picked', { src: '/visual-elements/they_picked_sheet.webp', alt: 'They picked' }, 'game-layout__picked-label');
+  const config = (id: string) => layoutDocument.elements.find((element) => element.id === id)!;
+  addSprite('p1-wins-label', { src: config('p1-wins-label').assets!.src!, alt: layoutDocument.copy!.wins! }, 'game-layout__wins-label');
+  addSprite('p2-wins-label', { src: config('p2-wins-label').assets!.src!, alt: layoutDocument.copy!.wins! }, 'game-layout__wins-label');
+  addSprite('p1-picked', { src: config('p1-picked').assets!.src!, alt: layoutDocument.copy!.youPicked! }, 'game-layout__picked-label');
+  addSprite('p2-picked', { src: config('p2-picked').assets!.src!, alt: layoutDocument.copy!.theyPicked! }, 'game-layout__picked-label');
 
   mountGameLayoutVariantContent(slots, options.variantContent);
 
   const rail = document.createElement('div');
   rail.className = 'game-layout__tool-rail';
+  const toolsByAsset = new Map<string, HTMLElement>();
   const createTool = (label: string, assetName: 'rulebook-button' | 'burger-button') => {
     const button = createGameButton({
       label,
@@ -138,10 +153,11 @@ export function createGameLayout<TLayoutName extends string>(
       'game-button--baked-label',
     );
     buttons.push(button);
+    toolsByAsset.set(assetName, button.element);
     rail.append(button.element);
   };
-  createTool('Rules', 'rulebook-button');
-  createTool('Menu', 'burger-button');
+  createTool(layoutDocument.copy!.rules!, 'rulebook-button');
+  createTool(layoutDocument.copy!.menu!, 'burger-button');
   composition.append(rail);
 
   scaleBox.content.append(composition);
@@ -149,6 +165,12 @@ export function createGameLayout<TLayoutName extends string>(
   options.container.replaceChildren(screen);
   const stopLayout = observeResponsiveScaleBox(screen, scaleBox, options.layouts, (layout) => {
     composition.dataset.layout = layout.name;
+    const orientation = layout.name === 'portrait' ? 'portrait' : 'landscape';
+    applyDocumentLayout(layoutDocument, orientation, [
+      ...Object.entries(slots).map(([id, element]) => ({ id, element })),
+      { id: 'rules', element: toolsByAsset.get('rulebook-button')! },
+      { id: 'menu', element: toolsByAsset.get('burger-button')! },
+    ]);
   });
 
   return {

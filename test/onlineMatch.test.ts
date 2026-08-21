@@ -18,9 +18,9 @@ describe('online match', () => {
     expect(state.phase).toBe('scoreboard');
     advanceMatchDeadline(state, state.deadlineAt!);
     expect(state.activeSlot).toBe('slot-4');
-    send(state, 'p1', { type: 'variant-command', slotId: 'slot-4', command: 'charge' });
-    expect(projectOnlineMatch(state, 'p2').ownMove).toBeUndefined();
-    expect(projectOnlineMatch(state, 'p2').ready.p1).toBe(true);
+    send(state, 'p1', { type: 'variant-command', slotId: 'slot-4', command: 'advance' });
+    const variant = projectOnlineMatch(state, 'p2').variant as { ready: Record<PlayerId, boolean> };
+    expect(variant.ready.p1).toBe(true);
   });
 
   test('rejects duplicate/stale commands and locks six unique bans', () => {
@@ -35,7 +35,7 @@ describe('online match', () => {
     for (const slot of ['slot-6', 'slot-7', 'slot-8'] as const) send(state, 'p2', { type: 'toggle-ban', slotId: slot });
     expect(state.bansLocked).toBe(true);
     expect(state.activeSlot).toBe('slot-9');
-    expect(state.phase).toBe('scoreboard');
+    expect(state.phase).toBe('playing');
   });
 
   test('repeats a shared pick for a split-series third game and completes', () => {
@@ -52,8 +52,20 @@ describe('online match', () => {
 
   test('sends different split picks into simultaneous banning', () => {
     const state = findSplitSeries(false);
+    expect(state.phase).toBe('scoreboard');
+    expect(state.activeSlot).toBeUndefined();
+    advanceMatchDeadline(state, state.deadlineAt!);
     expect(state.phase).toBe('banning');
     expect(projectOnlineMatch(state, 'p1').unavailableSlots).toEqual(['slot-3', 'slot-4']);
+  });
+
+  test('allows a player to take back their own ban before the sixth lock', () => {
+    const state = createOnlineMatch('m-unban', players, 2, 0);
+    state.phase = 'banning'; state.pickOrder = ['slot-1', 'slot-2']; state.activeSlot = undefined;
+    send(state, 'p1', { type: 'toggle-ban', slotId: 'slot-3' });
+    expect(state.bans.p1).toEqual(['slot-3']);
+    send(state, 'p1', { type: 'toggle-ban', slotId: 'slot-3' });
+    expect(state.bans.p1).toEqual([]);
   });
 });
 
@@ -77,6 +89,6 @@ function findSplitSeries(samePick: boolean): ReturnType<typeof createOnlineMatch
 function playGame(state: ReturnType<typeof createOnlineMatch>): void {
   advanceMatchDeadline(state, state.deadlineAt!);
   const slotId = state.activeSlot!;
-  send(state, 'p1', { type: 'variant-command', slotId, command: 'charge' });
-  send(state, 'p2', { type: 'variant-command', slotId, command: 'block' });
+  send(state, 'p1', { type: 'variant-command', slotId, command: 'advance' });
+  send(state, 'p2', { type: 'variant-command', slotId, command: 'advance' });
 }

@@ -5,8 +5,14 @@ import { createMenuCanvas } from '../layout/menuLayout';
 import { createBoilingSprite } from '../renderer/boilingSprite';
 import { createGameButton, type GameButton } from '../input/gameButton';
 import type { MatchProjection } from '../protocol/protocol';
+import { getLayoutDocument } from '../layout/layoutDocuments';
+import { applyDocumentLayout } from '../layout/layoutRuntime';
+import { createTextEntry } from '../input/textEntry';
+import { createToggleButton } from '../input/toggleButton';
+import type { ConnectionState } from './appController';
 
 export type ScreenCleanup = () => void;
+export type LobbyScreenMount = ScreenCleanup & { setConnectionState(state: ConnectionState): void };
 
 function mountPanel(container: HTMLElement, title: string): { panel: HTMLElement; cleanup: ScreenCleanup } {
   const panel = document.createElement('section');
@@ -32,16 +38,26 @@ export function mountLobbyScreen(
   container: HTMLElement,
   clock: BoilClock,
   playerName: string,
-  onMatch: () => void,
+  matchmakingActive: boolean,
+  onMatchmakingChange: (active: boolean) => void,
+  onComputer: () => void,
+  onTutorial: () => void,
   onScoreboard: () => void,
-): ScreenCleanup {
+): LobbyScreenMount {
+  const layoutDocument = getLayoutDocument('lobby');
+  let layoutName: 'landscape' | 'portrait' = 'landscape';
+  const layoutBindings: { id: string; element: HTMLElement }[] = [];
   const screen = document.createElement('section');
   screen.className = 'menu-canvas-screen lobby-screen';
   screen.setAttribute('aria-label', 'Lobby');
-  const canvas = createMenuCanvas(screen, 'lobby-screen');
+  const canvas = createMenuCanvas(screen, 'lobby-screen', (name) => {
+    layoutName = name;
+    applyDocumentLayout(layoutDocument, layoutName, layoutBindings);
+  });
   const composition = canvas.composition;
   const sprites: ReturnType<typeof createBoilingSprite>[] = [];
   const gameButtons: GameButton[] = [];
+  const gameButtonByElement = new Map<HTMLElement, GameButton>();
   const sprite = (src: string, className: string, alt = '') => {
     const value = createBoilingSprite({ src, className, alt, clock });
     sprites.push(value);
@@ -59,106 +75,115 @@ export function mountLobbyScreen(
     });
     button.element.classList.add(className, 'game-button--baked-label');
     gameButtons.push(button);
+    gameButtonByElement.set(button.element, button);
     return button.element;
   };
-  const burgerButton = (run: () => void) => {
-    const button = createGameButton({
-      label: 'Show Players',
-      onActivate: run,
-      upSheet: '/interactive-elements/burger-button-up-sheet.webp',
-      betweenSheet: '/interactive-elements/burger-button-between-sheet.webp',
-      depressedSheet: '/interactive-elements/burger-button-depressed-sheet.webp',
-      clock,
-    });
-    button.element.classList.add('lobby-screen__roster-button', 'game-button--baked-label');
-    gameButtons.push(button);
-    return button.element;
-  };
-  const staticArtButton = (label: string, src: string, className: string) => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = `lobby-art-button ${className}`;
-    button.setAttribute('aria-label', label);
-    const image = document.createElement('img');
-    image.className = 'lobby-art-button__art';
-    image.src = src;
-    image.alt = '';
-    button.append(image);
-    return button;
-  };
+  const lobbyElement = (id: string) => layoutDocument.elements.find((item) => item.id === id)!;
 
-  const header = sprite('/lobby/header-sheet.webp', 'lobby-screen__header', 'Lobby');
+  const header = sprite(layoutDocument.elements.find((item) => item.id === 'header')!.assets!.src!, 'lobby-screen__header', layoutDocument.copy!.heading);
+  const curtainLeft = sprite(layoutDocument.elements.find((item) => item.id === 'curtain-left')!.assets!.src!, 'portrait-curtain-piece');
+  const curtainRight = sprite(layoutDocument.elements.find((item) => item.id === 'curtain-right')!.assets!.src!, 'portrait-curtain-piece');
   const whiteboard = document.createElement('div');
   whiteboard.className = 'lobby-screen__whiteboard';
+  const whiteboardFill = document.createElement('div');
+  whiteboardFill.className = 'lobby-screen__whiteboard-fill';
   const whiteboardArt = document.createElement('img');
   whiteboardArt.className = 'lobby-screen__whiteboard-art';
   whiteboardArt.src = '/lobby/whiteboard.webp';
   whiteboardArt.alt = '';
-  whiteboard.append(whiteboardArt);
+  whiteboard.append(whiteboardFill, whiteboardArt);
   const player = document.createElement('p');
   player.className = 'lobby-screen__player';
   player.textContent = playerName;
-  whiteboard.append(player);
-  const tools = document.createElement('div');
-  tools.className = 'lobby-screen__tools';
-  for (const [name, path] of [
-    ['Black marker', 'black-marker'], ['Red marker', 'red-marker'], ['Blue marker', 'blue-marker'],
-    ['Green marker', 'green-marker'], ['Purple marker', 'purple-marker'], ['Eraser', 'eraser'],
-  ] as const) tools.append(staticArtButton(name, `/lobby/${path}-sheet.webp`, 'lobby-screen__tool'));
-  whiteboard.append(tools);
+  const tools = ['black-marker', 'red-marker', 'blue-marker', 'purple-marker', 'green-marker', 'eraser'].map((id) => {
+    const tool = sprite(lobbyElement(id).assets!.src!, 'lobby-screen__tool', id.replace('-', ' '));
+    return { id, element: tool };
+  });
 
   const chat = document.createElement('form');
   chat.className = 'lobby-screen__chat';
   chat.addEventListener('submit', (event) => event.preventDefault());
-  const input = document.createElement('input');
-  input.name = 'message';
-  input.maxLength = 200;
-  input.autocomplete = 'off';
-  input.setAttribute('aria-label', 'Chat message');
-  chat.append(input, menuButton('Chat', 'chat-button', 'lobby-screen__chat-button'));
+  const chatEntry = createTextEntry({
+    label: 'Chat message', maxLength: 200, autocomplete: 'off',
+    sheet: lobbyElement('chat-input').assets!.src!, clock,
+  });
+  chatEntry.input.name = 'message';
+  chatEntry.element.classList.add('lobby-screen__chat-input');
+  const chatButton = menuButton('Chat', 'chat-button', 'lobby-screen__chat-button');
+  chat.append(chatEntry.element, chatButton);
   const roster = document.createElement('aside');
   roster.className = 'lobby-screen__roster';
   roster.hidden = true;
-  roster.textContent = 'Player List';
-  const rosterButton = burgerButton(() => {
-    roster.hidden = !roster.hidden;
+  roster.textContent = layoutDocument.copy!.playerList!;
+  const rosterToggle = createToggleButton({
+    label: layoutDocument.copy!.showPlayers!,
+    pressed: false,
+    onChange: (open) => { roster.hidden = !open; },
+    offSheet: '/interactive-elements/toggle-list-off-sheet.webp',
+    betweenSheet: '/interactive-elements/toggle-list-between-sheet.webp',
+    onSheet: '/interactive-elements/toggle-list-on-sheet.webp',
+    juiceSheet: '/interactive-elements/generic-buttons/button-juice-sheet.webp',
+    clock,
   });
+  rosterToggle.element.classList.add('lobby-screen__roster-toggle', 'toggle-button--baked-label');
 
-  const actions = document.createElement('div');
-  actions.className = 'lobby-screen__actions';
-  actions.append(
-    menuButton('Back', 'back-button-w', 'lobby-screen__action'),
-    menuButton('Play vs Computer', 'vscomputer-button-w', 'lobby-screen__action'),
-    menuButton('Tutorial', 'tutorial-button', 'lobby-screen__action'),
-    menuButton('Ready to Play', 'match-button', 'lobby-screen__action', onMatch),
-    menuButton('Settings', 'settings-button', 'lobby-screen__action'),
-  );
-  const scoreboard = action('Scoreboard', onScoreboard);
+  const matchmakingToggle = createToggleButton({
+    label: layoutDocument.copy!.ready!,
+    pressed: matchmakingActive,
+    onChange: onMatchmakingChange,
+    offSheet: '/interactive-elements/matchmaking-toggle-up-sheet.webp',
+    betweenSheet: '/interactive-elements/matchmaking-toggle-between-sheet.webp',
+    onSheet: '/interactive-elements/matchmaking-toggle-down-sheet.webp',
+    juiceSheet: '/interactive-elements/generic-buttons/button-juice-sheet.webp',
+    clock,
+  });
+  matchmakingToggle.element.classList.add('lobby-screen__action', 'lobby-screen__matchmaking-toggle', 'toggle-button--baked-label');
+  const leaveQueue = (run: () => void) => () => {
+    matchmakingToggle.setPressed(false);
+    onMatchmakingChange(false);
+    run();
+  };
+
+  const actions = [
+    { id: 'back', element: menuButton('Back', 'back-button-w', 'lobby-screen__action') },
+    { id: 'computer', element: menuButton('Play vs Computer', 'vscomputer-button-w', 'lobby-screen__action', leaveQueue(onComputer)) },
+    { id: 'tutorial', element: menuButton('Tutorial', 'tutorial-button', 'lobby-screen__action', leaveQueue(onTutorial)) },
+    { id: 'ready', element: matchmakingToggle.element },
+    { id: 'settings', element: menuButton('Settings', 'settings-button', 'lobby-screen__action') },
+  ];
+  const scoreboard = action('Scoreboard', leaveQueue(onScoreboard));
   scoreboard.classList.add('lobby-screen__scoreboard-preview');
-  composition.append(header, whiteboard, chat, rosterButton, actions, roster, scoreboard);
+  composition.append(header, whiteboard, player, ...tools.map((item) => item.element), chat,
+    ...actions.map((item) => item.element), roster, scoreboard, curtainLeft, curtainRight);
+  composition.append(rosterToggle.element);
+  layoutBindings.push(
+    { id: 'header', element: header }, { id: 'whiteboard', element: whiteboard },
+    { id: 'player-name', element: player }, ...tools,
+    { id: 'chat-input', element: chatEntry.element }, { id: 'chat-button', element: chatButton },
+    { id: 'roster-toggle', element: rosterToggle.element }, ...actions, { id: 'roster', element: roster },
+    { id: 'scoreboard-preview', element: scoreboard }, { id: 'curtain-left', element: curtainLeft },
+    { id: 'curtain-right', element: curtainRight },
+  );
+  applyDocumentLayout(layoutDocument, layoutName, layoutBindings);
   container.replaceChildren(screen);
-  return () => {
+  const cleanup = (() => {
     canvas.destroy();
     for (const button of gameButtons) button.destroy();
     for (const item of sprites) item.destroy();
+    chatEntry.destroy();
+    rosterToggle.destroy();
+    matchmakingToggle.destroy();
     screen.remove();
+  }) as LobbyScreenMount;
+  cleanup.setConnectionState = (state) => {
+    const unavailable = state !== 'connected';
+    screen.dataset.connection = state;
+    chatEntry.input.disabled = unavailable;
+    gameButtonByElement.get(chatButton)?.setDisabled(unavailable);
+    rosterToggle.setDisabled(unavailable);
+    matchmakingToggle.setDisabled(unavailable);
   };
-}
-
-export function mountMatchmakingScreen(container: HTMLElement, clock: BoilClock, onCancel: () => void): ScreenCleanup {
-  const { panel, cleanup } = mountPanel(container, 'Finding Match');
-  const status = document.createElement('p');
-  status.textContent = 'Searching…';
-  status.setAttribute('role', 'status');
-  const stop = createGameButton({
-    label: 'Stop Matchmaking', onActivate: onCancel, clock,
-    upSheet: '/interactive-elements/menu-buttons/stop-button-up-sheet.webp',
-    betweenSheet: '/interactive-elements/menu-buttons/stop-button-between-sheet.webp',
-    depressedSheet: '/interactive-elements/menu-buttons/stop-button-depressed-sheet.webp',
-  });
-  stop.element.classList.add('game-button--baked-label');
-  panel.append(status, stop.element);
-  return () => { stop.destroy(); cleanup(); };
+  return cleanup;
 }
 
 export function mountMatchFoundScreen(container: HTMLElement, projection: MatchProjection): ScreenCleanup {
