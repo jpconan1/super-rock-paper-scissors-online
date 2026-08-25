@@ -4,7 +4,7 @@ import variantSelectSource from './documents/variant-select.json';
 import scoreboardSource from './documents/scoreboard.json';
 import gameParentSource from './documents/game-parent.json';
 import fireballWarSource from './documents/variants/fireball-war.json';
-import rpsSource from './documents/variants/rps.json';
+import abmSource from './documents/variants/abm.json';
 import dragonSpearSource from './documents/variants/dragon-spear.json';
 import pickTwoSource from './documents/variants/pick-two.json';
 import gunKnifeFistSource from './documents/variants/gun-knife-fist.json';
@@ -24,7 +24,7 @@ import tapTapShootDetailSource from './documents/variant-details/tap-tap-shoot.j
 import { validateLayoutDocument, type LayoutDocument } from './layoutDocument';
 
 const sources: unknown[] = [titleSource, lobbySource, variantSelectSource, scoreboardSource, gameParentSource,
-  fireballWarSource, rpsSource, dragonSpearSource, pickTwoSource, gunKnifeFistSource, kitchenSinkSource,
+  fireballWarSource, abmSource, dragonSpearSource, pickTwoSource, gunKnifeFistSource, kitchenSinkSource,
   rpsRpgSource, rpsPokerSource, tapTapShootSource];
 sources.push(rpsDetailSource, dragonSpearDetailSource, pickTwoDetailSource, gunKnifeFistDetailSource,
   kitchenSinkDetailSource, fireballWarDetailSource, rpsRpgDetailSource, rpsPokerDetailSource, tapTapShootDetailSource);

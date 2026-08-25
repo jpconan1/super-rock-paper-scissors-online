@@ -16,11 +16,11 @@ body { user-select: none; background: #201f1c; font: 14px/1.25 system-ui, sans-s
 .editor-canvas { position: absolute; top: 0; left: 0; overflow: hidden; color: #171412; background: #e7ddc4 url('/crumpled-paper-background.webp') center/cover; transform-origin: top left; touch-action: none; }
 .editor-node { position: absolute; outline: 1px dashed transparent; touch-action: none; }
 .editor-node.boiling-sprite { pointer-events: auto; }
-.editor-node.boiling-sprite > .boiling-sprite__sheet { pointer-events: none; }
+.editor-node.boiling-sprite > .boiling-sprite__canvas { pointer-events: none; }
 .editor-node:hover { outline-color: #66b7ff; }
 .editor-node.is-selected { outline: 2px solid #20a5ff; outline-offset: 1px; }
 .editor-node.is-selected::after { position: absolute; right: -6px; bottom: -6px; width: 10px; height: 10px; border: 1px solid white; background: #20a5ff; content: ''; cursor: nwse-resize; }
-.editor-node > img:not(.boiling-sprite__sheet) { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+.editor-node > img { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
 .editor-node--group, .editor-node--collection { border: 1px dashed rgba(30,100,190,.55); }
 .editor-node--text-entry { border: 3px solid #211d19; background: rgba(255,255,255,.6); }
 .editor-node--text, .editor-node--dynamic-text { display: grid; padding: 4px; place-items: center; font-family: 'Architects Daughter'; }

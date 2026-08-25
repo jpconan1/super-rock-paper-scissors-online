@@ -60,7 +60,7 @@ export function mountReadyWaiting(container: HTMLElement, clock: BoilClock): Rea
     const elapsed = Math.max(0, serverTime - readyEvent.startsAt);
     const visual = getReadyWaitingVisual(elapsed, reducedMotion);
     const nextReady = `/visual-elements/ready-waiting/${visual.readyAsset}_sheet.webp`;
-    const nextSplit = `/variants/dummy/scenes/split-scenes/dummy-scene-${early}-rdy.png`;
+    const nextSplit = `/variants/dummy/scenes/split-scenes/dummy-scene-${early}-rdy.webp`;
     if (readySource !== nextReady) ready.setSource(readySource = nextReady);
     if (splitSource !== nextSplit) split.src = splitSource = nextSplit;
     split.hidden = !visual.split;
@@ -86,7 +86,7 @@ export function mountReadyWaiting(container: HTMLElement, clock: BoilClock): Rea
       if (early && early !== shownEarly) {
         shownEarly = early;
         void playStarburstWipe(container, clock, () => {
-          split.src = splitSource = `/variants/dummy/scenes/split-scenes/dummy-scene-${early}-rdy.png`;
+          split.src = splitSource = `/variants/dummy/scenes/split-scenes/dummy-scene-${early}-rdy.webp`;
           split.hidden = false;
         }, wipeAbort.signal);
       }

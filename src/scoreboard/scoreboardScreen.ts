@@ -44,7 +44,7 @@ export function mountScoreboardScreen(options: ScoreboardScreenOptions): () => v
   boardAnchor.append(board.element);
   const results = document.createElement('ol');
   const resultSprites: ReturnType<typeof createBoilingSprite>[] = [];
-  results.className = 'scoreboard-screen__results';
+  results.className = 'textbox scoreboard-screen__results';
   for (let index = 0; index < 3; index++) {
     const game = options.projection?.games[index];
     const slotId = game?.slotId ?? (index === options.projection?.games.length ? options.projection?.activeSlot : options.projection?.pickOrder[index]);

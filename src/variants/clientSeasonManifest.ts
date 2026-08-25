@@ -22,10 +22,22 @@ function descriptor(documentId: string, clock: BoilClock): ClientVariantDescript
 }
 
 export function createClientSeasonManifest(clock: BoilClock): SeasonClientManifest {
+  const abm = descriptor('variant-abm', clock);
   return {
     seasonId: 'local-alpha',
     slots: [
-      { slotId: 'slot-1', variant: descriptor('variant-rps', clock) },
+      { slotId: 'slot-1', variant: {
+        ...abm,
+        variantId: 'attack-block-mana',
+        title: 'Attack Block Mana',
+        rulesCopy: ['Attack costs 1 Mana and defeats Mana.', 'Block stops Attack. Mana gains Mana.', 'First to three rounds wins.'],
+        assetBundleId: 'variant:abm',
+        thumbnail: '/variants/abm/advantaged-placeholder-sheet.webp',
+        loadPresentation: async () => {
+          const { createAttackBlockManaPresentation } = await import('./attackBlockMana/attackBlockManaPresentation');
+          return createAttackBlockManaPresentation(clock);
+        },
+      } },
       { slotId: 'slot-2', variant: descriptor('variant-dragon-spear', clock) },
       { slotId: 'slot-3', variant: descriptor('variant-pick-two', clock) },
       { slotId: 'slot-4', variant: descriptor('variant-gun-knife-fist', clock) },

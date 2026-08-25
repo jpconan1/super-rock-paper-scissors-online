@@ -12,15 +12,15 @@ export function createDummyPresentation(clock: BoilClock): VariantPresentation<D
   return {
     async preload(): Promise<AssetLease> {
       const lease = assetLoader.retainUrls([
-        '/variants/dummy/scenes/dummy-scene.png',
-        '/variants/dummy/scenes/split-scenes/dummy-scene-p1-rdy.png',
-        '/variants/dummy/scenes/split-scenes/dummy-scene-p2-rdy.png',
+        '/variants/dummy/scenes/dummy-scene.webp',
+        '/variants/dummy/scenes/split-scenes/dummy-scene-p1-rdy.webp',
+        '/variants/dummy/scenes/split-scenes/dummy-scene-p2-rdy.webp',
       ]);
       await lease.ready;
       return lease;
     },
-    mount({ container, send }) {
-      cleanup = mountDummyScreen(container, clock, () => send('advance'));
+    mount({ container, send, openMenu }) {
+      cleanup = mountDummyScreen(container, clock, () => send('advance'), openMenu);
       root = container.querySelector<HTMLElement>('.dummy-game') ?? undefined;
       const scene = root?.querySelector<HTMLElement>('.game-layout__slot--scene');
       if (scene) ready = mountReadyWaiting(scene, clock);

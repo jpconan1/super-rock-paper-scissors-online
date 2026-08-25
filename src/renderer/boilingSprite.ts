@@ -39,19 +39,38 @@ export function createBoilingSprite(options: BoilingSpriteOptions): BoilingSprit
   element.setAttribute('role', 'img');
   element.setAttribute('aria-label', options.alt ?? '');
 
-  const image = document.createElement('img');
-  image.className = 'boiling-sprite__sheet';
-  image.alt = '';
-  image.draggable = false;
-  element.append(image);
+  const canvas = document.createElement('canvas');
+  canvas.className = 'boiling-sprite__canvas';
+  canvas.setAttribute('aria-hidden', 'true');
+  element.append(canvas);
+
+  const context = canvas.getContext('2d') ?? failCanvasContext();
+
+  const image = new Image();
 
   let frame: BoilFrame = 0;
   let sourceRevision = 0;
   let ready: Promise<void> = Promise.resolve();
 
+  function drawFrame(): void {
+    if (!image.complete || !image.naturalWidth || !image.naturalHeight || !canvas.width || !canvas.height) return;
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(
+      image,
+      0,
+      frame * canvas.height,
+      canvas.width,
+      canvas.height,
+      0,
+      0,
+      canvas.width,
+      canvas.height,
+    );
+  }
+
   function setFrame(nextFrame: BoilFrame): void {
     frame = nextFrame;
-    image.style.transform = `translateY(-${frame * (100 / BOIL_FRAME_COUNT)}%)`;
+    drawFrame();
   }
 
   function setSource(src: string): void {
@@ -61,7 +80,10 @@ export function createBoilingSprite(options: BoilingSpriteOptions): BoilingSprit
         if (revision !== sourceRevision) return;
         try {
           const frameSize = getVerticalSheetFrameSize({ width: image.naturalWidth, height: image.naturalHeight });
+          canvas.width = frameSize.width;
+          canvas.height = frameSize.height;
           element.style.aspectRatio = `${frameSize.width} / ${frameSize.height}`;
+          drawFrame();
           options.onFrameSize?.(frameSize, src);
           const decoding = image.decode?.();
           if (decoding) void decoding.catch(() => {}).finally(resolve);
@@ -94,4 +116,8 @@ export function createBoilingSprite(options: BoilingSpriteOptions): BoilingSprit
       element.remove();
     },
   };
+}
+
+function failCanvasContext(): never {
+  throw new Error('Could not create boiling sprite canvas context.');
 }

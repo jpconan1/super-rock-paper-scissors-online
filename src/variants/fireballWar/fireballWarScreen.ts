@@ -40,6 +40,7 @@ export function mountFireballWarScreen(
   container: HTMLElement,
   clock: BoilClock,
   onMove: (move: FireballWarMove) => void = () => {},
+  onMenu: () => void = () => {},
 ): () => void {
   const layoutDocument = getLayoutDocument('variant-fireball-war');
   const configured = (id: string) => layoutDocument.elements.find((element) => element.id === id)!;
@@ -145,6 +146,7 @@ export function mountFireballWarScreen(
       'p2-resources': resources(1, 'P2'),
       controls,
     },
+    onMenu,
   });
 
   return () => {

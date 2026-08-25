@@ -122,7 +122,7 @@ function makeNode(config: LayoutElement): { element: HTMLElement; cleanup(): voi
   if (isVariantDetail(current) && config.binding === 'variant-rules') {
     const variantDocument = linkedVariant(current)!;
     const element = document.createElement('div');
-    element.className = `${className} editor-variant-rules alert-box`;
+    element.className = `${className} editor-variant-rules textbox`;
     [variantDocument.rules!.lead, ...variantDocument.rules!.paragraphs].forEach((line, index) => {
       const paragraph = document.createElement('p');
       paragraph.textContent = line;

@@ -1,13 +1,16 @@
 import type { VariantRules } from './variant';
 import { dummyRules } from '../variants/dummy/dummyRules';
+import { attackBlockManaRules } from '../variants/attackBlockMana/attackBlockManaRules';
 import { SLOT_IDS, type SlotId } from './slots';
 
 export type ServerVariantRules = VariantRules<unknown, unknown, unknown, unknown>;
 
 const registry = new Map<string, ServerVariantRules>([
   [dummyRules.variantId, dummyRules as ServerVariantRules],
+  [attackBlockManaRules.variantId, attackBlockManaRules as ServerVariantRules],
 ]);
 const slotRegistry = new Map<SlotId, ServerVariantRules>(SLOT_IDS.map((slot) => [slot, dummyRules as ServerVariantRules]));
+slotRegistry.set('slot-1', attackBlockManaRules as ServerVariantRules);
 
 export function getServerVariantForSlot(slotId: SlotId): ServerVariantRules {
   const rules = slotRegistry.get(slotId);

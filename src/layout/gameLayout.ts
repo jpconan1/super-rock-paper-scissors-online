@@ -61,12 +61,15 @@ export interface GameLayoutOptions<TLayoutName extends string> {
     scene: GameLayoutArtwork;
   }>;
   variantContent: GameLayoutVariantContent;
+  onMenu?: () => void;
+  onLayoutChange?(layout: ResponsiveScaleBoxLayout<TLayoutName>): void;
 }
 
 export interface GameLayout {
   element: HTMLElement;
   composition: HTMLDivElement;
   slots: Readonly<Record<GameLayoutSlotName, HTMLDivElement>>;
+  setArtwork(slot: 'turn' | 'p1Wins' | 'p2Wins' | 'scene', artwork: GameLayoutArtwork): void;
   destroy(): void;
 }
 
@@ -103,6 +106,7 @@ export function createGameLayout<TLayoutName extends string>(
   composition.className = `game-layout ${options.compositionClassName}`;
   const slots = createGameLayoutSlots(composition);
   const sprites: BoilingSprite[] = [];
+  const artworkSprites = new Map<'turn' | 'p1Wins' | 'p2Wins' | 'scene', BoilingSprite>();
   const buttons: GameButton[] = [];
   const layoutDocument = getLayoutDocument('game-parent');
 
@@ -121,6 +125,8 @@ export function createGameLayout<TLayoutName extends string>(
     }
     const sprite = createBoilingSprite({ ...artwork, clock: options.clock, className });
     sprites.push(sprite);
+    const artworkSlot = slot === 'p1-wins' ? 'p1Wins' : slot === 'p2-wins' ? 'p2Wins' : slot === 'turn' || slot === 'scene' ? slot : undefined;
+    if (artworkSlot) artworkSprites.set(artworkSlot, sprite);
     slots[slot].append(sprite.element);
   };
   addSprite('turn', options.artwork.turn, 'game-layout__turn');
@@ -138,10 +144,10 @@ export function createGameLayout<TLayoutName extends string>(
   const rail = document.createElement('div');
   rail.className = 'game-layout__tool-rail';
   const toolsByAsset = new Map<string, HTMLElement>();
-  const createTool = (label: string, assetName: 'rulebook-button' | 'burger-button') => {
+  const createTool = (label: string, assetName: 'rulebook-button' | 'burger-button', onActivate = () => {}) => {
     const button = createGameButton({
       label,
-      onActivate: () => {},
+      onActivate,
       upSheet: `${INTERACTIVE_ROOT}/${assetName}-up-sheet.webp`,
       betweenSheet: `${INTERACTIVE_ROOT}/${assetName}-between-sheet.webp`,
       depressedSheet: `${INTERACTIVE_ROOT}/${assetName}-depressed-sheet.webp`,
@@ -157,7 +163,7 @@ export function createGameLayout<TLayoutName extends string>(
     rail.append(button.element);
   };
   createTool(layoutDocument.copy!.rules!, 'rulebook-button');
-  createTool(layoutDocument.copy!.menu!, 'burger-button');
+  createTool(layoutDocument.copy!.menu!, 'burger-button', options.onMenu);
   composition.append(rail);
 
   scaleBox.content.append(composition);
@@ -171,12 +177,19 @@ export function createGameLayout<TLayoutName extends string>(
       { id: 'rules', element: toolsByAsset.get('rulebook-button')! },
       { id: 'menu', element: toolsByAsset.get('burger-button')! },
     ]);
+    options.onLayoutChange?.(layout);
   });
 
   return {
     element: screen,
     composition,
     slots,
+    setArtwork(slot, artwork) {
+      const sprite = artworkSprites.get(slot);
+      if (!sprite) return;
+      sprite.setSource(artwork.src);
+      sprite.element.setAttribute('aria-label', artwork.alt);
+    },
     destroy() {
       stopLayout();
       for (const button of buttons) button.destroy();

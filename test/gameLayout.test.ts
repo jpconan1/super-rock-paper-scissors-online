@@ -18,7 +18,7 @@ vi.mock('../src/renderer/boilingSprite', () => ({
   createBoilingSprite: () => {
     const destroy = vi.fn();
     mocks.spriteDestroys.push(destroy);
-    return { element: document.createElement('div'), destroy };
+    return { element: document.createElement('div'), setSource: vi.fn(), destroy };
   },
 }));
 
@@ -171,6 +171,21 @@ describe('shared game layout contract', () => {
     expect(mocks.spriteDestroys).toHaveLength(8);
     expect(mocks.spriteDestroys.every((destroy) => destroy.mock.calls.length === 1)).toBe(true);
     expect(container.children).toHaveLength(0);
+  });
+
+  test('reports responsive layout changes to variant content', () => {
+    useFakeDocument();
+    const onLayoutChange = vi.fn();
+    const content = Object.fromEntries(['p1-move', 'p2-move', 'p1-resources', 'p2-resources', 'controls'].map((name) => [name, new FakeElement()]));
+    const layout = createGameLayout({
+      container: new FakeElement() as unknown as HTMLElement, clock: {} as never, layouts: FIREBALL_WAR_LAYOUTS,
+      screenClassName: 'test', compositionClassName: 'test', ariaLabel: 'Test', onLayoutChange,
+      players: { p1: { heading: 'P1', rating: '', platform: '' }, p2: { heading: 'P2', rating: '', platform: '' } },
+      artwork: { turn: { src: 'turn', alt: '' }, p1Wins: { src: 'one', alt: '' }, p2Wins: { src: 'two', alt: '' }, scene: { src: 'scene', alt: '' } },
+      variantContent: content as never,
+    });
+    expect(onLayoutChange).toHaveBeenCalledWith(FIREBALL_WAR_LAYOUTS[0]);
+    layout.destroy();
   });
 });
 

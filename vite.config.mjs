@@ -10,6 +10,7 @@ const layoutFiles = {
   'variant-select': 'src/layout/documents/variant-select.json', scoreboard: 'src/layout/documents/scoreboard.json',
   'game-parent': 'src/layout/documents/game-parent.json',
   'variant-fireball-war': 'src/layout/documents/variants/fireball-war.json',
+  'variant-abm': 'src/layout/documents/variants/abm.json',
   'variant-rps': 'src/layout/documents/variants/rps.json',
   'variant-dragon-spear': 'src/layout/documents/variants/dragon-spear.json',
   'variant-pick-two': 'src/layout/documents/variants/pick-two.json',

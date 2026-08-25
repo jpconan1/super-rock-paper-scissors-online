@@ -1,16 +1,20 @@
 import type { ConnectionState } from './appController';
 import { PROTOCOL_VERSION, type MatchCommandPayload, type ServerSnapshot } from '../protocol/protocol';
 import type { SlotId } from '../core/slots';
+import { isWhiteboardServerMessage, type WhiteboardClientMessage, type WhiteboardServerMessage } from '../whiteboard/protocol';
 
 export interface ShellSessionListener {
   connection(state: ConnectionState): void;
   matchFound(): void;
   snapshot(snapshot: ServerSnapshot): void;
+  whiteboard?(message: WhiteboardServerMessage): void;
 }
 
 export interface ShellSessionAdapter {
   subscribe(listener: ShellSessionListener): () => void;
   enterLobby(playerName: string): Promise<void>;
+  leaveLobby(): void;
+  sendWhiteboard(message: WhiteboardClientMessage): void;
   startMatchmaking(): void;
   cancelMatchmaking(): void;
   selectSlot(slotId: SlotId): void;
@@ -32,6 +36,10 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
   private stopped = true;
   private ticket?: { matchId: string; seat: string; token: string };
   private intentionallyClosed = false;
+  private whiteboardSocket?: WebSocket;
+  private whiteboardReconnect?: ReturnType<typeof setTimeout>;
+  private whiteboardActive = false;
+  private readonly whiteboardPending = new Map<string, WhiteboardClientMessage>();
 
   constructor(private readonly baseUrl = location.origin) {
     sessionStorage.setItem('super-rps-guest', this.guestId);
@@ -50,9 +58,21 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
       const health = await response.json() as { ok?: boolean };
       if (health.ok !== true) throw new Error('Server health check returned an invalid response.');
       this.listener?.connection('connected');
+      this.whiteboardActive = true;
+      this.connectWhiteboard();
     } catch {
       this.listener?.connection('offline');
     }
+  }
+  leaveLobby(): void {
+    this.whiteboardActive = false;
+    if (this.whiteboardReconnect) clearTimeout(this.whiteboardReconnect);
+    this.whiteboardReconnect = undefined;
+    this.whiteboardSocket?.close(); this.whiteboardSocket = undefined;
+  }
+  sendWhiteboard(message: WhiteboardClientMessage): void {
+    this.whiteboardPending.set(message.clientOperationId, message);
+    if (this.whiteboardSocket?.readyState === WebSocket.OPEN) this.whiteboardSocket.send(JSON.stringify(message));
   }
   startMatchmaking(): void {
     if (!this.stopped) return;
@@ -79,7 +99,31 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
 
   toggleBan(slotId: SlotId): void { this.sendPayload({ type: 'toggle-ban', slotId }); }
   leaveMatch(): void { this.intentionallyClosed = true; this.socket?.close(); this.socket = undefined; this.latest = undefined; this.ticket = undefined; }
-  destroy(): void { this.cancelMatchmaking(); this.leaveMatch(); this.listener = undefined; }
+  destroy(): void { this.leaveLobby(); this.cancelMatchmaking(); this.leaveMatch(); this.listener = undefined; }
+
+  private connectWhiteboard(): void {
+    if (!this.whiteboardActive || this.whiteboardSocket) return;
+    const url = new URL(`${this.baseUrl}/whiteboard`); url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    const socket = new WebSocket(url); this.whiteboardSocket = socket;
+    socket.addEventListener('open', () => { for (const message of this.whiteboardPending.values()) socket.send(JSON.stringify(message)); });
+    socket.addEventListener('message', (event) => {
+      try {
+        const message = JSON.parse(String(event.data));
+        if (!isWhiteboardServerMessage(message)) return;
+        if (message.type === 'operation' && message.operation.clientOperationId) this.whiteboardPending.delete(message.operation.clientOperationId);
+        if (message.type === 'reset') this.whiteboardPending.clear();
+        if (message.type === 'snapshot' || message.type === 'reset') {
+          for (const operation of message.board.operations) if (operation.clientOperationId) this.whiteboardPending.delete(operation.clientOperationId);
+        }
+        this.listener?.whiteboard?.(message);
+      } catch { /* ignore malformed server data */ }
+    });
+    socket.addEventListener('close', () => {
+      if (this.whiteboardSocket !== socket) return;
+      this.whiteboardSocket = undefined;
+      if (this.whiteboardActive) this.whiteboardReconnect = setTimeout(() => { this.whiteboardReconnect = undefined; this.connectWhiteboard(); }, 1_000);
+    });
+  }
 
   private async pollMatchmaking(generation: number): Promise<void> {
     if (this.stopped || generation !== this.matchmakingGeneration) return;
@@ -158,6 +202,8 @@ export class LocalShellSessionAdapter implements ShellSessionAdapter {
   }
 
   async enterLobby(_playerName: string): Promise<void> { this.listener?.connection('connected'); }
+  leaveLobby(): void {}
+  sendWhiteboard(_message: WhiteboardClientMessage): void {}
 
   startMatchmaking(): void {
     this.cancelMatchmaking();

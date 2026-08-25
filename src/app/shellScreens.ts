@@ -10,19 +10,29 @@ import { applyDocumentLayout } from '../layout/layoutRuntime';
 import { createTextEntry } from '../input/textEntry';
 import { createToggleButton } from '../input/toggleButton';
 import type { ConnectionState } from './appController';
+import { createTextbox } from '../ui/textbox';
+import { mountWhiteboard } from '../whiteboard/whiteboard';
+import type { WhiteboardClientMessage, WhiteboardServerMessage } from '../whiteboard/protocol';
 
 export type ScreenCleanup = () => void;
-export type LobbyScreenMount = ScreenCleanup & { setConnectionState(state: ConnectionState): void };
+export type LobbyScreenMount = ScreenCleanup & {
+  setConnectionState(state: ConnectionState): void;
+  receiveWhiteboard(message: WhiteboardServerMessage): void;
+};
 
 function mountPanel(container: HTMLElement, title: string): { panel: HTMLElement; cleanup: ScreenCleanup } {
-  const panel = document.createElement('section');
-  panel.className = 'shell-screen';
+  const screen = document.createElement('section');
+  screen.className = 'shell-screen menu-canvas-screen';
+  const canvas = createMenuCanvas(screen, 'shell-screen');
+  const textbox = createTextbox({ className: 'shell-screen__textbox' });
+  const panel = textbox.element;
   panel.setAttribute('aria-label', title);
   const heading = document.createElement('h1');
   heading.textContent = title;
   panel.append(heading);
-  container.replaceChildren(panel);
-  return { panel, cleanup: () => panel.remove() };
+  canvas.composition.append(panel);
+  container.replaceChildren(screen);
+  return { panel, cleanup: () => { canvas.destroy(); screen.remove(); } };
 }
 
 function action(label: string, run: () => void): HTMLButtonElement {
@@ -43,6 +53,8 @@ export function mountLobbyScreen(
   onComputer: () => void,
   onTutorial: () => void,
   onScoreboard: () => void,
+  onSettings: () => void,
+  sendWhiteboard: (message: WhiteboardClientMessage) => void,
 ): LobbyScreenMount {
   const layoutDocument = getLayoutDocument('lobby');
   let layoutName: 'landscape' | 'portrait' = 'landscape';
@@ -92,12 +104,14 @@ export function mountLobbyScreen(
   whiteboardArt.src = '/lobby/whiteboard.webp';
   whiteboardArt.alt = '';
   whiteboard.append(whiteboardFill, whiteboardArt);
-  const player = document.createElement('p');
-  player.className = 'lobby-screen__player';
-  player.textContent = playerName;
+  const toolButtons = new Map<'black' | 'red' | 'blue' | 'purple' | 'green' | 'erase', HTMLButtonElement>();
   const tools = ['black-marker', 'red-marker', 'blue-marker', 'purple-marker', 'green-marker', 'eraser'].map((id) => {
-    const tool = sprite(lobbyElement(id).assets!.src!, 'lobby-screen__tool', id.replace('-', ' '));
-    return { id, element: tool };
+    const name = (id === 'eraser' ? 'erase' : id.replace('-marker', '')) as 'black' | 'red' | 'blue' | 'purple' | 'green' | 'erase';
+    const button = document.createElement('button');
+    button.type = 'button'; button.className = 'lobby-screen__tool'; button.setAttribute('aria-label', id.replace('-', ' ')); button.setAttribute('aria-pressed', 'false');
+    button.append(sprite(lobbyElement(id).assets!.src!, 'lobby-screen__tool-art', ''));
+    toolButtons.set(name, button);
+    return { id, element: button };
   });
 
   const chat = document.createElement('form');
@@ -112,7 +126,7 @@ export function mountLobbyScreen(
   const chatButton = menuButton('Chat', 'chat-button', 'lobby-screen__chat-button');
   chat.append(chatEntry.element, chatButton);
   const roster = document.createElement('aside');
-  roster.className = 'lobby-screen__roster';
+  roster.className = 'textbox lobby-screen__roster';
   roster.hidden = true;
   roster.textContent = layoutDocument.copy!.playerList!;
   const rosterToggle = createToggleButton({
@@ -145,20 +159,18 @@ export function mountLobbyScreen(
   };
 
   const actions = [
-    { id: 'back', element: menuButton('Back', 'back-button-w', 'lobby-screen__action') },
     { id: 'computer', element: menuButton('Play vs Computer', 'vscomputer-button-w', 'lobby-screen__action', leaveQueue(onComputer)) },
     { id: 'tutorial', element: menuButton('Tutorial', 'tutorial-button', 'lobby-screen__action', leaveQueue(onTutorial)) },
     { id: 'ready', element: matchmakingToggle.element },
-    { id: 'settings', element: menuButton('Settings', 'settings-button', 'lobby-screen__action') },
+    { id: 'settings', element: menuButton('Settings', 'settings-button', 'lobby-screen__action', onSettings) },
   ];
   const scoreboard = action('Scoreboard', leaveQueue(onScoreboard));
   scoreboard.classList.add('lobby-screen__scoreboard-preview');
-  composition.append(header, whiteboard, player, ...tools.map((item) => item.element), chat,
+  composition.append(header, whiteboard, ...tools.map((item) => item.element), chat,
     ...actions.map((item) => item.element), roster, scoreboard, curtainLeft, curtainRight);
   composition.append(rosterToggle.element);
   layoutBindings.push(
-    { id: 'header', element: header }, { id: 'whiteboard', element: whiteboard },
-    { id: 'player-name', element: player }, ...tools,
+    { id: 'header', element: header }, { id: 'whiteboard', element: whiteboard }, ...tools,
     { id: 'chat-input', element: chatEntry.element }, { id: 'chat-button', element: chatButton },
     { id: 'roster-toggle', element: rosterToggle.element }, ...actions, { id: 'roster', element: roster },
     { id: 'scoreboard-preview', element: scoreboard }, { id: 'curtain-left', element: curtainLeft },
@@ -166,6 +178,19 @@ export function mountLobbyScreen(
   );
   applyDocumentLayout(layoutDocument, layoutName, layoutBindings);
   container.replaceChildren(screen);
+  const whiteboardController = mountWhiteboard({
+    board: whiteboard, composition, toolButtons, clock,
+    isPortrait: () => layoutName === 'portrait', send: sendWhiteboard,
+  });
+  const submitChat = (event: Event) => {
+    event.preventDefault();
+    const text = chatEntry.input.value.trim().replace(/\s+/g, ' ');
+    if (!text) return;
+    sendWhiteboard({ type: 'chat', clientOperationId: crypto.randomUUID(), displayName: playerName, text, color: whiteboardController.color() });
+    chatEntry.input.value = '';
+  };
+  chat.addEventListener('submit', submitChat);
+  chatButton.addEventListener('click', submitChat);
   const cleanup = (() => {
     canvas.destroy();
     for (const button of gameButtons) button.destroy();
@@ -173,6 +198,9 @@ export function mountLobbyScreen(
     chatEntry.destroy();
     rosterToggle.destroy();
     matchmakingToggle.destroy();
+    chat.removeEventListener('submit', submitChat);
+    chatButton.removeEventListener('click', submitChat);
+    whiteboardController.destroy();
     screen.remove();
   }) as LobbyScreenMount;
   cleanup.setConnectionState = (state) => {
@@ -182,7 +210,9 @@ export function mountLobbyScreen(
     gameButtonByElement.get(chatButton)?.setDisabled(unavailable);
     rosterToggle.setDisabled(unavailable);
     matchmakingToggle.setDisabled(unavailable);
+    whiteboardController.setEnabled(!unavailable);
   };
+  cleanup.receiveWhiteboard = (message) => whiteboardController.receive(message);
   return cleanup;
 }
 
@@ -235,9 +265,10 @@ export function showConnectionModal(container: HTMLElement, state: 'reconnecting
   modal.className = 'shell-modal';
   modal.setAttribute('role', 'alertdialog');
   modal.setAttribute('aria-modal', 'true');
-  modal.textContent = state === 'reconnecting' ? 'Reconnecting…' : 'Connection lost';
+  const message = createTextbox({ className: 'shell-modal__message', content: document.createTextNode(state === 'reconnecting' ? 'Reconnecting…' : 'Connection lost') });
+  modal.append(message.element);
   container.replaceChildren(modal);
-  return () => modal.remove();
+  return () => { message.destroy(); modal.remove(); };
 }
 
 export function mountErrorScreen(container: HTMLElement, error: unknown, onBack: () => void): ScreenCleanup {

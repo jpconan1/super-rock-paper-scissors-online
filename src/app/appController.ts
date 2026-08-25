@@ -13,9 +13,10 @@ import { mountVariantSelectScreen } from '../variantSelect/variantSelectScreen';
 import { mountScoreboardScreen } from '../scoreboard/scoreboardScreen';
 import type { ShellSessionAdapter } from './shellSessionAdapter';
 import { mountErrorScreen, mountLobbyScreen, mountMatchFoundScreen, showConnectionModal, type LobbyScreenMount } from './shellScreens';
-import { createGameButton, type GameButton } from '../input/gameButton';
 import { MatchFlowDirector, statesForMatch } from './matchFlowDirector';
 import type { VariantSelectScreen } from '../variantSelect/variantSelectScreen';
+import { mountUniversalMenu, type UniversalMenu } from './universalMenu';
+import { createEmptyWhiteboard, type WhiteboardServerMessage, type WhiteboardSnapshot } from '../whiteboard/protocol';
 
 export type ConnectionState = 'connected' | 'reconnecting' | 'offline';
 export type ShellDestination = 'title' | 'lobby' | 'match-found' | 'slot-picker' | 'scoreboard' | 'gameplay';
@@ -47,11 +48,17 @@ export class AppController {
   private activeSlot?: SlotId;
   private screenReady: Promise<void> = Promise.resolve();
   private curtain?: CurtainWipe;
-  private gameplayLeaveButton?: GameButton;
+  private universalMenu?: UniversalMenu;
   private matchmakingActive = false;
   private lobbyScreen?: LobbyScreenMount;
   private variantSelectScreen?: VariantSelectScreen;
   private matchFlowDirector?: MatchFlowDirector;
+  private whiteboard: WhiteboardSnapshot = createEmptyWhiteboard();
+  private readonly onGlobalKeyDown = (event: KeyboardEvent) => {
+    if (event.key !== 'Escape' || event.repeat || this.destination === 'title') return;
+    event.preventDefault();
+    this.universalMenu ? this.closeUniversalMenu() : this.openUniversalMenu();
+  };
 
   constructor(private readonly container: HTMLElement, private readonly optionsOrRegistry: AppControllerOptions | PresentationRegistry) {
     if (!isControllerOptions(optionsOrRegistry)) {
@@ -82,7 +89,9 @@ export class AppController {
       connection: (state) => this.setConnectionState(state),
       matchFound: () => {},
       snapshot: (snapshot) => this.receiveSnapshot(snapshot),
+      whiteboard: (message) => this.receiveWhiteboard(message),
     });
+    globalThis.addEventListener?.('keydown', this.onGlobalKeyDown as EventListener);
     const removeLoadingScreen = await runLoadingScreen(this.screenLayer, options.clock, assetLoader.retainBundle('shared'), true);
     this.transitionLayer.replaceChildren(...this.screenLayer.childNodes);
     await this.navigate('title', false);
@@ -92,8 +101,9 @@ export class AppController {
   }
 
   async navigate(destination: ShellDestination, animated = true): Promise<void> {
-    if (this.destination === 'lobby' && destination !== 'lobby' && destination !== 'match-found') {
+    if (this.destination === 'lobby' && destination !== 'lobby') {
       this.setMatchmaking(false);
+      this.options.session.leaveLobby();
     }
     const revision = ++this.loadRevision;
     this.lifecycle?.abort();
@@ -131,7 +141,7 @@ export class AppController {
     const emit = send ?? ((command: unknown) => {
       if (this.connectionState === 'connected') this.options.session.send(command);
     });
-    presentation.mount({ container: this.screenLayer, signal: this.lifecycle.signal, send: emit });
+    presentation.mount({ container: this.screenLayer, signal: this.lifecycle.signal, send: emit, openMenu: () => this.openUniversalMenu() });
     this.timeline = new AnimationTimeline(({ event }) => {
       if (this.latestSnapshot) {
         presentation.render(variantProjection(this.latestSnapshot.projection), [event], Date.now());
@@ -154,6 +164,7 @@ export class AppController {
 
   setConnectionState(state: ConnectionState): void {
     this.connectionState = state;
+    if (state !== 'connected') this.closeUniversalMenu();
     this.modalCleanup?.();
     this.modalCleanup = undefined;
     this.lobbyScreen?.setConnectionState(state);
@@ -167,6 +178,8 @@ export class AppController {
 
   unmount(): void {
     this.loadRevision++;
+    globalThis.removeEventListener?.('keydown', this.onGlobalKeyDown as EventListener);
+    this.closeUniversalMenu();
     this.lifecycle?.abort();
     this.lifecycle = undefined;
     this.clearScreen();
@@ -191,6 +204,7 @@ export class AppController {
       this.screenCleanup = title;
       this.screenReady = title.ready;
     } else if (destination === 'lobby') {
+      void options.session.enterLobby(this.playerName);
       this.screenReady = Promise.resolve();
       this.modalCleanup?.();
       this.modalCleanup = undefined;
@@ -203,7 +217,10 @@ export class AppController {
         () => void this.navigate('slot-picker'),
         () => {},
         () => void this.navigate('scoreboard'),
+        () => this.openUniversalMenu(),
+        (message) => options.session.sendWhiteboard(message),
       );
+      lobby.receiveWhiteboard({ type: 'snapshot', board: this.whiteboard });
       lobby.setConnectionState(this.connectionState);
       this.lobbyScreen = lobby;
       this.screenCleanup = lobby;
@@ -243,6 +260,21 @@ export class AppController {
     }
   }
 
+  private receiveWhiteboard(message: WhiteboardServerMessage): void {
+    if (message.type === 'snapshot' || message.type === 'reset') this.whiteboard = message.board;
+    else if (message.type === 'operation') {
+      if (this.whiteboard.operations.some((operation) => operation.id === message.operation.id)) return;
+      this.whiteboard = { ...this.whiteboard, sequence: Math.max(this.whiteboard.sequence, message.operation.sequence), operations: [...this.whiteboard.operations, message.operation] };
+      if (message.operation.kind === 'text') this.whiteboard.nextY = Math.max(this.whiteboard.nextY, message.operation.rowY + message.operation.rowSpan * this.whiteboard.rowHeight);
+    } else if (message.type === 'trim') this.whiteboard = {
+      ...this.whiteboard, top: message.top,
+      operations: this.whiteboard.operations.filter((operation) => operation.kind === 'text'
+        ? operation.rowY + operation.rowSpan * this.whiteboard.rowHeight > message.top
+        : operation.points.some((point) => point.y >= message.top)),
+    };
+    this.lobbyScreen?.receiveWhiteboard(message);
+  }
+
   private async openGameplay(slot: SlotId): Promise<void> {
     const revision = ++this.loadRevision;
     this.lifecycle?.abort();
@@ -257,21 +289,6 @@ export class AppController {
         this.destination = 'gameplay';
         await this.loadSlot(slot);
         if (revision + 1 !== this.loadRevision || signal.aborted) return;
-        const leave = createGameButton({
-          label: 'Leave Match',
-          clock: this.options.clock,
-          upSheet: '/interactive-elements/menu-buttons/leave-button-up-sheet.webp',
-          betweenSheet: '/interactive-elements/menu-buttons/leave-button-between-sheet.webp',
-          depressedSheet: '/interactive-elements/menu-buttons/leave-button-depressed-sheet.webp',
-          onActivate: () => {
-          if (!confirm('Leave this match?')) return;
-          this.options.session.leaveMatch();
-          void this.navigate('lobby');
-          },
-        });
-        leave.element.classList.add('gameplay-leave', 'game-button--baked-label');
-        this.gameplayLeaveButton = leave;
-        this.screenLayer.append(leave.element);
         if (this.latestSnapshot) this.receiveSnapshot(this.latestSnapshot);
       }, signal);
     } catch (error) { if (!signal.aborted) this.showError(error); }
@@ -297,8 +314,6 @@ export class AppController {
   }
 
   private clearPresentation(): void {
-    this.gameplayLeaveButton?.destroy();
-    this.gameplayLeaveButton = undefined;
     this.timeline?.cancel(true);
     this.timeline = undefined;
     this.mounted?.unmount();
@@ -311,6 +326,32 @@ export class AppController {
   private showError(error: unknown): void {
     this.clearScreen();
     this.screenCleanup = mountErrorScreen(this.screenLayer, error, () => void this.navigate('lobby'));
+  }
+
+  private openUniversalMenu(): void {
+    if (this.destination === 'title' || this.universalMenu) return;
+    const scaleContent = this.screenLayer.querySelector<HTMLElement>('.scale-box__content');
+    const background = scaleContent?.firstElementChild instanceof HTMLElement
+      ? scaleContent.firstElementChild
+      : this.screenLayer.firstElementChild instanceof HTMLElement ? this.screenLayer.firstElementChild : this.screenLayer;
+    this.universalMenu = mountUniversalMenu(scaleContent ?? this.screenLayer, background, this.options.clock,
+      () => this.quitToTitle(), () => this.closeUniversalMenu());
+  }
+
+  private closeUniversalMenu(): void {
+    const menu = this.universalMenu;
+    this.universalMenu = undefined;
+    menu?.destroy();
+  }
+
+  private quitToTitle(): void {
+    const wasInMatch = Boolean(this.matchProjection) || this.destination === 'gameplay' || this.destination === 'match-found';
+    this.closeUniversalMenu();
+    this.setMatchmaking(false);
+    if (wasInMatch) this.options.session.leaveMatch();
+    this.latestSnapshot = undefined;
+    this.matchFlowDirector?.cancel();
+    void this.navigate('title');
   }
 
   private get options(): AppControllerOptions {

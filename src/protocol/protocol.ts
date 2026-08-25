@@ -14,7 +14,8 @@ export interface ClientCommand<TPayload = unknown> {
 
 export type SemanticEventType =
   | 'match-found' | 'pick-confirmed' | 'game-start' | 'ready'
-  | 'reveal' | 'score' | 'scoreboard' | 'bans-locked' | 'match-complete' | 'wipe';
+  | 'reveal' | 'score' | 'scoreboard' | 'bans-locked' | 'match-complete' | 'wipe'
+  | 'class-reveal' | 'move-reveal' | 'forced-mana' | 'round-result' | 'counter-pick';
 
 export interface TimedSemanticEvent<TPayload = unknown> {
   id: string;

@@ -4,6 +4,10 @@ import { getServerVariant } from '../src/core/serverVariantRegistry';
 import type { TimedSemanticEvent } from '../src/protocol/protocol';
 import { acceptMatchCommand, advanceMatchDeadline, createOnlineMatch, projectOnlineMatch, type OnlineMatchState } from '../src/core/onlineMatch';
 import type { MatchCommandPayload, MatchPlayer } from '../src/protocol/protocol';
+import {
+  createEmptyWhiteboard, WHITEBOARD_COLORS, type WhiteboardClientMessage, type WhiteboardColor,
+  type WhiteboardOperation, type WhiteboardPoint, type WhiteboardServerMessage, type WhiteboardSnapshot,
+} from '../src/whiteboard/protocol';
 
 interface Env {
   MATCHES: DurableObjectNamespace<MatchObject>;
@@ -181,7 +185,122 @@ abstract class BroadcastObject extends DurableObject<Env> {
 }
 
 export class LobbyObject extends BroadcastObject { maxMessageBytes = 2_000; }
-export class WhiteboardObject extends BroadcastObject { maxMessageBytes = 16_000; }
+
+interface WhiteboardAttachment { strokeTimes: number[] }
+const WHITEBOARD_MAX_OPERATIONS = 800;
+const WHITEBOARD_MAX_POINTS = 180;
+const WHITEBOARD_STROKES_PER_SECOND = 12;
+
+export class WhiteboardObject extends DurableObject<Env> {
+  private board: WhiteboardSnapshot = createEmptyWhiteboard();
+
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env);
+    ctx.blockConcurrencyWhile(async () => {
+      const meta = await ctx.storage.get<Omit<WhiteboardSnapshot, 'operations'>>('board:meta');
+      const stored = await ctx.storage.list<WhiteboardOperation>({ prefix: 'board:operation:' });
+      if (meta) this.board = { ...meta, operations: [...stored.values()].sort((a, b) => a.sequence - b.sequence) };
+    });
+  }
+
+  async fetch(request: Request): Promise<Response> {
+    if (request.headers.get('Upgrade') !== 'websocket') return json({ error: 'WebSocket required.' }, 426);
+    const pair = new WebSocketPair(); const [client, server] = Object.values(pair);
+    this.ctx.acceptWebSocket(server); server.serializeAttachment({ strokeTimes: [] } satisfies WhiteboardAttachment);
+    this.send(server, { type: 'snapshot', board: this.board });
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
+  async webSocketMessage(socket: WebSocket, raw: string | ArrayBuffer): Promise<void> {
+    if (typeof raw !== 'string' || new TextEncoder().encode(raw).byteLength > 16_000) { this.error(socket, 'message-too-large', 'Message too large.'); return; }
+    try {
+      const message = JSON.parse(raw) as WhiteboardClientMessage;
+      if (!message || !['chat', 'stroke', 'erase'].includes(message.type) || !validClientId(message.clientOperationId)) throw new Error('Invalid whiteboard message.');
+      const duplicate = this.board.operations.find((operation) => operation.clientOperationId === message.clientOperationId);
+      if (duplicate) { this.send(socket, { type: 'operation', operation: duplicate }); return; }
+      if (message.type !== 'chat' && !this.allowStroke(socket)) { this.error(socket, 'rate-limited', 'Drawing too quickly.'); return; }
+      const operation = this.createOperation(message);
+      if (!operation) throw new Error('Invalid whiteboard content.');
+      this.board.operations.push(operation); this.board.sequence = operation.sequence;
+      if (operation.kind === 'text') this.board.nextY = operation.rowY + operation.rowSpan * this.board.rowHeight;
+      if (this.board.operations.length > WHITEBOARD_MAX_OPERATIONS) { await this.reset(); return; }
+      await this.persistOperation(operation);
+      this.broadcast({ type: 'operation', operation });
+      if (operation.kind === 'text') await this.trimIfNeeded();
+    } catch (error) { this.error(socket, 'invalid-message', error instanceof Error ? error.message : 'Invalid whiteboard message.'); }
+  }
+
+  private createOperation(message: WhiteboardClientMessage): WhiteboardOperation | undefined {
+    const common = { id: crypto.randomUUID(), sequence: this.board.sequence + 1, clientOperationId: message.clientOperationId };
+    if (message.type === 'chat') {
+      const text = sanitizeText(message.text, 200); const displayName = sanitizeText(message.displayName, 50);
+      if (!text) return;
+      const color = normalizeColor(message.color);
+      const rowSpan = Math.max(1, Math.min(3, Math.ceil((displayName.length + text.length + 2) / 37)));
+      return { ...common, kind: 'text', displayName: displayName || 'Guest', text, color, rowY: this.board.nextY, rowSpan };
+    }
+    const points = sanitizePoints(message.points, this.board.top, this.board.top + this.board.maxHeight);
+    if (points.length < 2) return;
+    return message.type === 'erase'
+      ? { ...common, kind: 'erase', width: 120, points }
+      : { ...common, kind: 'stroke', color: normalizeColor(message.color), width: 5, points };
+  }
+
+  private allowStroke(socket: WebSocket): boolean {
+    const attachment = (socket.deserializeAttachment() as WhiteboardAttachment | null) ?? { strokeTimes: [] };
+    const cutoff = Date.now() - 1_000; attachment.strokeTimes = attachment.strokeTimes.filter((time) => time > cutoff);
+    if (attachment.strokeTimes.length >= WHITEBOARD_STROKES_PER_SECOND) return false;
+    attachment.strokeTimes.push(Date.now()); socket.serializeAttachment(attachment); return true;
+  }
+
+  private async persistOperation(operation: WhiteboardOperation): Promise<void> {
+    await this.ctx.storage.transaction(async (storage) => {
+      await storage.put(operationKey(operation.sequence), operation);
+      await storage.put('board:meta', boardMeta(this.board));
+    });
+  }
+
+  private async trimIfNeeded(): Promise<void> {
+    const overflow = this.board.nextY - this.board.top - this.board.maxHeight;
+    if (overflow <= 0) return;
+    const old = this.board.operations; this.board.top += Math.ceil(overflow / this.board.rowHeight) * this.board.rowHeight;
+    this.board.operations = old.filter((operation) => operation.kind === 'text'
+      ? operation.rowY + operation.rowSpan * this.board.rowHeight > this.board.top
+      : operation.points.some((point) => point.y >= this.board.top));
+    const removed = old.filter((operation) => !this.board.operations.includes(operation));
+    await this.ctx.storage.transaction(async (storage) => {
+      await storage.delete(removed.map((operation) => operationKey(operation.sequence)));
+      await storage.put('board:meta', boardMeta(this.board));
+    });
+    this.broadcast({ type: 'trim', top: this.board.top });
+  }
+
+  private async reset(): Promise<void> {
+    const keys = [...(await this.ctx.storage.list({ prefix: 'board:operation:' })).keys()];
+    this.board = createEmptyWhiteboard();
+    await this.ctx.storage.transaction(async (storage) => { await storage.delete(keys); await storage.put('board:meta', boardMeta(this.board)); });
+    this.broadcast({ type: 'reset', board: this.board });
+  }
+
+  private broadcast(message: WhiteboardServerMessage): void { for (const socket of this.ctx.getWebSockets()) this.send(socket, message); }
+  private send(socket: WebSocket, message: WhiteboardServerMessage): void { socket.send(JSON.stringify(message)); }
+  private error(socket: WebSocket, code: string, message: string): void { this.send(socket, { type: 'error', code, message }); }
+}
+
+function boardMeta(board: WhiteboardSnapshot): Omit<WhiteboardSnapshot, 'operations'> { const { operations: _operations, ...meta } = board; return meta; }
+function operationKey(sequence: number): string { return `board:operation:${String(sequence).padStart(12, '0')}`; }
+function validClientId(value: unknown): value is string { return typeof value === 'string' && value.length > 0 && value.length <= 100; }
+function normalizeColor(value: unknown): WhiteboardColor { return WHITEBOARD_COLORS.includes(value as WhiteboardColor) ? value as WhiteboardColor : 'black'; }
+function sanitizeText(value: unknown, max: number): string { return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ').slice(0, max) : ''; }
+function sanitizePoints(value: unknown, minimumY: number, maximumY: number): WhiteboardPoint[] {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, WHITEBOARD_MAX_POINTS).flatMap((point) => {
+    if (!point || typeof point !== 'object') return [];
+    const candidate = point as { x?: unknown; y?: unknown };
+    if (typeof candidate.x !== 'number' || typeof candidate.y !== 'number' || !Number.isFinite(candidate.x) || !Number.isFinite(candidate.y)) return [];
+    return [{ x: Math.max(0, Math.min(760, candidate.x)), y: Math.max(minimumY, Math.min(maximumY, candidate.y)) }];
+  });
+}
 
 export async function finalizeMatch(db: D1Database, result: {
   resultId: string; matchId: string; seasonId: string; p1Id: string; p2Id: string;

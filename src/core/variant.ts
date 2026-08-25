@@ -36,6 +36,7 @@ export interface VariantPresentationContext<TCommand> {
   container: HTMLElement;
   signal: AbortSignal;
   send(command: TCommand): void;
+  openMenu(): void;
 }
 
 export interface PresentationAssetLease {

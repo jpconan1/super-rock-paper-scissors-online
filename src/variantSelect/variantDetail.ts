@@ -37,7 +37,7 @@ export function createVariantDetail(
   element.setAttribute('aria-modal', 'true');
   element.setAttribute('aria-label', `${variant.title} rules`);
   const panel = document.createElement('div');
-  panel.className = 'alert-box variant-detail__panel';
+  panel.className = 'textbox variant-detail__panel';
   const copy = document.createElement('div');
   copy.className = 'variant-detail__copy';
   for (const [index, line] of variant.rulesCopy.entries()) {
@@ -76,7 +76,7 @@ export function createVariantDetail(
       let content: HTMLElement;
       if (config.binding === 'variant-rules') {
         content = copy;
-        content.classList.add('alert-box');
+        content.classList.add('textbox');
       } else if ((config.type === 'sprite' || config.type === 'decoration') && config.assets?.src) {
         const sprite = createBoilingSprite({ src: config.assets.src, alt: config.alt ?? '', clock });
         content = sprite.element;
@@ -119,7 +119,7 @@ export function createVariantDetail(
       back.element.tabIndex = -1;
       play.element.hidden = true;
       const waiting = document.createElement('div');
-      waiting.className = 'alert-box variant-detail__waiting';
+      waiting.className = 'textbox variant-detail__waiting';
       waiting.textContent = 'Waiting for opponent';
       const readySlot = document.createElement('div');
       readySlot.className = 'variant-detail__ready-slot';

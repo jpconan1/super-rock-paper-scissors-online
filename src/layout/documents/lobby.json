@@ -305,8 +305,8 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 355,
-          "y": 840,
+          "x": 365,
+          "y": 690,
           "width": 165,
           "height": 82.5,
           "aspectLock": true
@@ -335,7 +335,8 @@
           "width": 148,
           "height": 74
         }
-      }
+      },
+      "visible": false
     },
     {
       "id": "computer",
@@ -348,16 +349,17 @@
       },
       "layouts": {
         "landscape": {
-          "x": 248,
-          "y": 464,
+          "x": 250,
+          "y": 460,
           "width": 148,
           "height": 74
         },
         "portrait": {
-          "x": 115,
-          "y": 760,
-          "width": 148,
-          "height": 74
+          "x": 50,
+          "y": 830,
+          "width": 210,
+          "height": 105,
+          "aspectLock": true
         }
       }
     },
@@ -372,8 +374,8 @@
       },
       "layouts": {
         "landscape": {
-          "x": 560,
-          "y": 465,
+          "x": 495,
+          "y": 460,
           "width": 148,
           "height": 74
         },
@@ -383,7 +385,8 @@
           "width": 148,
           "height": 74
         }
-      }
+      },
+      "visible": false
     },
     {
       "id": "ready",
@@ -397,15 +400,16 @@
       "layouts": {
         "landscape": {
           "x": 405,
-          "y": 465,
+          "y": 460,
           "width": 148,
           "height": 74
         },
         "portrait": {
-          "x": 195,
-          "y": 675,
-          "width": 148,
-          "height": 74
+          "x": 310,
+          "y": 830,
+          "width": 210,
+          "height": 105,
+          "aspectLock": true
         }
       }
     },
@@ -420,14 +424,14 @@
       },
       "layouts": {
         "landscape": {
-          "x": 722,
-          "y": 464,
+          "x": 555,
+          "y": 460,
           "width": 148,
           "height": 74
         },
         "portrait": {
-          "x": 200,
-          "y": 845,
+          "x": 35,
+          "y": 700,
           "width": 148,
           "height": 74
         }
