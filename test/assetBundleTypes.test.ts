@@ -5,6 +5,8 @@ describe('asset bundle manifest', () => {
   test('separates shared and variant images while excluding loading and non-images', () => {
     expect(classifyAssetUrls([
       'title/logo.webp',
+      'visual-elements/you-tag-p1-sheet.webp',
+      'visual-elements/you-tag-p2-sheet.webp',
       'variants/fireball-war/scene.webp',
       'interactive-elements/fireball-war/button.webp',
       'interactive-elements/generic-buttons/button.webp',
@@ -15,6 +17,8 @@ describe('asset bundle manifest', () => {
       shared: [
         '/interactive-elements/generic-buttons/button.webp',
         '/title/logo.webp',
+        '/visual-elements/you-tag-p1-sheet.webp',
+        '/visual-elements/you-tag-p2-sheet.webp',
       ],
       'variant:fireball-war': [
         '/interactive-elements/fireball-war/button.webp',

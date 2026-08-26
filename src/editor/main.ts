@@ -11,6 +11,8 @@ import { applyLayoutGeometry, validateLayoutDocument, type LayoutDocument, type 
 import { createVariantButton } from '../variantSelect/variantButton';
 import { createVariantDetail } from '../variantSelect/variantDetail';
 import { curtainOpenAsset } from '../renderer/curtainWipe';
+import { correctElementRatio, nativeAssetPath, nativeFrameSize, nativeRatio, resizeWithNativeRatio } from './nativeAspectRatio';
+import type { SheetDimensions } from '../renderer/boilingSprite';
 
 const host = document.querySelector<HTMLElement>('#editor');
 if (!host) throw new Error('Missing editor mount.');
@@ -18,7 +20,7 @@ const clock = new BoilClock(document, true);
 let workingDocuments = new Map([...layoutDocuments].map(([id, document]) => [id, clone(document)]));
 let current = workingDocuments.values().next().value!;
 let orientation: LayoutOrientation = 'landscape';
-let previewState = 'Default';
+let previewState = 'Class select';
 let zoom = 1;
 let hasFitInitialView = false;
 let selected = new Set<string>();
@@ -29,12 +31,15 @@ const savedDocuments = new Map([...workingDocuments].map(([id, document]) => [id
 let selectedRuleDocumentId = 'variant-rps';
 let cleanupNodes: (() => void)[] = [];
 let assets: string[] = [];
+const nativeSizes = new Map<string, SheetDimensions>();
+const nativeLoads = new Map<string, Promise<SheetDimensions>>();
+let nativeRenderQueued = false;
 
 host.innerHTML = `<main class="layout-editor">
   <header class="editor-toolbar">
     <select data-action="document" aria-label="Document"></select>
     <select data-action="orientation"><option value="landscape">Landscape</option><option value="portrait">Portrait</option></select>
-    <select data-action="state"><option>Default</option><option>Depressed buttons</option><option>Disabled/banned</option><option>Rules open</option><option>Roster open</option><option>Populated scoreboard</option></select>
+    <select data-action="state" aria-label="ABM state"><option>Class select</option><option>Battle</option><option>Waiting</option></select>
     <button data-action="undo">Undo</button><button data-action="redo">Redo</button>
     <button data-action="save">Save</button><button data-action="export">Export</button><button data-action="import">Import</button>
     <span class="dirty" data-dirty></span><span class="editor-status" data-status></span>
@@ -46,6 +51,7 @@ host.innerHTML = `<main class="layout-editor">
 
 const $ = <T extends Element>(selector: string) => host.querySelector<T>(selector)!;
 const docSelect = $<HTMLSelectElement>('[data-action=document]');
+const stateSelect = $<HTMLSelectElement>('[data-action=state]');
 for (const document of layoutDocuments.values()) docSelect.add(new Option(document.title, document.id));
 const typeSelect = $<HTMLSelectElement>('[data-new-type]');
 for (const type of ['group','sprite','button','text','dynamic-text','text-entry','toggle','volume-slider','variant-grid','collection','control','resource','decoration']) typeSelect.add(new Option(type, type));
@@ -63,10 +69,11 @@ function render(): void {
   const nodes = new Map<string, HTMLElement>();
   const ordered = [...current.elements].sort((a,b) => (a.layer ?? 0) - (b.layer ?? 0));
   for (const config of ordered) {
+    requestNativeCorrection(current, config);
     const node = makeNode(config);
     applyLayoutGeometry(node.element, config.layouts[orientation]);
     node.element.style.zIndex = String((config.layer ?? 0) + (isVariantDetail(current) ? 1 : 0));
-    node.element.hidden = config.visible === false || (config.id === 'rules-panel' && previewState !== 'Rules open');
+    node.element.hidden = !elementVisible(config) || abmStateHidden(config.id);
     node.element.dataset.id = config.id;
     if (current.id === 'variant-select') {
       if (config.id === 'header') node.element.classList.add('variant-select-screen__header');
@@ -102,6 +109,28 @@ function render(): void {
 
 function makeNode(config: LayoutElement): { element: HTMLElement; cleanup(): void } {
   const className = `editor-node editor-node--${config.type}`;
+  if (current.id === 'variant-abm' && (config.id === 'p1-move' || config.id === 'p2-move')) {
+    const element = document.createElement('div'); element.className = `${className} abm-slot-status`;
+    element.textContent = previewState === 'Class select' ? 'CLASS' : 'ATTACK';
+    return { element, cleanup: () => element.remove() };
+  }
+  if (current.id === 'variant-abm' && config.id === 'picker-copy') {
+    const element = document.createElement('div'); element.className = `${className} abm-picker__copy textbox`;
+    const name = document.createElement('strong'); name.className = 'abm-picker__name'; name.textContent = 'Advantaged';
+    const description = document.createElement('p'); description.className = 'abm-picker__description'; description.textContent = 'Gains 2 Mana instead of 1 during the first three turns.';
+    const status = document.createElement('small'); status.className = 'abm-picker__status'; status.textContent = 'PLAYABLE'; element.append(name, description, status);
+    return { element, cleanup: () => element.remove() };
+  }
+  const blockPreview = current.id === 'variant-abm' ? config.id.match(/^p([12])-block-([1-5])$/) : null;
+  if (blockPreview) {
+    const player = blockPreview[1] === '1' ? 'p1' : 'p2'; const index = Number(blockPreview[2]) - 1;
+    const filled = player === 'p1' ? index < 4 : index >= 3;
+    const sprite = createBoilingSprite({
+      src: filled ? '/variants/abm/block-icon-sheet.webp' : '/variants/abm/block-icon-empty-sheet.webp',
+      alt: filled ? 'Available Block' : 'Spent Block', clock, className: `${className} abm-block-preview${filled ? ' is-filled' : ''}`,
+    });
+    return { element: sprite.element, cleanup: () => sprite.destroy() };
+  }
   if (isVariantDetail(current) && config.binding === 'selected-variant-button') {
     const variantDocument = linkedVariant(current)!;
     const slot = current.copy!.slotId!;
@@ -205,12 +234,33 @@ function makeNode(config: LayoutElement): { element: HTMLElement; cleanup(): voi
   }
   const element = document.createElement(config.type === 'text-entry' ? 'input' : 'div');
   element.className = className;
+  if ((config.type === 'group' || config.type === 'collection') && selected.has(config.id)) {
+    const handle = document.createElement('button'); handle.type = 'button'; handle.className = 'editor-group-handle';
+    handle.setAttribute('aria-label', `Move ${config.id}`); handle.title = `Drag to move ${config.id}`; element.append(handle);
+  }
   if (config.assets?.src) { const image = document.createElement('img'); image.src = config.assets.src; image.alt = ''; element.append(image); }
   else if (config.id === 'rules-panel' && previewState === 'Rules open') element.textContent = current.rules ? [current.rules.lead, ...current.rules.paragraphs].join('\n\n') : 'Selected variant rules';
   else if (config.id === 'roster' && previewState === 'Roster open') element.textContent = 'Player List\nP1\nP2\nP3';
   else if (config.id === 'board' && previewState === 'Populated scoreboard') element.textContent = 'Game 1   3 – 1\nGame 2   2 – 3\nNext game';
   else if (!['group', 'variant-grid', 'collection'].includes(config.type)) element.textContent = config.label ?? config.binding ?? config.id;
   return { element, cleanup: () => element.remove() };
+}
+
+function abmStateHidden(id: string): boolean {
+  if (current.id !== 'variant-abm') return false;
+  const state = previewState;
+  const picker = new Set(['picker-portrait', 'picker-copy', 'picker-prev', 'picker-next', 'lock-class']);
+  const battleControls = new Set(['attack', 'block', 'mana', 'arrow-attack-block', 'arrow-block-mana', 'arrow-mana-attack', 'p1-class-badge', 'p2-class-badge']);
+  const waiting = new Set(['waiting-ready', 'waiting-dots']);
+  if (state === 'Class select') return id === 'scene-art' || battleControls.has(id) || waiting.has(id);
+  if (state === 'Battle') return picker.has(id) || waiting.has(id);
+  return picker.has(id);
+}
+
+function abmStateKey(): string { return previewState === 'Battle' ? 'battle' : previewState === 'Waiting' ? 'waiting' : 'class-select'; }
+function elementVisible(element: LayoutElement): boolean {
+  if (element.visible === false) return false;
+  return current.id !== 'variant-abm' || element.stateVisibility?.[abmStateKey()] !== false;
 }
 
 function beginPointer(event: PointerEvent, id: string, target: HTMLElement): void {
@@ -231,15 +281,14 @@ function beginPointer(event: PointerEvent, id: string, target: HTMLElement): voi
       const geometry = current.elements.find((item) => item.id === key)!.layouts[orientation]; const original = originals.get(key)!;
       const config = current.elements.find((item) => item.id === key)!;
       if (resize && key === id) {
-        const width = Math.max(1, snap(original.width + dx));
+        const minimum = minimumContainerSize(config);
+        const width = Math.max(1, minimum.width, snap(original.width + dx));
         if (STRETCHABLE_TYPES.has(config.type)) {
           geometry.width = width;
-          geometry.height = Math.max(1, snap(original.height + dy));
+          geometry.height = Math.max(1, minimum.height, snap(original.height + dy));
         } else {
-          const ratio = original.width / original.height;
-          geometry.width = width;
-          geometry.height = width / ratio;
-          geometry.aspectLock = true;
+          const ratio = nativeRatioFor(config) ?? original.width / original.height;
+          resizeWithNativeRatio(geometry, 'width', width, ratio);
         }
       }
       else { geometry.x = snap(original.x + dx); geometry.y = snap(original.y + dy); }
@@ -251,7 +300,7 @@ function beginPointer(event: PointerEvent, id: string, target: HTMLElement): voi
   const end = (next: PointerEvent) => {
     if (next.pointerId !== event.pointerId) return;
     canvas.removeEventListener('pointermove', move); canvas.removeEventListener('pointerup', end); canvas.removeEventListener('pointercancel', end);
-    commit(before); render();
+    fitAllContainers(current); commit(before); render();
   };
   canvas.addEventListener('pointermove', move); canvas.addEventListener('pointerup', end); canvas.addEventListener('pointercancel', end);
   event.preventDefault(); event.stopImmediatePropagation();
@@ -287,7 +336,10 @@ function renderTree(): void {
   for (const element of [...current.elements].sort((a,b) => (b.layer ?? 0) - (a.layer ?? 0))) {
     const row = document.createElement('div'); row.className = 'editor-tree-row'; row.classList.toggle('is-selected', selected.has(element.id));
     const choose = document.createElement('button'); choose.textContent = `${element.parent ? '↳ ' : ''}${element.id} · ${element.type}`; choose.onclick = () => { selected = new Set([element.id]); render(); };
-    const hide = document.createElement('button'); hide.textContent = element.visible === false ? '○' : '●'; hide.onclick = () => mutate(() => { element.visible = element.visible === false; });
+    const hide = document.createElement('button'); hide.textContent = elementVisible(element) && !abmStateHidden(element.id) ? '●' : '○'; hide.onclick = () => mutate(() => {
+      if (current.id === 'variant-abm') element.stateVisibility = { ...(element.stateVisibility ?? {}), [abmStateKey()]: !elementVisible(element) };
+      else element.visible = element.visible === false;
+    });
     row.append(choose, hide); tree.append(row);
   }
 }
@@ -296,20 +348,23 @@ function renderInspector(): void {
   const panel = $('[data-inspector]'); const item = selected.size === 1 ? current.elements.find((element) => selected.has(element.id)) : undefined;
   if (!item) { panel.innerHTML = '<h2>Inspector</h2><p>Select one element.</p>'; return; }
   const geometry = item.layouts[orientation];
+  const size = nativeSizeFor(item);
+  const nativeDetails = size ? `Native frame: ${size.width} × ${size.height} · ${formatNumber(nativeRatio(size))}:1`
+    : nativeAssetPath(item) ? 'Native frame: loading…' : '';
   panel.innerHTML = `<h2>Inspector</h2><label>ID<input data-prop="id" value="${escapeHtml(item.id)}" ${item.protected ? 'disabled' : ''}></label>
     <label>Type<select data-prop="type" ${item.protected ? 'disabled' : ''}>${[...typeSelect.options].map((option) => `<option ${option.value === item.type ? 'selected' : ''}>${option.value}</option>`).join('')}</select></label>
     <label>Label<input data-prop="label" value="${escapeHtml(item.label ?? '')}"></label><label>Asset<input data-prop="asset" value="${escapeHtml(item.assets?.src ?? item.assets?.up ?? '')}"></label>
     <div class="editor-fields">${(['x','y','width','height'] as const).map((key) => `<label>${key}<input type="number" data-geo="${key}" value="${geometry[key]}"></label>`).join('')}<label>Layer<input type="number" data-prop="layer" value="${item.layer ?? 0}"></label><label>Rotation<input type="number" data-geo="rotation" value="${geometry.rotation ?? 0}"></label></div>
-    <p>${STRETCHABLE_TYPES.has(item.type) ? 'Container: free resize' : 'Artwork: proportional resize'}</p>
+    <p>${STRETCHABLE_TYPES.has(item.type) ? 'Container: free resize' : 'Artwork: native-ratio resize'}${nativeDetails ? `<br>${nativeDetails}` : ''}</p>
     <button data-delete ${item.protected ? 'disabled' : ''}>Delete</button><button data-duplicate>Duplicate</button><button data-up>Layer +</button><button data-down>Layer −</button>`;
   panel.querySelectorAll<HTMLInputElement | HTMLSelectElement>('[data-geo]').forEach((input) => input.onchange = () => mutate(() => {
     const key = input.dataset.geo! as keyof typeof geometry;
-    const value = Number(input.value);
+    const minimum = minimumContainerSize(item);
+    const value = key === 'width' ? Math.max(Number(input.value), minimum.width)
+      : key === 'height' ? Math.max(Number(input.value), minimum.height) : Number(input.value);
     if ((key === 'width' || key === 'height') && !STRETCHABLE_TYPES.has(item.type)) {
-      const ratio = geometry.width / geometry.height;
-      if (key === 'width') { geometry.width = value; geometry.height = value / ratio; }
-      else { geometry.height = value; geometry.width = value * ratio; }
-      geometry.aspectLock = true;
+      const ratio = nativeRatioFor(item) ?? geometry.width / geometry.height;
+      resizeWithNativeRatio(geometry, key, value, ratio);
     } else (geometry as unknown as Record<string, number>)[key] = value;
   }));
   panel.querySelectorAll<HTMLInputElement | HTMLSelectElement>('[data-prop]').forEach((input) => input.onchange = () => mutate(() => {
@@ -367,13 +422,69 @@ function renderRules(): void {
 function snapshot(): WorkspaceSnapshot { return { currentId: current.id, documents: clone([...workingDocuments.values()]) }; }
 function restore(value: WorkspaceSnapshot): void {
   workingDocuments = new Map(value.documents.map((document) => [document.id, document]));
-  current = workingDocuments.get(value.currentId)!;
+  current = workingDocuments.get(value.currentId)!; syncStateSelect();
 }
-function mutate(change: () => void): void { const before = snapshot(); change(); commit(before); render(); }
+function mutate(change: () => void): void { const before = snapshot(); change(); fitAllContainers(current); commit(before); render(); }
 function commit(before: WorkspaceSnapshot): void { if (JSON.stringify(before.documents) !== JSON.stringify([...workingDocuments.values()])) { history.push(before); future = []; } }
 function duplicate(item: LayoutElement): void { mutate(() => { const copy = clone(item); copy.id = uniqueId(`${item.id}-copy`); copy.protected = false; copy.layouts.landscape.x += 10; copy.layouts.landscape.y += 10; copy.layouts.portrait.x += 10; copy.layouts.portrait.y += 10; current.elements.push(copy); selected = new Set([copy.id]); }); }
 function uniqueId(base: string): string { let id = base, index = 2; while (current.elements.some((item) => item.id === id)) id = `${base}-${index++}`; return id; }
 function snap(value: number): number { return Math.round(value / 5) * 5; }
+function minimumContainerSize(item: LayoutElement): { width: number; height: number } {
+  if (!STRETCHABLE_TYPES.has(item.type)) return { width: 1, height: 1 };
+  const children = current.elements.filter((element) => element.parent === item.id).map((element) => element.layouts[orientation]);
+  return {
+    width: Math.max(1, ...children.map((geometry) => geometry.x + geometry.width)),
+    height: Math.max(1, ...children.map((geometry) => geometry.y + geometry.height)),
+  };
+}
+function nativeSizeFor(item: LayoutElement): SheetDimensions | undefined {
+  const path = nativeAssetPath(item); return path ? nativeSizes.get(path) : undefined;
+}
+function nativeRatioFor(item: LayoutElement): number | undefined {
+  const size = nativeSizeFor(item); return size ? nativeRatio(size) : undefined;
+}
+function requestNativeCorrection(document: LayoutDocument, item: LayoutElement): void {
+  const path = nativeAssetPath(item); if (!path) return;
+  const apply = (size: SheetDimensions) => {
+    const liveDocument = workingDocuments.get(document.id); const liveItem = liveDocument?.elements.find(({ id }) => id === item.id);
+    if (!liveDocument || !liveItem || nativeAssetPath(liveItem) !== path || !correctElementRatio(liveItem, nativeRatio(size))) return;
+    fitParentContainers(liveDocument, liveItem);
+    if (current.id === liveDocument.id && !nativeRenderQueued) {
+      nativeRenderQueued = true; requestAnimationFrame(() => { nativeRenderQueued = false; render(); });
+    } else updateDirty();
+  };
+  const cached = nativeSizes.get(path); if (cached) { apply(cached); return; }
+  loadNativeSize(path).then(apply).catch((error) => status(error instanceof Error ? error.message : String(error)));
+}
+function loadNativeSize(path: string): Promise<SheetDimensions> {
+  const existing = nativeLoads.get(path); if (existing) return existing;
+  const load = new Promise<SheetDimensions>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => { try { const size = nativeFrameSize(path, { width: image.naturalWidth, height: image.naturalHeight }); nativeSizes.set(path, size); resolve(size); } catch (error) { reject(error); } };
+    image.onerror = () => reject(new Error(`Could not read native artwork size: ${path}`)); image.src = path;
+  });
+  nativeLoads.set(path, load); return load;
+}
+function fitParentContainers(document: LayoutDocument, item: LayoutElement): void {
+  if (item.parent) fitAllContainers(document);
+}
+function fitAllContainers(document: LayoutDocument): void {
+  const depth = (item: LayoutElement): number => { let value = 0, parent = item.parent; while (parent) { value++; parent = document.elements.find(({ id }) => id === parent)?.parent; } return value; };
+  const containers = document.elements.filter((item) => STRETCHABLE_TYPES.has(item.type) && document.elements.some(({ parent }) => parent === item.id))
+    .sort((a, b) => depth(b) - depth(a));
+  for (const parent of containers) for (const layout of ['landscape', 'portrait'] as const) {
+    const children = document.elements.filter((item) => item.parent === parent.id); if (!children.length) continue;
+    const parentGeometry = parent.layouts[layout]; const childGeometries = children.map((child) => child.layouts[layout]);
+    const minX = Math.min(0, ...childGeometries.map(({ x }) => x)); const minY = Math.min(0, ...childGeometries.map(({ y }) => y));
+    if (minX < 0) { parentGeometry.x += minX; parentGeometry.width -= minX; for (const child of childGeometries) child.x -= minX; }
+    if (minY < 0) { parentGeometry.y += minY; parentGeometry.height -= minY; for (const child of childGeometries) child.y -= minY; }
+    const requiredWidth = Math.max(...childGeometries.map(({ x, width }) => x + width));
+    const requiredHeight = Math.max(...childGeometries.map(({ y, height }) => y + height));
+    if (requiredWidth > parentGeometry.width + 0.001) parentGeometry.width = requiredWidth + 4;
+    if (requiredHeight > parentGeometry.height + 0.001) parentGeometry.height = requiredHeight + 4;
+  }
+}
+function formatNumber(value: number): string { return String(Math.round(value * 1000) / 1000); }
 function clone<T>(value: T): T { return structuredClone(value); }
 function escapeHtml(value: string): string { const node = document.createElement('span'); node.textContent = value; return node.innerHTML; }
 function dirtyDocuments(): LayoutDocument[] { return [...workingDocuments.values()].filter((document) => JSON.stringify(document) !== savedDocuments.get(document.id)); }
@@ -382,27 +493,28 @@ function status(message: string): void { $('[data-status]').textContent = messag
 
 docSelect.onchange = () => {
   current = workingDocuments.get(docSelect.value)!;
-  selected.clear(); render(); fitPreview();
+  selected.clear(); syncStateSelect(); render(); fitPreview();
 };
 $<HTMLSelectElement>('[data-action=orientation]').onchange = (event) => { orientation = (event.target as HTMLSelectElement).value as LayoutOrientation; render(); fitPreview(); };
-$<HTMLSelectElement>('[data-action=state]').onchange = (event) => { previewState = (event.target as HTMLSelectElement).value; render(); };
+stateSelect.onchange = (event) => { previewState = (event.target as HTMLSelectElement).value; render(); };
 $<HTMLButtonElement>('[data-action=undo]').onclick = () => { const prior = history.pop(); if (!prior) return; future.push(snapshot()); restore(prior); docSelect.value = current.id; render(); };
 $<HTMLButtonElement>('[data-action=redo]').onclick = () => { const next = future.pop(); if (!next) return; history.push(snapshot()); restore(next); docSelect.value = current.id; render(); };
 $<HTMLButtonElement>('[data-action=add]').onclick = () => mutate(() => { const id = uniqueId(typeSelect.value); current.elements.push({ id, type: typeSelect.value as LayoutElementType, layer: 1, layouts: { landscape: {x:20,y:20,width:120,height:60}, portrait:{x:20,y:20,width:120,height:60} } }); selected = new Set([id]); });
 $<HTMLButtonElement>('[data-action=group]').onclick = () => mutate(() => { if (!selected.size) return; const id = uniqueId('group'); current.elements.push({id,type:'group',layer:0,layouts:{landscape:{x:0,y:0,width:current.canvases.landscape.width,height:current.canvases.landscape.height},portrait:{x:0,y:0,width:current.canvases.portrait.width,height:current.canvases.portrait.height}}}); current.elements.forEach((item) => { if (selected.has(item.id)) item.parent=id; }); selected=new Set([id]); });
 $<HTMLButtonElement>('[data-action=export]').onclick = () => { const link=document.createElement('a'); link.href=URL.createObjectURL(new Blob([JSON.stringify(current,null,2)+'\n'],{type:'application/json'})); link.download=`${current.id}.json`; link.click(); URL.revokeObjectURL(link.href); };
 $<HTMLButtonElement>('[data-action=import]').onclick = () => $<HTMLInputElement>('[data-import-file]').click();
-$<HTMLInputElement>('[data-import-file]').onchange = async (event) => { const file=(event.target as HTMLInputElement).files?.[0]; if (!file) return; try { const imported=validateLayoutDocument(JSON.parse(await file.text())); workingDocuments.set(imported.id, imported); current=imported; docSelect.value=current.id; selected.clear(); history=[]; future=[]; render(); } catch(error) { alert(error instanceof Error ? error.message : String(error)); } };
+$<HTMLInputElement>('[data-import-file]').onchange = async (event) => { const file=(event.target as HTMLInputElement).files?.[0]; if (!file) return; try { const imported=validateLayoutDocument(JSON.parse(await file.text())); workingDocuments.set(imported.id, imported); current=imported; docSelect.value=current.id; selected.clear(); history=[]; future=[]; syncStateSelect(); render(); } catch(error) { alert(error instanceof Error ? error.message : String(error)); } };
 $<HTMLButtonElement>('[data-action=save]').onclick = async () => { try {
   const dirty = dirtyDocuments();
   for (const document of dirty) {
+    fitAllContainers(document);
     validateLayoutDocument(document);
     const response=await fetch('/__layout-editor/save',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(document)});
     if(!response.ok) throw new Error(await response.text());
     savedDocuments.set(document.id, JSON.stringify(document));
     layoutDocuments.set(document.id, clone(document));
   }
-  updateDirty(); status(dirty.length ? `Saved ${dirty.length} document${dirty.length === 1 ? '' : 's'}` : 'No changes');
+  render(); status(dirty.length ? `Saved ${dirty.length} document${dirty.length === 1 ? '' : 's'}` : 'No changes');
 } catch(error) { status(error instanceof Error ? error.message : String(error)); } };
 $<HTMLInputElement>('[data-zoom]').oninput = (event) => { zoom = Number((event.target as HTMLInputElement).value) / 100; applyZoom(); };
 $<HTMLButtonElement>('[data-action=fit]').onclick = fitPreview;
@@ -417,5 +529,6 @@ window.addEventListener('keydown', (event) => { if ((event.target as HTMLElement
 void fetch('/__layout-editor/assets').then((response)=>response.json()).then((value:string[])=>{assets=value;renderAssets();}).catch(()=>{});
 $<HTMLInputElement>('[data-asset-filter]').oninput=renderAssets;
 function renderAssets(){const query=$<HTMLInputElement>('[data-asset-filter]').value.toLowerCase();$('[data-assets]').innerHTML=assets.filter(asset=>asset.includes(query)).slice(0,150).map(asset=>`<div>${escapeHtml(asset)}</div>`).join('');}
-render();
+function syncStateSelect(): void { stateSelect.hidden = current.id !== 'variant-abm'; }
+syncStateSelect(); render();
 requestAnimationFrame(() => { if (!hasFitInitialView) { hasFitInitialView = true; fitPreview(); } });

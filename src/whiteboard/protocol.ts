@@ -21,6 +21,7 @@ export interface WhiteboardText extends OperationBase {
   displayName: string;
   text: string;
   color: WhiteboardColor;
+  system?: boolean;
   rowY: number;
   rowSpan: number;
 }
@@ -40,6 +41,7 @@ export interface WhiteboardSnapshot {
 
 export type WhiteboardClientMessage =
   | { type: 'chat'; clientOperationId: string; displayName: string; text: string; color: WhiteboardColor }
+  | { type: 'status'; clientOperationId: string; displayName: string; status: 'ready' }
   | { type: 'stroke'; clientOperationId: string; color: WhiteboardColor; points: WhiteboardPoint[] }
   | { type: 'erase'; clientOperationId: string; points: WhiteboardPoint[] };
 

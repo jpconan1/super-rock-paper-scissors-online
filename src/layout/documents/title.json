@@ -87,13 +87,15 @@
           "x": 290,
           "y": 230,
           "width": 184,
-          "height": 92
+          "height": 92,
+          "aspectLock": true
         },
         "portrait": {
           "x": 45,
           "y": 700,
           "width": 184,
-          "height": 92
+          "height": 92,
+          "aspectLock": true
         }
       }
     },
@@ -112,13 +114,34 @@
           "x": 505,
           "y": 230,
           "width": 184,
-          "height": 92
+          "height": 92,
+          "aspectLock": true
         },
         "portrait": {
           "x": 305,
           "y": 700,
           "width": 184,
-          "height": 92
+          "height": 92,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "online-count",
+      "type": "dynamic-text",
+      "protected": true,
+      "layouts": {
+        "landscape": {
+          "x": 320,
+          "y": 410,
+          "width": 320,
+          "height": 26
+        },
+        "portrait": {
+          "x": 120,
+          "y": 650,
+          "width": 300,
+          "height": 30
         }
       }
     },

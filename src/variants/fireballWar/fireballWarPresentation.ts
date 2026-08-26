@@ -11,7 +11,9 @@ export function createFireballWarPresentation(clock: BoilClock): VariantPresenta
       await lease.ready;
       return lease;
     },
-    mount({ container, send, openMenu }) { cleanup = mountFireballWarScreen(container, clock, (move) => send({ type: 'move', move }), openMenu); },
+    mount({ container, send, openMenu, self }) {
+      cleanup = mountFireballWarScreen(container, clock, (move) => send({ type: 'move', move }), openMenu, self ?? 'p1');
+    },
     render() {},
     unmount() { cleanup?.(); cleanup = undefined; },
   };

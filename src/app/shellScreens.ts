@@ -13,12 +13,35 @@ import type { ConnectionState } from './appController';
 import { createTextbox } from '../ui/textbox';
 import { mountWhiteboard } from '../whiteboard/whiteboard';
 import type { WhiteboardClientMessage, WhiteboardServerMessage } from '../whiteboard/protocol';
+import type { LobbyPlayer } from '../lobby/protocol';
 
 export type ScreenCleanup = () => void;
 export type LobbyScreenMount = ScreenCleanup & {
   setConnectionState(state: ConnectionState): void;
   receiveWhiteboard(message: WhiteboardServerMessage): void;
+  updateRoster(players: LobbyPlayer[], selfId: string): void;
 };
+
+export function orderLobbyPlayers(players: readonly LobbyPlayer[], selfId: string): LobbyPlayer[] {
+  const weight = { ready: 1, idle: 2, 'playing-computer': 3, 'in-match': 3 } as const;
+  return [...players].sort((a, b) => a.playerId === selfId ? -1 : b.playerId === selfId ? 1
+    : weight[a.presence] - weight[b.presence] || a.displayName.localeCompare(b.displayName));
+}
+
+function renderLobbyRoster(roster: HTMLElement, players: readonly LobbyPlayer[], selfId: string): void {
+  const ordered = orderLobbyPlayers(players, selfId);
+  roster.replaceChildren();
+  const heading = document.createElement('strong'); heading.className = 'lobby-screen__roster-heading'; heading.textContent = `ONLINE · ${players.length}`; roster.append(heading);
+  for (const player of ordered) {
+    const row = document.createElement('div'); row.className = `lobby-screen__roster-row is-${player.presence}`;
+    const name = document.createElement('span'); name.textContent = `${player.displayName}${player.playerId === selfId ? ' (you)' : ''}`;
+    const status = document.createElement('small'); status.textContent = ({ idle: 'Idle', ready: 'Ready', 'playing-computer': 'Playing computer', 'in-match': 'In match' } as const)[player.presence];
+    row.append(name, status); roster.append(row);
+  }
+  if (!ordered.some((player) => player.playerId !== selfId)) {
+    const empty = document.createElement('p'); empty.className = 'lobby-screen__roster-empty'; empty.textContent = 'Nobody else online'; roster.append(empty);
+  }
+}
 
 function mountPanel(container: HTMLElement, title: string): { panel: HTMLElement; cleanup: ScreenCleanup } {
   const screen = document.createElement('section');
@@ -128,7 +151,7 @@ export function mountLobbyScreen(
   const roster = document.createElement('aside');
   roster.className = 'textbox lobby-screen__roster';
   roster.hidden = true;
-  roster.textContent = layoutDocument.copy!.playerList!;
+  renderLobbyRoster(roster, [], '');
   const rosterToggle = createToggleButton({
     label: layoutDocument.copy!.showPlayers!,
     pressed: false,
@@ -213,6 +236,7 @@ export function mountLobbyScreen(
     whiteboardController.setEnabled(!unavailable);
   };
   cleanup.receiveWhiteboard = (message) => whiteboardController.receive(message);
+  cleanup.updateRoster = (players, selfId) => renderLobbyRoster(roster, players, selfId);
   return cleanup;
 }
 

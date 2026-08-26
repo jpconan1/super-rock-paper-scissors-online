@@ -1,9 +1,10 @@
 import type { BoilClock } from '../../animation/boilClock';
 import { createGameButton } from '../../input/gameButton';
 import { createGameLayout } from '../../layout/gameLayout';
+import type { PlayerId } from '../../core/variant';
 import { FIREBALL_WAR_LAYOUTS } from '../fireballWar/fireballWarScreen';
 
-export function mountDummyScreen(container: HTMLElement, clock: BoilClock, advance: () => void, onMenu: () => void): () => void {
+export function mountDummyScreen(container: HTMLElement, clock: BoilClock, advance: () => void, onMenu: () => void, viewer: PlayerId = 'p1'): () => void {
   const controls = document.createElement('div');
   controls.className = 'dummy-game__controls';
   const button = createGameButton({
@@ -24,6 +25,7 @@ export function mountDummyScreen(container: HTMLElement, clock: BoilClock, advan
     screenClassName: 'dummy-game',
     compositionClassName: 'dummy-game__composition',
     ariaLabel: 'Dummy variant',
+    viewer,
     players: {
       p1: { heading: 'P1 · YOU', rating: 'Elo 1500 (Bronze)', platform: 'Platform: Web' },
       p2: { heading: 'P2 · RIVAL', rating: 'Elo 1500 (Bronze)', platform: 'Platform: Web' },

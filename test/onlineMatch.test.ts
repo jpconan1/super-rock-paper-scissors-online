@@ -1,5 +1,13 @@
 import { describe, expect, test } from 'vitest';
 import { acceptMatchCommand, advanceMatchDeadline, createOnlineMatch, projectOnlineMatch } from '../src/core/onlineMatch';
+import { BEAT_MS, beats } from '../src/core/time';
+
+describe('game time', () => {
+  test('defines one beat as 0.75 seconds', () => {
+    expect(BEAT_MS).toBe(750);
+    expect(beats(2)).toBe(1_500);
+  });
+});
 import type { MatchCommandPayload } from '../src/protocol/protocol';
 import type { PlayerId } from '../src/core/variant';
 
@@ -9,6 +17,43 @@ const players = {
 };
 
 describe('online match', () => {
+  test('runs an ABM-only match directly in slot one and holds its final result', () => {
+    const state = createOnlineMatch('abm', players, 1, 0, 'abm-only');
+    advanceMatchDeadline(state, 1_500);
+    expect(state.phase).toBe('playing');
+    expect(state.activeSlot).toBe('slot-1');
+    send(state, 'p1', { type: 'variant-command', slotId: 'slot-1', command: { type: 'lock-class', classId: 'advantaged' } });
+    send(state, 'p2', { type: 'variant-command', slotId: 'slot-1', command: { type: 'lock-class', classId: 'advantaged' } });
+    for (let round = 0; round < 3; round++) {
+      send(state, 'p1', { type: 'variant-command', slotId: 'slot-1', command: { type: 'choose-move', move: 'attack' } });
+      send(state, 'p2', { type: 'variant-command', slotId: 'slot-1', command: { type: 'choose-move', move: 'mana' } });
+      if (round < 2) send(state, 'p2', { type: 'variant-command', slotId: 'slot-1', command: { type: 'lock-class', classId: 'advantaged' } });
+    }
+    expect(state.games).toHaveLength(1);
+    expect(state.winner).toBe('p1');
+    expect(state.phase).toBe('playing');
+    expect(state.events.some(({ type }) => type === 'match-complete')).toBe(true);
+    expect(state.deadlineAt).toBeUndefined();
+    expect(advanceMatchDeadline(state, Number.MAX_SAFE_INTEGER)).toBe(false);
+    expect(state.phase).toBe('playing');
+    expect(state.gameState).toMatchObject({ phase: 'match-complete', winner: 'p1', score: { p1: 3, p2: 0 } });
+  });
+
+  test('schedules and resolves the late ABM player deadline', () => {
+    const state = createOnlineMatch('abm-timeout', players, 1, 0, 'abm-only');
+    advanceMatchDeadline(state, 1_500);
+    send(state, 'p1', { type: 'variant-command', slotId: 'slot-1', command: { type: 'lock-class', classId: 'lucky' } });
+    send(state, 'p2', { type: 'variant-command', slotId: 'slot-1', command: { type: 'lock-class', classId: 'thief' } });
+    send(state, 'p1', { type: 'variant-command', slotId: 'slot-1', command: { type: 'choose-move', move: 'mana' } });
+    const deadline = state.deadlineAt!;
+    expect(deadline).toBeGreaterThan(0);
+    expect(advanceMatchDeadline(state, deadline - 1)).toBe(false);
+    expect(advanceMatchDeadline(state, deadline)).toBe(true);
+    expect(state.deadlineAt).toBeUndefined();
+    expect(state.events.some(({ type }) => type === 'move-timeout')).toBe(true);
+    expect(state.gameState).toMatchObject({ phase: 'idle', players: { p2: { strikes: 1, lastMove: 'skip' } } });
+  });
+
   test('orders picks, advances by deadline, and hides opponent moves', () => {
     const state = createOnlineMatch('m', players, 1, 0);
     expect(advanceMatchDeadline(state, 1_500)).toBe(true);

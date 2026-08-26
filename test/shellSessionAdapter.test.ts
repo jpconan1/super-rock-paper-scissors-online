@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { LocalShellSessionAdapter, WebSocketShellSessionAdapter } from '../src/app/shellSessionAdapter';
+import { LocalShellSessionAdapter, serializeVariantCommand, WebSocketShellSessionAdapter } from '../src/app/shellSessionAdapter';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -8,12 +8,22 @@ function deferred<T>() {
 }
 
 describe('matchmaking session adapters', () => {
+  test('preserves ABM command envelopes while unwrapping legacy move commands', () => {
+    const abm = { type: 'choose-move', move: 'attack' } as const;
+    expect(serializeVariantCommand(abm)).toBe(abm);
+    expect(serializeVariantCommand({ type: 'move', move: 'fireball' })).toBe('fireball');
+  });
   beforeEach(() => {
     vi.useFakeTimers();
     const values = new Map<string, string>();
     vi.stubGlobal('sessionStorage', {
       getItem: (key: string) => values.get(key) ?? null,
       setItem: (key: string, value: string) => values.set(key, value),
+      removeItem: (key: string) => values.delete(key),
+    });
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => values.get(`local:${key}`) ?? null,
+      setItem: (key: string, value: string) => values.set(`local:${key}`, value),
     });
   });
 

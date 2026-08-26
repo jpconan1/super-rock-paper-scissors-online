@@ -19,8 +19,8 @@ export function createDummyPresentation(clock: BoilClock): VariantPresentation<D
       await lease.ready;
       return lease;
     },
-    mount({ container, send, openMenu }) {
-      cleanup = mountDummyScreen(container, clock, () => send('advance'), openMenu);
+    mount({ container, send, openMenu, self }) {
+      cleanup = mountDummyScreen(container, clock, () => send('advance'), openMenu, self ?? 'p1');
       root = container.querySelector<HTMLElement>('.dummy-game') ?? undefined;
       const scene = root?.querySelector<HTMLElement>('.game-layout__slot--scene');
       if (scene) ready = mountReadyWaiting(scene, clock);

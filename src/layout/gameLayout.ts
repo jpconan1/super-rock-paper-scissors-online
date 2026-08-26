@@ -1,15 +1,23 @@
 import type { BoilClock } from '../animation/boilClock';
 import { createGameButton, type GameButton } from '../input/gameButton';
 import { createBoilingSprite, type BoilingSprite } from '../renderer/boilingSprite';
+import type { PlayerId } from '../core/variant';
 import {
   createScaleBox,
   observeResponsiveScaleBox,
   type ResponsiveScaleBoxLayout,
 } from './scaleBox';
 import { getLayoutDocument } from './layoutDocuments';
+import { applyLayoutGeometry, type LayoutGeometry } from './layoutDocument';
 import { applyDocumentLayout } from './layoutRuntime';
 
 const INTERACTIVE_ROOT = '/interactive-elements';
+export const YOU_TAG_ART = {
+  p1: '/visual-elements/you-tag-p1-sheet.webp',
+  p2: '/visual-elements/you-tag-p2-sheet.webp',
+} as const;
+const YOU_TAG_WIDTH = 128;
+const YOU_TAG_HEIGHT = 64;
 
 export const GAME_LAYOUT_SLOT_NAMES = [
   'p1-info',
@@ -53,6 +61,9 @@ export interface GameLayoutOptions<TLayoutName extends string> {
   screenClassName: string;
   compositionClassName: string;
   ariaLabel: string;
+  viewer?: PlayerId;
+  youTagVisible?: boolean;
+  layoutDocumentId?: string;
   players: Readonly<{ p1: GameLayoutPlayer; p2: GameLayoutPlayer }>;
   artwork: Readonly<{
     turn: GameLayoutArtwork;
@@ -70,7 +81,21 @@ export interface GameLayout {
   composition: HTMLDivElement;
   slots: Readonly<Record<GameLayoutSlotName, HTMLDivElement>>;
   setArtwork(slot: 'turn' | 'p1Wins' | 'p2Wins' | 'scene', artwork: GameLayoutArtwork): void;
+  setYouTagVisible(visible: boolean): void;
   destroy(): void;
+}
+
+export function getYouTagGeometry(
+  viewer: PlayerId,
+  orientation: 'landscape' | 'portrait',
+  scene: LayoutGeometry,
+  canvasWidth: number,
+): LayoutGeometry {
+  const desiredX = viewer === 'p1' ? scene.x - YOU_TAG_WIDTH : scene.x + scene.width;
+  const x = orientation === 'portrait'
+    ? Math.max(0, Math.min(canvasWidth - YOU_TAG_WIDTH, desiredX))
+    : desiredX;
+  return { x, y: scene.y + (scene.height - YOU_TAG_HEIGHT) / 2, width: YOU_TAG_WIDTH, height: YOU_TAG_HEIGHT };
 }
 
 export function createGameLayoutSlots(composition: HTMLElement): Record<GameLayoutSlotName, HTMLDivElement> {
@@ -108,7 +133,7 @@ export function createGameLayout<TLayoutName extends string>(
   const sprites: BoilingSprite[] = [];
   const artworkSprites = new Map<'turn' | 'p1Wins' | 'p2Wins' | 'scene', BoilingSprite>();
   const buttons: GameButton[] = [];
-  const layoutDocument = getLayoutDocument('game-parent');
+  const layoutDocument = getLayoutDocument(options.layoutDocumentId ?? 'game-parent');
 
   slots['p1-info'].append(createPlayerInfo(options.players.p1, 'p1'));
   slots['p2-info'].append(createPlayerInfo(options.players.p2, 'p2'));
@@ -138,6 +163,14 @@ export function createGameLayout<TLayoutName extends string>(
   addSprite('p2-wins-label', { src: config('p2-wins-label').assets!.src!, alt: layoutDocument.copy!.wins! }, 'game-layout__wins-label');
   addSprite('p1-picked', { src: config('p1-picked').assets!.src!, alt: layoutDocument.copy!.youPicked! }, 'game-layout__picked-label');
   addSprite('p2-picked', { src: config('p2-picked').assets!.src!, alt: layoutDocument.copy!.theyPicked! }, 'game-layout__picked-label');
+
+  const viewer = options.viewer ?? 'p1';
+  const youTag = createBoilingSprite({
+    src: YOU_TAG_ART[viewer], clock: options.clock, className: `game-layout__you-tag game-layout__you-tag--${viewer}`,
+    alt: viewer === 'p1' ? 'You are Player 1' : 'You are Player 2',
+  });
+  youTag.element.hidden = options.youTagVisible === false;
+  sprites.push(youTag); composition.append(youTag.element);
 
   mountGameLayoutVariantContent(slots, options.variantContent);
 
@@ -177,6 +210,8 @@ export function createGameLayout<TLayoutName extends string>(
       { id: 'rules', element: toolsByAsset.get('rulebook-button')! },
       { id: 'menu', element: toolsByAsset.get('burger-button')! },
     ]);
+    const sceneGeometry = config('scene').layouts[orientation];
+    applyLayoutGeometry(youTag.element, getYouTagGeometry(viewer, orientation, sceneGeometry, layout.width));
     options.onLayoutChange?.(layout);
   });
 
@@ -190,6 +225,7 @@ export function createGameLayout<TLayoutName extends string>(
       sprite.setSource(artwork.src);
       sprite.element.setAttribute('aria-label', artwork.alt);
     },
+    setYouTagVisible(visible) { youTag.element.hidden = !visible; },
     destroy() {
       stopLayout();
       for (const button of buttons) button.destroy();

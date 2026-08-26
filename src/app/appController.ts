@@ -17,6 +17,8 @@ import { MatchFlowDirector, statesForMatch } from './matchFlowDirector';
 import type { VariantSelectScreen } from '../variantSelect/variantSelectScreen';
 import { mountUniversalMenu, type UniversalMenu } from './universalMenu';
 import { createEmptyWhiteboard, type WhiteboardServerMessage, type WhiteboardSnapshot } from '../whiteboard/protocol';
+import type { LobbyPlayer } from '../lobby/protocol';
+import { beats } from '../core/time';
 
 export type ConnectionState = 'connected' | 'reconnecting' | 'offline';
 export type ShellDestination = 'title' | 'lobby' | 'match-found' | 'slot-picker' | 'scoreboard' | 'gameplay';
@@ -54,6 +56,9 @@ export class AppController {
   private variantSelectScreen?: VariantSelectScreen;
   private matchFlowDirector?: MatchFlowDirector;
   private whiteboard: WhiteboardSnapshot = createEmptyWhiteboard();
+  private lobbyPlayers: LobbyPlayer[] = [];
+  private lobbySelfId = '';
+  private disconnectedCompletedMatchId?: string;
   private readonly onGlobalKeyDown = (event: KeyboardEvent) => {
     if (event.key !== 'Escape' || event.repeat || this.destination === 'title') return;
     event.preventDefault();
@@ -90,6 +95,10 @@ export class AppController {
       matchFound: () => {},
       snapshot: (snapshot) => this.receiveSnapshot(snapshot),
       whiteboard: (message) => this.receiveWhiteboard(message),
+      roster: (players, selfId) => {
+        this.lobbyPlayers = players; this.lobbySelfId = selfId;
+        this.lobbyScreen?.updateRoster(players, selfId);
+      },
     });
     globalThis.addEventListener?.('keydown', this.onGlobalKeyDown as EventListener);
     const removeLoadingScreen = await runLoadingScreen(this.screenLayer, options.clock, assetLoader.retainBundle('shared'), true);
@@ -141,7 +150,11 @@ export class AppController {
     const emit = send ?? ((command: unknown) => {
       if (this.connectionState === 'connected') this.options.session.send(command);
     });
-    presentation.mount({ container: this.screenLayer, signal: this.lifecycle.signal, send: emit, openMenu: () => this.openUniversalMenu() });
+    presentation.mount({
+      container: this.screenLayer, signal: this.lifecycle.signal, send: emit,
+      openMenu: () => this.openUniversalMenu(), backToLobby: () => void this.navigate('lobby'),
+      self: this.matchProjection?.self ?? 'p1', players: this.matchProjection?.players,
+    });
     this.timeline = new AnimationTimeline(({ event }) => {
       if (this.latestSnapshot) {
         presentation.render(variantProjection(this.latestSnapshot.projection), [event], Date.now());
@@ -157,6 +170,13 @@ export class AppController {
     if (this.mounted) {
       this.mounted.render(variantProjection(snapshot.projection), snapshot.events, snapshot.serverTime);
       this.timeline?.schedule(snapshot.events, snapshot.serverTime);
+    }
+    const match = isMatchProjection(snapshot.projection) ? snapshot.projection : undefined;
+    const variant = variantProjection(snapshot.projection) as { phase?: unknown } | undefined;
+    if (isControllerOptions(this.optionsOrRegistry) && match?.activeSlot === 'slot-1' && variant?.phase === 'match-complete'
+      && this.disconnectedCompletedMatchId !== snapshot.matchId) {
+      this.disconnectedCompletedMatchId = snapshot.matchId;
+      this.options.session.leaveMatch();
     }
   }
 
@@ -200,7 +220,7 @@ export class AppController {
       const title = mountTitleScreen(this.screenLayer, options.clock, (name) => {
         this.playerName = name;
         void options.session.enterLobby(name).then(() => this.navigate('lobby'));
-      });
+      }, () => options.session.getOnlinePlayerCount());
       this.screenCleanup = title;
       this.screenReady = title.ready;
     } else if (destination === 'lobby') {
@@ -214,13 +234,14 @@ export class AppController {
         this.playerName,
         this.matchmakingActive,
         (active) => this.setMatchmaking(active),
-        () => void this.navigate('slot-picker'),
+        () => { options.session.setLobbyPresence('playing-computer'); void this.navigate('slot-picker'); },
         () => {},
         () => void this.navigate('scoreboard'),
         () => this.openUniversalMenu(),
         (message) => options.session.sendWhiteboard(message),
       );
       lobby.receiveWhiteboard({ type: 'snapshot', board: this.whiteboard });
+      lobby.updateRoster(this.lobbyPlayers, this.lobbySelfId);
       lobby.setConnectionState(this.connectionState);
       this.lobbyScreen = lobby;
       this.screenCleanup = lobby;
@@ -349,6 +370,7 @@ export class AppController {
     this.closeUniversalMenu();
     this.setMatchmaking(false);
     if (wasInMatch) this.options.session.leaveMatch();
+    this.options.session.disconnectOnline();
     this.latestSnapshot = undefined;
     this.matchFlowDirector?.cancel();
     void this.navigate('title');
@@ -377,7 +399,12 @@ export class AppController {
   private async syncMatchScreen(projection: MatchProjection): Promise<void> {
     if (projection.phase === 'match-found') {
       this.matchmakingActive = false;
-      if (this.destination !== 'match-found') await this.navigate('match-found');
+      if (this.destination !== 'match-found') {
+        await this.navigate('match-found');
+        // The server deadline starts when players are paired. Hold again from
+        // the moment the match-found screen is actually visible to this player.
+        await waitFor(beats(2), this.lifecycle?.signal);
+      }
       return;
     }
     if (projection.phase === 'selecting') {

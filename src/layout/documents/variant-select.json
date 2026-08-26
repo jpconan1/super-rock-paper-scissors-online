@@ -64,14 +64,14 @@
           "x": 185,
           "y": 110,
           "width": 218,
-          "height": 86,
+          "height": 131.3175074183976,
           "aspectLock": true
         },
         "portrait": {
           "x": -10,
           "y": 255,
           "width": 218,
-          "height": 86,
+          "height": 131.3175074183976,
           "aspectLock": true
         }
       }
@@ -91,14 +91,14 @@
           "x": 380,
           "y": 100,
           "width": 218,
-          "height": 86,
+          "height": 135.46736292428199,
           "aspectLock": true
         },
         "portrait": {
           "x": 170,
           "y": 230,
           "width": 218,
-          "height": 86,
+          "height": 135.46736292428199,
           "aspectLock": true
         }
       }
@@ -118,14 +118,14 @@
           "x": 560,
           "y": 130,
           "width": 218,
-          "height": 86,
+          "height": 77.28428093645485,
           "aspectLock": true
         },
         "portrait": {
           "x": 330,
           "y": 275,
           "width": 218,
-          "height": 86,
+          "height": 77.28428093645485,
           "aspectLock": true
         }
       }
@@ -145,14 +145,14 @@
           "x": 370,
           "y": 405,
           "width": 218,
-          "height": 86,
+          "height": 310.2697674418605,
           "aspectLock": true
         },
         "portrait": {
           "x": 170,
           "y": 595,
           "width": 218,
-          "height": 86,
+          "height": 310.2697674418605,
           "aspectLock": true
         }
       }
@@ -172,14 +172,14 @@
           "x": 375,
           "y": 235,
           "width": 218,
-          "height": 86,
+          "height": 174.4,
           "aspectLock": true
         },
         "portrait": {
           "x": 165,
           "y": 385,
           "width": 218,
-          "height": 86,
+          "height": 174.4,
           "aspectLock": true
         }
       }
@@ -199,14 +199,14 @@
           "x": 565,
           "y": 355,
           "width": 218,
-          "height": 86,
+          "height": 53.54385964912281,
           "aspectLock": true
         },
         "portrait": {
           "x": 335,
           "y": 645,
           "width": 218,
-          "height": 86,
+          "height": 53.54385964912281,
           "aspectLock": true
         }
       }
@@ -226,14 +226,14 @@
           "x": 195,
           "y": 375,
           "width": 218,
-          "height": 86,
+          "height": 178.1219512195122,
           "aspectLock": true
         },
         "portrait": {
           "x": 0,
           "y": 620,
           "width": 218,
-          "height": 86,
+          "height": 178.1219512195122,
           "aspectLock": true
         }
       }
@@ -253,14 +253,14 @@
           "x": 185,
           "y": 235,
           "width": 218,
-          "height": 86,
+          "height": 151.5680473372781,
           "aspectLock": true
         },
         "portrait": {
           "x": -15,
           "y": 445,
           "width": 218,
-          "height": 86,
+          "height": 151.5680473372781,
           "aspectLock": true
         }
       }
@@ -280,14 +280,14 @@
           "x": 560,
           "y": 245,
           "width": 218,
-          "height": 86,
+          "height": 213.87121212121212,
           "aspectLock": true
         },
         "portrait": {
           "x": 330,
           "y": 445,
           "width": 218,
-          "height": 86,
+          "height": 213.87121212121212,
           "aspectLock": true
         }
       }
@@ -308,13 +308,15 @@
           "x": 35,
           "y": 450,
           "width": 148,
-          "height": 42
+          "height": 74,
+          "aspectLock": true
         },
         "portrait": {
           "x": 210,
           "y": 860,
           "width": 148,
-          "height": 42
+          "height": 74,
+          "aspectLock": true
         }
       }
     },
@@ -330,7 +332,8 @@
           "x": 0,
           "y": 0,
           "width": 0,
-          "height": 0
+          "height": 0,
+          "aspectLock": true
         },
         "portrait": {
           "x": -60,
@@ -353,7 +356,8 @@
           "x": 960,
           "y": 0,
           "width": 0,
-          "height": 0
+          "height": 0,
+          "aspectLock": true
         },
         "portrait": {
           "x": 380,

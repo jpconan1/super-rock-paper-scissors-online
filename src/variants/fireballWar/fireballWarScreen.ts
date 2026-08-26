@@ -4,6 +4,7 @@ import { createGameLayout } from '../../layout/gameLayout';
 import type { ResponsiveScaleBoxLayout } from '../../layout/scaleBox';
 import { createBoilingSprite, type BoilingSprite } from '../../renderer/boilingSprite';
 import type { FireballWarMove } from './fireballWarTypes';
+import type { PlayerId } from '../../core/variant';
 import { getLayoutDocument } from '../../layout/layoutDocuments';
 import { applyConfiguredElement } from '../../layout/layoutRuntime';
 
@@ -41,6 +42,7 @@ export function mountFireballWarScreen(
   clock: BoilClock,
   onMove: (move: FireballWarMove) => void = () => {},
   onMenu: () => void = () => {},
+  viewer: PlayerId = 'p1',
 ): () => void {
   const layoutDocument = getLayoutDocument('variant-fireball-war');
   const configured = (id: string) => layoutDocument.elements.find((element) => element.id === id)!;
@@ -129,6 +131,7 @@ export function mountFireballWarScreen(
     screenClassName: 'fireball-war',
     compositionClassName: 'fireball-war__composition',
     ariaLabel: 'Fireball War layout prototype',
+    viewer,
     players: {
       p1: { heading: 'P1 · YOU', rating: 'Elo 1500 (Bronze)', platform: 'Platform: Web' },
       p2: { heading: 'P2 · RIVAL', rating: 'Elo 1500 (Bronze)', platform: 'Platform: Web' },

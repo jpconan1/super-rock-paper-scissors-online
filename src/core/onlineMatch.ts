@@ -2,9 +2,11 @@ import { SLOT_IDS, type SlotId } from './slots';
 import type { DeterministicContext, PlayerId, VariantGameResult } from './variant';
 import type { CompletedGame, MatchCommandPayload, MatchPhase, MatchPlayer, MatchProjection, TimedSemanticEvent } from '../protocol/protocol';
 import { getServerVariantForSlot } from './serverVariantRegistry';
+import { beats } from './time';
 
 export const SCOREBOARD_HOLD_MS = 3_750;
-export const MATCH_FOUND_HOLD_MS = 1_500;
+export const MATCH_FOUND_HOLD_MS = beats(2);
+export type MatchFormat = 'abm-only' | 'multi-slot';
 
 export interface OnlineMatchState {
   matchId: string;
@@ -23,6 +25,7 @@ export interface OnlineMatchState {
   events: TimedSemanticEvent[];
   processed: string[];
   seed: number;
+  format: MatchFormat;
 }
 
 export interface MatchMutation { commandId: string; expectedRevision: number; payload: MatchCommandPayload }
@@ -33,12 +36,13 @@ export function createOnlineMatch(
   players: Record<PlayerId, MatchPlayer>,
   seed: number,
   now: number,
+  format: MatchFormat = 'multi-slot',
 ): OnlineMatchState {
   const deadlineAt = now + MATCH_FOUND_HOLD_MS;
   return {
     matchId, revision: 0, phase: 'match-found', players, picks: {}, pickOrder: [], games: [],
     bans: { p1: [], p2: [] }, bansLocked: false, deadlineAt, events: [event(matchId, 0, 0, 'match-found', now, deadlineAt)],
-    processed: [], seed,
+    processed: [], seed, format,
   };
 }
 
@@ -94,6 +98,7 @@ export function acceptMatchCommand(state: OnlineMatchState, player: PlayerId, mu
       for (const cue of resolution.events ?? []) emitted.push(event(state.matchId, nextRevision, emitted.length, cue.type, cue.startsAt, cue.endsAt, cue.payload));
       const result = rules.result(state.gameState) as VariantGameResult | undefined;
       if (result) finishGame(state, result, now, add);
+      else state.deadlineAt = rules.nextDeadline?.(state.gameState);
       break;
     }
   }
@@ -112,10 +117,24 @@ export function advanceMatchDeadline(state: OnlineMatchState, now: number): bool
   const nextRevision = state.revision + 1;
   state.deadlineAt = undefined;
   state.events = [];
-  if (state.phase === 'match-found') state.phase = 'selecting';
+  if (state.phase === 'match-found' && state.format === 'abm-only') startGame(state, 'slot-1', now, nextRevision);
+  else if (state.phase === 'match-found') state.phase = 'selecting';
   else if (state.phase === 'scoreboard' && state.activeSlot) startGame(state, state.activeSlot, now, nextRevision);
   else if (state.phase === 'scoreboard') state.phase = 'banning';
   else if (state.phase === 'final-scoreboard') state.phase = 'complete';
+  else if (state.phase === 'playing' && state.activeSlot && state.gameState) {
+    const rules = getServerVariantForSlot(state.activeSlot);
+    const resolution = rules.advanceDeadline?.(state.gameState, randomContext(mixSeed(state.seed, nextRevision), now));
+    if (!resolution) return false;
+    state.gameState = resolution.state;
+    state.events = (resolution.events ?? []).map((cue, index) => event(state.matchId, nextRevision, index, cue.type, cue.startsAt, cue.endsAt, cue.payload));
+    const result = rules.result(state.gameState) as VariantGameResult | undefined;
+    if (result) {
+      const add = (type: TimedSemanticEvent['type'], duration: number, payload?: unknown) =>
+        state.events.push(event(state.matchId, nextRevision, state.events.length, type, now, now + duration, payload));
+      finishGame(state, result, now, add);
+    } else state.deadlineAt = rules.nextDeadline?.(state.gameState);
+  }
   else return false;
   state.revision = nextRevision;
   return true;
@@ -175,6 +194,12 @@ function finishGame(
   add: (type: TimedSemanticEvent['type'], duration: number, payload?: unknown) => void,
 ): void {
   state.games.push({ slotId: state.activeSlot!, ...result });
+  if (state.format === 'abm-only') {
+    state.winner = result.winner;
+    state.deadlineAt = undefined;
+    add('match-complete', SCOREBOARD_HOLD_MS, { winner: state.winner, scores: result.scores });
+    return;
+  }
   if (state.games.length === 1) return enterScoreboard(state, state.pickOrder[1]!, now, 'scoreboard', add);
   const wins = { p1: 0, p2: 0 };
   for (const game of state.games) wins[game.winner]++;

@@ -230,7 +230,7 @@ function drawText(canvas: HTMLCanvasElement, board: WhiteboardSnapshot): void {
   for (const operation of board.operations) {
     if (operation.kind === 'text') {
       context.save(); context.fillStyle = COLORS[operation.color]; context.font = '38px "Architects Daughter", cursive'; context.textBaseline = 'top';
-      const lines = wrapText(context, `${operation.displayName}: ${operation.text}`, operation.rowSpan, board.width - 36);
+      const lines = wrapText(context, operation.system ? operation.text : `${operation.displayName}: ${operation.text}`, operation.rowSpan, board.width - 36);
       lines.forEach((line, index) => context.fillText(line, 18, operation.rowY - board.top + index * 48, board.width - 36)); context.restore();
     } else if (operation.kind === 'erase') drawPath(context, operation, board.top, 0, false);
   }

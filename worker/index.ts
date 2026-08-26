@@ -8,6 +8,8 @@ import {
   createEmptyWhiteboard, WHITEBOARD_COLORS, type WhiteboardClientMessage, type WhiteboardColor,
   type WhiteboardOperation, type WhiteboardPoint, type WhiteboardServerMessage, type WhiteboardSnapshot,
 } from '../src/whiteboard/protocol';
+import { isLobbyPresence, type LobbyPlayer, type LobbyPresence, type LobbyServerMessage } from '../src/lobby/protocol';
+import { eloDeltas } from '../src/core/elo';
 
 interface Env {
   MATCHES: DurableObjectNamespace<MatchObject>;
@@ -21,6 +23,9 @@ type Seat = 'p1' | 'p2';
 interface MatchRecord extends OnlineMatchState {
   tokens: Record<Seat, string>;
   accepted: Array<{ revision: number; seat: Seat; command: ClientCommand }>;
+  playerIds?: Record<Seat, string>;
+  ratingsFinalized?: boolean;
+  ratingRetryAt?: number;
 }
 interface SocketAttachment { seat: Seat }
 
@@ -32,15 +37,16 @@ export class MatchObject extends DurableObject<Env> {
     ctx.blockConcurrencyWhile(async () => { this.record = await ctx.storage.get<MatchRecord>('match'); });
   }
 
-  async initialize(matchId: string, players?: Record<Seat, MatchPlayer>): Promise<{ matchId: string; seats: Record<Seat, string> }> {
+  async initialize(matchId: string, players?: Record<Seat, MatchPlayer>, playerIds?: Record<Seat, string>, format: 'abm-only' | 'multi-slot' = 'multi-slot'): Promise<{ matchId: string; seats: Record<Seat, string> }> {
     if (!this.record) {
       const seed = crypto.getRandomValues(new Uint32Array(1))[0]!;
       this.record = Object.assign(createOnlineMatch(matchId, players ?? {
         p1: { name: 'Player 1', platform: 'Web', rating: 1500 },
         p2: { name: 'Player 2', platform: 'Web', rating: 1500 },
-      }, seed, Date.now()), {
+      }, seed, Date.now(), format), {
         tokens: { p1: token(), p2: token() },
         accepted: [],
+        ...(playerIds ? { playerIds } : {}),
       });
       await this.ctx.storage.put('match', this.record);
       await this.scheduleAlarm();
@@ -86,6 +92,7 @@ export class MatchObject extends DurableObject<Env> {
         return;
       }
       this.record.accepted.push({ revision: this.record.revision, seat: attachment.seat, command });
+      await this.finalizeRating();
       await this.ctx.storage.put('match', this.record);
       await this.scheduleAlarm();
       this.broadcast();
@@ -95,10 +102,15 @@ export class MatchObject extends DurableObject<Env> {
   }
 
   async alarm(): Promise<void> {
-    if (!this.record || !advanceMatchDeadline(this.record, Date.now())) return;
+    if (!this.record) return;
+    const now = Date.now();
+    const advanced = advanceMatchDeadline(this.record, now);
+    const retryingRating = Boolean(this.record.ratingRetryAt && this.record.ratingRetryAt <= now);
+    if (advanced || retryingRating) await this.finalizeRating();
+    if (!advanced && !retryingRating) return;
     await this.ctx.storage.put('match', this.record);
     await this.scheduleAlarm();
-    this.broadcast();
+    if (advanced) this.broadcast();
   }
 
   private snapshot(seat: Seat) {
@@ -122,15 +134,36 @@ export class MatchObject extends DurableObject<Env> {
   }
 
   private async scheduleAlarm(): Promise<void> {
-    if (this.record?.deadlineAt) await this.ctx.storage.setAlarm(this.record.deadlineAt);
+    const deadlines = [this.record?.deadlineAt, this.record?.ratingRetryAt].filter((value): value is number => value !== undefined);
+    if (deadlines.length) await this.ctx.storage.setAlarm(Math.min(...deadlines));
+  }
+
+  private async finalizeRating(): Promise<void> {
+    const record = this.record;
+    if (!record?.winner || !record.playerIds || record.ratingsFinalized) return;
+    const deltas = eloDeltas(record.players.p1.rating, record.players.p2.rating, record.winner);
+    try {
+      await finalizeMatch(this.env.DB, {
+        resultId: record.matchId, matchId: record.matchId, seasonId: 'public-abm-test',
+        p1Id: record.playerIds.p1, p2Id: record.playerIds.p2, winnerId: record.playerIds[record.winner],
+        p1Delta: deltas.p1, p2Delta: deltas.p2,
+        summary: JSON.stringify({ format: record.format, games: record.games, winner: record.winner,
+          ratings: { p1: record.players.p1.rating, p2: record.players.p2.rating }, deltas }),
+      });
+      record.ratingsFinalized = true;
+      record.ratingRetryAt = undefined;
+    } catch {
+      record.ratingRetryAt = Date.now() + 5_000;
+    }
   }
 }
 
-interface QueueEntry { guestId: string; name: string; queuedAt: number }
+interface QueueEntry { guestId: string; name: string; rating: number; queuedAt: number }
 interface MatchTicket { matchId: string; seat: Seat; token: string }
 
 export class MatchmakerObject extends DurableObject<Env> {
-  async enqueue(guestId: string, name: string): Promise<{ status: 'waiting' } | ({ status: 'matched' } & MatchTicket)> {
+  async enqueue(guestId: string, guestSecret: string, name: string): Promise<{ status: 'waiting' } | ({ status: 'matched' } & MatchTicket)> {
+    const player = await authenticateGuest(this.env.DB, guestId, guestSecret, name);
     const ticket = await this.ctx.storage.get<MatchTicket>(`ticket:${guestId}`);
     if (ticket) {
       await this.ctx.storage.delete(`ticket:${guestId}`);
@@ -139,7 +172,7 @@ export class MatchmakerObject extends DurableObject<Env> {
     const queue = (await this.ctx.storage.get<QueueEntry[]>('queue')) ?? [];
     const opponent = queue.find((entry) => entry.guestId !== guestId);
     if (!opponent) {
-      if (!queue.some((entry) => entry.guestId === guestId)) queue.push({ guestId, name, queuedAt: Date.now() });
+      if (!queue.some((entry) => entry.guestId === guestId)) queue.push({ guestId, name, rating: player.rating, queuedAt: Date.now() });
       await this.ctx.storage.put('queue', queue);
       return { status: 'waiting' };
     }
@@ -147,9 +180,9 @@ export class MatchmakerObject extends DurableObject<Env> {
     const id = this.env.MATCHES.newUniqueId();
     const matchId = id.toString();
     const initialized = await this.env.MATCHES.get(id).initialize(matchId, {
-      p1: { name: opponent.name, platform: 'Web', rating: 1500 },
-      p2: { name, platform: 'Web', rating: 1500 },
-    });
+      p1: { name: opponent.name, platform: 'Web', rating: opponent.rating },
+      p2: { name, platform: 'Web', rating: player.rating },
+    }, { p1: opponent.guestId, p2: guestId }, 'abm-only');
     const first: MatchTicket = { matchId, seat: 'p1', token: initialized.seats.p1 };
     const second: MatchTicket = { matchId, seat: 'p2', token: initialized.seats.p2 };
     await this.ctx.storage.put(`ticket:${opponent.guestId}`, first);
@@ -184,7 +217,82 @@ abstract class BroadcastObject extends DurableObject<Env> {
   }
 }
 
-export class LobbyObject extends BroadcastObject { maxMessageBytes = 2_000; }
+interface LobbyAttachment extends LobbyPlayer {}
+interface LobbyGracePlayer extends LobbyPlayer { expiresAt: number }
+const LOBBY_GRACE_MS = 5_000;
+
+export class LobbyObject extends DurableObject<Env> {
+  async getOnlinePlayerCount(): Promise<number> { return (await this.roster()).length; }
+
+  async fetch(request: Request): Promise<Response> {
+    if (request.headers.get('Upgrade') !== 'websocket') return json({ error: 'WebSocket required.' }, 426);
+    const url = new URL(request.url);
+    const playerId = url.searchParams.get('guest');
+    if (!playerId || !validClientId(playerId)) return json({ error: 'Invalid guest.' }, 400);
+    const displayName = sanitizeText(url.searchParams.get('name'), 50) || 'Guest';
+    await this.ctx.storage.delete(`lobby:grace:${playerId}`);
+    const pair = new WebSocketPair(); const [client, server] = Object.values(pair);
+    this.ctx.acceptWebSocket(server);
+    server.serializeAttachment({ playerId, displayName, presence: 'idle' } satisfies LobbyAttachment);
+    await this.broadcastRoster();
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
+  async webSocketMessage(socket: WebSocket, raw: string | ArrayBuffer): Promise<void> {
+    if (typeof raw !== 'string' || raw.length > 2_000) return;
+    try {
+      const message = JSON.parse(raw) as { type?: unknown; presence?: unknown };
+      if (message.type !== 'presence' || !isLobbyPresence(message.presence)) throw new Error('Invalid presence.');
+      const attachment = socket.deserializeAttachment() as LobbyAttachment | null;
+      if (!attachment) return;
+      for (const candidate of this.ctx.getWebSockets()) {
+        const player = candidate.deserializeAttachment() as LobbyAttachment | null;
+        if (player?.playerId === attachment.playerId) candidate.serializeAttachment({ ...player, presence: message.presence });
+      }
+      await this.broadcastRoster();
+    } catch { socket.send(JSON.stringify({ type: 'error', message: 'Invalid lobby message.' } satisfies LobbyServerMessage)); }
+  }
+
+  async webSocketClose(socket: WebSocket): Promise<void> {
+    const player = socket.deserializeAttachment() as LobbyAttachment | null;
+    if (!player || this.connectedPlayers(socket).some((candidate) => candidate.playerId === player.playerId)) return;
+    await this.ctx.storage.put(`lobby:grace:${player.playerId}`, { ...player, expiresAt: Date.now() + LOBBY_GRACE_MS } satisfies LobbyGracePlayer);
+    await this.ctx.storage.setAlarm(Date.now() + LOBBY_GRACE_MS);
+    await this.broadcastRoster();
+  }
+
+  async alarm(): Promise<void> {
+    const grace = await this.ctx.storage.list<LobbyGracePlayer>({ prefix: 'lobby:grace:' });
+    const now = Date.now(); const expired = [...grace].filter(([, player]) => player.expiresAt <= now).map(([key]) => key);
+    if (expired.length) await this.ctx.storage.delete(expired);
+    const remaining = [...grace.values()].filter((player) => player.expiresAt > now);
+    if (remaining.length) await this.ctx.storage.setAlarm(Math.min(...remaining.map((player) => player.expiresAt)));
+    await this.broadcastRoster();
+  }
+
+  private connectedPlayers(exclude?: WebSocket): LobbyAttachment[] {
+    return this.ctx.getWebSockets().flatMap((socket) => {
+      if (socket === exclude) return [];
+      const player = socket.deserializeAttachment() as LobbyAttachment | null; return player ? [player] : [];
+    });
+  }
+
+  private async roster(): Promise<LobbyPlayer[]> {
+    const players = new Map<string, LobbyPlayer>();
+    const grace = await this.ctx.storage.list<LobbyGracePlayer>({ prefix: 'lobby:grace:' });
+    for (const player of grace.values()) if (player.expiresAt > Date.now()) players.set(player.playerId, player);
+    for (const player of this.connectedPlayers()) players.set(player.playerId, player);
+    return [...players.values()].map(({ playerId, displayName, presence }) => ({ playerId, displayName, presence }));
+  }
+
+  private async broadcastRoster(): Promise<void> {
+    const players = await this.roster();
+    for (const socket of this.ctx.getWebSockets()) {
+      const self = socket.deserializeAttachment() as LobbyAttachment | null;
+      if (self) socket.send(JSON.stringify({ type: 'roster', selfId: self.playerId, players } satisfies LobbyServerMessage));
+    }
+  }
+}
 
 interface WhiteboardAttachment { strokeTimes: number[] }
 const WHITEBOARD_MAX_OPERATIONS = 800;
@@ -205,9 +313,17 @@ export class WhiteboardObject extends DurableObject<Env> {
 
   async fetch(request: Request): Promise<Response> {
     if (request.headers.get('Upgrade') !== 'websocket') return json({ error: 'WebSocket required.' }, 426);
+    const url = new URL(request.url);
     const pair = new WebSocketPair(); const [client, server] = Object.values(pair);
     this.ctx.acceptWebSocket(server); server.serializeAttachment({ strokeTimes: [] } satisfies WhiteboardAttachment);
     this.send(server, { type: 'snapshot', board: this.board });
+    const visit = url.searchParams.get('visit');
+    if (visit && validClientId(visit) && !this.board.operations.some((operation) => operation.clientOperationId === `join:${visit}`)) {
+      const name = sanitizeText(url.searchParams.get('name'), 50) || 'Guest';
+      const operation = this.createSystemText(`${name} entered the lobby!`, `join:${visit}`);
+      this.board.operations.push(operation); this.board.sequence = operation.sequence; this.board.nextY = operation.rowY + operation.rowSpan * this.board.rowHeight;
+      await this.persistOperation(operation); this.broadcast({ type: 'operation', operation }); await this.trimIfNeeded();
+    }
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -215,10 +331,10 @@ export class WhiteboardObject extends DurableObject<Env> {
     if (typeof raw !== 'string' || new TextEncoder().encode(raw).byteLength > 16_000) { this.error(socket, 'message-too-large', 'Message too large.'); return; }
     try {
       const message = JSON.parse(raw) as WhiteboardClientMessage;
-      if (!message || !['chat', 'stroke', 'erase'].includes(message.type) || !validClientId(message.clientOperationId)) throw new Error('Invalid whiteboard message.');
+      if (!message || !['chat', 'status', 'stroke', 'erase'].includes(message.type) || !validClientId(message.clientOperationId)) throw new Error('Invalid whiteboard message.');
       const duplicate = this.board.operations.find((operation) => operation.clientOperationId === message.clientOperationId);
       if (duplicate) { this.send(socket, { type: 'operation', operation: duplicate }); return; }
-      if (message.type !== 'chat' && !this.allowStroke(socket)) { this.error(socket, 'rate-limited', 'Drawing too quickly.'); return; }
+      if ((message.type === 'stroke' || message.type === 'erase') && !this.allowStroke(socket)) { this.error(socket, 'rate-limited', 'Drawing too quickly.'); return; }
       const operation = this.createOperation(message);
       if (!operation) throw new Error('Invalid whiteboard content.');
       this.board.operations.push(operation); this.board.sequence = operation.sequence;
@@ -232,6 +348,11 @@ export class WhiteboardObject extends DurableObject<Env> {
 
   private createOperation(message: WhiteboardClientMessage): WhiteboardOperation | undefined {
     const common = { id: crypto.randomUUID(), sequence: this.board.sequence + 1, clientOperationId: message.clientOperationId };
+    if (message.type === 'status') {
+      if (message.status !== 'ready') return;
+      const name = sanitizeText(message.displayName, 50) || 'Guest';
+      return this.createSystemText(`${name} is ready to play!`, message.clientOperationId);
+    }
     if (message.type === 'chat') {
       const text = sanitizeText(message.text, 200); const displayName = sanitizeText(message.displayName, 50);
       if (!text) return;
@@ -244,6 +365,12 @@ export class WhiteboardObject extends DurableObject<Env> {
     return message.type === 'erase'
       ? { ...common, kind: 'erase', width: 120, points }
       : { ...common, kind: 'stroke', color: normalizeColor(message.color), width: 5, points };
+  }
+
+  private createSystemText(text: string, clientOperationId: string): Extract<WhiteboardOperation, { kind: 'text' }> {
+    const rowSpan = Math.max(1, Math.min(3, Math.ceil(text.length / 37)));
+    return { kind: 'text', id: crypto.randomUUID(), sequence: this.board.sequence + 1, clientOperationId,
+      displayName: '', text, color: 'black', system: true, rowY: this.board.nextY, rowSpan };
   }
 
   private allowStroke(socket: WebSocket): boolean {
@@ -317,19 +444,41 @@ export async function finalizeMatch(db: D1Database, result: {
   return responses[3]?.meta.changes === 1 ? 'applied' : 'duplicate';
 }
 
+async function authenticateGuest(db: D1Database, guestId: string, secret: string, displayName: string): Promise<{ rating: number }> {
+  if (!validClientId(guestId) || secret.length < 32 || secret.length > 256) throw new Error('Invalid guest credentials.');
+  const secretHash = await sha256(secret);
+  await db.prepare('INSERT OR IGNORE INTO players (player_id, guest_secret_hash, display_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
+    .bind(guestId, secretHash, displayName, Date.now(), Date.now()).run();
+  const player = await db.prepare('SELECT guest_secret_hash, rating FROM players WHERE player_id = ?').bind(guestId)
+    .first<{ guest_secret_hash: string; rating: number }>();
+  if (!player || player.guest_secret_hash !== secretHash) throw new Error('Invalid guest credentials.');
+  await db.prepare('UPDATE players SET display_name = ?, updated_at = ? WHERE player_id = ?').bind(displayName, Date.now(), guestId).run();
+  return { rating: player.rating };
+}
+
+async function sha256(value: string): Promise<string> {
+  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+  return [...new Uint8Array(bytes)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders() });
     const url = new URL(request.url);
     if (url.pathname === '/health') return json({ ok: true });
+    if (url.pathname === '/online-status') return json({ playersOnline: await env.LOBBY.getByName('global').getOnlinePlayerCount() });
     if (url.pathname === '/matches' && request.method === 'POST') {
       const id = env.MATCHES.newUniqueId();
       return json(await env.MATCHES.get(id).initialize(id.toString()), 201);
     }
     if (url.pathname === '/matchmaking' && request.method === 'POST') {
-      const body = await request.json<{ guestId?: string; name?: string }>();
-      if (!body.guestId || !body.name) return json({ error: 'guestId and name are required.' }, 400);
-      return json(await env.MATCHMAKER.getByName('global').enqueue(body.guestId, body.name));
+      const body = await request.json<{ guestId?: string; guestSecret?: string; name?: string }>();
+      if (!body.guestId || !body.guestSecret || !body.name) return json({ error: 'guestId, guestSecret, and name are required.' }, 400);
+      try {
+        return json(await env.MATCHMAKER.getByName('global').enqueue(body.guestId, body.guestSecret, sanitizeText(body.name, 50) || 'Guest'));
+      } catch (error) {
+        return json({ error: error instanceof Error ? error.message : 'Matchmaking failed.' }, 401);
+      }
     }
     if (url.pathname === '/matchmaking' && request.method === 'DELETE') {
       const guestId = url.searchParams.get('guestId');

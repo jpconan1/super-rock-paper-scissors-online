@@ -1,5 +1,5 @@
 import type { SlotId } from './slots';
-import type { TimedSemanticEvent } from '../protocol/protocol';
+import type { MatchPlayer, TimedSemanticEvent } from '../protocol/protocol';
 import type { AssetBundleId } from '../assets/assetBundleTypes';
 
 export type PlayerId = 'p1' | 'p2';
@@ -7,6 +7,7 @@ export type PlayerId = 'p1' | 'p2';
 export interface VariantGameResult {
   winner: PlayerId;
   scores: Record<PlayerId, number>;
+  reason?: 'forfeit';
 }
 
 export interface DeterministicContext {
@@ -28,6 +29,8 @@ export interface VariantRules<TState, TCommand, TProjection, TResult> {
   readonly rulesVersion: number;
   initialize(context: DeterministicContext): TState;
   resolve(state: TState, player: PlayerId, command: TCommand, context: DeterministicContext): VariantResolution<TState>;
+  nextDeadline?(state: TState): number | undefined;
+  advanceDeadline?(state: TState, context: DeterministicContext): VariantResolution<TState> | undefined;
   project(state: TState, viewer: PlayerId): TProjection;
   result(state: TState): TResult | undefined;
 }
@@ -37,6 +40,9 @@ export interface VariantPresentationContext<TCommand> {
   signal: AbortSignal;
   send(command: TCommand): void;
   openMenu(): void;
+  backToLobby?(): void;
+  self?: PlayerId;
+  players?: Readonly<Record<PlayerId, MatchPlayer>>;
 }
 
 export interface PresentationAssetLease {

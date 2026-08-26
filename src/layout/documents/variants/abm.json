@@ -4,29 +4,1268 @@
   "title": "Attack Block Mana",
   "kind": "variant",
   "canvases": {
-    "landscape": { "width": 960, "height": 540, "minAspectRatio": 1 },
-    "portrait": { "width": 390, "height": 705, "minAspectRatio": 0 }
+    "landscape": {
+      "width": 960,
+      "height": 540,
+      "minAspectRatio": 1
+    },
+    "portrait": {
+      "width": 390,
+      "height": 705,
+      "minAspectRatio": 0
+    }
   },
   "copy": {
     "variantId": "attack-block-mana",
     "buttonAssetKey": "rps",
     "assetBundleId": "variant:abm",
     "buttonLabel": "Attack Block Mana",
-    "rulesLabel": "Attack Block Mana rules"
+    "rulesLabel": "Attack Block Mana rules",
+    "rules": "Rules",
+    "menu": "Menu",
+    "wins": "Wins",
+    "youPicked": "You picked",
+    "theyPicked": "They picked"
   },
   "rules": {
     "lead": "Attack costs Mana, Block stops Attack, and Mana builds your next Attack.",
-    "paragraphs": ["Choose a class, then win three rounds."]
+    "paragraphs": [
+      "Choose a class, then win three rounds."
+    ]
   },
   "elements": [
-    { "id": "picker-group", "type": "group", "layouts": { "landscape": { "x": 0, "y": 0, "width": 352, "height": 176 }, "portrait": { "x": 0, "y": 0, "width": 352, "height": 176 } } },
-    { "id": "picker-prev", "type": "button", "parent": "picker-group", "layouts": { "landscape": { "x": 0, "y": 56, "width": 64, "height": 32 }, "portrait": { "x": 0, "y": 56, "width": 64, "height": 32 } } },
-    { "id": "picker-next", "type": "button", "parent": "picker-group", "layouts": { "landscape": { "x": 288, "y": 56, "width": 64, "height": 32 }, "portrait": { "x": 288, "y": 56, "width": 64, "height": 32 } } },
-    { "id": "controls-group", "type": "group", "layouts": { "landscape": { "x": 0, "y": 0, "width": 960, "height": 190 }, "portrait": { "x": 0, "y": 0, "width": 390, "height": 190 } } },
-    { "id": "lock-class", "type": "control", "parent": "controls-group", "layouts": { "landscape": { "x": 400, "y": 50, "width": 160, "height": 64 }, "portrait": { "x": 115, "y": 50, "width": 160, "height": 64 } } },
-    { "id": "attack", "type": "control", "parent": "controls-group", "layouts": { "landscape": { "x": 300, "y": 54, "width": 120, "height": 58 }, "portrait": { "x": 5, "y": 54, "width": 120, "height": 58 } } },
-    { "id": "block", "type": "control", "parent": "controls-group", "layouts": { "landscape": { "x": 420, "y": 18, "width": 120, "height": 58 }, "portrait": { "x": 135, "y": 18, "width": 120, "height": 58 } } },
-    { "id": "mana", "type": "control", "parent": "controls-group", "layouts": { "landscape": { "x": 540, "y": 54, "width": 120, "height": 58 }, "portrait": { "x": 265, "y": 54, "width": 120, "height": 58 } } },
-    { "id": "activate", "type": "control", "parent": "controls-group", "layouts": { "landscape": { "x": 420, "y": 112, "width": 120, "height": 50 }, "portrait": { "x": 135, "y": 112, "width": 120, "height": 50 } } }
+    {
+      "id": "p1-info",
+      "type": "dynamic-text",
+      "protected": true,
+      "binding": "p1-info",
+      "layouts": {
+        "landscape": {
+          "x": 12,
+          "y": 120,
+          "width": 190,
+          "height": 72
+        },
+        "portrait": {
+          "x": 12,
+          "y": 98,
+          "width": 180,
+          "height": 52
+        }
+      }
+    },
+    {
+      "id": "turn",
+      "type": "sprite",
+      "protected": true,
+      "binding": "turn",
+      "assets": {
+        "src": "/visual-elements/time-counters/turn0-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 400,
+          "y": 0,
+          "width": 160,
+          "height": 80,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 115,
+          "y": 0,
+          "width": 160,
+          "height": 80,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "p2-info",
+      "type": "dynamic-text",
+      "protected": true,
+      "binding": "p2-info",
+      "layouts": {
+        "landscape": {
+          "x": 758,
+          "y": 120,
+          "width": 190,
+          "height": 72
+        },
+        "portrait": {
+          "x": 198,
+          "y": 98,
+          "width": 180,
+          "height": 52
+        }
+      }
+    },
+    {
+      "id": "p1-wins-label",
+      "type": "sprite",
+      "protected": true,
+      "assets": {
+        "src": "/visual-elements/win-couters/wins_label_sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 150,
+          "y": 0,
+          "width": 96,
+          "height": 48,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 74,
+          "y": 0,
+          "width": 72,
+          "height": 36,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "p2-wins-label",
+      "type": "sprite",
+      "protected": true,
+      "assets": {
+        "src": "/visual-elements/win-couters/wins_label_sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 714,
+          "y": 0,
+          "width": 96,
+          "height": 48,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 244,
+          "y": 0,
+          "width": 72,
+          "height": 36,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "p1-wins",
+      "type": "sprite",
+      "protected": true,
+      "binding": "p1-wins",
+      "assets": {
+        "src": "/visual-elements/win-couters/ft3-win-counter-0-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 166,
+          "y": 44,
+          "width": 64,
+          "height": 64,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 90,
+          "y": 26,
+          "width": 48,
+          "height": 48,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "p2-wins",
+      "type": "sprite",
+      "protected": true,
+      "binding": "p2-wins",
+      "assets": {
+        "src": "/visual-elements/win-couters/ft3-win-counter-0-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 730,
+          "y": 44,
+          "width": 64,
+          "height": 64,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 252,
+          "y": 26,
+          "width": 48,
+          "height": 48,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "p1-picked",
+      "type": "sprite",
+      "protected": true,
+      "assets": {
+        "src": "/visual-elements/you_picked_sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 28,
+          "y": 204,
+          "width": 128,
+          "height": 64,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 24,
+          "y": 162,
+          "width": 96,
+          "height": 48,
+          "aspectLock": true
+        }
+      },
+      "visible": false
+    },
+    {
+      "id": "p2-picked",
+      "type": "sprite",
+      "protected": true,
+      "assets": {
+        "src": "/visual-elements/they_picked_sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 793,
+          "y": 204,
+          "width": 150,
+          "height": 64,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 262,
+          "y": 162,
+          "width": 112,
+          "height": 47.78666666666667,
+          "aspectLock": true
+        }
+      },
+      "visible": false
+    },
+    {
+      "id": "scene",
+      "type": "group",
+      "protected": true,
+      "binding": "scene",
+      "layouts": {
+        "landscape": {
+          "x": 304,
+          "y": 135,
+          "width": 352,
+          "height": 176,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 19,
+          "y": 270,
+          "width": 352,
+          "height": 176,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "scene-art",
+      "type": "sprite",
+      "parent": "scene",
+      "assets": {
+        "src": "/variants/abm/scenes/abm-standoff-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 0,
+          "y": 0,
+          "width": 352,
+          "height": 176,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 0,
+          "y": 0,
+          "width": 352,
+          "height": 176,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "picker-portrait",
+      "type": "sprite",
+      "parent": "scene",
+      "assets": {
+        "src": "/variants/abm/advantaged-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 0,
+          "y": 0,
+          "width": 176,
+          "height": 176,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 0,
+          "y": 0,
+          "width": 176,
+          "height": 176,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "picker-copy",
+      "type": "dynamic-text",
+      "parent": "scene",
+      "label": "Class name and description",
+      "layouts": {
+        "landscape": {
+          "x": 176,
+          "y": 0,
+          "width": 176,
+          "height": 176
+        },
+        "portrait": {
+          "x": 176,
+          "y": 0,
+          "width": 176,
+          "height": 176
+        }
+      }
+    },
+    {
+      "id": "p1-class-badge",
+      "type": "sprite",
+      "assets": {
+        "src": "/variants/abm/advantaged-badge-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 12,
+          "y": 200,
+          "width": 140,
+          "height": 34.52054794520548,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 12,
+          "y": 160,
+          "width": 120,
+          "height": 29.589041095890412,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "p2-class-badge",
+      "type": "sprite",
+      "assets": {
+        "src": "/variants/abm/advantaged-badge-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 808,
+          "y": 200,
+          "width": 140,
+          "height": 34.52054794520548,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 258,
+          "y": 160,
+          "width": 120,
+          "height": 29.589041095890412,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "waiting-ready",
+      "type": "sprite",
+      "parent": "scene",
+      "assets": {
+        "src": "/visual-elements/ready-waiting/rdy_sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 116,
+          "y": 28,
+          "width": 120,
+          "height": 102.4,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 116,
+          "y": 28,
+          "width": 120,
+          "height": 102.4,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "waiting-dots",
+      "type": "sprite",
+      "parent": "scene",
+      "assets": {
+        "src": "/visual-elements/ready-waiting/waiting1_sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 151,
+          "y": 0,
+          "width": 50,
+          "height": 20.37037037037037,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 151,
+          "y": 0,
+          "width": 50,
+          "height": 20.37037037037037,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "p1-move",
+      "type": "group",
+      "protected": true,
+      "binding": "p1-move",
+      "layouts": {
+        "landscape": {
+          "x": 12,
+          "y": 252,
+          "width": 160,
+          "height": 80
+        },
+        "portrait": {
+          "x": 12,
+          "y": 198,
+          "width": 120,
+          "height": 60
+        }
+      }
+    },
+    {
+      "id": "p2-move",
+      "type": "group",
+      "protected": true,
+      "binding": "p2-move",
+      "layouts": {
+        "landscape": {
+          "x": 788,
+          "y": 252,
+          "width": 160,
+          "height": 80
+        },
+        "portrait": {
+          "x": 258,
+          "y": 198,
+          "width": 120,
+          "height": 60
+        }
+      }
+    },
+    {
+      "id": "p1-resources",
+      "type": "group",
+      "protected": true,
+      "binding": "p1-resources",
+      "layouts": {
+        "landscape": {
+          "x": 200,
+          "y": 330,
+          "width": 160,
+          "height": 60
+        },
+        "portrait": {
+          "x": 40,
+          "y": 450,
+          "width": 120,
+          "height": 47
+        }
+      },
+      "visible": true
+    },
+    {
+      "id": "p1-mana-group",
+      "type": "group",
+      "parent": "p1-resources",
+      "layouts": {
+        "landscape": {
+          "x": 0,
+          "y": 0,
+          "width": 160,
+          "height": 39
+        },
+        "portrait": {
+          "x": 0,
+          "y": 0,
+          "width": 120,
+          "height": 30
+        }
+      },
+      "visible": true
+    },
+    {
+      "id": "p1-mana-icon",
+      "type": "sprite",
+      "parent": "p1-mana-group",
+      "assets": {
+        "src": "/variants/abm/mana-icon-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 25,
+          "y": 0,
+          "width": 35,
+          "height": 35,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 15,
+          "y": 0,
+          "width": 30,
+          "height": 30,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "p1-mana-count",
+      "type": "sprite",
+      "parent": "p1-mana-group",
+      "assets": {
+        "src": "/visual-elements/resource-counters/times1-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 70,
+          "y": 0,
+          "width": 64,
+          "height": 32,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 50,
+          "y": 0,
+          "width": 60,
+          "height": 30,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "p1-block-group",
+      "type": "group",
+      "parent": "p1-resources",
+      "layouts": {
+        "landscape": {
+          "x": 0,
+          "y": 34,
+          "width": 160,
+          "height": 26
+        },
+        "portrait": {
+          "x": 0,
+          "y": 27,
+          "width": 120,
+          "height": 20
+        }
+      },
+      "visible": true
+    },
+    {
+      "id": "p1-block-1",
+      "type": "sprite",
+      "parent": "p1-block-group",
+      "assets": {
+        "src": "/variants/abm/block-icon-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 5,
+          "y": 0,
+          "width": 26,
+          "height": 26,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 0,
+          "y": 0,
+          "width": 20,
+          "height": 20,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "p1-block-2",
+      "type": "sprite",
+      "parent": "p1-block-group",
+      "assets": {
+        "src": "/variants/abm/block-icon-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 31,
+          "y": 0,
+          "width": 26,
+          "height": 26,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 20,
+          "y": 0,
+          "width": 20,
+          "height": 20,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "p1-block-3",
+      "type": "sprite",
+      "parent": "p1-block-group",
+      "assets": {
+        "src": "/variants/abm/block-icon-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 57,
+          "y": 0,
+          "width": 26,
+          "height": 26,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 40,
+          "y": 0,
+          "width": 20,
+          "height": 20,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "p1-block-4",
+      "type": "sprite",
+      "parent": "p1-block-group",
+      "assets": {
+        "src": "/variants/abm/block-icon-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 83,
+          "y": 0,
+          "width": 26,
+          "height": 26,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 60,
+          "y": 0,
+          "width": 20,
+          "height": 20,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "p1-block-5",
+      "type": "sprite",
+      "parent": "p1-block-group",
+      "assets": {
+        "src": "/variants/abm/block-icon-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 109,
+          "y": 0,
+          "width": 26,
+          "height": 26,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 80,
+          "y": 0,
+          "width": 20,
+          "height": 20,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "p2-resources",
+      "type": "group",
+      "protected": true,
+      "binding": "p2-resources",
+      "layouts": {
+        "landscape": {
+          "x": 605,
+          "y": 330,
+          "width": 197,
+          "height": 60
+        },
+        "portrait": {
+          "x": 215,
+          "y": 450,
+          "width": 178,
+          "height": 47
+        }
+      },
+      "visible": true,
+      "stateVisibility": {
+        "class-select": false,
+        "battle": true,
+        "waiting": true
+      }
+    },
+    {
+      "id": "p2-mana-group",
+      "type": "group",
+      "parent": "p2-resources",
+      "layouts": {
+        "landscape": {
+          "x": 0,
+          "y": 0,
+          "width": 193,
+          "height": 39
+        },
+        "portrait": {
+          "x": 0,
+          "y": 0,
+          "width": 174,
+          "height": 30
+        }
+      }
+    },
+    {
+      "id": "p2-mana-count",
+      "type": "sprite",
+      "parent": "p2-mana-group",
+      "assets": {
+        "src": "/visual-elements/resource-counters/times1-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 95,
+          "y": 0,
+          "width": 64,
+          "height": 32,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 75,
+          "y": 0,
+          "width": 60,
+          "height": 30,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "p2-mana-icon",
+      "type": "sprite",
+      "parent": "p2-mana-group",
+      "assets": {
+        "src": "/variants/abm/mana-icon-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 50,
+          "y": 0,
+          "width": 35,
+          "height": 35,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 40,
+          "y": 0,
+          "width": 30,
+          "height": 30,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "p2-block-group",
+      "type": "group",
+      "parent": "p2-resources",
+      "layouts": {
+        "landscape": {
+          "x": 0,
+          "y": 34,
+          "width": 160,
+          "height": 26
+        },
+        "portrait": {
+          "x": 0,
+          "y": 27,
+          "width": 120,
+          "height": 20
+        }
+      }
+    },
+    {
+      "id": "p2-block-1",
+      "type": "sprite",
+      "parent": "p2-block-group",
+      "assets": {
+        "src": "/variants/abm/block-icon-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 25,
+          "y": 0,
+          "width": 26,
+          "height": 26,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 20,
+          "y": 0,
+          "width": 20,
+          "height": 20,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "p2-block-2",
+      "type": "sprite",
+      "parent": "p2-block-group",
+      "assets": {
+        "src": "/variants/abm/block-icon-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 51,
+          "y": 0,
+          "width": 26,
+          "height": 26,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 40,
+          "y": 0,
+          "width": 20,
+          "height": 20,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "p2-block-3",
+      "type": "sprite",
+      "parent": "p2-block-group",
+      "assets": {
+        "src": "/variants/abm/block-icon-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 77,
+          "y": 0,
+          "width": 26,
+          "height": 26,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 60,
+          "y": 0,
+          "width": 20,
+          "height": 20,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "p2-block-4",
+      "type": "sprite",
+      "parent": "p2-block-group",
+      "assets": {
+        "src": "/variants/abm/block-icon-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 103,
+          "y": 0,
+          "width": 26,
+          "height": 26,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 80,
+          "y": 0,
+          "width": 20,
+          "height": 20,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "p2-block-5",
+      "type": "sprite",
+      "parent": "p2-block-group",
+      "assets": {
+        "src": "/variants/abm/block-icon-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 129,
+          "y": 0,
+          "width": 26,
+          "height": 26,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 100,
+          "y": 0,
+          "width": 20,
+          "height": 20,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "controls",
+      "type": "group",
+      "protected": true,
+      "binding": "controls",
+      "layouts": {
+        "landscape": {
+          "x": 0,
+          "y": 338,
+          "width": 960,
+          "height": 190
+        },
+        "portrait": {
+          "x": 0,
+          "y": 503,
+          "width": 390,
+          "height": 190
+        }
+      }
+    },
+    {
+      "id": "picker-prev",
+      "type": "button",
+      "parent": "controls",
+      "label": "Previous class",
+      "assets": {
+        "up": "/variants/abm/Prev-button-up-sheet.webp",
+        "between": "/variants/abm/Prev-button-between-sheet.webp",
+        "depressed": "/variants/abm/Prev-button-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 250,
+          "y": 85,
+          "width": 128,
+          "height": 64,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 10,
+          "y": 70,
+          "width": 96,
+          "height": 48,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "lock-class",
+      "type": "button",
+      "parent": "controls",
+      "label": "Select",
+      "assets": {
+        "up": "/new-buttons/select-button-up-sheet.webp",
+        "between": "/new-buttons/select-button-between-sheet.webp",
+        "depressed": "/new-buttons/select-button-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 400,
+          "y": 75,
+          "width": 160,
+          "height": 80,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 125,
+          "y": 60,
+          "width": 140,
+          "height": 70,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "picker-next",
+      "type": "button",
+      "parent": "controls",
+      "label": "Next class",
+      "assets": {
+        "up": "/variants/abm/next-button-up-sheet.webp",
+        "between": "/variants/abm/next-button-between-sheet.webp",
+        "depressed": "/variants/abm/next-button-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 585,
+          "y": 85,
+          "width": 128,
+          "height": 64,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 280,
+          "y": 70,
+          "width": 95,
+          "height": 47.5,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "attack",
+      "type": "button",
+      "parent": "controls",
+      "label": "Attack",
+      "assets": {
+        "up": "/variants/abm/attack-button-up-sheet.webp",
+        "between": "/variants/abm/attack-button-between-sheet.webp",
+        "depressed": "/variants/abm/attack-button-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 385,
+          "y": 0,
+          "width": 150,
+          "height": 80,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 115,
+          "y": 5,
+          "width": 150,
+          "height": 80,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "block",
+      "type": "button",
+      "parent": "controls",
+      "label": "Block",
+      "assets": {
+        "up": "/variants/abm/block-button-up-sheet.webp",
+        "between": "/variants/abm/block-button-between-sheet.webp",
+        "depressed": "/variants/abm/block-button-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 245,
+          "y": 105,
+          "width": 150,
+          "height": 75,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 15,
+          "y": 105,
+          "width": 150,
+          "height": 75,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "mana",
+      "type": "button",
+      "parent": "controls",
+      "label": "Mana",
+      "assets": {
+        "up": "/variants/abm/mana-up-sheet.webp",
+        "between": "/variants/abm/mana-between-sheet.webp",
+        "depressed": "/variants/abm/mana-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 485,
+          "y": 90,
+          "width": 140,
+          "height": 93.16176470588236,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 235,
+          "y": 85,
+          "width": 135,
+          "height": 89.83455882352942,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "back-lobby",
+      "type": "button",
+      "parent": "controls",
+      "label": "Back to Lobby",
+      "assets": {
+        "up": "/visual-elements/system-scenes/back-lobby-button-up-sheet.webp",
+        "between": "/visual-elements/system-scenes/back-lobby-button-between-sheet.webp",
+        "depressed": "/visual-elements/system-scenes/back-lobby-button-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 352,
+          "y": 31,
+          "width": 256,
+          "height": 128,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 67,
+          "y": 31,
+          "width": 256,
+          "height": 128,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "arrow-attack-block",
+      "type": "decoration",
+      "parent": "controls",
+      "assets": {
+        "src": "/visual-elements/arrows/arrow-blue-upright-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 345,
+          "y": 65,
+          "width": 33,
+          "height": 36.04615384615385,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 70,
+          "y": 65,
+          "width": 33,
+          "height": 36.04615384615385,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "arrow-block-mana",
+      "type": "decoration",
+      "parent": "controls",
+      "assets": {
+        "src": "/visual-elements/arrows/arrow-red-downright-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 540,
+          "y": 55,
+          "width": 33,
+          "height": 36.04615384615385,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 270,
+          "y": 50,
+          "width": 33,
+          "height": 36.04615384615385,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "arrow-mana-attack",
+      "type": "decoration",
+      "parent": "controls",
+      "assets": {
+        "src": "/variants/abm/arrow-purp-left-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 410,
+          "y": 125,
+          "width": 64,
+          "height": 32,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 165,
+          "y": 120,
+          "width": 64,
+          "height": 32,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "menu",
+      "type": "button",
+      "protected": true,
+      "behavior": "game-menu",
+      "assets": {
+        "up": "/interactive-elements/burger-button-up-sheet.webp",
+        "between": "/interactive-elements/burger-button-between-sheet.webp",
+        "depressed": "/interactive-elements/burger-button-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 12,
+          "y": 12,
+          "width": 64,
+          "height": 64,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 12,
+          "y": 12,
+          "width": 64,
+          "height": 64,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "rules",
+      "type": "button",
+      "protected": true,
+      "behavior": "game-rules",
+      "assets": {
+        "up": "/interactive-elements/rulebook-button-up-sheet.webp",
+        "between": "/interactive-elements/rulebook-button-between-sheet.webp",
+        "depressed": "/interactive-elements/rulebook-button-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 884,
+          "y": 12,
+          "width": 64,
+          "height": 64,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 314,
+          "y": 12,
+          "width": 64,
+          "height": 64,
+          "aspectLock": true
+        }
+      }
+    }
   ]
 }

@@ -46,8 +46,10 @@ vi.mock('../src/layout/scaleBox', async (importOriginal) => {
 
 import {
   GAME_LAYOUT_SLOT_NAMES,
+  YOU_TAG_ART,
   createGameLayout,
   createGameLayoutSlots,
+  getYouTagGeometry,
   mountGameLayoutVariantContent,
 } from '../src/layout/gameLayout';
 import { FIREBALL_WAR_LAYOUTS, FIREBALL_WAR_MOVE_ART } from '../src/variants/fireballWar/fireballWarScreen';
@@ -168,9 +170,22 @@ describe('shared game layout contract', () => {
     expect(mocks.stop).toHaveBeenCalledOnce();
     expect(mocks.buttonDestroys).toHaveLength(2);
     expect(mocks.buttonDestroys.every((destroy) => destroy.mock.calls.length === 1)).toBe(true);
-    expect(mocks.spriteDestroys).toHaveLength(8);
+    expect(mocks.spriteDestroys).toHaveLength(9);
     expect(mocks.spriteDestroys.every((destroy) => destroy.mock.calls.length === 1)).toBe(true);
     expect(container.children).toHaveLength(0);
+  });
+
+  test('positions the viewer tag outside landscape scenes and clamped over portrait edges', () => {
+    const landscapeScene = { x: 304, y: 135, width: 352, height: 176 };
+    const portraitScene = { x: 19, y: 270, width: 352, height: 176 };
+    expect(getYouTagGeometry('p1', 'landscape', landscapeScene, 960)).toEqual({ x: 176, y: 191, width: 128, height: 64 });
+    expect(getYouTagGeometry('p2', 'landscape', landscapeScene, 960)).toEqual({ x: 656, y: 191, width: 128, height: 64 });
+    expect(getYouTagGeometry('p1', 'portrait', portraitScene, 390)).toEqual({ x: 0, y: 326, width: 128, height: 64 });
+    expect(getYouTagGeometry('p2', 'portrait', portraitScene, 390)).toEqual({ x: 262, y: 326, width: 128, height: 64 });
+    expect(YOU_TAG_ART).toEqual({
+      p1: '/visual-elements/you-tag-p1-sheet.webp',
+      p2: '/visual-elements/you-tag-p2-sheet.webp',
+    });
   });
 
   test('reports responsive layout changes to variant content', () => {

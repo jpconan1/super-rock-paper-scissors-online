@@ -2,8 +2,9 @@ import { AnimationPlayer } from '../animation/animationPlayer';
 import type { BoilClock } from '../animation/boilClock';
 import { createBoilingSprite } from './boilingSprite';
 import type { CoveredSwap } from './wipeTransition';
+import { ANIMATION_FRAME_MS } from '../core/time';
 
-const STEP_MS = 58;
+const STEP_MS = ANIMATION_FRAME_MS;
 
 // These are composite drawings, not a forward/reverse frame sequence. Order and
 // layering match the original canvas renderer. Step 5 is fully white.

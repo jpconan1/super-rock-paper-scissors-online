@@ -108,7 +108,7 @@ export function mountVariantSelectScreen(options: VariantSelectScreenOptions): V
   });
   composition.append(header.element, ...slotButtons, back.element, curtainLeft.element, curtainRight.element);
   const banCounter = options.mode === 'ban' ? createBoilingSprite({
-    src: '/visual-elements/ban-animation/times3-sheet.webp', clock: options.clock,
+    src: '/visual-elements/resource-counters/times3-sheet.webp', clock: options.clock,
     className: 'variant-ban-counter', alt: '3 bans remaining',
   }) : undefined;
   if (banCounter) { banCounter.element.hidden = true; composition.append(banCounter.element); }
@@ -343,7 +343,7 @@ function updateBanCounter(counter: ReturnType<typeof createBoilingSprite> | unde
   const remaining = Math.max(0, 3 - used);
   counter.element.setAttribute('aria-label', `${remaining} bans remaining`);
   counter.element.hidden = remaining === 0;
-  if (remaining > 0) counter.setSource(`/visual-elements/ban-animation/times${remaining}-sheet.webp`);
+  if (remaining > 0) counter.setSource(`/visual-elements/resource-counters/times${remaining}-sheet.webp`);
 }
 
 function applyBanControls(

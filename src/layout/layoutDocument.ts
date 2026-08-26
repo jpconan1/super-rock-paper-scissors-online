@@ -32,6 +32,7 @@ export interface LayoutElement {
   parent?: string;
   layer?: number;
   visible?: boolean;
+  stateVisibility?: Record<string, boolean>;
   protected?: boolean;
   className?: string;
   label?: string;

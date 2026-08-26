@@ -24,7 +24,10 @@ const titleElement = (id: string) => TITLE_LAYOUT.elements.find((element) => ele
 
 export type TitleScreenMount = (() => void) & { readonly ready: Promise<void> };
 
-export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPlay: (playerName: string) => void): TitleScreenMount {
+export function formatOnlinePlayerCount(count: number | null): string { return `players online: ${count ?? '?'}`; }
+
+export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPlay: (playerName: string) => void,
+  getOnlinePlayerCount: () => Promise<number | null> = async () => null): TitleScreenMount {
   const screen = document.createElement('section');
   screen.className = 'title-screen';
   screen.setAttribute('aria-labelledby', 'title-screen-heading');
@@ -39,6 +42,16 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
   heading.id = 'title-screen-heading';
   heading.className = 'visually-hidden';
   heading.textContent = TITLE_LAYOUT.copy!.heading!;
+  const onlineCount = document.createElement('p');
+  onlineCount.className = 'title-screen__online-count'; onlineCount.setAttribute('aria-live', 'polite');
+  onlineCount.textContent = formatOnlinePlayerCount(null);
+  let countStopped = false;
+  const updateCount = async () => {
+    const count = await getOnlinePlayerCount();
+    if (!countStopped) onlineCount.textContent = formatOnlinePlayerCount(count);
+  };
+  void updateCount();
+  const countTimer = window.setInterval(() => void updateCount(), 5_000);
 
   const logo = createBoilingSprite({
     src: titleElement('logo').assets!.src!,
@@ -106,12 +119,13 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
   nameEntry.input.addEventListener('keydown', onNameKeyDown);
 
   composition.append(logo.element, randomName.element, enterLobby.element, nameEntry.element,
-    soundToggle.element, musicVolume.element, sfxVolume.element, boilToggle.element);
+    soundToggle.element, musicVolume.element, sfxVolume.element, boilToggle.element, onlineCount);
   bindings.push(
     { id: 'logo', element: logo.element }, { id: 'random-name', element: randomName.element },
     { id: 'enter-lobby', element: enterLobby.element }, { id: 'name-entry', element: nameEntry.element },
     { id: 'sound-toggle', element: soundToggle.element }, { id: 'music-slider', element: musicVolume.element },
     { id: 'sfx-slider', element: sfxVolume.element }, { id: 'boil-toggle', element: boilToggle.element },
+    { id: 'online-count', element: onlineCount },
   );
   applyLayout();
   screen.append(heading);
@@ -129,6 +143,7 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
     nameEntry.input.removeEventListener('keydown', onNameKeyDown);
     nameEntry.destroy();
     enterLobby.destroy();
+    countStopped = true; window.clearInterval(countTimer);
     screen.remove();
   }) as TitleScreenMount;
   Object.defineProperty(cleanup, 'ready', { value: logo.whenReady() });
