@@ -5,9 +5,11 @@ import type { MusicManifest } from '../src/audio/musicManifest';
 class ParamMock {
   value = 1;
   events: Array<[string, number, number?]> = [];
+  curves: Array<{ values: Float32Array; time: number; duration: number }> = [];
   cancelScheduledValues(time: number) { this.events.push(['cancel', time]); }
   setValueAtTime(value: number, time: number) { this.value = value; this.events.push(['set', value, time]); }
   linearRampToValueAtTime(value: number, time: number) { this.value = value; this.events.push(['ramp', value, time]); }
+  setValueCurveAtTime(values: Float32Array, time: number, duration: number) { this.curves.push({ values, time, duration }); }
 }
 
 class NodeMock {
@@ -28,6 +30,14 @@ class GainMock extends NodeMock { gain = new ParamMock(); }
 
 function buffer(seconds = 4, sampleRate = 48_000): AudioBuffer {
   return { duration: seconds, length: seconds * sampleRate, sampleRate } as AudioBuffer;
+}
+
+function expectCurve(curve: { values: Float32Array; time: number; duration: number }, start: number, middle: number, end: number, time: number, duration: number) {
+  expect(curve.time).toBeCloseTo(time);
+  expect(curve.duration).toBeCloseTo(duration);
+  expect(curve.values[0]).toBeCloseTo(start);
+  expect(curve.values[Math.floor(curve.values.length / 2)]).toBeCloseTo(middle);
+  expect(curve.values.at(-1)).toBeCloseTo(end);
 }
 
 const track = (src: string, lengthSamples = 200) => ({ src, startSample: 0, lengthSamples });
@@ -94,7 +104,8 @@ describe('MusicTransport', () => {
   });
 
   it('aligns a topper to the same next phrase boundary', async () => {
-    const { context, transport, sources } = setup();
+    const { context, transport, sources, gains } = setup();
+    transport.setVariationsEnabled(true);
     transport.setBase('drums-bass');
     await Promise.resolve(); await Promise.resolve(); transport.tick();
     context.currentTime = 0.75;
@@ -102,6 +113,11 @@ describe('MusicTransport', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     const partialTopper = sources.find((source) => source.starts[0]?.[0] === 0.75);
     expect(partialTopper?.starts[0]?.[1]).toBeCloseTo(0.7);
+    const partialCurve = gains[1]!.gain.curves[0]!;
+    expect(partialCurve.time).toBe(0.75);
+    expect(partialCurve.duration).toBeCloseTo(1.3);
+    expect(partialCurve.values[0]).toBeCloseTo(0.75 + 0.25 * Math.sin(Math.PI * 0.35));
+    expect(partialCurve.values.at(-1)).toBeCloseTo(0.75);
     transport.setTopper('double-match-point');
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(partialTopper?.stop).toHaveBeenCalledOnce();
@@ -158,7 +174,7 @@ describe('MusicTransport', () => {
     transport.destroy();
   });
 
-  it('selects a loaded variation per phrase and queues exactly one sax phrase', async () => {
+  it('alternates plain and random variation phrases, with sax returning to plain', async () => {
     const sources: SourceMock[] = [];
     const buffers = new Map<string, AudioBuffer>();
     const context = {
@@ -175,20 +191,95 @@ describe('MusicTransport', () => {
         const loaded = Object.assign(buffer(), { id: src });
         buffers.set(src, loaded); return loaded;
       },
-      random: vi.fn().mockReturnValueOnce(0.1).mockReturnValueOnce(0.75).mockReturnValue(0.9),
+      random: vi.fn().mockReturnValue(0.75),
       tickMilliseconds: 60_000,
     });
-    transport.setBase('drums-bass');
     transport.setVariationsEnabled(true);
+    transport.setBase('drums-bass');
     await new Promise((resolve) => setTimeout(resolve, 0));
     transport.tick();
-    expect(sources[0]?.buffer).toBe(buffers.get('/audio/var2'));
+    expect(sources[0]?.buffer).toBe(buffers.get('/audio/base'));
+
+    context.currentTime = 1.9; transport.tick();
+    expect(sources[1]?.buffer).toBe(buffers.get('/audio/var2'));
 
     await transport.queueBaseOnce('drums-bass-sax');
-    context.currentTime = 1.9; transport.tick();
-    expect(sources[1]?.buffer).toBe(buffers.get('/audio/sax'));
     context.currentTime = 3.9; transport.tick();
-    expect(sources[2]?.buffer).toBe(buffers.get('/audio/base'));
+    expect(sources[2]?.buffer).toBe(buffers.get('/audio/sax'));
+    context.currentTime = 5.9; transport.tick();
+    expect(sources[3]?.buffer).toBe(buffers.get('/audio/base'));
+    context.currentTime = 7.9; transport.tick();
+    expect(sources[4]?.buffer).toBe(buffers.get('/audio/var2'));
+    transport.destroy();
+  });
+
+  it('uses the upper sine half on plain phrases and lower half on variations', async () => {
+    const sources: SourceMock[] = [];
+    const gains: GainMock[] = [];
+    const buffers = new Map<string, AudioBuffer>();
+    const context = {
+      currentTime: 0, state: 'running',
+      createBufferSource: () => { const source = new SourceMock(); sources.push(source); return source; },
+      createGain: () => { const gain = new GainMock(); gains.push(gain); return gain; },
+    };
+    const dynamicManifest = { ...manifest, variations: [manifest.bases['drums-bass-var-1']] };
+    const transport = new MusicTransport({
+      context: context as unknown as AudioContext,
+      output: new NodeMock() as unknown as AudioNode,
+      interruptOutput: new NodeMock() as unknown as AudioNode,
+      manifest: dynamicManifest,
+      load: async (src) => { const loaded = Object.assign(buffer(), { id: src }); buffers.set(src, loaded); return loaded; },
+      random: () => 0,
+      tickMilliseconds: 60_000,
+    });
+    transport.setVariationsEnabled(true);
+    transport.setTopper('match-point');
+    transport.setBase('drums-bass');
+    await new Promise((resolve) => setTimeout(resolve, 0)); transport.tick();
+    expect(sources.map(({ buffer }) => buffer)).toEqual([buffers.get('/audio/base'), buffers.get('/audio/top')]);
+    expectCurve(gains[1]!.gain.curves[0]!, 0.75, 1, 0.75, 0.05, 2);
+    context.currentTime = 1.9; transport.tick();
+    expect(sources.map(({ buffer }) => buffer)).toEqual([
+      buffers.get('/audio/base'), buffers.get('/audio/top'), buffers.get('/audio/var1'), buffers.get('/audio/top'),
+    ]);
+    expectCurve(gains[2]!.gain.curves[0]!, 0.75, 0.5, 0.75, 2.05, 2);
+    transport.destroy();
+  });
+
+  it('starts at the current lower-wave phase during a variation and gives sax the full lower half', async () => {
+    const sources: SourceMock[] = [];
+    const gains: GainMock[] = [];
+    const buffers = new Map<string, AudioBuffer>();
+    const context = {
+      currentTime: 0, state: 'running',
+      createBufferSource: () => { const source = new SourceMock(); sources.push(source); return source; },
+      createGain: () => { const gain = new GainMock(); gains.push(gain); return gain; },
+    };
+    const transport = new MusicTransport({
+      context: context as unknown as AudioContext,
+      output: new NodeMock() as unknown as AudioNode,
+      interruptOutput: new NodeMock() as unknown as AudioNode,
+      manifest: { ...manifest, variations: [manifest.bases['drums-bass-var-1']] },
+      load: async (src) => { const loaded = Object.assign(buffer(), { id: src }); buffers.set(src, loaded); return loaded; },
+      random: () => 0,
+      tickMilliseconds: 60_000,
+    });
+    transport.setVariationsEnabled(true); transport.setBase('drums-bass');
+    await new Promise((resolve) => setTimeout(resolve, 0)); transport.tick();
+    context.currentTime = 1.9; transport.tick();
+    context.currentTime = 2.5; transport.setTopper('match-point');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const variationSuffix = gains.at(-1)!.gain.curves[0]!;
+    expect(variationSuffix.values[0]).toBeCloseTo(0.75 - 0.25 * Math.sin(Math.PI * 0.225));
+    expect(Math.min(...variationSuffix.values)).toBeCloseTo(0.5, 2);
+    expect(variationSuffix.values.at(-1)).toBeCloseTo(0.75);
+
+    await transport.queueBaseOnce('drums-bass-sax');
+    context.currentTime = 3.9; transport.tick();
+    expect(sources.slice(-2).map(({ buffer }) => buffer)).toEqual([buffers.get('/audio/sax'), buffers.get('/audio/top')]);
+    expectCurve(gains.at(-1)!.gain.curves[0]!, 0.75, 0.5, 0.75, 4.05, 2);
+    context.currentTime = 5.9; transport.tick();
+    expectCurve(gains.at(-1)!.gain.curves[0]!, 0.75, 1, 0.75, 6.05, 2);
     transport.destroy();
   });
 

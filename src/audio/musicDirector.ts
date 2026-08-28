@@ -22,8 +22,8 @@ export class MusicDirector {
     this.score = { p1: 0, p2: 0 };
     this.winner = undefined;
     setMusicTopper('none');
-    setMusicBase('drums-bass');
     setMusicVariationsEnabled(true);
+    setMusicBase('drums-bass');
     void preloadMusic('match');
   }
 

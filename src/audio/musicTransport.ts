@@ -1,5 +1,11 @@
 import type { MusicBase, MusicManifest, MusicTopper, MusicTrackDefinition } from './musicManifest';
 
+const TOPPER_MIN_GAIN = 0.5;
+const TOPPER_CENTER_GAIN = 0.75;
+const TOPPER_MAX_GAIN = 1;
+const TOPPER_CURVE_POINTS = 65;
+type TopperMode = 'upper-wave' | 'lower-wave' | 'off';
+
 interface LoadedTrack {
   definition: MusicTrackDefinition;
   buffer: AudioBuffer;
@@ -38,7 +44,9 @@ export class MusicTransport {
   private interrupt: AudioBufferSourceNode | undefined;
   private interruptGeneration = 0;
   private variationsEnabled = false;
+  private nextDynamicSegment: 'plain' | 'variation' = 'plain';
   private queuedBaseOnce: MusicBase | undefined;
+  private readonly phraseWindows: Array<{ start: number; end: number; topperMode: TopperMode }> = [];
   private readonly random: () => number;
 
   constructor(options: MusicTransportOptions) {
@@ -82,6 +90,7 @@ export class MusicTransport {
 
   setVariationsEnabled(enabled: boolean): void {
     this.variationsEnabled = enabled;
+    this.nextDynamicSegment = 'plain';
     if (enabled) for (const definition of this.manifest.variations) void this.prepare(definition).catch(() => {});
   }
 
@@ -181,17 +190,32 @@ export class MusicTransport {
 
     const queuedBase = this.queuedBaseOnce;
     this.queuedBaseOnce = undefined;
+    if (queuedBase) this.nextDynamicSegment = 'plain';
     const baseDefinition = queuedBase
       ? this.manifest.bases[queuedBase]
       : this.chooseBaseDefinition();
     this.scheduleTrack(baseDefinition, when, this.phraseSeconds, 'base');
-    if (this.activeTopper !== 'none') this.scheduleTrack(this.manifest.toppers[this.activeTopper], when, this.phraseSeconds, 'topper');
+    const topperMode = this.topperModeForPhrase(baseDefinition, queuedBase);
+    this.phraseWindows.push({ start: when, end: when + this.phraseSeconds, topperMode });
+    while (this.phraseWindows[0] && this.phraseWindows[0].end <= this.context.currentTime) this.phraseWindows.shift();
+    if (this.activeTopper !== 'none' && topperMode !== 'off') {
+      this.scheduleTrack(this.manifest.toppers[this.activeTopper], when, this.phraseSeconds, 'topper', topperMode);
+    }
+  }
+
+  private topperModeForPhrase(baseDefinition: MusicTrackDefinition, queuedBase: MusicBase | undefined): TopperMode {
+    if (!this.variationsEnabled || this.activeBase !== 'drums-bass') return 'off';
+    if (queuedBase === 'drums-bass-sax') return 'lower-wave';
+    return !queuedBase && baseDefinition === this.manifest.bases['drums-bass'] ? 'upper-wave' : 'lower-wave';
   }
 
   private chooseBaseDefinition(): MusicTrackDefinition {
-    if (!this.variationsEnabled || this.activeBase !== 'drums-bass' || this.random() >= 0.5) {
+    if (!this.variationsEnabled || this.activeBase !== 'drums-bass') {
       return this.manifest.bases[this.activeBase];
     }
+    const segment = this.nextDynamicSegment;
+    this.nextDynamicSegment = segment === 'plain' ? 'variation' : 'plain';
+    if (segment === 'plain') return this.manifest.bases[this.activeBase];
     const loaded = this.manifest.variations.filter((definition) => this.loaded.has(definition.src));
     if (loaded.length === 0) return this.manifest.bases[this.activeBase];
     return loaded[Math.floor(this.random() * loaded.length)] ?? this.manifest.bases[this.activeBase];
@@ -206,6 +230,7 @@ export class MusicTransport {
     }
     this.origin = undefined;
     this.scheduledThrough = 0;
+    this.phraseWindows.length = 0;
     const now = this.context.currentTime;
     this.programGain.gain.cancelScheduledValues(now);
     this.programGain.gain.setValueAtTime(0, now);
@@ -224,19 +249,22 @@ export class MusicTransport {
     this.programGain.gain.setValueAtTime(1, now);
   }
 
-  private scheduleTrack(definition: MusicTrackDefinition, when: number, phraseDuration: number, role: 'base' | 'topper'): void {
+  private scheduleTrack(definition: MusicTrackDefinition, when: number, phraseDuration: number, role: 'base' | 'topper', topperMode: Exclude<TopperMode, 'off'> = 'upper-wave'): void {
     const loaded = this.loaded.get(definition.src);
     if (!loaded) return;
     const repeats = this.manifest.phraseSamples / definition.lengthSamples;
     for (let index = 0; index < repeats; index += 1) {
       const duration = definition.lengthSamples / this.manifest.sampleRate;
-      const source = this.createSource(loaded, this.programGain);
+      const startsAt = when + index * (phraseDuration / repeats);
+      const source = role === 'topper'
+        ? this.createTopperSource(loaded, this.programGain, startsAt, duration, topperMode, 0)
+        : this.createSource(loaded, this.programGain);
       source.onended = () => {
         this.scheduled.delete(source);
         source.disconnect();
       };
       this.scheduled.set(source, role);
-      source.start(when + index * (phraseDuration / repeats), loaded.startSeconds, duration);
+      source.start(startsAt, loaded.startSeconds, duration);
     }
   }
 
@@ -249,13 +277,18 @@ export class MusicTransport {
     }
     this.activeTopper = this.requestedTopper;
     if (this.activeTopper === 'none' || this.origin === undefined || this.context.state !== 'running') return;
+    const currentPhrase = this.phraseWindows.find(({ start, end }) => start <= this.context.currentTime && this.context.currentTime < end);
+    if (!currentPhrase || currentPhrase.topperMode === 'off') return;
     const definition = this.manifest.toppers[this.activeTopper];
     const loaded = this.loaded.get(definition.src);
     if (!loaded) return;
 
     const phase = this.phaseSeconds;
     const remaining = this.phraseSeconds - phase;
-    const source = this.createSource(loaded, this.programGain);
+    const phraseProgress = Math.max(0, Math.min(1, (this.context.currentTime - currentPhrase.start) / this.phraseSeconds));
+    const source = this.createTopperSource(
+      loaded, this.programGain, this.context.currentTime, remaining, currentPhrase.topperMode, phraseProgress,
+    );
     source.onended = () => {
       this.scheduled.delete(source);
       source.disconnect();
@@ -266,7 +299,10 @@ export class MusicTransport {
     const elapsed = Math.max(0, this.context.currentTime - this.origin);
     const nextBoundary = this.origin + (Math.floor(elapsed / this.phraseSeconds) + 1) * this.phraseSeconds;
     if (this.scheduledThrough > nextBoundary) {
-      this.scheduleTrack(definition, nextBoundary, this.phraseSeconds, 'topper');
+      const nextPhrase = this.phraseWindows.find(({ start }) => Math.abs(start - nextBoundary) < 0.001);
+      if (nextPhrase && nextPhrase.topperMode !== 'off') {
+        this.scheduleTrack(definition, nextBoundary, this.phraseSeconds, 'topper', nextPhrase.topperMode);
+      }
     }
   }
 
@@ -282,6 +318,17 @@ export class MusicTransport {
       gainNode.connect(output);
       source.addEventListener('ended', () => gainNode.disconnect(), { once: true });
     }
+    return source;
+  }
+
+  private createTopperSource(loaded: LoadedTrack, output: AudioNode, startsAt: number, duration: number, mode: Exclude<TopperMode, 'off'>, progress: number): AudioBufferSourceNode {
+    const source = this.context.createBufferSource();
+    source.buffer = loaded.buffer;
+    const gainNode = this.context.createGain();
+    gainNode.gain.setValueCurveAtTime(topperCurve(mode, loaded.definition.gain ?? 1, progress), startsAt, duration);
+    source.connect(gainNode);
+    gainNode.connect(output);
+    source.addEventListener('ended', () => gainNode.disconnect(), { once: true });
     return source;
   }
 
@@ -321,4 +368,17 @@ export class MusicTransport {
   private definitionSampleRate(definition: MusicTrackDefinition): number {
     return definition.sampleRate ?? this.manifest.sampleRate;
   }
+}
+
+function topperCurve(mode: Exclude<TopperMode, 'off'>, authoredGain: number, progressStart: number): Float32Array {
+  const start = Math.max(0, Math.min(1, progressStart));
+  const points = Math.max(2, Math.ceil((TOPPER_CURVE_POINTS - 1) * (1 - start)) + 1);
+  return Float32Array.from({ length: points }, (_, index) => {
+    const progress = start + (1 - start) * (index / (points - 1));
+    const wave = Math.sin(Math.PI * progress);
+    const gain = mode === 'upper-wave'
+      ? TOPPER_CENTER_GAIN + (TOPPER_MAX_GAIN - TOPPER_CENTER_GAIN) * wave
+      : TOPPER_CENTER_GAIN - (TOPPER_CENTER_GAIN - TOPPER_MIN_GAIN) * wave;
+    return authoredGain * gain;
+  });
 }
