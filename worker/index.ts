@@ -9,11 +9,15 @@ import {
 } from '../src/core/onlineMatch';
 import type { MatchCommandPayload, MatchPlayer } from '../src/protocol/protocol';
 import {
-  createEmptyWhiteboard, WHITEBOARD_COLORS, type WhiteboardClientMessage, type WhiteboardColor,
+  createEmptyWhiteboard, pruneWhiteboardOperationPrefix, WHITEBOARD_COLORS, type WhiteboardClientMessage, type WhiteboardColor,
   type WhiteboardOperation, type WhiteboardPoint, type WhiteboardServerMessage, type WhiteboardSnapshot,
 } from '../src/whiteboard/protocol';
 import { isLobbyPresence, type LobbyPlayer, type LobbyPresence, type LobbyServerMessage } from '../src/lobby/protocol';
 import { eloDeltas } from '../src/core/elo';
+import { WhiteboardRateLimiter, type WhiteboardRateCategory } from '../src/whiteboard/rateLimiter';
+import { LOBBY_SOCKET_PROTOCOL, MATCH_SOCKET_PROTOCOL, socketCredential, WHITEBOARD_SOCKET_PROTOCOL } from '../src/protocol/webSocketAuth';
+import { consumeSlidingWindow, messageFitsUtf8Limit, readJsonBody, RequestBodyError } from '../src/protocol/abuseProtection';
+import { corsHeadersForOrigin, isAllowedRequestOrigin } from '../src/protocol/originPolicy';
 
 interface Env {
   MATCHES: DurableObjectNamespace<MatchObject>;
@@ -21,9 +25,14 @@ interface Env {
   LOBBY: DurableObjectNamespace<LobbyObject>;
   WHITEBOARD: DurableObjectNamespace<WhiteboardObject>;
   DB: D1Database;
+  SOCKET_RATE: RateLimit;
+  MATCHMAKING_IP_RATE: RateLimit;
+  MATCHMAKING_GUEST_RATE: RateLimit;
+  ALLOWED_ORIGINS?: string;
 }
 
 type Seat = 'p1' | 'p2';
+const MATCH_MESSAGE_MAX_BYTES = 256_000;
 interface MatchRecord extends OnlineMatchState {
   tokens: Record<Seat, string>;
   accepted: Array<{ revision: number; seat: Seat; command: ClientCommand }>;
@@ -31,7 +40,8 @@ interface MatchRecord extends OnlineMatchState {
   ratingsFinalized?: boolean;
   ratingRetryAt?: number;
 }
-interface SocketAttachment { seat: Seat }
+interface SocketAttachment { seat: Seat; messageTimes: number[] }
+const MATCH_SOCKETS_PER_SEAT = 2;
 
 export class MatchObject extends DurableObject<Env> {
   private record?: MatchRecord;
@@ -80,12 +90,15 @@ export class MatchObject extends DurableObject<Env> {
     if (request.headers.get('Upgrade') !== 'websocket') return json({ error: 'WebSocket required.' }, 426);
     const url = new URL(request.url);
     const seat = url.searchParams.get('seat');
-    const resumeToken = url.searchParams.get('token');
+    const resumeToken = socketCredential(request.headers.get('Sec-WebSocket-Protocol'), MATCH_SOCKET_PROTOCOL);
     if (!this.record || !isSeat(seat) || this.record.tokens[seat] !== resumeToken) return json({ error: 'Invalid seat token.' }, 401);
+    if (this.ctx.getWebSockets().filter((socket) => (socket.deserializeAttachment() as SocketAttachment | null)?.seat === seat).length >= MATCH_SOCKETS_PER_SEAT) {
+      return rateLimited();
+    }
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
     this.ctx.acceptWebSocket(server);
-    server.serializeAttachment({ seat } satisfies SocketAttachment);
+    server.serializeAttachment({ seat, messageTimes: [] } satisfies SocketAttachment);
     const reconnected = markPlayerConnected(this.record, seat);
     if (reconnected) {
       await this.ctx.storage.put('match', this.record);
@@ -93,12 +106,16 @@ export class MatchObject extends DurableObject<Env> {
     }
     server.send(JSON.stringify(this.snapshot(seat)));
     if (reconnected) this.broadcast(server);
-    return new Response(null, { status: 101, webSocket: client });
+    return webSocketResponse(client, MATCH_SOCKET_PROTOCOL);
   }
 
   async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void> {
     const attachment = socket.deserializeAttachment() as SocketAttachment | null;
-    if (!attachment || typeof message !== 'string' || !this.record) return;
+    if (!attachment || !this.record) return;
+    if (!messageFitsUtf8Limit(message, MATCH_MESSAGE_MAX_BYTES)) {
+      socket.send(JSON.stringify({ type: 'error', message: 'Message too large.' })); return;
+    }
+    if (!allowSocketMessage(socket, attachment, Date.now())) return;
     try {
       const command = parseClientCommand(JSON.parse(message));
       if (command.matchId !== this.record.matchId) throw new Error('Wrong match.');
@@ -239,7 +256,8 @@ export class MatchmakerObject extends DurableObject<Env> {
     return { status: 'matched', ...second };
   }
 
-  async cancel(guestId: string): Promise<void> {
+  async cancel(guestId: string, guestSecret: string): Promise<void> {
+    await authenticateExistingGuest(this.env.DB, guestId, guestSecret);
     const queue = (await this.ctx.storage.get<QueueEntry[]>('queue')) ?? [];
     await this.ctx.storage.put('queue', queue.filter((entry) => entry.guestId !== guestId));
     await this.ctx.storage.delete(`ticket:${guestId}`);
@@ -267,9 +285,11 @@ abstract class BroadcastObject extends DurableObject<Env> {
   }
 }
 
-interface LobbyAttachment extends LobbyPlayer {}
+interface LobbyAttachment extends LobbyPlayer { messageTimes: number[]; clientKey: string }
 interface LobbyGracePlayer extends LobbyPlayer { expiresAt: number }
 const LOBBY_GRACE_MS = 5_000;
+const CHANNEL_SOCKETS_PER_GUEST = 3;
+const CHANNEL_SOCKETS_PER_CLIENT = 20;
 
 export class LobbyObject extends DurableObject<Env> {
   async getOnlinePlayerCount(): Promise<number> { return (await this.roster()).length; }
@@ -280,12 +300,20 @@ export class LobbyObject extends DurableObject<Env> {
     const playerId = url.searchParams.get('guest');
     if (!playerId || !validClientId(playerId)) return json({ error: 'Invalid guest.' }, 400);
     const displayName = sanitizeText(url.searchParams.get('name'), 50) || 'Guest';
+    const guestSecret = socketCredential(request.headers.get('Sec-WebSocket-Protocol'), LOBBY_SOCKET_PROTOCOL);
+    if (!guestSecret) return json({ error: 'Invalid guest credentials.' }, 401);
+    try { await authenticateGuest(this.env.DB, playerId, guestSecret, displayName); }
+    catch { return json({ error: 'Invalid guest credentials.' }, 401); }
+    const clientKey = request.headers.get('CF-Connecting-IP') ?? 'unknown-client';
+    const connections = this.connectedPlayers();
+    if (connections.filter((player) => player.playerId === playerId).length >= CHANNEL_SOCKETS_PER_GUEST
+      || connections.filter((player) => player.clientKey === clientKey).length >= CHANNEL_SOCKETS_PER_CLIENT) return rateLimited();
     await this.ctx.storage.delete(`lobby:grace:${playerId}`);
     const pair = new WebSocketPair(); const [client, server] = Object.values(pair);
     this.ctx.acceptWebSocket(server);
-    server.serializeAttachment({ playerId, displayName, presence: 'idle' } satisfies LobbyAttachment);
+    server.serializeAttachment({ playerId, displayName, presence: 'idle', messageTimes: [], clientKey } satisfies LobbyAttachment);
     await this.broadcastRoster();
-    return new Response(null, { status: 101, webSocket: client });
+    return webSocketResponse(client, LOBBY_SOCKET_PROTOCOL);
   }
 
   async webSocketMessage(socket: WebSocket, raw: string | ArrayBuffer): Promise<void> {
@@ -295,6 +323,8 @@ export class LobbyObject extends DurableObject<Env> {
       if (message.type !== 'presence' || !isLobbyPresence(message.presence)) throw new Error('Invalid presence.');
       const attachment = socket.deserializeAttachment() as LobbyAttachment | null;
       if (!attachment) return;
+      if (!allowSocketMessage(socket, attachment, Date.now())) return;
+      if (attachment.presence === message.presence) return;
       for (const candidate of this.ctx.getWebSockets()) {
         const player = candidate.deserializeAttachment() as LobbyAttachment | null;
         if (player?.playerId === attachment.playerId) candidate.serializeAttachment({ ...player, presence: message.presence });
@@ -344,13 +374,15 @@ export class LobbyObject extends DurableObject<Env> {
   }
 }
 
-interface WhiteboardAttachment { strokeTimes: number[] }
+interface WhiteboardAttachment { guestId: string; displayName: string; clientKey: string }
+interface WhiteboardPrune { throughSequence: number; removed: WhiteboardOperation[] }
 const WHITEBOARD_MAX_OPERATIONS = 800;
+const WHITEBOARD_PRUNE_OPERATIONS = 200;
 const WHITEBOARD_MAX_POINTS = 180;
-const WHITEBOARD_STROKES_PER_SECOND = 12;
 
 export class WhiteboardObject extends DurableObject<Env> {
   private board: WhiteboardSnapshot = createEmptyWhiteboard();
+  private readonly rateLimiter = new WhiteboardRateLimiter();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -364,17 +396,33 @@ export class WhiteboardObject extends DurableObject<Env> {
   async fetch(request: Request): Promise<Response> {
     if (request.headers.get('Upgrade') !== 'websocket') return json({ error: 'WebSocket required.' }, 426);
     const url = new URL(request.url);
+    const guestId = url.searchParams.get('guest');
+    if (!guestId || !validClientId(guestId)) return json({ error: 'Invalid guest.' }, 400);
+    const displayName = sanitizeText(url.searchParams.get('name'), 50) || 'Guest';
+    const guestSecret = socketCredential(request.headers.get('Sec-WebSocket-Protocol'), WHITEBOARD_SOCKET_PROTOCOL);
+    if (!guestSecret) return json({ error: 'Invalid guest credentials.' }, 401);
+    try { await authenticateGuest(this.env.DB, guestId, guestSecret, displayName); }
+    catch { return json({ error: 'Invalid guest credentials.' }, 401); }
+    const clientKey = request.headers.get('CF-Connecting-IP') ?? 'unknown-client';
+    const connections = this.ctx.getWebSockets().flatMap((socket) => {
+      const attachment = socket.deserializeAttachment() as WhiteboardAttachment | null; return attachment ? [attachment] : [];
+    });
+    if (connections.filter((player) => player.guestId === guestId).length >= CHANNEL_SOCKETS_PER_GUEST
+      || connections.filter((player) => player.clientKey === clientKey).length >= CHANNEL_SOCKETS_PER_CLIENT) return rateLimited();
     const pair = new WebSocketPair(); const [client, server] = Object.values(pair);
-    this.ctx.acceptWebSocket(server); server.serializeAttachment({ strokeTimes: [] } satisfies WhiteboardAttachment);
+    this.ctx.acceptWebSocket(server); server.serializeAttachment({ guestId, displayName, clientKey } satisfies WhiteboardAttachment);
     this.send(server, { type: 'snapshot', board: this.board });
     const visit = url.searchParams.get('visit');
     if (visit && validClientId(visit) && !this.board.operations.some((operation) => operation.clientOperationId === `join:${visit}`)) {
-      const name = sanitizeText(url.searchParams.get('name'), 50) || 'Guest';
-      const operation = this.createSystemText(`${name} entered the lobby!`, `join:${visit}`);
-      this.board.operations.push(operation); this.board.sequence = operation.sequence; this.board.nextY = operation.rowY + operation.rowSpan * this.board.rowHeight;
-      await this.persistOperation(operation); this.broadcast({ type: 'operation', operation }); await this.trimIfNeeded();
+      if (this.rateLimiter.allow(guestId, 'text', Date.now())) {
+        const operation = this.createSystemText(`${displayName} entered the lobby!`, `join:${visit}`);
+        const prune = this.pruneIfNeeded();
+        this.board.operations.push(operation); this.board.sequence = operation.sequence; this.board.nextY = operation.rowY + operation.rowSpan * this.board.rowHeight;
+        await this.persistOperation(operation, prune); this.broadcastPrune(prune);
+        this.broadcast({ type: 'operation', operation }); await this.trimIfNeeded();
+      }
     }
-    return new Response(null, { status: 101, webSocket: client });
+    return webSocketResponse(client, WHITEBOARD_SOCKET_PROTOCOL);
   }
 
   async webSocketMessage(socket: WebSocket, raw: string | ArrayBuffer): Promise<void> {
@@ -384,31 +432,36 @@ export class WhiteboardObject extends DurableObject<Env> {
       if (!message || !['chat', 'status', 'stroke', 'erase'].includes(message.type) || !validClientId(message.clientOperationId)) throw new Error('Invalid whiteboard message.');
       const duplicate = this.board.operations.find((operation) => operation.clientOperationId === message.clientOperationId);
       if (duplicate) { this.send(socket, { type: 'operation', operation: duplicate }); return; }
-      if ((message.type === 'stroke' || message.type === 'erase') && !this.allowStroke(socket)) { this.error(socket, 'rate-limited', 'Drawing too quickly.'); return; }
-      const operation = this.createOperation(message);
+      const attachment = socket.deserializeAttachment() as WhiteboardAttachment | null;
+      if (!attachment) throw new Error('Missing guest identity.');
+      const operation = this.createOperation(message, attachment.displayName);
       if (!operation) throw new Error('Invalid whiteboard content.');
+      const category: WhiteboardRateCategory = message.type === 'stroke' || message.type === 'erase' ? 'draw' : 'text';
+      if (!this.rateLimiter.allow(attachment.guestId, category, Date.now())) {
+        this.error(socket, 'rate-limited', 'Too many whiteboard operations.', message.clientOperationId); return;
+      }
+      const prune = this.pruneIfNeeded();
       this.board.operations.push(operation); this.board.sequence = operation.sequence;
       if (operation.kind === 'text') this.board.nextY = operation.rowY + operation.rowSpan * this.board.rowHeight;
-      if (this.board.operations.length > WHITEBOARD_MAX_OPERATIONS) { await this.reset(); return; }
-      await this.persistOperation(operation);
+      await this.persistOperation(operation, prune);
+      this.broadcastPrune(prune);
       this.broadcast({ type: 'operation', operation });
       if (operation.kind === 'text') await this.trimIfNeeded();
     } catch (error) { this.error(socket, 'invalid-message', error instanceof Error ? error.message : 'Invalid whiteboard message.'); }
   }
 
-  private createOperation(message: WhiteboardClientMessage): WhiteboardOperation | undefined {
+  private createOperation(message: WhiteboardClientMessage, displayName: string): WhiteboardOperation | undefined {
     const common = { id: crypto.randomUUID(), sequence: this.board.sequence + 1, clientOperationId: message.clientOperationId };
     if (message.type === 'status') {
       if (message.status !== 'ready') return;
-      const name = sanitizeText(message.displayName, 50) || 'Guest';
-      return this.createSystemText(`${name} is ready to play!`, message.clientOperationId);
+      return this.createSystemText(`${displayName} is ready to play!`, message.clientOperationId);
     }
     if (message.type === 'chat') {
-      const text = sanitizeText(message.text, 200); const displayName = sanitizeText(message.displayName, 50);
+      const text = sanitizeText(message.text, 200);
       if (!text) return;
       const color = normalizeColor(message.color);
       const rowSpan = Math.max(1, Math.min(3, Math.ceil((displayName.length + text.length + 2) / 37)));
-      return { ...common, kind: 'text', displayName: displayName || 'Guest', text, color, rowY: this.board.nextY, rowSpan };
+      return { ...common, kind: 'text', displayName, text, color, rowY: this.board.nextY, rowSpan };
     }
     const points = sanitizePoints(message.points, this.board.top, this.board.top + this.board.maxHeight);
     if (points.length < 2) return;
@@ -423,18 +476,23 @@ export class WhiteboardObject extends DurableObject<Env> {
       displayName: '', text, color: 'black', system: true, rowY: this.board.nextY, rowSpan };
   }
 
-  private allowStroke(socket: WebSocket): boolean {
-    const attachment = (socket.deserializeAttachment() as WhiteboardAttachment | null) ?? { strokeTimes: [] };
-    const cutoff = Date.now() - 1_000; attachment.strokeTimes = attachment.strokeTimes.filter((time) => time > cutoff);
-    if (attachment.strokeTimes.length >= WHITEBOARD_STROKES_PER_SECOND) return false;
-    attachment.strokeTimes.push(Date.now()); socket.serializeAttachment(attachment); return true;
-  }
-
-  private async persistOperation(operation: WhiteboardOperation): Promise<void> {
+  private async persistOperation(operation: WhiteboardOperation, prune?: WhiteboardPrune): Promise<void> {
     await this.ctx.storage.transaction(async (storage) => {
+      if (prune) await storage.delete(prune.removed.map((item) => operationKey(item.sequence)));
       await storage.put(operationKey(operation.sequence), operation);
       await storage.put('board:meta', boardMeta(this.board));
     });
+  }
+
+  private pruneIfNeeded(): WhiteboardPrune | undefined {
+    const result = pruneWhiteboardOperationPrefix(this.board.operations, WHITEBOARD_MAX_OPERATIONS, WHITEBOARD_PRUNE_OPERATIONS);
+    if (result.throughSequence === undefined) return;
+    this.board.operations = result.retained;
+    return { throughSequence: result.throughSequence, removed: result.removed };
+  }
+
+  private broadcastPrune(prune?: WhiteboardPrune): void {
+    if (prune) this.broadcast({ type: 'prune', throughSequence: prune.throughSequence });
   }
 
   private async trimIfNeeded(): Promise<void> {
@@ -452,16 +510,11 @@ export class WhiteboardObject extends DurableObject<Env> {
     this.broadcast({ type: 'trim', top: this.board.top });
   }
 
-  private async reset(): Promise<void> {
-    const keys = [...(await this.ctx.storage.list({ prefix: 'board:operation:' })).keys()];
-    this.board = createEmptyWhiteboard();
-    await this.ctx.storage.transaction(async (storage) => { await storage.delete(keys); await storage.put('board:meta', boardMeta(this.board)); });
-    this.broadcast({ type: 'reset', board: this.board });
-  }
-
   private broadcast(message: WhiteboardServerMessage): void { for (const socket of this.ctx.getWebSockets()) this.send(socket, message); }
   private send(socket: WebSocket, message: WhiteboardServerMessage): void { socket.send(JSON.stringify(message)); }
-  private error(socket: WebSocket, code: string, message: string): void { this.send(socket, { type: 'error', code, message }); }
+  private error(socket: WebSocket, code: string, message: string, clientOperationId?: string): void {
+    this.send(socket, { type: 'error', code, message, ...(clientOperationId ? { clientOperationId } : {}) });
+  }
 }
 
 function boardMeta(board: WhiteboardSnapshot): Omit<WhiteboardSnapshot, 'operations'> { const { operations: _operations, ...meta } = board; return meta; }
@@ -506,6 +559,14 @@ async function authenticateGuest(db: D1Database, guestId: string, secret: string
   return { rating: player.rating };
 }
 
+async function authenticateExistingGuest(db: D1Database, guestId: string, secret: string): Promise<void> {
+  if (!validClientId(guestId) || secret.length < 32 || secret.length > 256) throw new Error('Invalid guest credentials.');
+  const secretHash = await sha256(secret);
+  const player = await db.prepare('SELECT guest_secret_hash FROM players WHERE player_id = ?').bind(guestId)
+    .first<{ guest_secret_hash: string }>();
+  if (!player || player.guest_secret_hash !== secretHash) throw new Error('Invalid guest credentials.');
+}
+
 async function sha256(value: string): Promise<string> {
   const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
   return [...new Uint8Array(bytes)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
@@ -513,41 +574,94 @@ async function sha256(value: string): Promise<string> {
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders() });
     const url = new URL(request.url);
+    const origin = request.headers.get('Origin');
+    if (!isAllowedRequestOrigin(origin, url.origin, env.ALLOWED_ORIGINS)) return json({ error: 'Origin not allowed.' }, 403);
+    if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: origin ? corsHeadersForOrigin(origin) : undefined });
+    return withCors(await routeRequest(request, env, url), origin);
+  },
+} satisfies ExportedHandler<Env>;
+
+async function routeRequest(request: Request, env: Env, url: URL): Promise<Response> {
+    const clientKey = request.headers.get('CF-Connecting-IP') ?? 'unknown-client';
     if (url.pathname === '/health') return json({ ok: true });
-    if (url.pathname === '/online-status') return json({ playersOnline: await env.LOBBY.getByName('global').getOnlinePlayerCount() });
-    if (url.pathname === '/matches' && request.method === 'POST') {
-      const id = env.MATCHES.newUniqueId();
-      return json(await env.MATCHES.get(id).initialize(id.toString()), 201);
+    if (url.pathname === '/online-status') {
+      if (!await allowed(env.SOCKET_RATE, `status:${clientKey}`)) return rateLimited();
+      return json({ playersOnline: await env.LOBBY.getByName('global').getOnlinePlayerCount() });
     }
     if (url.pathname === '/matchmaking' && request.method === 'POST') {
-      const body = await request.json<{ guestId?: string; guestSecret?: string; name?: string }>();
-      if (!body.guestId || !body.guestSecret || !body.name) return json({ error: 'guestId, guestSecret, and name are required.' }, 400);
       try {
+        if (!await allowed(env.MATCHMAKING_IP_RATE, clientKey)) return rateLimited();
+        const body = await readJsonBody<{ guestId?: string; guestSecret?: string; name?: string }>(request);
+        if (!body.guestId || !body.guestSecret || !body.name) return json({ error: 'guestId, guestSecret, and name are required.' }, 400);
+        if (!await allowed(env.MATCHMAKING_GUEST_RATE, body.guestId)) return rateLimited();
         return json(await env.MATCHMAKER.getByName('global').enqueue(body.guestId, body.guestSecret, sanitizeText(body.name, 50) || 'Guest'));
       } catch (error) {
+        if (error instanceof RequestBodyError) return json({ error: error.message }, error.status);
         return json({ error: error instanceof Error ? error.message : 'Matchmaking failed.' }, 401);
       }
     }
     if (url.pathname === '/matchmaking' && request.method === 'DELETE') {
-      const guestId = url.searchParams.get('guestId');
-      if (guestId) await env.MATCHMAKER.getByName('global').cancel(guestId);
-      return new Response(null, { status: 204 });
+      try {
+        if (!await allowed(env.MATCHMAKING_IP_RATE, clientKey)) return rateLimited();
+        const body = await readJsonBody<{ guestId?: string; guestSecret?: string }>(request);
+        if (!body.guestId || !body.guestSecret) return json({ error: 'guestId and guestSecret are required.' }, 400);
+        if (!await allowed(env.MATCHMAKING_GUEST_RATE, body.guestId)) return rateLimited();
+        await env.MATCHMAKER.getByName('global').cancel(body.guestId, body.guestSecret);
+        return new Response(null, { status: 204 });
+      } catch (error) {
+        if (error instanceof RequestBodyError) return json({ error: error.message }, error.status);
+        return json({ error: error instanceof Error ? error.message : 'Cancellation failed.' }, 401);
+      }
     }
-    const match = url.pathname.match(/^\/matches\/([a-f0-9]+)$/);
-    if (match?.[1]) return env.MATCHES.get(env.MATCHES.idFromString(match[1])).fetch(request);
-    if (url.pathname === '/lobby') return env.LOBBY.getByName('global').fetch(request);
-    if (url.pathname === '/whiteboard') return env.WHITEBOARD.getByName('global').fetch(request);
+    const match = url.pathname.match(/^\/matches\/([a-f0-9]{64})$/);
+    if (match?.[1]) {
+      if (!await allowed(env.SOCKET_RATE, `socket:${clientKey}`)) return rateLimited();
+      return env.MATCHES.get(env.MATCHES.idFromString(match[1])).fetch(request);
+    }
+    if (url.pathname === '/lobby' || url.pathname === '/whiteboard') {
+      if (!await allowed(env.SOCKET_RATE, `socket:${clientKey}`)) return rateLimited();
+      const guestId = url.searchParams.get('guest');
+      if (!guestId || !validClientId(guestId)) return json({ error: 'Invalid guest.' }, 400);
+      if (!await allowed(env.SOCKET_RATE, `guest:${guestId}`)) return rateLimited();
+      return url.pathname === '/lobby' ? env.LOBBY.getByName('global').fetch(request) : env.WHITEBOARD.getByName('global').fetch(request);
+    }
     return json({ error: 'Not found.' }, 404);
-  },
-} satisfies ExportedHandler<Env>;
+}
 
 function token(): string { return crypto.randomUUID(); }
 function isSeat(value: string | null): value is Seat { return value === 'p1' || value === 'p2'; }
 function json(value: unknown, status = 200): Response {
-  return Response.json(value, { status, headers: { 'cache-control': 'no-store', ...corsHeaders() } });
+  return Response.json(value, { status, headers: { 'cache-control': 'no-store' } });
 }
-function corsHeaders(): Record<string, string> {
-  return { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET,POST,DELETE,OPTIONS', 'access-control-allow-headers': 'content-type' };
+
+const SOCKET_MESSAGE_LIMIT = 30;
+const SOCKET_MESSAGE_WINDOW_MS = 10_000;
+function allowSocketMessage<T extends { messageTimes: number[] }>(socket: WebSocket, attachment: T, now: number): boolean {
+  const result = consumeSlidingWindow(attachment.messageTimes ?? [], now, SOCKET_MESSAGE_LIMIT, SOCKET_MESSAGE_WINDOW_MS);
+  attachment.messageTimes = result.times;
+  if (!result.allowed) return false;
+  socket.serializeAttachment(attachment); return true;
+}
+
+async function allowed(limiter: RateLimit, key: string): Promise<boolean> {
+  return (await limiter.limit({ key })).success;
+}
+
+function rateLimited(): Response {
+  return Response.json({ error: 'Too many requests.' }, {
+    status: 429, headers: { 'cache-control': 'no-store', 'retry-after': '60' },
+  });
+}
+
+function withCors(response: Response, origin: string | null): Response {
+  if (!origin || response.status === 101) return response;
+  const headers = new Headers(response.headers);
+  for (const [name, value] of Object.entries(corsHeadersForOrigin(origin))) headers.set(name, value);
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
+
+function webSocketResponse(socket: WebSocket, protocol: string): Response {
+  return new Response(null, { status: 101, webSocket: socket, headers: { 'Sec-WebSocket-Protocol': protocol } });
 }

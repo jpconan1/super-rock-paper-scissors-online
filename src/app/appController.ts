@@ -298,6 +298,8 @@ export class AppController {
       operations: this.whiteboard.operations.filter((operation) => operation.kind === 'text'
         ? operation.rowY + operation.rowSpan * this.whiteboard.rowHeight > message.top
         : operation.points.some((point) => point.y >= message.top)),
+    }; else if (message.type === 'prune') this.whiteboard = {
+      ...this.whiteboard, operations: this.whiteboard.operations.filter((operation) => operation.sequence > message.throughSequence),
     };
     this.lobbyScreen?.receiveWhiteboard(message);
   }

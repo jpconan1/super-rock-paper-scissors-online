@@ -206,6 +206,8 @@ export function mountWhiteboard(options: {
       const nearBottom = scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 45;
       if (message.type === 'snapshot' || message.type === 'reset') model.setSnapshot(message.board);
       else if (message.type === 'operation') model.append(message.operation);
+      else if (message.type === 'prune') model.prune(message.throughSequence);
+      else if (message.type === 'error' && message.clientOperationId) model.reject(message.clientOperationId);
       else if (message.type === 'trim') {
         if (active) { pendingTrim = message.top; return; }
         const previousTop = model.snapshot().top; const previousScrollTop = scroll.scrollTop;

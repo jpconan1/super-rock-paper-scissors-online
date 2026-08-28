@@ -36,5 +36,10 @@
     "database_name": "super-rps-online",
     "database_id": "78998a29-8eb7-43ae-bced-80a2123c57c9",
     "migrations_dir": "worker/migrations"
-  }]
+  }],
+  "ratelimits": [
+    { "name": "SOCKET_RATE", "namespace_id": "731001", "simple": { "limit": 120, "period": 60 } },
+    { "name": "MATCHMAKING_IP_RATE", "namespace_id": "731002", "simple": { "limit": 600, "period": 60 } },
+    { "name": "MATCHMAKING_GUEST_RATE", "namespace_id": "731003", "simple": { "limit": 120, "period": 60 } }
+  ]
 }

@@ -19,6 +19,8 @@ Before the first remote deployment:
 
 That command builds the browser app, then deploys its static assets and the API/WebSocket Worker together. Attach `abm.jpconan.ca` to `super-rps-online`; the old `super-rps-online-menu` Worker is no longer used.
 
-`POST /matches` creates a Match Durable Object and returns private P1/P2 resume tokens. Connect either seat to `/matches/{matchId}?seat=p1&token={token}` using WebSocket upgrade. `/lobby` and `/whiteboard` are WebSocket endpoints.
+Matchmaking creates Match Durable Objects internally. Connect a returned seat to `/matches/{matchId}?seat=p1` using WebSocket subprotocols `super-rps-match-v1` and the private seat token. `/lobby` and `/whiteboard` require their public protocol name plus the guest secret as WebSocket subprotocols. Public match creation is intentionally unavailable.
+
+Browser HTTP and WebSocket traffic is same-origin by default. Future trusted web distributions can be enabled without code changes by setting `ALLOWED_ORIGINS` to a comma-separated list of exact origins. Native clients that omit the browser `Origin` header remain supported.
 
 Do not commit Cloudflare credentials or generated `.wrangler` state.

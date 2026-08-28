@@ -49,14 +49,23 @@ export type WhiteboardServerMessage =
   | { type: 'snapshot'; board: WhiteboardSnapshot }
   | { type: 'operation'; operation: WhiteboardOperation }
   | { type: 'trim'; top: number }
+  | { type: 'prune'; throughSequence: number }
   | { type: 'reset'; board: WhiteboardSnapshot }
-  | { type: 'error'; code: string; message: string };
+  | { type: 'error'; code: string; message: string; clientOperationId?: string };
 
 export function createEmptyWhiteboard(): WhiteboardSnapshot {
   return { width: 760, viewHeight: 450, maxHeight: 1575, rowHeight: 60, top: 0, nextY: 68, sequence: 0, operations: [] };
 }
 
+export function pruneWhiteboardOperationPrefix(operations: WhiteboardOperation[], maximum: number, count: number): {
+  retained: WhiteboardOperation[]; removed: WhiteboardOperation[]; throughSequence?: number;
+} {
+  if (operations.length < maximum) return { retained: operations, removed: [] };
+  const removed = operations.slice(0, count);
+  return { retained: operations.slice(count), removed, throughSequence: removed.at(-1)?.sequence };
+}
+
 export function isWhiteboardServerMessage(value: unknown): value is WhiteboardServerMessage {
   if (!value || typeof value !== 'object' || !('type' in value)) return false;
-  return ['snapshot', 'operation', 'trim', 'reset', 'error'].includes(String(value.type));
+  return ['snapshot', 'operation', 'trim', 'prune', 'reset', 'error'].includes(String(value.type));
 }

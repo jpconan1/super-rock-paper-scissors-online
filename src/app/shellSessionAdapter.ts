@@ -3,6 +3,7 @@ import { PROTOCOL_VERSION, type MatchCommandPayload, type ServerSnapshot } from 
 import type { SlotId } from '../core/slots';
 import { isWhiteboardServerMessage, type WhiteboardClientMessage, type WhiteboardServerMessage } from '../whiteboard/protocol';
 import { isLobbyServerMessage, type LobbyPlayer, type LobbyPresence } from '../lobby/protocol';
+import { LOBBY_SOCKET_PROTOCOL, MATCH_SOCKET_PROTOCOL, WHITEBOARD_SOCKET_PROTOCOL } from '../protocol/webSocketAuth';
 
 export interface ShellSessionListener {
   connection(state: ConnectionState): void;
@@ -128,7 +129,10 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
     if (this.pollTimer) clearTimeout(this.pollTimer);
     this.pollTimer = undefined;
     this.setLobbyPresence('idle');
-    void fetch(`${this.baseUrl}/matchmaking?guestId=${encodeURIComponent(this.guestId)}`, { method: 'DELETE' }).catch(() => {});
+    void fetch(`${this.baseUrl}/matchmaking`, {
+      method: 'DELETE', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ guestId: this.guestId, guestSecret: this.guestSecret }),
+    }).catch(() => {});
   }
   selectSlot(slotId: SlotId): void { this.sendPayload({ type: 'select-slot', slotId }); }
   send(command: unknown): void {
@@ -144,7 +148,7 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
     if (!this.onlineActive || this.lobbySocket) return;
     const url = new URL(`${this.baseUrl}/lobby`); url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
     url.searchParams.set('guest', this.guestId); url.searchParams.set('name', this.playerName || 'Guest');
-    const socket = new WebSocket(url); this.lobbySocket = socket;
+    const socket = new WebSocket(url, [LOBBY_SOCKET_PROTOCOL, this.guestSecret]); this.lobbySocket = socket;
     socket.addEventListener('open', () => socket.send(JSON.stringify({ type: 'presence', presence: this.lobbyPresence })));
     socket.addEventListener('message', (event) => {
       try { const message = JSON.parse(String(event.data)); if (isLobbyServerMessage(message) && message.type === 'roster') this.listener?.roster?.(message.players, message.selfId); } catch { /* ignore malformed server data */ }
@@ -159,14 +163,15 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
   private connectWhiteboard(): void {
     if (!this.whiteboardActive || this.whiteboardSocket) return;
     const url = new URL(`${this.baseUrl}/whiteboard`); url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-    url.searchParams.set('name', this.playerName || 'Guest'); url.searchParams.set('visit', this.lobbyVisitId);
-    const socket = new WebSocket(url); this.whiteboardSocket = socket;
+    url.searchParams.set('guest', this.guestId); url.searchParams.set('name', this.playerName || 'Guest'); url.searchParams.set('visit', this.lobbyVisitId);
+    const socket = new WebSocket(url, [WHITEBOARD_SOCKET_PROTOCOL, this.guestSecret]); this.whiteboardSocket = socket;
     socket.addEventListener('open', () => { for (const message of this.whiteboardPending.values()) socket.send(JSON.stringify(message)); });
     socket.addEventListener('message', (event) => {
       try {
         const message = JSON.parse(String(event.data));
         if (!isWhiteboardServerMessage(message)) return;
         if (message.type === 'operation' && message.operation.clientOperationId) this.whiteboardPending.delete(message.operation.clientOperationId);
+        if (message.type === 'error' && message.clientOperationId) this.whiteboardPending.delete(message.clientOperationId);
         if (message.type === 'reset') this.whiteboardPending.clear();
         if (message.type === 'snapshot' || message.type === 'reset') {
           for (const operation of message.board.operations) if (operation.clientOperationId) this.whiteboardPending.delete(operation.clientOperationId);
@@ -217,8 +222,8 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
     this.ticket = { matchId, seat, token };
     const url = new URL(`${this.baseUrl}/matches/${matchId}`);
     url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-    url.searchParams.set('seat', seat); url.searchParams.set('token', token);
-    const socket = new WebSocket(url);
+    url.searchParams.set('seat', seat);
+    const socket = new WebSocket(url, [MATCH_SOCKET_PROTOCOL, token]);
     this.socket = socket;
     socket.addEventListener('open', () => { this.listener?.connection('connected'); this.listener?.matchFound(); });
     socket.addEventListener('message', (message) => {

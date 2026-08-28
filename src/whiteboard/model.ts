@@ -25,6 +25,12 @@ export class WhiteboardModel {
     if (operation.clientOperationId) this.optimistic.set(operation.clientOperationId, operation);
   }
 
+  reject(clientOperationId: string): void { this.optimistic.delete(clientOperationId); }
+
+  prune(throughSequence: number): void {
+    this.board.operations = this.board.operations.filter((operation) => operation.sequence > throughSequence);
+  }
+
   trim(top: number): void {
     this.board.top = top;
     this.board.operations = this.board.operations.filter((operation) => operation.kind === 'text'
