@@ -3,7 +3,12 @@ import type { ClientVariantDescriptor, SeasonClientManifest } from './variant';
 
 export function validateClientSeason(manifest: SeasonClientManifest): ReadonlyMap<SlotId, ClientVariantDescriptor> {
   if (!manifest.seasonId.trim()) throw new Error('Client season requires an ID.');
-  if (manifest.slots.length !== SLOT_IDS.length) throw new Error('Client season must map exactly nine slots.');
+  const requiredSlots = manifest.mode === 'single-variant' ? 1 : SLOT_IDS.length;
+  if (manifest.slots.length !== requiredSlots) {
+    throw new Error(manifest.mode === 'single-variant'
+      ? 'Single-variant client season must map exactly one slot.'
+      : 'Multi-variant client season must map exactly nine slots.');
+  }
   const result = new Map<SlotId, ClientVariantDescriptor>();
   const variants = new Set<string>();
   for (const entry of manifest.slots) {
@@ -18,6 +23,7 @@ export function validateClientSeason(manifest: SeasonClientManifest): ReadonlyMa
     result.set(entry.slotId, descriptor);
     variants.add(descriptor.variantId);
   }
-  for (const slot of SLOT_IDS) if (!result.has(slot)) throw new Error(`Missing client slot: ${slot}`);
+  if (manifest.mode === 'single-variant' && !result.has('slot-1')) throw new Error('Single-variant client season must use slot-1.');
+  if (manifest.mode === 'multi-variant') for (const slot of SLOT_IDS) if (!result.has(slot)) throw new Error(`Missing client slot: ${slot}`);
   return result;
 }

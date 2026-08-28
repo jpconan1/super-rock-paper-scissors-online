@@ -6,6 +6,7 @@ import { beats } from './time';
 
 export const SCOREBOARD_HOLD_MS = 3_750;
 export const MATCH_FOUND_HOLD_MS = beats(2);
+export const DISCONNECT_GRACE_MS = 10_000;
 export type MatchFormat = 'abm-only' | 'multi-slot';
 
 export interface OnlineMatchState {
@@ -21,6 +22,10 @@ export interface OnlineMatchState {
   bans: Record<PlayerId, SlotId[]>;
   bansLocked: boolean;
   winner?: PlayerId;
+  completionReason?: 'played' | 'disconnect';
+  disconnectedPlayer?: PlayerId;
+  connections: Record<PlayerId, boolean>;
+  disconnectDeadlines: Partial<Record<PlayerId, number>>;
   deadlineAt?: number;
   events: TimedSemanticEvent[];
   processed: string[];
@@ -42,7 +47,7 @@ export function createOnlineMatch(
   return {
     matchId, revision: 0, phase: 'match-found', players, picks: {}, pickOrder: [], games: [],
     bans: { p1: [], p2: [] }, bansLocked: false, deadlineAt, events: [event(matchId, 0, 0, 'match-found', now, deadlineAt)],
-    processed: [], seed, format,
+    processed: [], seed, format, connections: { p1: true, p2: true }, disconnectDeadlines: {},
   };
 }
 
@@ -150,7 +155,57 @@ export function projectOnlineMatch(state: OnlineMatchState, viewer: PlayerId): M
     ...(variant === undefined ? {} : { variant }), unavailableSlots: unavailable(state),
     ownBans: state.bans[viewer], opponentBanCount: state.bans[viewer === 'p1' ? 'p2' : 'p1'].length,
     bansLocked: state.bansLocked, ...(state.winner ? { winner: state.winner } : {}),
+    ...(state.completionReason ? { completionReason: state.completionReason } : {}),
+    ...(state.disconnectedPlayer ? { disconnectedPlayer: state.disconnectedPlayer } : {}),
+    reconnectingPlayers: (['p1', 'p2'] as const).filter((player) => !state.connections[player]),
   };
+}
+
+export function markPlayerDisconnected(state: OnlineMatchState, player: PlayerId, now: number): boolean {
+  if (!state.connections[player]) return false;
+  state.connections[player] = false;
+  if (state.phase === 'playing') state.disconnectDeadlines[player] = now + DISCONNECT_GRACE_MS;
+  return true;
+}
+
+export function markPlayerConnected(state: OnlineMatchState, player: PlayerId): boolean {
+  const changed = !state.connections[player] || state.disconnectDeadlines[player] !== undefined;
+  state.connections[player] = true;
+  delete state.disconnectDeadlines[player];
+  return changed;
+}
+
+export function beginGameplayDisconnectGrace(state: OnlineMatchState, now: number): boolean {
+  if (state.phase !== 'playing') return false;
+  let changed = false;
+  for (const player of ['p1', 'p2'] as const) {
+    if (!state.connections[player] && state.disconnectDeadlines[player] === undefined) {
+      state.disconnectDeadlines[player] = now + DISCONNECT_GRACE_MS;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+export function resolveDisconnectDeadline(state: OnlineMatchState, now: number): boolean {
+  if (state.phase !== 'playing') return false;
+  const expired = (['p1', 'p2'] as const).filter((player) =>
+    !state.connections[player] && (state.disconnectDeadlines[player] ?? Infinity) <= now);
+  if (!expired.length) return false;
+  const bothExpired = expired.length === 2;
+  const disconnectedPlayer = bothExpired ? undefined : expired[0]!;
+  const winner = disconnectedPlayer === 'p1' ? 'p2' : disconnectedPlayer === 'p2' ? 'p1' : undefined;
+  state.phase = 'complete';
+  state.winner = winner;
+  state.completionReason = 'disconnect';
+  state.disconnectedPlayer = disconnectedPlayer;
+  state.deadlineAt = undefined;
+  state.disconnectDeadlines = {};
+  state.revision++;
+  state.events = [event(state.matchId, state.revision, 0, 'match-complete', now, now + SCOREBOARD_HOLD_MS, {
+    reason: 'disconnect', ...(winner ? { winner } : {}), disconnectedPlayers: expired,
+  })];
+  return true;
 }
 
 function enterScoreboard(
@@ -183,6 +238,7 @@ function startGame(
     matchWins: wins,
   });
   state.deadlineAt = undefined;
+  beginGameplayDisconnectGrace(state, now);
   if (add) add('game-start', 600, { slotId: slot });
   else state.events = [event(state.matchId, revision, 0, 'game-start', now, now + 600, { slotId: slot })];
 }
@@ -196,7 +252,10 @@ function finishGame(
   state.games.push({ slotId: state.activeSlot!, ...result });
   if (state.format === 'abm-only') {
     state.winner = result.winner;
+    state.phase = 'complete';
+    state.completionReason = 'played';
     state.deadlineAt = undefined;
+    state.disconnectDeadlines = {};
     add('match-complete', SCOREBOARD_HOLD_MS, { winner: state.winner, scores: result.scores });
     return;
   }

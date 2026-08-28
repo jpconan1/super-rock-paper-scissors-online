@@ -1,5 +1,6 @@
 import type { BoilClock } from '../animation/boilClock';
 import { createSoundEffect } from '../audio/soundEffect';
+import { catalogSound } from '../audio/soundCatalog';
 import { createBoilingSprite } from '../renderer/boilingSprite';
 import { detectSheetTextAnchor } from '../renderer/textAnchorDetector';
 import { setControlDisabled } from './controlDisabled';
@@ -26,8 +27,8 @@ export interface ToggleButton {
 }
 
 export function createToggleButton(options: ToggleButtonOptions): ToggleButton {
-  const depressedSound = createSoundEffect(options.depressedSound ?? '/audio/button-depressed.mp3');
-  const releasedSound = createSoundEffect(options.releasedSound ?? '/audio/button-released.mp3');
+  const depressedSound = options.depressedSound ? createSoundEffect(options.depressedSound) : catalogSound('button-down');
+  const releasedSound = options.releasedSound ? createSoundEffect(options.releasedSound) : catalogSound('button-up');
   const element = document.createElement('button');
   element.type = 'button';
   element.className = 'toggle-button';

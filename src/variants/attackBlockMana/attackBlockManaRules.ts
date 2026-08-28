@@ -10,7 +10,7 @@ export const ABM_LETHAL_TO_RESULT_MS = STARBURST_WIPE_MS + beats(1);
 export const ABM_RESULT_TO_COUNTER_PICK_MS = STARBURST_WIPE_MS + beats(2);
 
 export const attackBlockManaRules: VariantRules<AbmState, AbmCommand, AbmProjection, AbmResult> = {
-  variantId: 'attack-block-mana', rulesVersion: 2,
+  variantId: 'attack-block-mana', rulesVersion: 1,
   initialize: () => ({
     phase: 'selecting-classes', turn: 0, round: 1, score: { p1: 0, p2: 0 },
     players: { p1: freshPlayer(), p2: freshPlayer() }, pendingClasses: {}, pendingMoves: {},

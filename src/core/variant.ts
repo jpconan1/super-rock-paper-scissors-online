@@ -1,6 +1,7 @@
 import type { SlotId } from './slots';
 import type { MatchPlayer, TimedSemanticEvent } from '../protocol/protocol';
 import type { AssetBundleId } from '../assets/assetBundleTypes';
+import type { MusicDirector } from '../audio/musicDirector';
 
 export type PlayerId = 'p1' | 'p2';
 
@@ -43,6 +44,7 @@ export interface VariantPresentationContext<TCommand> {
   backToLobby?(): void;
   self?: PlayerId;
   players?: Readonly<Record<PlayerId, MatchPlayer>>;
+  music?: MusicDirector;
 }
 
 export interface PresentationAssetLease {
@@ -80,5 +82,6 @@ export interface SeasonClientSlot {
 
 export interface SeasonClientManifest {
   readonly seasonId: string;
+  readonly mode: 'single-variant' | 'multi-variant';
   readonly slots: readonly SeasonClientSlot[];
 }

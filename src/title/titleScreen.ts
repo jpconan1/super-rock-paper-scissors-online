@@ -63,7 +63,7 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
   const boilToggle = createBoilToggle(clock);
   const musicVolume = createVolumeSlider('music', clock, getMusicVolume(), setMusicVolume);
   const sfxVolume = createVolumeSlider('sfx', clock, getSfxVolume(), setSfxVolume);
-  setMusicBase('drums-bass');
+  setMusicBase('drums');
   void preloadMusic('title');
   const unsubscribeAudio = subscribeAudioState(({ enabled }) => {
     musicVolume.setDisabled(!enabled);

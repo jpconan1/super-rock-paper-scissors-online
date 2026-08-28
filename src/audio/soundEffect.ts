@@ -230,6 +230,19 @@ export function setMusicBase(base: MusicBase): void {
   ensureMusicTransport()?.setBase(base);
 }
 
+export function setMusicBaseImmediately(base: MusicBase): void {
+  requestedBase = base;
+  ensureMusicTransport()?.setBaseImmediately(base);
+}
+
+export function setMusicVariationsEnabled(enabled: boolean): void {
+  ensureMusicTransport()?.setVariationsEnabled(enabled);
+}
+
+export function queueMusicBaseOnce(base: MusicBase): Promise<void> {
+  return ensureMusicTransport()?.queueBaseOnce(base) ?? Promise.resolve();
+}
+
 export function setMusicTopper(topper: MusicTopper): void {
   requestedTopper = topper;
   ensureMusicTransport()?.setTopper(topper);
@@ -239,12 +252,16 @@ export function preloadMusic(group: string): Promise<void> {
   return ensureMusicTransport()?.preload(group) ?? Promise.resolve();
 }
 
-export function playMusicInterrupt(id: string): Promise<boolean> {
-  return ensureMusicTransport()?.playInterrupt(id) ?? Promise.resolve(false);
+export function playMusicInterrupt(id: string, resume = true): Promise<boolean> {
+  return ensureMusicTransport()?.playInterrupt(id, resume) ?? Promise.resolve(false);
 }
 
 export function getMusicPhaseSeconds(): number {
   return musicTransport?.phaseSeconds ?? 0;
+}
+
+export function stopMusic(): void {
+  musicTransport?.stop();
 }
 
 function createFallbackPool(src: string, size = 4): HTMLAudioElement[] {

@@ -78,6 +78,7 @@ export function mountLobbyScreen(
   onScoreboard: () => void,
   onSettings: () => void,
   sendWhiteboard: (message: WhiteboardClientMessage) => void,
+  multiVariantFlow = true,
 ): LobbyScreenMount {
   const layoutDocument = getLayoutDocument('lobby');
   let layoutName: 'landscape' | 'portrait' = 'landscape';
@@ -187,16 +188,16 @@ export function mountLobbyScreen(
     { id: 'ready', element: matchmakingToggle.element },
     { id: 'settings', element: menuButton('Settings', 'settings-button', 'lobby-screen__action', onSettings) },
   ];
-  const scoreboard = action('Scoreboard', leaveQueue(onScoreboard));
-  scoreboard.classList.add('lobby-screen__scoreboard-preview');
+  const scoreboard = multiVariantFlow ? action('Scoreboard', leaveQueue(onScoreboard)) : undefined;
+  scoreboard?.classList.add('lobby-screen__scoreboard-preview');
   composition.append(header, whiteboard, ...tools.map((item) => item.element), chat,
-    ...actions.map((item) => item.element), roster, scoreboard, curtainLeft, curtainRight);
+    ...actions.map((item) => item.element), roster, ...(scoreboard ? [scoreboard] : []), curtainLeft, curtainRight);
   composition.append(rosterToggle.element);
   layoutBindings.push(
     { id: 'header', element: header }, { id: 'whiteboard', element: whiteboard }, ...tools,
     { id: 'chat-input', element: chatEntry.element }, { id: 'chat-button', element: chatButton },
     { id: 'roster-toggle', element: rosterToggle.element }, ...actions, { id: 'roster', element: roster },
-    { id: 'scoreboard-preview', element: scoreboard }, { id: 'curtain-left', element: curtainLeft },
+    ...(scoreboard ? [{ id: 'scoreboard-preview', element: scoreboard }] : []), { id: 'curtain-left', element: curtainLeft },
     { id: 'curtain-right', element: curtainRight },
   );
   applyDocumentLayout(layoutDocument, layoutName, layoutBindings);
@@ -293,6 +294,33 @@ export function showConnectionModal(container: HTMLElement, state: 'reconnecting
   modal.append(message.element);
   container.replaceChildren(modal);
   return () => { message.destroy(); modal.remove(); };
+}
+
+export function mountDisconnectResult(
+  container: HTMLElement,
+  clock: BoilClock,
+  won: boolean,
+  onBack: () => void,
+): ScreenCleanup {
+  const modal = document.createElement('div');
+  modal.className = 'shell-modal disconnect-result';
+  modal.setAttribute('role', 'alertdialog');
+  modal.setAttribute('aria-modal', 'true');
+  const message = document.createElement('p');
+  message.className = 'disconnect-result__message';
+  message.textContent = won ? 'Opponent disconnected!' : 'You disconnected!';
+  const textbox = createTextbox({ className: 'shell-modal__message disconnect-result__textbox', content: message });
+  const back = createGameButton({
+    label: 'Back to Lobby', onActivate: onBack, clock,
+    upSheet: '/visual-elements/system-scenes/back-lobby-button-up-sheet.webp',
+    betweenSheet: '/visual-elements/system-scenes/back-lobby-button-between-sheet.webp',
+    depressedSheet: '/visual-elements/system-scenes/back-lobby-button-depressed-sheet.webp',
+  });
+  back.element.classList.add('disconnect-result__back', 'game-button--baked-label');
+  textbox.element.append(back.element);
+  modal.append(textbox.element);
+  container.replaceChildren(modal);
+  return () => { back.destroy(); textbox.destroy(); modal.remove(); };
 }
 
 export function mountErrorScreen(container: HTMLElement, error: unknown, onBack: () => void): ScreenCleanup {

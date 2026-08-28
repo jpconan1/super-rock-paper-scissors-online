@@ -12,13 +12,15 @@ import { CurtainWipe } from '../renderer/curtainWipe';
 import { mountVariantSelectScreen } from '../variantSelect/variantSelectScreen';
 import { mountScoreboardScreen } from '../scoreboard/scoreboardScreen';
 import type { ShellSessionAdapter } from './shellSessionAdapter';
-import { mountErrorScreen, mountLobbyScreen, mountMatchFoundScreen, showConnectionModal, type LobbyScreenMount } from './shellScreens';
+import { mountDisconnectResult, mountErrorScreen, mountLobbyScreen, mountMatchFoundScreen, showConnectionModal, type LobbyScreenMount } from './shellScreens';
 import { MatchFlowDirector, statesForMatch } from './matchFlowDirector';
 import type { VariantSelectScreen } from '../variantSelect/variantSelectScreen';
 import { mountUniversalMenu, type UniversalMenu } from './universalMenu';
 import { createEmptyWhiteboard, type WhiteboardServerMessage, type WhiteboardSnapshot } from '../whiteboard/protocol';
 import type { LobbyPlayer } from '../lobby/protocol';
 import { beats } from '../core/time';
+import { MusicDirector } from '../audio/musicDirector';
+import { destroySoundCatalog } from '../audio/soundCatalog';
 
 export type ConnectionState = 'connected' | 'reconnecting' | 'offline';
 export type ShellDestination = 'title' | 'lobby' | 'match-found' | 'slot-picker' | 'scoreboard' | 'gameplay';
@@ -58,7 +60,8 @@ export class AppController {
   private whiteboard: WhiteboardSnapshot = createEmptyWhiteboard();
   private lobbyPlayers: LobbyPlayer[] = [];
   private lobbySelfId = '';
-  private disconnectedCompletedMatchId?: string;
+  private terminalCleanup?: () => void;
+  private readonly music = new MusicDirector();
   private readonly onGlobalKeyDown = (event: KeyboardEvent) => {
     if (event.key !== 'Escape' || event.repeat || this.destination === 'title') return;
     event.preventDefault();
@@ -147,13 +150,15 @@ export class AppController {
     this.mounted = presentation;
     this.assetLease = lease;
     this.activeSlot = slotId;
+    if (descriptor?.variantId === 'attack-block-mana') this.music.enterAbm();
     const emit = send ?? ((command: unknown) => {
       if (this.connectionState === 'connected') this.options.session.send(command);
     });
     presentation.mount({
       container: this.screenLayer, signal: this.lifecycle.signal, send: emit,
-      openMenu: () => this.openUniversalMenu(), backToLobby: () => void this.navigate('lobby'),
+      openMenu: () => this.openUniversalMenu(), backToLobby: () => this.returnToLobbyFromMatch(),
       self: this.matchProjection?.self ?? 'p1', players: this.matchProjection?.players,
+      music: this.music,
     });
     this.timeline = new AnimationTimeline(({ event }) => {
       if (this.latestSnapshot) {
@@ -171,13 +176,6 @@ export class AppController {
       this.mounted.render(variantProjection(snapshot.projection), snapshot.events, snapshot.serverTime);
       this.timeline?.schedule(snapshot.events, snapshot.serverTime);
     }
-    const match = isMatchProjection(snapshot.projection) ? snapshot.projection : undefined;
-    const variant = variantProjection(snapshot.projection) as { phase?: unknown } | undefined;
-    if (isControllerOptions(this.optionsOrRegistry) && match?.activeSlot === 'slot-1' && variant?.phase === 'match-complete'
-      && this.disconnectedCompletedMatchId !== snapshot.matchId) {
-      this.disconnectedCompletedMatchId = snapshot.matchId;
-      this.options.session.leaveMatch();
-    }
   }
 
   render(snapshot: ServerSnapshot): void { this.receiveSnapshot(snapshot); }
@@ -187,6 +185,8 @@ export class AppController {
     if (state !== 'connected') this.closeUniversalMenu();
     this.modalCleanup?.();
     this.modalCleanup = undefined;
+    this.terminalCleanup?.();
+    this.terminalCleanup = undefined;
     this.lobbyScreen?.setConnectionState(state);
     if (state !== 'connected' && this.destination !== 'lobby') {
       this.timeline?.cancel(true);
@@ -205,17 +205,22 @@ export class AppController {
     this.clearScreen();
     this.modalCleanup?.();
     this.modalCleanup = undefined;
+    this.terminalCleanup?.();
+    this.terminalCleanup = undefined;
     this.unsubscribeSession?.();
     this.unsubscribeSession = undefined;
     this.curtain?.destroy();
     this.curtain = undefined;
     this.setMatchmaking(false);
     this.matchFlowDirector?.cancel();
+    this.music.leaveAbm();
+    destroySoundCatalog();
     if (isControllerOptions(this.optionsOrRegistry)) this.optionsOrRegistry.session.destroy();
   }
 
   private mountDestination(destination: ShellDestination): void {
     const options = this.options;
+    this.music.enterMenu();
     if (destination === 'title') {
       const title = mountTitleScreen(this.screenLayer, options.clock, (name) => {
         this.playerName = name;
@@ -239,6 +244,7 @@ export class AppController {
         () => void this.navigate('scoreboard'),
         () => this.openUniversalMenu(),
         (message) => options.session.sendWhiteboard(message),
+        options.season.mode === 'multi-variant',
       );
       lobby.receiveWhiteboard({ type: 'snapshot', board: this.whiteboard });
       lobby.updateRoster(this.lobbyPlayers, this.lobbySelfId);
@@ -342,6 +348,7 @@ export class AppController {
     this.assetLease?.release();
     this.assetLease = undefined;
     this.activeSlot = undefined;
+    this.music.leaveAbm();
   }
 
   private showError(error: unknown): void {
@@ -428,10 +435,25 @@ export class AppController {
       return;
     }
     if (projection.phase === 'complete' && this.destination !== 'lobby') {
-      this.options.session.leaveMatch();
-      this.latestSnapshot = undefined;
-      await this.navigate('lobby');
+      if (projection.completionReason === 'disconnect' && !this.terminalCleanup) {
+        this.modalCleanup?.();
+        this.modalCleanup = undefined;
+        this.terminalCleanup = mountDisconnectResult(
+          this.modalLayer, this.options.clock, projection.winner === projection.self,
+          () => this.returnToLobbyFromMatch(),
+        );
+      }
     }
+  }
+
+  private returnToLobbyFromMatch(): void {
+    this.terminalCleanup?.();
+    this.terminalCleanup = undefined;
+    this.options.session.leaveMatch();
+    this.latestSnapshot = undefined;
+    this.matchFlowDirector?.cancel();
+    this.music.enterMenu(true);
+    void this.navigate('lobby');
   }
 }
 

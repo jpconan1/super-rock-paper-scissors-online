@@ -9,10 +9,9 @@
     "test": "vitest run",
     "worker:check": "tsc -p worker/tsconfig.json",
     "worker:dev": "wrangler dev",
-    "worker:deploy": "wrangler deploy",
-    "menu:deploy": "wrangler deploy --config wrangler.menu.jsonc",
-    "d1:migrate:local": "wrangler d1 migrations apply super-rps --local",
-    "d1:migrate:remote": "wrangler d1 migrations apply super-rps --remote",
+    "worker:deploy": "npm run build && wrangler deploy",
+    "d1:migrate:local": "wrangler d1 migrations apply super-rps-online --local",
+    "d1:migrate:remote": "wrangler d1 migrations apply super-rps-online --remote",
     "assets:compress-staged": "scripts/compress-staged-assets.sh",
     "assets:check": "scripts/check-compressed-assets.sh && node scripts/validate-music-assets.mjs",
     "audio:check": "node scripts/validate-music-assets.mjs"

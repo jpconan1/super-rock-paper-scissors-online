@@ -21,24 +21,29 @@ function descriptor(documentId: string, clock: BoilClock): ClientVariantDescript
   };
 }
 
-export function createClientSeasonManifest(clock: BoilClock): SeasonClientManifest {
+export function createClientSeasonManifest(
+  clock: BoilClock,
+  mode: SeasonClientManifest['mode'] = 'single-variant',
+): SeasonClientManifest {
   const abm = descriptor('variant-abm', clock);
+  const abmSlot = { slotId: 'slot-1' as const, variant: {
+    ...abm,
+    variantId: 'attack-block-mana',
+    rulesVersion: 1,
+    title: 'Attack Block Mana',
+    rulesCopy: ['Attack costs 1 Mana and defeats Mana.', 'Block stops Attack. Mana gains Mana.', 'First to three rounds wins.'],
+    assetBundleId: 'variant:abm' as const,
+    thumbnail: '/variants/abm/advantaged-placeholder-sheet.webp',
+    loadPresentation: async () => {
+      const { createAttackBlockManaPresentation } = await import('./attackBlockMana/attackBlockManaPresentation');
+      return createAttackBlockManaPresentation(clock);
+    },
+  } };
   return {
     seasonId: 'local-alpha',
-    slots: [
-      { slotId: 'slot-1', variant: {
-        ...abm,
-        variantId: 'attack-block-mana',
-        rulesVersion: 2,
-        title: 'Attack Block Mana',
-        rulesCopy: ['Attack costs 1 Mana and defeats Mana.', 'Block stops Attack. Mana gains Mana.', 'First to three rounds wins.'],
-        assetBundleId: 'variant:abm',
-        thumbnail: '/variants/abm/advantaged-placeholder-sheet.webp',
-        loadPresentation: async () => {
-          const { createAttackBlockManaPresentation } = await import('./attackBlockMana/attackBlockManaPresentation');
-          return createAttackBlockManaPresentation(clock);
-        },
-      } },
+    mode,
+    slots: mode === 'single-variant' ? [abmSlot] : [
+      abmSlot,
       { slotId: 'slot-2', variant: descriptor('variant-dragon-spear', clock) },
       { slotId: 'slot-3', variant: descriptor('variant-pick-two', clock) },
       { slotId: 'slot-4', variant: descriptor('variant-gun-knife-fist', clock) },

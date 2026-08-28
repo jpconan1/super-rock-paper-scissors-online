@@ -1,5 +1,8 @@
 import { describe, expect, test } from 'vitest';
-import { acceptMatchCommand, advanceMatchDeadline, createOnlineMatch, projectOnlineMatch } from '../src/core/onlineMatch';
+import {
+  acceptMatchCommand, advanceMatchDeadline, beginGameplayDisconnectGrace, createOnlineMatch,
+  markPlayerConnected, markPlayerDisconnected, projectOnlineMatch, resolveDisconnectDeadline,
+} from '../src/core/onlineMatch';
 import { BEAT_MS, beats } from '../src/core/time';
 
 describe('game time', () => {
@@ -31,11 +34,12 @@ describe('online match', () => {
     }
     expect(state.games).toHaveLength(1);
     expect(state.winner).toBe('p1');
-    expect(state.phase).toBe('playing');
+    expect(state.phase).toBe('complete');
     expect(state.events.some(({ type }) => type === 'match-complete')).toBe(true);
     expect(state.deadlineAt).toBeUndefined();
+    expect(state.completionReason).toBe('played');
     expect(advanceMatchDeadline(state, Number.MAX_SAFE_INTEGER)).toBe(false);
-    expect(state.phase).toBe('playing');
+    expect(state.phase).toBe('complete');
     expect(state.gameState).toMatchObject({ phase: 'match-complete', winner: 'p1', score: { p1: 3, p2: 0 } });
   });
 
@@ -52,6 +56,59 @@ describe('online match', () => {
     expect(state.deadlineAt).toBeUndefined();
     expect(state.events.some(({ type }) => type === 'move-timeout')).toBe(true);
     expect(state.gameState).toMatchObject({ phase: 'idle', players: { p2: { strikes: 1, lastMove: 'skip' } } });
+  });
+
+  test('forfeits a disconnected player after ten seconds', () => {
+    const state = createOnlineMatch('disconnect', players, 1, 0, 'abm-only');
+    advanceMatchDeadline(state, 1_500);
+    expect(markPlayerDisconnected(state, 'p2', 2_000)).toBe(true);
+    expect(state.disconnectDeadlines.p2).toBe(12_000);
+    expect(projectOnlineMatch(state, 'p1').reconnectingPlayers).toEqual(['p2']);
+    expect(resolveDisconnectDeadline(state, 11_999)).toBe(false);
+    expect(resolveDisconnectDeadline(state, 12_000)).toBe(true);
+    expect(state).toMatchObject({ phase: 'complete', winner: 'p1', completionReason: 'disconnect', disconnectedPlayer: 'p2' });
+    expect(state.events).toHaveLength(1);
+    expect(state.events[0]).toMatchObject({ type: 'match-complete', payload: { reason: 'disconnect', winner: 'p1' } });
+  });
+
+  test('cancels disconnect grace when the player reconnects', () => {
+    const state = createOnlineMatch('reconnect', players, 1, 0, 'abm-only');
+    advanceMatchDeadline(state, 1_500);
+    markPlayerDisconnected(state, 'p1', 2_000);
+    expect(markPlayerConnected(state, 'p1')).toBe(true);
+    expect(state.disconnectDeadlines.p1).toBeUndefined();
+    expect(resolveDisconnectDeadline(state, 20_000)).toBe(false);
+    expect(state.phase).toBe('playing');
+  });
+
+  test('starts grace at gameplay for a player disconnected during match-found', () => {
+    const state = createOnlineMatch('pregame-disconnect', players, 1, 0, 'abm-only');
+    markPlayerDisconnected(state, 'p2', 200);
+    expect(state.disconnectDeadlines.p2).toBeUndefined();
+    advanceMatchDeadline(state, 1_500);
+    expect(beginGameplayDisconnectGrace(state, 1_500)).toBe(false);
+    expect(state.disconnectDeadlines.p2).toBe(11_500);
+    expect(state.winner).toBeUndefined();
+  });
+
+  test('does not overwrite a completed game with a disconnect', () => {
+    const state = createOnlineMatch('completed-disconnect', players, 1, 0, 'abm-only');
+    advanceMatchDeadline(state, 1_500);
+    state.phase = 'complete'; state.winner = 'p2'; state.completionReason = 'played';
+    markPlayerDisconnected(state, 'p1', 2_000);
+    expect(resolveDisconnectDeadline(state, 20_000)).toBe(false);
+    expect(state).toMatchObject({ winner: 'p2', completionReason: 'played' });
+  });
+
+  test('ends simultaneous expired disconnects without awarding either player', () => {
+    const state = createOnlineMatch('both-disconnect', players, 1, 0, 'abm-only');
+    advanceMatchDeadline(state, 1_500);
+    markPlayerDisconnected(state, 'p1', 2_000);
+    markPlayerDisconnected(state, 'p2', 2_000);
+    expect(resolveDisconnectDeadline(state, 12_000)).toBe(true);
+    expect(state).toMatchObject({ phase: 'complete', completionReason: 'disconnect' });
+    expect(state.winner).toBeUndefined();
+    expect(state.disconnectedPlayer).toBeUndefined();
   });
 
   test('orders picks, advances by deadline, and hides opponent moves', () => {

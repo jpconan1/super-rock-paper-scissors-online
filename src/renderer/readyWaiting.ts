@@ -2,7 +2,7 @@ import type { BoilClock } from '../animation/boilClock';
 import type { TimedSemanticEvent } from '../protocol/protocol';
 import type { PlayerId } from '../core/variant';
 import { createBoilingSprite, type BoilingSprite } from './boilingSprite';
-import { createSoundEffect } from '../audio/soundEffect';
+import { catalogSound } from '../audio/soundCatalog';
 import { playStarburstWipe } from './starburstWipe';
 
 const STEP_MS = 58;
@@ -37,7 +37,7 @@ export function mountReadyWaiting(container: HTMLElement, clock: BoilClock): Rea
   split.className = 'ready-waiting__split';
   split.alt = '';
   split.draggable = false;
-  const sound = createSoundEffect('/audio/ready.mp3');
+  const sound = catalogSound('ready');
   layer.append(split, ready.element, dots.element);
   container.append(layer);
   let readyEvent: TimedSemanticEvent | undefined;

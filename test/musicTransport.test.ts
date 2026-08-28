@@ -157,4 +157,51 @@ describe('MusicTransport', () => {
     expect(sources).toHaveLength(2);
     transport.destroy();
   });
+
+  it('selects a loaded variation per phrase and queues exactly one sax phrase', async () => {
+    const sources: SourceMock[] = [];
+    const buffers = new Map<string, AudioBuffer>();
+    const context = {
+      currentTime: 0, state: 'running',
+      createBufferSource: () => { const source = new SourceMock(); sources.push(source); return source; },
+      createGain: () => new GainMock(),
+    };
+    const transport = new MusicTransport({
+      context: context as unknown as AudioContext,
+      output: new NodeMock() as unknown as AudioNode,
+      interruptOutput: new NodeMock() as unknown as AudioNode,
+      manifest: { ...manifest, variations: [manifest.bases['drums-bass-var-1'], manifest.bases['drums-bass-var-2']] },
+      load: async (src) => {
+        const loaded = Object.assign(buffer(), { id: src });
+        buffers.set(src, loaded); return loaded;
+      },
+      random: vi.fn().mockReturnValueOnce(0.1).mockReturnValueOnce(0.75).mockReturnValue(0.9),
+      tickMilliseconds: 60_000,
+    });
+    transport.setBase('drums-bass');
+    transport.setVariationsEnabled(true);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    transport.tick();
+    expect(sources[0]?.buffer).toBe(buffers.get('/audio/var2'));
+
+    await transport.queueBaseOnce('drums-bass-sax');
+    context.currentTime = 1.9; transport.tick();
+    expect(sources[1]?.buffer).toBe(buffers.get('/audio/sax'));
+    context.currentTime = 3.9; transport.tick();
+    expect(sources[2]?.buffer).toBe(buffers.get('/audio/base'));
+    transport.destroy();
+  });
+
+  it('restarts immediately on a menu base instead of finishing the game phrase', async () => {
+    const { context, transport, sources } = setup();
+    transport.setBase('drums-bass');
+    await Promise.resolve(); await Promise.resolve(); transport.tick();
+    const gameSource = sources[0]!;
+    context.currentTime = 0.5;
+    transport.setBaseImmediately('drums');
+    await Promise.resolve(); await Promise.resolve(); transport.tick();
+    expect(gameSource.stop).toHaveBeenCalledOnce();
+    expect(sources.slice(-2).map((source) => source.starts[0]?.[0])).toEqual([0.55, 1.55]);
+    transport.destroy();
+  });
 });

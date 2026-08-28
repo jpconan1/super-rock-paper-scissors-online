@@ -14,6 +14,12 @@ body { user-select: none; background: #201f1c; font: 14px/1.25 system-ui, sans-s
 .editor-zoom output { min-width: 42px; text-align: right; }
 .editor-canvas-shell { position: relative; flex: none; }
 .editor-canvas { position: absolute; top: 0; left: 0; overflow: hidden; color: #171412; background: #e7ddc4 url('/crumpled-paper-background.webp') center/cover; transform-origin: top left; touch-action: none; }
+.editor-abm-preview, .editor-abm-overlay { position: absolute; inset: 0; }
+.editor-abm-preview { pointer-events: none; }
+.editor-abm-preview .game-layout-screen { width: 100%; height: 100%; }
+.editor-abm-overlay { z-index: 10000; }
+.editor-abm-overlay .editor-node { background: transparent; pointer-events: auto; }
+.editor-abm-overlay .editor-node--group, .editor-abm-overlay .editor-node--collection { pointer-events: auto; }
 .editor-node { position: absolute; outline: 1px dashed transparent; touch-action: none; }
 .editor-node.boiling-sprite { pointer-events: auto; }
 .editor-node.boiling-sprite > .boiling-sprite__canvas { pointer-events: none; }

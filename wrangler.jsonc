@@ -3,6 +3,22 @@
   "name": "super-rps-online",
   "main": "worker/index.ts",
   "compatibility_date": "2026-08-12",
+  "routes": [
+    { "pattern": "abm.jpconan.ca", "custom_domain": true }
+  ],
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": [
+      "/health",
+      "/online-status",
+      "/matches",
+      "/matches/*",
+      "/matchmaking",
+      "/lobby",
+      "/whiteboard"
+    ]
+  },
   "durable_objects": {
     "bindings": [
       { "name": "MATCHES", "class_name": "MatchObject" },
@@ -17,8 +33,8 @@
   }],
   "d1_databases": [{
     "binding": "DB",
-    "database_name": "super-rps",
-    "database_id": "replace-with-cloudflare-d1-id",
+    "database_name": "super-rps-online",
+    "database_id": "78998a29-8eb7-43ae-bced-80a2123c57c9",
     "migrations_dir": "worker/migrations"
   }]
 }

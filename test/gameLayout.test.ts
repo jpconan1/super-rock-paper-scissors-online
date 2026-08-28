@@ -53,6 +53,7 @@ import {
   mountGameLayoutVariantContent,
 } from '../src/layout/gameLayout';
 import { FIREBALL_WAR_LAYOUTS, FIREBALL_WAR_MOVE_ART } from '../src/variants/fireballWar/fireballWarScreen';
+import { getLayoutDocument } from '../src/layout/layoutDocuments';
 
 class FakeClassList {
   readonly values = new Set<string>();
@@ -178,10 +179,10 @@ describe('shared game layout contract', () => {
   test('positions the viewer tag outside landscape scenes and clamped over portrait edges', () => {
     const landscapeScene = { x: 304, y: 135, width: 352, height: 176 };
     const portraitScene = { x: 19, y: 270, width: 352, height: 176 };
-    expect(getYouTagGeometry('p1', 'landscape', landscapeScene, 960)).toEqual({ x: 176, y: 191, width: 128, height: 64 });
-    expect(getYouTagGeometry('p2', 'landscape', landscapeScene, 960)).toEqual({ x: 656, y: 191, width: 128, height: 64 });
-    expect(getYouTagGeometry('p1', 'portrait', portraitScene, 390)).toEqual({ x: 0, y: 326, width: 128, height: 64 });
-    expect(getYouTagGeometry('p2', 'portrait', portraitScene, 390)).toEqual({ x: 262, y: 326, width: 128, height: 64 });
+    expect(getYouTagGeometry('p1', 'landscape', landscapeScene, 960)).toEqual({ x: 240, y: 207, width: 64, height: 32 });
+    expect(getYouTagGeometry('p2', 'landscape', landscapeScene, 960)).toEqual({ x: 656, y: 207, width: 64, height: 32 });
+    expect(getYouTagGeometry('p1', 'portrait', portraitScene, 390)).toEqual({ x: 0, y: 342, width: 64, height: 32 });
+    expect(getYouTagGeometry('p2', 'portrait', portraitScene, 390)).toEqual({ x: 326, y: 342, width: 64, height: 32 });
     expect(YOU_TAG_ART).toEqual({
       p1: '/visual-elements/you-tag-p1-sheet.webp',
       p2: '/visual-elements/you-tag-p2-sheet.webp',
@@ -200,6 +201,25 @@ describe('shared game layout contract', () => {
       variantContent: content as never,
     });
     expect(onLayoutChange).toHaveBeenCalledWith(FIREBALL_WAR_LAYOUTS[0]);
+    layout.destroy();
+  });
+
+  test('uses an injected working document and fixed editor orientation without mutating it', () => {
+    useFakeDocument();
+    const document = structuredClone(getLayoutDocument('game-parent'));
+    const before = structuredClone(document);
+    const onLayoutChange = vi.fn();
+    const content = Object.fromEntries(['p1-move', 'p2-move', 'p1-resources', 'p2-resources', 'controls'].map((name) => [name, new FakeElement()]));
+    const layout = createGameLayout({
+      container: new FakeElement() as unknown as HTMLElement, clock: {} as never, layouts: FIREBALL_WAR_LAYOUTS,
+      fixedLayoutName: 'portrait', layoutDocument: document,
+      screenClassName: 'test', compositionClassName: 'test', ariaLabel: 'Test', onLayoutChange,
+      players: { p1: { heading: 'P1', rating: '', platform: '' }, p2: { heading: 'P2', rating: '', platform: '' } },
+      artwork: { turn: { src: 'turn', alt: '' }, p1Wins: { src: 'one', alt: '' }, p2Wins: { src: 'two', alt: '' }, scene: { src: 'scene', alt: '' } },
+      variantContent: content as never,
+    });
+    expect(onLayoutChange).toHaveBeenCalledWith(FIREBALL_WAR_LAYOUTS[1]);
+    expect(document).toEqual(before);
     layout.destroy();
   });
 });

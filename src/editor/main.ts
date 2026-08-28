@@ -13,6 +13,8 @@ import { createVariantDetail } from '../variantSelect/variantDetail';
 import { curtainOpenAsset } from '../renderer/curtainWipe';
 import { correctElementRatio, nativeAssetPath, nativeFrameSize, nativeRatio, resizeWithNativeRatio } from './nativeAspectRatio';
 import type { SheetDimensions } from '../renderer/boilingSprite';
+import { createAttackBlockManaPresentation } from '../variants/attackBlockMana/attackBlockManaPresentation';
+import { ABM_EDITOR_FIXTURES, getAbmEditorFixture } from './abmFixtures';
 
 const host = document.querySelector<HTMLElement>('#editor');
 if (!host) throw new Error('Missing editor mount.');
@@ -21,6 +23,7 @@ let workingDocuments = new Map([...layoutDocuments].map(([id, document]) => [id,
 let current = workingDocuments.values().next().value!;
 let orientation: LayoutOrientation = 'landscape';
 let previewState = 'Class select';
+let abmFixtureId = ABM_EDITOR_FIXTURES[0]!.id;
 let zoom = 1;
 let hasFitInitialView = false;
 let selected = new Set<string>();
@@ -39,7 +42,7 @@ host.innerHTML = `<main class="layout-editor">
   <header class="editor-toolbar">
     <select data-action="document" aria-label="Document"></select>
     <select data-action="orientation"><option value="landscape">Landscape</option><option value="portrait">Portrait</option></select>
-    <select data-action="state" aria-label="ABM state"><option>Class select</option><option>Battle</option><option>Waiting</option></select>
+    <select data-action="state" aria-label="ABM fixture"></select><button data-action="replay" hidden>Replay</button>
     <button data-action="undo">Undo</button><button data-action="redo">Redo</button>
     <button data-action="save">Save</button><button data-action="export">Export</button><button data-action="import">Import</button>
     <span class="dirty" data-dirty></span><span class="editor-status" data-status></span>
@@ -52,6 +55,8 @@ host.innerHTML = `<main class="layout-editor">
 const $ = <T extends Element>(selector: string) => host.querySelector<T>(selector)!;
 const docSelect = $<HTMLSelectElement>('[data-action=document]');
 const stateSelect = $<HTMLSelectElement>('[data-action=state]');
+const replayButton = $<HTMLButtonElement>('[data-action=replay]');
+for (const fixture of ABM_EDITOR_FIXTURES) stateSelect.add(new Option(fixture.label, fixture.id));
 for (const document of layoutDocuments.values()) docSelect.add(new Option(document.title, document.id));
 const typeSelect = $<HTMLSelectElement>('[data-new-type]');
 for (const type of ['group','sprite','button','text','dynamic-text','text-entry','toggle','volume-slider','variant-grid','collection','control','resource','decoration']) typeSelect.add(new Option(type, type));
@@ -66,6 +71,11 @@ function render(): void {
   const size = current.canvases[orientation];
   canvas.style.width = `${size.width}px`; canvas.style.height = `${size.height}px`; canvas.replaceChildren();
   applyZoom();
+  if (current.id === 'variant-abm') {
+    renderAbmPreview(false);
+    renderTree(); renderInspector(); renderRules(); updateDirty();
+    return;
+  }
   const nodes = new Map<string, HTMLElement>();
   const ordered = [...current.elements].sort((a,b) => (a.layer ?? 0) - (b.layer ?? 0));
   for (const config of ordered) {
@@ -73,7 +83,7 @@ function render(): void {
     const node = makeNode(config);
     applyLayoutGeometry(node.element, config.layouts[orientation]);
     node.element.style.zIndex = String((config.layer ?? 0) + (isVariantDetail(current) ? 1 : 0));
-    node.element.hidden = !elementVisible(config) || abmStateHidden(config.id);
+    node.element.hidden = !elementVisible(config);
     node.element.dataset.id = config.id;
     if (current.id === 'variant-select') {
       if (config.id === 'header') node.element.classList.add('variant-select-screen__header');
@@ -107,30 +117,49 @@ function render(): void {
   renderTree(); renderInspector(); renderRules(); updateDirty();
 }
 
+function renderAbmPreview(replay: boolean): void {
+  const canvas = $<HTMLElement>('[data-canvas]');
+  const preview = document.createElement('div'); preview.className = 'editor-abm-preview';
+  const overlay = document.createElement('div'); overlay.className = 'editor-abm-overlay';
+  canvas.replaceChildren(preview, overlay);
+  const fixture = getAbmEditorFixture(abmFixtureId);
+  const startedAt = Date.now();
+  const presentation = createAttackBlockManaPresentation(clock, {
+    layoutDocument: current,
+    fixedOrientation: orientation,
+    scheduleTimers: replay,
+    now: () => replay ? fixture.serverTime + Date.now() - startedAt : fixture.serverTime,
+  });
+  const lifecycle = new AbortController();
+  presentation.mount({
+    container: preview, signal: lifecycle.signal, send: () => {}, openMenu: () => {}, backToLobby: () => {},
+    self: fixture.viewer, players: fixture.players,
+  });
+  presentation.render(fixture.projection, replay ? fixture.events : [], fixture.serverTime);
+  const handles = new Map<string, HTMLElement>();
+  for (const config of [...current.elements].sort((a, b) => (a.layer ?? 0) - (b.layer ?? 0))) {
+    requestNativeCorrection(current, config);
+    const target = preview.querySelector<HTMLElement>(`[data-layout-element="${config.id}"]`);
+    if (!target) continue;
+    const handle = document.createElement('div');
+    handle.className = `editor-node editor-node--${config.type}`;
+    handle.dataset.id = config.id;
+    handle.dataset.previewTarget = config.id;
+    handle.classList.toggle('is-selected', selected.has(config.id));
+    handle.hidden = target.hidden;
+    applyLayoutGeometry(handle, config.layouts[orientation]);
+    handle.style.zIndex = String((config.layer ?? 0) + 10_000);
+    handles.set(config.id, handle);
+  }
+  for (const config of current.elements) {
+    const handle = handles.get(config.id); if (!handle) continue;
+    (config.parent ? handles.get(config.parent) : overlay)?.append(handle);
+  }
+  cleanupNodes.push(() => { lifecycle.abort(); presentation.unmount(); });
+}
+
 function makeNode(config: LayoutElement): { element: HTMLElement; cleanup(): void } {
   const className = `editor-node editor-node--${config.type}`;
-  if (current.id === 'variant-abm' && (config.id === 'p1-move' || config.id === 'p2-move')) {
-    const element = document.createElement('div'); element.className = `${className} abm-slot-status`;
-    element.textContent = previewState === 'Class select' ? 'CLASS' : 'ATTACK';
-    return { element, cleanup: () => element.remove() };
-  }
-  if (current.id === 'variant-abm' && config.id === 'picker-copy') {
-    const element = document.createElement('div'); element.className = `${className} abm-picker__copy textbox`;
-    const name = document.createElement('strong'); name.className = 'abm-picker__name'; name.textContent = 'Advantaged';
-    const description = document.createElement('p'); description.className = 'abm-picker__description'; description.textContent = 'Gains 2 Mana instead of 1 during the first three turns.';
-    const status = document.createElement('small'); status.className = 'abm-picker__status'; status.textContent = 'PLAYABLE'; element.append(name, description, status);
-    return { element, cleanup: () => element.remove() };
-  }
-  const blockPreview = current.id === 'variant-abm' ? config.id.match(/^p([12])-block-([1-5])$/) : null;
-  if (blockPreview) {
-    const player = blockPreview[1] === '1' ? 'p1' : 'p2'; const index = Number(blockPreview[2]) - 1;
-    const filled = player === 'p1' ? index < 4 : index >= 3;
-    const sprite = createBoilingSprite({
-      src: filled ? '/variants/abm/block-icon-sheet.webp' : '/variants/abm/block-icon-empty-sheet.webp',
-      alt: filled ? 'Available Block' : 'Spent Block', clock, className: `${className} abm-block-preview${filled ? ' is-filled' : ''}`,
-    });
-    return { element: sprite.element, cleanup: () => sprite.destroy() };
-  }
   if (isVariantDetail(current) && config.binding === 'selected-variant-button') {
     const variantDocument = linkedVariant(current)!;
     const slot = current.copy!.slotId!;
@@ -246,21 +275,8 @@ function makeNode(config: LayoutElement): { element: HTMLElement; cleanup(): voi
   return { element, cleanup: () => element.remove() };
 }
 
-function abmStateHidden(id: string): boolean {
-  if (current.id !== 'variant-abm') return false;
-  const state = previewState;
-  const picker = new Set(['picker-portrait', 'picker-copy', 'picker-prev', 'picker-next', 'lock-class']);
-  const battleControls = new Set(['attack', 'block', 'mana', 'arrow-attack-block', 'arrow-block-mana', 'arrow-mana-attack', 'p1-class-badge', 'p2-class-badge']);
-  const waiting = new Set(['waiting-ready', 'waiting-dots']);
-  if (state === 'Class select') return id === 'scene-art' || battleControls.has(id) || waiting.has(id);
-  if (state === 'Battle') return picker.has(id) || waiting.has(id);
-  return picker.has(id);
-}
-
-function abmStateKey(): string { return previewState === 'Battle' ? 'battle' : previewState === 'Waiting' ? 'waiting' : 'class-select'; }
 function elementVisible(element: LayoutElement): boolean {
-  if (element.visible === false) return false;
-  return current.id !== 'variant-abm' || element.stateVisibility?.[abmStateKey()] !== false;
+  return element.visible !== false;
 }
 
 function beginPointer(event: PointerEvent, id: string, target: HTMLElement): void {
@@ -294,6 +310,9 @@ function beginPointer(event: PointerEvent, id: string, target: HTMLElement): voi
       else { geometry.x = snap(original.x + dx); geometry.y = snap(original.y + dy); }
       const preview = canvas.querySelector<HTMLElement>(`[data-id="${key}"]`);
       if (preview) applyLayoutGeometry(preview, geometry);
+      if (current.id === 'variant-abm') {
+        canvas.querySelectorAll<HTMLElement>(`[data-layout-element="${key}"]`).forEach((target) => applyLayoutGeometry(target, geometry));
+      }
     }
     renderInspector(); updateDirty();
   };
@@ -336,10 +355,7 @@ function renderTree(): void {
   for (const element of [...current.elements].sort((a,b) => (b.layer ?? 0) - (a.layer ?? 0))) {
     const row = document.createElement('div'); row.className = 'editor-tree-row'; row.classList.toggle('is-selected', selected.has(element.id));
     const choose = document.createElement('button'); choose.textContent = `${element.parent ? '↳ ' : ''}${element.id} · ${element.type}`; choose.onclick = () => { selected = new Set([element.id]); render(); };
-    const hide = document.createElement('button'); hide.textContent = elementVisible(element) && !abmStateHidden(element.id) ? '●' : '○'; hide.onclick = () => mutate(() => {
-      if (current.id === 'variant-abm') element.stateVisibility = { ...(element.stateVisibility ?? {}), [abmStateKey()]: !elementVisible(element) };
-      else element.visible = element.visible === false;
-    });
+    const hide = document.createElement('button'); hide.textContent = elementVisible(element) ? '●' : '○'; hide.onclick = () => mutate(() => { element.visible = element.visible === false; });
     row.append(choose, hide); tree.append(row);
   }
 }
@@ -496,7 +512,8 @@ docSelect.onchange = () => {
   selected.clear(); syncStateSelect(); render(); fitPreview();
 };
 $<HTMLSelectElement>('[data-action=orientation]').onchange = (event) => { orientation = (event.target as HTMLSelectElement).value as LayoutOrientation; render(); fitPreview(); };
-stateSelect.onchange = (event) => { previewState = (event.target as HTMLSelectElement).value; render(); };
+stateSelect.onchange = (event) => { abmFixtureId = (event.target as HTMLSelectElement).value; render(); };
+replayButton.onclick = () => { cleanupNodes.forEach((cleanup) => cleanup()); cleanupNodes = []; renderAbmPreview(true); };
 $<HTMLButtonElement>('[data-action=undo]').onclick = () => { const prior = history.pop(); if (!prior) return; future.push(snapshot()); restore(prior); docSelect.value = current.id; render(); };
 $<HTMLButtonElement>('[data-action=redo]').onclick = () => { const next = future.pop(); if (!next) return; history.push(snapshot()); restore(next); docSelect.value = current.id; render(); };
 $<HTMLButtonElement>('[data-action=add]').onclick = () => mutate(() => { const id = uniqueId(typeSelect.value); current.elements.push({ id, type: typeSelect.value as LayoutElementType, layer: 1, layouts: { landscape: {x:20,y:20,width:120,height:60}, portrait:{x:20,y:20,width:120,height:60} } }); selected = new Set([id]); });
@@ -529,6 +546,10 @@ window.addEventListener('keydown', (event) => { if ((event.target as HTMLElement
 void fetch('/__layout-editor/assets').then((response)=>response.json()).then((value:string[])=>{assets=value;renderAssets();}).catch(()=>{});
 $<HTMLInputElement>('[data-asset-filter]').oninput=renderAssets;
 function renderAssets(){const query=$<HTMLInputElement>('[data-asset-filter]').value.toLowerCase();$('[data-assets]').innerHTML=assets.filter(asset=>asset.includes(query)).slice(0,150).map(asset=>`<div>${escapeHtml(asset)}</div>`).join('');}
-function syncStateSelect(): void { stateSelect.hidden = current.id !== 'variant-abm'; }
+function syncStateSelect(): void {
+  const abm = current.id === 'variant-abm';
+  stateSelect.hidden = !abm; replayButton.hidden = !abm;
+  if (abm) stateSelect.value = abmFixtureId;
+}
 syncStateSelect(); render();
 requestAnimationFrame(() => { if (!hasFitInitialView) { hasFitInitialView = true; fitPreview(); } });

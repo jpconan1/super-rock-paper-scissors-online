@@ -63,6 +63,7 @@ export const musicManifest: MusicManifest = {
   variations,
   stings: {
     lose: { src: '/audio/lose_jingle.mp3', startSample: 0, lengthSamples: 68_936, sampleRate: 48_000 },
+    win: { src: '/audio/win_sound.mp3', startSample: 0, lengthSamples: 55_723, sampleRate: 48_000 },
   },
   preloadGroups: {
     title: [
@@ -73,13 +74,17 @@ export const musicManifest: MusicManifest = {
       '/audio/music-loops/string-topper-loop.mp3',
       '/audio/music-loops/string-topper-loop-2.mp3',
       '/audio/lose_jingle.mp3',
+      '/audio/win_sound.mp3',
     ],
     match: [
       '/audio/music-loops/drum-loop.mp3',
       '/audio/music-loops/drum-bass-loop.mp3',
+      ...variations.map((track) => track.src),
       '/audio/music-loops/drum-bass-sax-loop.mp3',
       '/audio/music-loops/string-topper-loop.mp3',
       '/audio/music-loops/string-topper-loop-2.mp3',
+      '/audio/lose_jingle.mp3',
+      '/audio/win_sound.mp3',
     ],
   },
 };

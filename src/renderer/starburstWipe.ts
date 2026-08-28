@@ -3,6 +3,7 @@ import type { BoilClock } from '../animation/boilClock';
 import { createBoilingSprite } from './boilingSprite';
 import type { CoveredSwap } from './wipeTransition';
 import { ANIMATION_FRAME_MS } from '../core/time';
+import { playCatalogSound } from '../audio/soundCatalog';
 
 const STEP_MS = ANIMATION_FRAME_MS;
 
@@ -30,6 +31,7 @@ export async function playStarburstWipe(
   signal?: AbortSignal,
 ): Promise<void> {
   if (signal?.aborted) return;
+  playCatalogSound('starburst');
   const layer = document.createElement('div');
   layer.className = 'starburst-wipe';
   const sprites = [0, 1, 2].map((index) => {

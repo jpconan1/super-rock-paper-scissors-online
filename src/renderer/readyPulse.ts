@@ -1,6 +1,6 @@
 import type { BoilClock } from '../animation/boilClock';
 import { AnimationPlayer } from '../animation/animationPlayer';
-import { createSoundEffect } from '../audio/soundEffect';
+import { catalogSound } from '../audio/soundCatalog';
 import { createBoilingSprite } from './boilingSprite';
 
 const STEP_MS = 58;
@@ -18,7 +18,7 @@ export interface ReadyPulse {
 
 export function createReadyPulse(clock: BoilClock, className = ''): ReadyPulse {
   const sprite = createBoilingSprite({ src: source('1'), clock, className: `ready-pulse__art ${className}`.trim(), alt: 'Ready' });
-  const sound = createSoundEffect('/audio/ready.mp3');
+  const sound = catalogSound('ready');
   const player = new AnimationPlayer<string>({ commit: (frame) => sprite.setSource(source(frame)) });
   const reducedMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
   let destroyed = false;

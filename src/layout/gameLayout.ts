@@ -8,7 +8,7 @@ import {
   type ResponsiveScaleBoxLayout,
 } from './scaleBox';
 import { getLayoutDocument } from './layoutDocuments';
-import { applyLayoutGeometry, type LayoutGeometry } from './layoutDocument';
+import { applyLayoutGeometry, type LayoutDocument, type LayoutGeometry } from './layoutDocument';
 import { applyDocumentLayout } from './layoutRuntime';
 
 const INTERACTIVE_ROOT = '/interactive-elements';
@@ -16,8 +16,8 @@ export const YOU_TAG_ART = {
   p1: '/visual-elements/you-tag-p1-sheet.webp',
   p2: '/visual-elements/you-tag-p2-sheet.webp',
 } as const;
-const YOU_TAG_WIDTH = 128;
-const YOU_TAG_HEIGHT = 64;
+const YOU_TAG_WIDTH = 64;
+const YOU_TAG_HEIGHT = 32;
 
 export const GAME_LAYOUT_SLOT_NAMES = [
   'p1-info',
@@ -64,6 +64,8 @@ export interface GameLayoutOptions<TLayoutName extends string> {
   viewer?: PlayerId;
   youTagVisible?: boolean;
   layoutDocumentId?: string;
+  layoutDocument?: LayoutDocument;
+  fixedLayoutName?: TLayoutName;
   players: Readonly<{ p1: GameLayoutPlayer; p2: GameLayoutPlayer }>;
   artwork: Readonly<{
     turn: GameLayoutArtwork;
@@ -120,7 +122,10 @@ export function mountGameLayoutVariantContent(
 export function createGameLayout<TLayoutName extends string>(
   options: GameLayoutOptions<TLayoutName>,
 ): GameLayout {
-  const initialLayout = options.layouts[0];
+  const availableLayouts = options.fixedLayoutName === undefined
+    ? options.layouts
+    : options.layouts.filter(({ name }) => name === options.fixedLayoutName);
+  const initialLayout = availableLayouts[0];
   if (!initialLayout) throw new Error('Game layout requires at least one responsive composition.');
 
   const screen = document.createElement('section');
@@ -133,7 +138,7 @@ export function createGameLayout<TLayoutName extends string>(
   const sprites: BoilingSprite[] = [];
   const artworkSprites = new Map<'turn' | 'p1Wins' | 'p2Wins' | 'scene', BoilingSprite>();
   const buttons: GameButton[] = [];
-  const layoutDocument = getLayoutDocument(options.layoutDocumentId ?? 'game-parent');
+  const layoutDocument = options.layoutDocument ?? getLayoutDocument(options.layoutDocumentId ?? 'game-parent');
 
   slots['p1-info'].append(createPlayerInfo(options.players.p1, 'p1'));
   slots['p2-info'].append(createPlayerInfo(options.players.p2, 'p2'));
@@ -202,7 +207,7 @@ export function createGameLayout<TLayoutName extends string>(
   scaleBox.content.append(composition);
   screen.append(scaleBox.element);
   options.container.replaceChildren(screen);
-  const stopLayout = observeResponsiveScaleBox(screen, scaleBox, options.layouts, (layout) => {
+  const stopLayout = observeResponsiveScaleBox(screen, scaleBox, availableLayouts, (layout) => {
     composition.dataset.layout = layout.name;
     const orientation = layout.name === 'portrait' ? 'portrait' : 'landscape';
     applyDocumentLayout(layoutDocument, orientation, [

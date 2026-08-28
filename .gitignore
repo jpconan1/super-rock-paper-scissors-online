@@ -3,5 +3,6 @@ dist/
 .wrangler/
 old-project/
 *.log
+.env.*.local
 .DS_Store
 .DS-Store

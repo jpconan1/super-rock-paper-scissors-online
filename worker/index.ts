@@ -2,7 +2,11 @@ import { DurableObject } from 'cloudflare:workers';
 import { parseClientCommand, PROTOCOL_VERSION, type ClientCommand } from '../src/protocol/protocol';
 import { getServerVariant } from '../src/core/serverVariantRegistry';
 import type { TimedSemanticEvent } from '../src/protocol/protocol';
-import { acceptMatchCommand, advanceMatchDeadline, createOnlineMatch, projectOnlineMatch, type OnlineMatchState } from '../src/core/onlineMatch';
+import {
+  acceptMatchCommand, advanceMatchDeadline, beginGameplayDisconnectGrace, createOnlineMatch,
+  markPlayerConnected, markPlayerDisconnected, projectOnlineMatch, resolveDisconnectDeadline,
+  type OnlineMatchState,
+} from '../src/core/onlineMatch';
 import type { MatchCommandPayload, MatchPlayer } from '../src/protocol/protocol';
 import {
   createEmptyWhiteboard, WHITEBOARD_COLORS, type WhiteboardClientMessage, type WhiteboardColor,
@@ -34,7 +38,24 @@ export class MatchObject extends DurableObject<Env> {
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    ctx.blockConcurrencyWhile(async () => { this.record = await ctx.storage.get<MatchRecord>('match'); });
+    ctx.blockConcurrencyWhile(async () => {
+      this.record = await ctx.storage.get<MatchRecord>('match');
+      if (!this.record) return;
+      // Normalize records written before connection tracking and authoritative
+      // ABM completion were introduced.
+      this.record.connections ??= { p1: false, p2: false };
+      this.record.disconnectDeadlines ??= {};
+      if (this.record.format === 'abm-only' && this.record.winner && this.record.phase === 'playing') {
+        this.record.phase = 'complete';
+        this.record.completionReason ??= 'played';
+        this.record.deadlineAt = undefined;
+        this.record.disconnectDeadlines = {};
+      }
+      for (const socket of ctx.getWebSockets()) {
+        const seat = (socket.deserializeAttachment() as SocketAttachment | null)?.seat;
+        if (seat) this.record.connections[seat] = true;
+      }
+    });
   }
 
   async initialize(matchId: string, players?: Record<Seat, MatchPlayer>, playerIds?: Record<Seat, string>, format: 'abm-only' | 'multi-slot' = 'multi-slot'): Promise<{ matchId: string; seats: Record<Seat, string> }> {
@@ -46,6 +67,7 @@ export class MatchObject extends DurableObject<Env> {
       }, seed, Date.now(), format), {
         tokens: { p1: token(), p2: token() },
         accepted: [],
+        connections: { p1: false, p2: false },
         ...(playerIds ? { playerIds } : {}),
       });
       await this.ctx.storage.put('match', this.record);
@@ -64,7 +86,13 @@ export class MatchObject extends DurableObject<Env> {
     const [client, server] = Object.values(pair);
     this.ctx.acceptWebSocket(server);
     server.serializeAttachment({ seat } satisfies SocketAttachment);
+    const reconnected = markPlayerConnected(this.record, seat);
+    if (reconnected) {
+      await this.ctx.storage.put('match', this.record);
+      await this.scheduleAlarm();
+    }
     server.send(JSON.stringify(this.snapshot(seat)));
+    if (reconnected) this.broadcast(server);
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -104,13 +132,24 @@ export class MatchObject extends DurableObject<Env> {
   async alarm(): Promise<void> {
     if (!this.record) return;
     const now = Date.now();
-    const advanced = advanceMatchDeadline(this.record, now);
+    const disconnected = resolveDisconnectDeadline(this.record, now);
+    const advanced = !disconnected && advanceMatchDeadline(this.record, now);
+    if (advanced) beginGameplayDisconnectGrace(this.record, now);
     const retryingRating = Boolean(this.record.ratingRetryAt && this.record.ratingRetryAt <= now);
-    if (advanced || retryingRating) await this.finalizeRating();
-    if (!advanced && !retryingRating) return;
+    if (disconnected || advanced || retryingRating) await this.finalizeRating();
+    if (!disconnected && !advanced && !retryingRating) return;
     await this.ctx.storage.put('match', this.record);
     await this.scheduleAlarm();
-    if (advanced) this.broadcast();
+    if (disconnected || advanced) this.broadcast();
+  }
+
+  async webSocketClose(socket: WebSocket): Promise<void> {
+    const attachment = socket.deserializeAttachment() as SocketAttachment | null;
+    if (!attachment || !this.record || this.hasConnectedSeat(attachment.seat, socket)) return;
+    if (!markPlayerDisconnected(this.record, attachment.seat, Date.now())) return;
+    await this.ctx.storage.put('match', this.record);
+    await this.scheduleAlarm();
+    this.broadcast();
   }
 
   private snapshot(seat: Seat) {
@@ -126,16 +165,26 @@ export class MatchObject extends DurableObject<Env> {
     };
   }
 
-  private broadcast(): void {
+  private broadcast(exclude?: WebSocket): void {
     for (const socket of this.ctx.getWebSockets()) {
+      if (socket === exclude) continue;
       const attachment = socket.deserializeAttachment() as SocketAttachment | null;
       if (attachment) socket.send(JSON.stringify({ type: 'snapshot', snapshot: this.snapshot(attachment.seat) }));
     }
   }
 
+  private hasConnectedSeat(seat: Seat, exclude?: WebSocket): boolean {
+    return this.ctx.getWebSockets().some((socket) => {
+      if (socket === exclude) return false;
+      return (socket.deserializeAttachment() as SocketAttachment | null)?.seat === seat;
+    });
+  }
+
   private async scheduleAlarm(): Promise<void> {
-    const deadlines = [this.record?.deadlineAt, this.record?.ratingRetryAt].filter((value): value is number => value !== undefined);
+    const deadlines = [this.record?.deadlineAt, this.record?.ratingRetryAt,
+      ...Object.values(this.record?.disconnectDeadlines ?? {})].filter((value): value is number => value !== undefined);
     if (deadlines.length) await this.ctx.storage.setAlarm(Math.min(...deadlines));
+    else await this.ctx.storage.deleteAlarm();
   }
 
   private async finalizeRating(): Promise<void> {
@@ -148,6 +197,7 @@ export class MatchObject extends DurableObject<Env> {
         p1Id: record.playerIds.p1, p2Id: record.playerIds.p2, winnerId: record.playerIds[record.winner],
         p1Delta: deltas.p1, p2Delta: deltas.p2,
         summary: JSON.stringify({ format: record.format, games: record.games, winner: record.winner,
+          completionReason: record.completionReason, disconnectedPlayer: record.disconnectedPlayer,
           ratings: { p1: record.players.p1.rating, p2: record.players.p2.rating }, deltas }),
       });
       record.ratingsFinalized = true;

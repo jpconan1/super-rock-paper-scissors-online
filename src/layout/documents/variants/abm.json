@@ -86,9 +86,9 @@
       "binding": "p2-info",
       "layouts": {
         "landscape": {
-          "x": 758,
+          "x": 730,
           "y": 120,
-          "width": 190,
+          "width": 218,
           "height": 72
         },
         "portrait": {
@@ -405,6 +405,24 @@
           "height": 102.4,
           "aspectLock": true
         }
+      }
+    },
+    {
+      "id": "class-ready-opponent-tag",
+      "type": "sprite",
+      "assets": { "src": "/visual-elements/oppponent-tag-sheet.webp" },
+      "layouts": {
+        "landscape": { "x": 440, "y": 315, "width": 80, "height": 40, "aspectLock": true },
+        "portrait": { "x": 155, "y": 452, "width": 80, "height": 40, "aspectLock": true }
+      }
+    },
+    {
+      "id": "class-ready",
+      "type": "sprite",
+      "assets": { "src": "/visual-elements/ready-waiting/rdy_sheet.webp" },
+      "layouts": {
+        "landscape": { "x": 440, "y": 343, "width": 80, "height": 68.26666666666667, "aspectLock": true },
+        "portrait": { "x": 155, "y": 480, "width": 80, "height": 68.26666666666667, "aspectLock": true }
       }
     },
     {

@@ -3,6 +3,7 @@ import { BOIL_FRAME_MS, type BoilClock } from '../animation/boilClock';
 import { BOIL_FRAME_COUNT, createBoilingSprite } from './boilingSprite';
 import type { CoveredSwap, WipeTransition } from './wipeTransition';
 import { createMenuCanvas, type MenuCanvas } from '../layout/menuLayout';
+import { playCatalogSound } from '../audio/soundCatalog';
 
 export const CURTAIN_FRAME_MS = 84;
 export const CURTAIN_CLOSED_HOLD_MS = BOIL_FRAME_MS * BOIL_FRAME_COUNT;
@@ -144,12 +145,14 @@ export class CurtainWipe implements WipeTransition {
 
   async close(signal?: AbortSignal): Promise<void> {
     if (this.destroyed || signal?.aborted || this.state === 'closed') return;
+    playCatalogSound('curtain-close');
     const animation = curtainAnimationFrames('closed', this.activeAssets().length);
     await this.animate(animation.frames, animation.finalFrame, signal);
   }
 
   async open(signal?: AbortSignal): Promise<void> {
     if (this.destroyed || signal?.aborted || this.state === 'open') return;
+    playCatalogSound('curtain-open');
     const animation = curtainAnimationFrames('open', this.activeAssets().length);
     await this.animate(animation.frames, animation.finalFrame, signal);
   }

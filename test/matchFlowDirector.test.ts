@@ -10,7 +10,7 @@ function projection(picks: MatchProjection['picks'] = {}): MatchProjection {
     phase: 'selecting', self: 'p1', players: {
       p1: { name: 'One', platform: 'Web', rating: 1 }, p2: { name: 'Two', platform: 'Web', rating: 1 },
     }, picks, pickOrder: Object.values(picks).filter((slot) => slot !== undefined), games: [], unavailableSlots: [], ownBans: [],
-    opponentBanCount: 0, bansLocked: false,
+    opponentBanCount: 0, bansLocked: false, reconnectingPlayers: [],
   };
 }
 

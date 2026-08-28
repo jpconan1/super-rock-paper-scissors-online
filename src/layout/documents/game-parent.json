@@ -5,7 +5,7 @@
   "elements": [
     { "id": "p1-info", "type": "dynamic-text", "protected": true, "binding": "p1-info", "layouts": { "landscape": { "x": 12, "y": 120, "width": 190, "height": 72 }, "portrait": { "x": 12, "y": 98, "width": 180, "height": 52 } } },
     { "id": "turn", "type": "sprite", "protected": true, "binding": "turn", "layouts": { "landscape": { "x": 400, "y": 0, "width": 160, "height": 96 }, "portrait": { "x": 115, "y": 0, "width": 160, "height": 96 } } },
-    { "id": "p2-info", "type": "dynamic-text", "protected": true, "binding": "p2-info", "layouts": { "landscape": { "x": 758, "y": 120, "width": 190, "height": 72 }, "portrait": { "x": 198, "y": 98, "width": 180, "height": 52 } } },
+    { "id": "p2-info", "type": "dynamic-text", "protected": true, "binding": "p2-info", "layouts": { "landscape": { "x": 730, "y": 120, "width": 218, "height": 72 }, "portrait": { "x": 198, "y": 98, "width": 180, "height": 52 } } },
     { "id": "p1-wins-label", "type": "sprite", "protected": true, "assets": { "src": "/visual-elements/win-couters/wins_label_sheet.webp" }, "layouts": { "landscape": { "x": 150.25, "y": 0, "width": 96, "height": 48 }, "portrait": { "x": 74, "y": 0, "width": 72, "height": 48 } } },
     { "id": "p2-wins-label", "type": "sprite", "protected": true, "assets": { "src": "/visual-elements/win-couters/wins_label_sheet.webp" }, "layouts": { "landscape": { "x": 713.75, "y": 0, "width": 96, "height": 48 }, "portrait": { "x": 244, "y": 0, "width": 72, "height": 48 } } },
     { "id": "p1-wins", "type": "sprite", "protected": true, "binding": "p1-wins", "layouts": { "landscape": { "x": 166.25, "y": 44, "width": 64, "height": 64 }, "portrait": { "x": 90, "y": 26, "width": 48, "height": 48 } } },

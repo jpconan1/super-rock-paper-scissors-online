@@ -95,6 +95,9 @@ body::before {
   pointer-events: auto;
 }
 .shell-modal__message { padding: 24px 32px; }
+.disconnect-result__textbox { display: grid; width: min(560px, calc(100% - 32px)); place-items: center; gap: 20px; text-align: center; }
+.disconnect-result__message { margin: 0; }
+.disconnect-result__back { width: min(260px, 80vw); }
 @media (max-width: 520px) { .slot-grid { grid-template-columns: repeat(3, minmax(76px, 1fr)); gap: 7px; } .slot-card { padding: 6px; font-size: .8rem; } }
 
 .variant-select-screen {
@@ -770,8 +773,9 @@ input {
 .abm-slot-status { position: relative; display: grid; width: 100%; height: 100%; place-items: center; font-size: 17px; font-weight: 900; text-align: center; }
 .abm-slot-status__move { position: absolute; inset: 0; width: 100%; height: 100%; }
 .abm-slot-status__move > .boiling-sprite__canvas { object-fit: contain; }
-.abm-slot-status__ready { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-.abm-slot-status__ready > .boiling-sprite__canvas { object-fit: contain; }
+.abm-class-ready, .abm-class-ready__opponent-tag { position: absolute; z-index: 5; overflow: visible; }
+.abm-class-ready > .boiling-sprite__canvas,
+.abm-class-ready__opponent-tag > .boiling-sprite__canvas { object-fit: contain; }
 .abm-slot-status__label { position: relative; z-index: 1; }
 .abm-resources { position: relative; display: block; width: 100%; height: 100%; font-size: 16px; font-weight: 900; text-align: center; }
 .abm-resource-group { position: absolute; display: block; }

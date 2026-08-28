@@ -54,6 +54,9 @@ export interface MatchProjection {
   opponentBanCount: number;
   bansLocked: boolean;
   winner?: PlayerId;
+  completionReason?: 'played' | 'disconnect';
+  disconnectedPlayer?: PlayerId;
+  reconnectingPlayers: readonly PlayerId[];
 }
 
 export type MatchCommandPayload =

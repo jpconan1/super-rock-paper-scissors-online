@@ -1,11 +1,25 @@
 import { describe, expect, test } from 'vitest';
 import { ABM_CLASSES } from '../src/variants/attackBlockMana/attackBlockManaCatalog';
-import { ABM_BACK_LOBBY_ART, ABM_LAYOUTS, ABM_RESULT_SCENES, ABM_SELECT_ART, blockSegments, getAbmClassReadyFrame, getAbmResultScene, getAbmWaitingVisual, sceneForMoves, shouldShowAbmYouTag } from '../src/variants/attackBlockMana/attackBlockManaPresentation';
+import { ABM_BACK_LOBBY_ART, ABM_LAYOUTS, ABM_RESULT_SCENES, ABM_SELECT_ART, blockSegments, getAbmClassReadyFrame, getAbmResultScene, getAbmWaitingVisual, sceneForMoves, shouldShowAbmYouTag, shouldShowClassReadyOpponentTag } from '../src/variants/attackBlockMana/attackBlockManaPresentation';
 import type { AbmProjection } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 import { resolveAbmScene, resolveAbmSplitScene } from '../src/variants/attackBlockMana/attackBlockManaScenes';
 import { getLayoutDocument } from '../src/layout/layoutDocuments';
+import { ABM_EDITOR_FIXTURES, getAbmEditorFixture } from '../src/editor/abmFixtures';
 
 describe('Attack Block Mana presentation data', () => {
+  test('provides deterministic editor fixtures across the full visual state matrix', () => {
+    expect(new Set(ABM_EDITOR_FIXTURES.map(({ id }) => id)).size).toBe(ABM_EDITOR_FIXTURES.length);
+    expect(ABM_EDITOR_FIXTURES.map(({ projection }) => projection.phase)).toEqual(expect.arrayContaining([
+      'selecting-classes', 'waiting-for-class', 'idle', 'waiting', 'counter-picking', 'match-complete',
+    ]));
+    expect(ABM_EDITOR_FIXTURES.some(({ projection }) => projection.self === 'p2')).toBe(true);
+    expect(ABM_EDITOR_FIXTURES.some(({ projection }) => projection.ownPendingMove && projection.legalActions.length === 0)).toBe(true);
+    expect(ABM_EDITOR_FIXTURES.some(({ projection }) => projection.lastRoundWinner === projection.self)).toBe(true);
+    expect(ABM_EDITOR_FIXTURES.some(({ projection }) => projection.lastRoundWinner && projection.lastRoundWinner !== projection.self)).toBe(true);
+    expect(ABM_EDITOR_FIXTURES.some(({ replayDuration, events }) => replayDuration && events.length)).toBe(true);
+    expect(getAbmEditorFixture('missing')).toBe(ABM_EDITOR_FIXTURES[0]);
+  });
+
   test('includes the final nine-class roster and every class is playable', () => {
     expect(ABM_CLASSES.map(({ id }) => id)).toEqual([
       'lucky', 'advantaged', 'thief', 'investor', 'sumo', 'cheater', 'duplicator', 'stunner', 'juggernaut',
@@ -134,14 +148,20 @@ describe('Attack Block Mana presentation data', () => {
     expect(getAbmClassReadyFrame(5_000, 1_000)).toBe('rdy');
   });
 
+  test('adds the opponent tag at the peak of an opponent READY cue', () => {
+    expect(shouldShowClassReadyOpponentTag(1_173, 1_000, true)).toBe(false);
+    expect(shouldShowClassReadyOpponentTag(1_174, 1_000, true)).toBe(true);
+    expect(shouldShowClassReadyOpponentTag(5_000, 1_000, true)).toBe(true);
+    expect(shouldShowClassReadyOpponentTag(5_000, 1_000, false)).toBe(false);
+  });
+
   test('hides YOU tags on opening and counter-pick class screens only', () => {
-    expect(shouldShowAbmYouTag('selecting-classes', false)).toBe(false);
-    expect(shouldShowAbmYouTag('waiting-for-class', false)).toBe(false);
-    expect(shouldShowAbmYouTag('counter-picking', false)).toBe(false);
-    expect(shouldShowAbmYouTag('counter-picking', true)).toBe(true);
-    expect(shouldShowAbmYouTag('idle', false)).toBe(true);
-    expect(shouldShowAbmYouTag('waiting', false)).toBe(true);
-    expect(shouldShowAbmYouTag('match-complete', false)).toBe(true);
+    expect(shouldShowAbmYouTag('selecting-classes')).toBe(false);
+    expect(shouldShowAbmYouTag('waiting-for-class')).toBe(false);
+    expect(shouldShowAbmYouTag('counter-picking')).toBe(false);
+    expect(shouldShowAbmYouTag('idle')).toBe(true);
+    expect(shouldShowAbmYouTag('waiting')).toBe(false);
+    expect(shouldShowAbmYouTag('match-complete')).toBe(false);
   });
 
   test('selects viewer-relative authored art for round, game, and forfeit results', () => {

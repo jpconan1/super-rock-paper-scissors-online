@@ -14,6 +14,7 @@ export interface MusicTransportOptions {
   load(src: string): Promise<AudioBuffer>;
   lookAheadSeconds?: number;
   tickMilliseconds?: number;
+  random?: () => number;
 }
 
 export class MusicTransport {
@@ -36,6 +37,9 @@ export class MusicTransport {
   private requestedTopper: MusicTopper = 'none';
   private interrupt: AudioBufferSourceNode | undefined;
   private interruptGeneration = 0;
+  private variationsEnabled = false;
+  private queuedBaseOnce: MusicBase | undefined;
+  private readonly random: () => number;
 
   constructor(options: MusicTransportOptions) {
     this.context = options.context;
@@ -46,6 +50,7 @@ export class MusicTransport {
     this.manifest = options.manifest;
     this.loadBuffer = options.load;
     this.lookAhead = options.lookAheadSeconds ?? 0.2;
+    this.random = options.random ?? Math.random;
     this.timer = setInterval(() => this.tick(), options.tickMilliseconds ?? 50);
   }
 
@@ -60,9 +65,29 @@ export class MusicTransport {
   }
 
   setBase(base: MusicBase): void {
+    this.cancelInterrupt();
+    this.restoreProgram();
     this.requestedBase = base;
     void this.prepare(this.manifest.bases[base]).catch(() => {});
     this.tick();
+  }
+
+  setBaseImmediately(base: MusicBase): void {
+    this.cancelInterrupt();
+    this.stopProgram();
+    this.restoreProgram();
+    this.requestedBase = this.activeBase = base;
+    void this.prepare(this.manifest.bases[base]).then(() => this.tick()).catch(() => {});
+  }
+
+  setVariationsEnabled(enabled: boolean): void {
+    this.variationsEnabled = enabled;
+    if (enabled) for (const definition of this.manifest.variations) void this.prepare(definition).catch(() => {});
+  }
+
+  async queueBaseOnce(base: MusicBase): Promise<void> {
+    await this.prepare(this.manifest.bases[base]);
+    this.queuedBaseOnce = base;
   }
 
   setTopper(topper: MusicTopper): void {
@@ -77,7 +102,7 @@ export class MusicTransport {
     return Promise.all(sources.map((src) => this.prepareSource(src))).then(() => undefined);
   }
 
-  async playInterrupt(id: string): Promise<boolean> {
+  async playInterrupt(id: string, resume = true): Promise<boolean> {
     const definition = this.manifest.stings[id];
     if (!definition) return false;
     await this.prepare(definition);
@@ -94,7 +119,7 @@ export class MusicTransport {
     this.interrupt = source;
     source.onended = () => {
       if (generation === this.interruptGeneration) this.interrupt = undefined;
-      if (generation === this.interruptGeneration) {
+      if (generation === this.interruptGeneration && resume) {
         const endedAt = this.context.currentTime;
         this.programGain.gain.cancelScheduledValues(endedAt);
         this.programGain.gain.setValueAtTime(0, endedAt);
@@ -102,6 +127,7 @@ export class MusicTransport {
       }
       source.disconnect();
     };
+    if (!resume) this.stopProgram();
     source.start(this.context.currentTime, loaded.startSeconds, definition.lengthSamples / this.definitionSampleRate(definition));
     return true;
   }
@@ -139,6 +165,13 @@ export class MusicTransport {
     this.programGain.disconnect();
   }
 
+  stop(): void {
+    this.cancelInterrupt();
+    this.stopProgram();
+    this.queuedBaseOnce = undefined;
+    this.requestedTopper = this.activeTopper = 'none';
+  }
+
   private schedulePhrase(when: number): void {
     const nextBase = this.manifest.bases[this.requestedBase];
     if (this.loaded.has(nextBase.src)) this.activeBase = this.requestedBase;
@@ -146,8 +179,49 @@ export class MusicTransport {
       this.activeTopper = this.requestedTopper;
     }
 
-    this.scheduleTrack(this.manifest.bases[this.activeBase], when, this.phraseSeconds, 'base');
+    const queuedBase = this.queuedBaseOnce;
+    this.queuedBaseOnce = undefined;
+    const baseDefinition = queuedBase
+      ? this.manifest.bases[queuedBase]
+      : this.chooseBaseDefinition();
+    this.scheduleTrack(baseDefinition, when, this.phraseSeconds, 'base');
     if (this.activeTopper !== 'none') this.scheduleTrack(this.manifest.toppers[this.activeTopper], when, this.phraseSeconds, 'topper');
+  }
+
+  private chooseBaseDefinition(): MusicTrackDefinition {
+    if (!this.variationsEnabled || this.activeBase !== 'drums-bass' || this.random() >= 0.5) {
+      return this.manifest.bases[this.activeBase];
+    }
+    const loaded = this.manifest.variations.filter((definition) => this.loaded.has(definition.src));
+    if (loaded.length === 0) return this.manifest.bases[this.activeBase];
+    return loaded[Math.floor(this.random() * loaded.length)] ?? this.manifest.bases[this.activeBase];
+  }
+
+  private stopProgram(): void {
+    for (const [source, role] of this.scheduled) {
+      if (role !== 'base' && role !== 'topper') continue;
+      try { source.stop(); } catch {}
+      source.disconnect();
+      this.scheduled.delete(source);
+    }
+    this.origin = undefined;
+    this.scheduledThrough = 0;
+    const now = this.context.currentTime;
+    this.programGain.gain.cancelScheduledValues(now);
+    this.programGain.gain.setValueAtTime(0, now);
+  }
+
+  private cancelInterrupt(): void {
+    this.interruptGeneration++;
+    try { this.interrupt?.stop(); } catch {}
+    this.interrupt?.disconnect();
+    this.interrupt = undefined;
+  }
+
+  private restoreProgram(): void {
+    const now = this.context.currentTime;
+    this.programGain.gain.cancelScheduledValues(now);
+    this.programGain.gain.setValueAtTime(1, now);
   }
 
   private scheduleTrack(definition: MusicTrackDefinition, when: number, phraseDuration: number, role: 'base' | 'topper'): void {

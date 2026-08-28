@@ -6,7 +6,7 @@ import { createGameButton, type GameButton } from '../../input/gameButton';
 import { createGameLayout, type GameLayout } from '../../layout/gameLayout';
 import { getLayoutDocument } from '../../layout/layoutDocuments';
 import { applyConfiguredElement } from '../../layout/layoutRuntime';
-import type { LayoutOrientation } from '../../layout/layoutDocument';
+import type { LayoutDocument, LayoutOrientation } from '../../layout/layoutDocument';
 import type { ResponsiveScaleBoxLayout } from '../../layout/scaleBox';
 import { createBoilingSprite, type BoilingSprite } from '../../renderer/boilingSprite';
 import { playStarburstWipe } from '../../renderer/starburstWipe';
@@ -14,6 +14,8 @@ import { createTextbox } from '../../ui/textbox';
 import { ABM_CLASSES } from './attackBlockManaCatalog';
 import { ABM_SCENE_URLS, resolveAbmScene, resolveAbmSplitScene } from './attackBlockManaScenes';
 import type { AbmCommand, AbmMove, AbmProjection } from './attackBlockManaTypes';
+import { playCatalogSound, type SoundId } from '../../audio/soundCatalog';
+import type { MusicDirector } from '../../audio/musicDirector';
 
 const ABM_ROOT = '/variants/abm';
 const SYSTEM_SCENE_ROOT = '/visual-elements/system-scenes';
@@ -60,9 +62,12 @@ export function getAbmClassReadyFrame(serverTime: number, classReadyAt: number):
   return frames[Math.min(frames.length - 1, Math.floor(Math.max(0, serverTime - classReadyAt) / 58))]!;
 }
 
-export function shouldShowAbmYouTag(phase: AbmProjection['phase'], counterLocked: boolean): boolean {
-  return !['selecting-classes', 'waiting-for-class'].includes(phase)
-    && !(phase === 'counter-picking' && !counterLocked);
+export function shouldShowClassReadyOpponentTag(serverTime: number, classReadyAt: number, isOpponent: boolean): boolean {
+  return isOpponent && serverTime >= classReadyAt + 3 * 58;
+}
+
+export function shouldShowAbmYouTag(phase: AbmProjection['phase']): boolean {
+  return phase === 'idle';
 }
 
 export function getAbmResultScene(projection: AbmProjection): { src: string; alt: string } | undefined {
@@ -75,7 +80,17 @@ export function getAbmResultScene(projection: AbmProjection): { src: string; alt
     : { src: won ? ABM_RESULT_SCENES.roundWon : ABM_RESULT_SCENES.roundLost, alt: won ? 'Round won' : 'Round lost' };
 }
 
-export function createAttackBlockManaPresentation(clock: BoilClock): VariantPresentation<AbmProjection, AbmCommand> {
+export interface AttackBlockManaPresentationOptions {
+  layoutDocument?: LayoutDocument;
+  fixedOrientation?: LayoutOrientation;
+  scheduleTimers?: boolean;
+  now?: () => number;
+}
+
+export function createAttackBlockManaPresentation(
+  clock: BoilClock,
+  options: AttackBlockManaPresentationOptions = {},
+): VariantPresentation<AbmProjection, AbmCommand> {
   let screen: ReturnType<typeof mountAttackBlockManaScreen> | undefined;
   return {
     async preload(): Promise<AssetLease> {
@@ -90,8 +105,8 @@ export function createAttackBlockManaPresentation(clock: BoilClock): VariantPres
         ...ABM_SCENE_URLS];
       const lease = assetLoader.retainUrls(urls); await lease.ready; return lease;
     },
-    mount({ container, send, openMenu, backToLobby, self, players }) {
-      screen = mountAttackBlockManaScreen(container, clock, send, openMenu, backToLobby, self ?? 'p1', players);
+    mount({ container, send, openMenu, backToLobby, self, players, music }) {
+      screen = mountAttackBlockManaScreen(container, clock, send, openMenu, backToLobby, self ?? 'p1', players, options, music);
     },
     render(projection, events, serverTime) { if (projection) screen?.render(projection, events, serverTime); },
     unmount() { screen?.destroy(); screen = undefined; },
@@ -109,8 +124,11 @@ export function blockSegments(player: 'p1' | 'p2', blocks: number): boolean[] {
 
 function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, send: (command: AbmCommand) => void, onMenu: () => void,
   backToLobby: (() => void) | undefined, viewer: 'p1' | 'p2',
-  players?: Readonly<Record<'p1' | 'p2', { name: string; platform: string; rating: number }>>) {
-  const layoutDocument = getLayoutDocument('variant-abm');
+  players: Readonly<Record<'p1' | 'p2', { name: string; platform: string; rating: number }>> | undefined,
+  options: AttackBlockManaPresentationOptions, music?: MusicDirector) {
+  const layoutDocument = options.layoutDocument ?? getLayoutDocument('variant-abm');
+  const now = options.now ?? Date.now;
+  const scheduleTimers = options.scheduleTimers !== false;
   const config = (id: string) => layoutDocument.elements.find((element) => element.id === id)!;
   const sprites: BoilingSprite[] = [];
   const buttons: GameButton[] = [];
@@ -123,6 +141,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   let newestProjection: AbmProjection | undefined;
   let newestEvents: readonly TimedSemanticEvent[] = [];
   const playedTransitionIds = new Set<string>();
+  const playedSoundIds = new Set<string>();
   let wipeRunning = false;
   const transitionAbort = new AbortController();
 
@@ -133,8 +152,9 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     sprites.push(sprite); output.append(sprite.element, label); return { output, sprite, label };
   };
   const p1Status = moveStatus('p1'); const p2Status = moveStatus('p2');
-  const classReadyArt = createBoilingSprite({ src: '/visual-elements/ready-waiting/1_sheet.webp', clock, className: 'abm-slot-status__ready', alt: 'Ready' });
-  classReadyArt.element.hidden = true; sprites.push(classReadyArt); p1Status.output.append(classReadyArt.element);
+  const classReadyArt = createBoilingSprite({ src: '/visual-elements/ready-waiting/1_sheet.webp', clock, className: 'abm-class-ready', alt: 'Ready' });
+  const classReadyOpponentTag = createBoilingSprite({ src: '/visual-elements/oppponent-tag-sheet.webp', clock, className: 'abm-class-ready__opponent-tag', alt: 'Opponent' });
+  classReadyArt.element.hidden = true; classReadyOpponentTag.element.hidden = true; sprites.push(classReadyArt, classReadyOpponentTag);
   const p1Resources = resourceDisplay('P1', 'p1', clock, sprites); const p2Resources = resourceDisplay('P2', 'p2', clock, sprites);
 
   const controls = element('div', 'abm-controls');
@@ -182,7 +202,8 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   let classBadges: { player: 'p1' | 'p2'; badge: BoilingSprite; asset: string }[] = [];
 
   const layout: GameLayout = createGameLayout({
-    container, clock, layouts: ABM_LAYOUTS, screenClassName: 'abm-game', compositionClassName: 'abm-game__composition', ariaLabel: 'Attack Block Mana', layoutDocumentId: 'variant-abm',
+    container, clock, layouts: ABM_LAYOUTS, screenClassName: 'abm-game', compositionClassName: 'abm-game__composition', ariaLabel: 'Attack Block Mana',
+    layoutDocument, fixedLayoutName: options.fixedOrientation,
     viewer, youTagVisible: false,
     players: {
       p1: playerDisplay('P1', players?.p1),
@@ -194,6 +215,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     onMenu,
   });
   layout.slots.scene.append(picker, waiting, result.element);
+  layout.composition.append(classReadyArt.element, classReadyOpponentTag.element);
   sceneArtwork = layout.slots.scene.querySelector<HTMLElement>('.game-layout__scene')!;
   sceneArtwork.hidden = true;
   controls.append(previous.element, next.element);
@@ -216,6 +238,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   function applyVariantLayout() {
     const bindings: readonly [string, HTMLElement][] = [['picker-prev', previous.element], ['picker-next', next.element], ['lock-class', lock.element],
       ['back-lobby', lobby.element],
+      ['class-ready', classReadyArt.element], ['class-ready-opponent-tag', classReadyOpponentTag.element],
       ...(sceneArtwork ? [['scene-art', sceneArtwork] as [string, HTMLElement]] : []),
       ['picker-portrait', portrait.element], ['picker-copy', copy.element], ['waiting-ready', readyArt.element], ['waiting-dots', dotsArt.element],
       ['waiting-ready', countdownArt.element],
@@ -243,8 +266,8 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     if ((reveal || forceWipe) && shownProjection) {
       if (reveal) playedTransitionIds.add(reveal.id);
       wipeRunning = true;
-      void playStarburstWipe(container, clock, () => paint(newestProjection!, Date.now(), newestEvents), transitionAbort.signal)
-        .then(() => { wipeRunning = false; if (newestProjection) paint(newestProjection, Date.now(), newestEvents); });
+      void playStarburstWipe(container, clock, () => paint(newestProjection!, now(), newestEvents), transitionAbort.signal)
+        .then(() => { wipeRunning = false; if (newestProjection) paint(newestProjection, now(), newestEvents); });
       return;
     }
     paint(nextProjection, serverTime, events);
@@ -252,24 +275,26 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
 
   function paint(nextProjection: AbmProjection, serverTime: number, events: readonly TimedSemanticEvent[] = []) {
     projection = shownProjection = nextProjection;
+    playAbmEventSounds(events, serverTime, playedSoundIds);
     if (revealTimer) { clearTimeout(revealTimer); revealTimer = undefined; }
     if (waitingTimer) { clearTimeout(waitingTimer); waitingTimer = undefined; }
     const counterLocked = nextProjection.phase === 'counter-picking'
       && nextProjection.counterPickAvailableAt !== undefined && serverTime < nextProjection.counterPickAvailableAt;
     const complete = nextProjection.phase === 'match-complete';
     const resultRevealed = nextProjection.resultRevealAt === undefined || serverTime >= nextProjection.resultRevealAt;
+    music?.updateAbm(nextProjection);
     const nextCue = events.filter((event) => isWipeCue(event.type) && !playedTransitionIds.has(event.id) && event.startsAt > serverTime)
       .sort((a, b) => a.startsAt - b.startsAt)[0]?.startsAt;
     const nextBoundary = [nextProjection.resultRevealAt, counterLocked ? nextProjection.counterPickAvailableAt : undefined, nextCue]
       .filter((value): value is number => value !== undefined && value > serverTime).sort((a, b) => a - b)[0];
-    if (nextBoundary !== undefined) {
+    if (scheduleTimers && nextBoundary !== undefined) {
       const boundaryNeedsWipe = nextBoundary === nextProjection.resultRevealAt
         || nextBoundary === nextProjection.counterPickAvailableAt;
       revealTimer = setTimeout(() => render(nextProjection, events, nextBoundary, boundaryNeedsWipe), nextBoundary - serverTime);
     }
     const picking = ['selecting-classes', 'waiting-for-class'].includes(nextProjection.phase)
       || (nextProjection.phase === 'counter-picking' && !counterLocked);
-    layout.setYouTagVisible(shouldShowAbmYouTag(nextProjection.phase, counterLocked));
+    layout.setYouTagVisible(shouldShowAbmYouTag(nextProjection.phase));
     const showingResult = (counterLocked || complete) && resultRevealed;
     const transitioning = counterLocked || complete;
     picker.hidden = !picking; sceneArtwork.hidden = picking; lock.element.hidden = !picking; for (const [, button] of moves) button.element.hidden = picking || transitioning;
@@ -300,6 +325,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     const showClassReady = picking && nextProjection.classReadyPlayer !== undefined && nextProjection.classReadyAt !== undefined;
     waiting.hidden = !showWaiting;
     classReadyArt.element.hidden = !showClassReady;
+    classReadyOpponentTag.element.hidden = true;
     if (showWaiting) paintWaiting(nextProjection, serverTime);
     else if (showClassReady) paintClassReady(nextProjection, serverTime);
     for (const item of classBadges) {
@@ -338,25 +364,48 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     if (visual.countdown !== undefined) countdownArt.setSource(`/visual-elements/ready-waiting/countdown${visual.countdown}-sheet.webp`);
     else if (visual.dots !== undefined) dotsArt.setSource(`/visual-elements/ready-waiting/waiting${visual.dots}_sheet.webp`);
     if (serverTime < deadlineAt) {
-      const paintedAt = Date.now();
-      waitingTimer = setTimeout(() => paint(nextProjection, serverTime + Math.max(58, Date.now() - paintedAt)), 58);
+      const paintedAt = now();
+      if (scheduleTimers) waitingTimer = setTimeout(() => paint(nextProjection, serverTime + Math.max(58, now() - paintedAt)), 58);
     }
   }
 
   function paintClassReady(nextProjection: AbmProjection, serverTime: number) {
-    const player = nextProjection.classReadyPlayer!;
-    const target = player === 'p1' ? p1Status.output : p2Status.output;
-    if (classReadyArt.element.parentElement !== target) target.append(classReadyArt.element);
-    classReadyArt.setSource(`/visual-elements/ready-waiting/${getAbmClassReadyFrame(serverTime, nextProjection.classReadyAt!)}_sheet.webp`);
+    const classReadyAt = nextProjection.classReadyAt!;
+    const frame = getAbmClassReadyFrame(serverTime, classReadyAt);
+    classReadyArt.setSource(`/visual-elements/ready-waiting/${frame}_sheet.webp`);
     classReadyArt.element.hidden = false;
-    if (getAbmClassReadyFrame(serverTime, nextProjection.classReadyAt!) !== 'rdy') {
-      const paintedAt = Date.now();
-      waitingTimer = setTimeout(() => paint(nextProjection, serverTime + Math.max(58, Date.now() - paintedAt)), 58);
+    classReadyOpponentTag.element.hidden = !shouldShowClassReadyOpponentTag(
+      serverTime, classReadyAt, nextProjection.classReadyPlayer !== nextProjection.self,
+    );
+    if (frame !== 'rdy') {
+      const paintedAt = now();
+      if (scheduleTimers) waitingTimer = setTimeout(() => paint(nextProjection, serverTime + Math.max(58, now() - paintedAt)), 58);
     }
   }
 
   applyVariantLayout(); updatePicker();
   return { render, destroy() { transitionAbort.abort(); if (revealTimer) clearTimeout(revealTimer); if (waitingTimer) clearTimeout(waitingTimer); layout.destroy(); copy.destroy(); for (const button of buttons) button.destroy(); for (const sprite of sprites) sprite.destroy(); } };
+}
+
+export function soundForAbmMoves(moves: Readonly<Record<'p1' | 'p2', AbmMove>>): SoundId | undefined {
+  if (moves.p1 === 'attack' && moves.p2 === 'attack') return 'abm-collision';
+  if (moves.p1 === 'mana' && moves.p2 === 'mana') return 'abm-charge';
+  const pair = new Set<AbmMove>([moves.p1, moves.p2]);
+  if (pair.has('block') && pair.has('mana')) return 'abm-charge';
+  if (pair.has('block') && pair.has('attack')) return 'abm-block';
+  return undefined;
+}
+
+export function playAbmEventSounds(events: readonly TimedSemanticEvent[], serverTime: number, played: Set<string>): void {
+  for (const event of events) {
+    if (event.type !== 'move-reveal' || event.startsAt > serverTime || event.endsAt <= serverTime || played.has(event.id)) continue;
+    const payload = event.payload as { moves?: Record<'p1' | 'p2', AbmMove> };
+    if (!payload.moves) continue;
+    const sound = soundForAbmMoves(payload.moves);
+    if (!sound) continue;
+    played.add(event.id);
+    playCatalogSound(sound);
+  }
 }
 
 function renderStatus(status: { output: HTMLElement; sprite: BoilingSprite; label: HTMLElement }, projection: AbmProjection, player: 'p1' | 'p2', picking: boolean) {
