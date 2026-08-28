@@ -18,6 +18,7 @@ import { WhiteboardRateLimiter, type WhiteboardRateCategory } from '../src/white
 import { LOBBY_SOCKET_PROTOCOL, MATCH_SOCKET_PROTOCOL, socketCredential, WHITEBOARD_SOCKET_PROTOCOL } from '../src/protocol/webSocketAuth';
 import { consumeSlidingWindow, messageFitsUtf8Limit, readJsonBody, RequestBodyError } from '../src/protocol/abuseProtection';
 import { corsHeadersForOrigin, isAllowedRequestOrigin } from '../src/protocol/originPolicy';
+import { refreshMatchmakingQueue, type MatchmakingQueueEntry } from '../src/core/matchmakingQueue';
 
 interface Env {
   MATCHES: DurableObjectNamespace<MatchObject>;
@@ -225,42 +226,67 @@ export class MatchObject extends DurableObject<Env> {
   }
 }
 
-interface QueueEntry { guestId: string; name: string; rating: number; queuedAt: number }
-interface MatchTicket { matchId: string; seat: Seat; token: string }
+interface MatchTicket { matchId: string; seat: Seat; token: string; expiresAt: number }
+const MATCHMAKING_QUEUE_TTL_MS = 5_000;
+const MATCH_TICKET_TTL_MS = 30_000;
 
 export class MatchmakerObject extends DurableObject<Env> {
   async enqueue(guestId: string, guestSecret: string, name: string): Promise<{ status: 'waiting' } | ({ status: 'matched' } & MatchTicket)> {
     const player = await authenticateGuest(this.env.DB, guestId, guestSecret, name);
+    const now = Date.now();
     const ticket = await this.ctx.storage.get<MatchTicket>(`ticket:${guestId}`);
     if (ticket) {
       await this.ctx.storage.delete(`ticket:${guestId}`);
-      return { status: 'matched', ...ticket };
+      if (ticket.expiresAt > now) return { status: 'matched', ...ticket };
     }
-    const queue = (await this.ctx.storage.get<QueueEntry[]>('queue')) ?? [];
-    const opponent = queue.find((entry) => entry.guestId !== guestId);
+    const queue = (await this.ctx.storage.get<MatchmakingQueueEntry[]>('queue')) ?? [];
+    const refreshed = refreshMatchmakingQueue(queue, guestId, name, player.rating, now, MATCHMAKING_QUEUE_TTL_MS);
+    const opponent = refreshed.opponent;
     if (!opponent) {
-      if (!queue.some((entry) => entry.guestId === guestId)) queue.push({ guestId, name, rating: player.rating, queuedAt: Date.now() });
-      await this.ctx.storage.put('queue', queue);
+      await this.ctx.storage.put('queue', refreshed.queue);
+      await this.scheduleCleanup(now + MATCHMAKING_QUEUE_TTL_MS);
       return { status: 'waiting' };
     }
-    await this.ctx.storage.put('queue', queue.filter((entry) => entry.guestId !== opponent.guestId));
+    await this.ctx.storage.put('queue', refreshed.queue);
     const id = this.env.MATCHES.newUniqueId();
     const matchId = id.toString();
     const initialized = await this.env.MATCHES.get(id).initialize(matchId, {
       p1: { name: opponent.name, platform: 'Web', rating: opponent.rating },
       p2: { name, platform: 'Web', rating: player.rating },
     }, { p1: opponent.guestId, p2: guestId }, 'abm-only');
-    const first: MatchTicket = { matchId, seat: 'p1', token: initialized.seats.p1 };
-    const second: MatchTicket = { matchId, seat: 'p2', token: initialized.seats.p2 };
+    const expiresAt = now + MATCH_TICKET_TTL_MS;
+    const first: MatchTicket = { matchId, seat: 'p1', token: initialized.seats.p1, expiresAt };
+    const second: MatchTicket = { matchId, seat: 'p2', token: initialized.seats.p2, expiresAt };
     await this.ctx.storage.put(`ticket:${opponent.guestId}`, first);
+    await this.scheduleCleanup(expiresAt);
     return { status: 'matched', ...second };
   }
 
   async cancel(guestId: string, guestSecret: string): Promise<void> {
     await authenticateExistingGuest(this.env.DB, guestId, guestSecret);
-    const queue = (await this.ctx.storage.get<QueueEntry[]>('queue')) ?? [];
+    const queue = (await this.ctx.storage.get<MatchmakingQueueEntry[]>('queue')) ?? [];
     await this.ctx.storage.put('queue', queue.filter((entry) => entry.guestId !== guestId));
     await this.ctx.storage.delete(`ticket:${guestId}`);
+  }
+
+  async alarm(): Promise<void> {
+    const now = Date.now();
+    const queue = ((await this.ctx.storage.get<MatchmakingQueueEntry[]>('queue')) ?? [])
+      .filter((entry) => now - entry.queuedAt < MATCHMAKING_QUEUE_TTL_MS);
+    await this.ctx.storage.put('queue', queue);
+    const tickets = await this.ctx.storage.list<MatchTicket>({ prefix: 'ticket:' });
+    const expiredTicketKeys = [...tickets].filter(([, ticket]) => ticket.expiresAt <= now).map(([key]) => key);
+    if (expiredTicketKeys.length) await this.ctx.storage.delete(expiredTicketKeys);
+    const deadlines = [
+      ...queue.map((entry) => entry.queuedAt + MATCHMAKING_QUEUE_TTL_MS),
+      ...[...tickets].filter(([key, ticket]) => !expiredTicketKeys.includes(key) && ticket.expiresAt > now).map(([, ticket]) => ticket.expiresAt),
+    ];
+    if (deadlines.length) await this.ctx.storage.setAlarm(Math.min(...deadlines));
+  }
+
+  private async scheduleCleanup(deadline: number): Promise<void> {
+    const current = await this.ctx.storage.getAlarm();
+    if (current === null || deadline < current) await this.ctx.storage.setAlarm(deadline);
   }
 }
 

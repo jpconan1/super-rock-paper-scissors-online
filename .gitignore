@@ -4,6 +4,8 @@ dist/
 old-project/
 *.log
 .env.*.local
+.dev.vars
+.dev.vars.*
 .DS_Store
 .DS-Store
 ABM Tour - League 1 Archive [ Arenas ] - blueberry-4 [1294022879243141122].json

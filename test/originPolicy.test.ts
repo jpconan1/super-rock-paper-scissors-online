@@ -7,6 +7,13 @@ describe('request origin policy', () => {
     expect(isAllowedRequestOrigin(null, 'https://abm.jpconan.ca')).toBe(true);
   });
 
+  test('allows different ports between local development servers only', () => {
+    expect(isAllowedRequestOrigin('http://localhost:5173', 'http://localhost:8787')).toBe(true);
+    expect(isAllowedRequestOrigin('http://127.0.0.1:5173', 'http://localhost:8787')).toBe(true);
+    expect(isAllowedRequestOrigin('http://localhost:5173', 'https://abm.jpconan.ca')).toBe(false);
+    expect(isAllowedRequestOrigin('https://evil.example', 'http://localhost:8787')).toBe(false);
+  });
+
   test('rejects arbitrary websites', () => {
     expect(isAllowedRequestOrigin('https://evil.example', 'https://abm.jpconan.ca')).toBe(false);
   });
