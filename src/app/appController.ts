@@ -102,6 +102,10 @@ export class AppController {
         this.lobbyPlayers = players; this.lobbySelfId = selfId;
         this.lobbyScreen?.updateRoster(players, selfId);
       },
+      matchmakingRejected: () => {
+        this.matchmakingActive = false;
+        this.lobbyScreen?.setMatchmaking(false);
+      },
     });
     globalThis.addEventListener?.('keydown', this.onGlobalKeyDown as EventListener);
     const removeLoadingScreen = await runLoadingScreen(this.screenLayer, options.clock, assetLoader.retainBundle('shared'), true);
@@ -401,6 +405,7 @@ export class AppController {
   private setMatchmaking(active: boolean): void {
     if (this.matchmakingActive === active) return;
     this.matchmakingActive = active;
+    this.lobbyScreen?.setMatchmaking(active);
     if (active) this.options.session.startMatchmaking();
     else this.options.session.cancelMatchmaking();
   }

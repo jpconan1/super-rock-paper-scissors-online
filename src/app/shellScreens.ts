@@ -18,6 +18,7 @@ import type { LobbyPlayer } from '../lobby/protocol';
 export type ScreenCleanup = () => void;
 export type LobbyScreenMount = ScreenCleanup & {
   setConnectionState(state: ConnectionState): void;
+  setMatchmaking(active: boolean): void;
   receiveWhiteboard(message: WhiteboardServerMessage): void;
   updateRoster(players: LobbyPlayer[], selfId: string): void;
 };
@@ -173,6 +174,7 @@ export function mountLobbyScreen(
     betweenSheet: '/interactive-elements/matchmaking-toggle-between-sheet.webp',
     onSheet: '/interactive-elements/matchmaking-toggle-down-sheet.webp',
     juiceSheet: '/interactive-elements/generic-buttons/button-juice-sheet.webp',
+    minimumPressedMs: 500,
     clock,
   });
   matchmakingToggle.element.classList.add('lobby-screen__action', 'lobby-screen__matchmaking-toggle', 'toggle-button--baked-label');
@@ -236,6 +238,7 @@ export function mountLobbyScreen(
     matchmakingToggle.setDisabled(unavailable);
     whiteboardController.setEnabled(!unavailable);
   };
+  cleanup.setMatchmaking = (active) => matchmakingToggle.setPressed(active);
   cleanup.receiveWhiteboard = (message) => whiteboardController.receive(message);
   cleanup.updateRoster = (players, selfId) => renderLobbyRoster(roster, players, selfId);
   return cleanup;

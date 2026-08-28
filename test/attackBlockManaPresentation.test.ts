@@ -28,6 +28,10 @@ describe('Attack Block Mana presentation data', () => {
     expect(ABM_CLASSES.every(({ asset, badgeAsset }) => asset.endsWith('-sheet.webp') && badgeAsset.endsWith('-badge-sheet.webp') && !asset.includes('placeholder'))).toBe(true);
   });
 
+  test('starts the class-select order with Lucky', () => {
+    expect(ABM_CLASSES[0]?.id).toBe('lucky');
+  });
+
   test('maps every move pairing to renamed ABM scene art', () => {
     expect(sceneForMoves('attack', 'attack')).toContain('attack-draw');
     expect(sceneForMoves('block', 'block')).toContain('block-draw');
@@ -45,6 +49,15 @@ describe('Attack Block Mana presentation data', () => {
     expect(resolveAbmSplitScene(undefined, 'p1').src).toContain('abm-standoff-p1-ready');
     expect(resolveAbmSplitScene({ p1: 'attack', p2: 'block' }, 'p1')).toMatchObject({ flip: true });
     expect(resolveAbmSplitScene({ p1: 'attack', p2: 'block' }, 'p1').src).toContain('block-attack-attack-ready');
+  });
+
+  test('shows authored Lucky proc art facing the Lucky player', () => {
+    expect(resolveAbmScene({ p1: 'mana', p2: 'attack' }, 'p1')).toEqual({
+      src: '/variants/abm/scenes/lucky-proc-sheet.webp', flip: false,
+    });
+    expect(resolveAbmScene({ p1: 'attack', p2: 'mana' }, 'p2')).toEqual({
+      src: '/variants/abm/scenes/lucky-proc-sheet.webp', flip: true,
+    });
   });
 
   test('maps the complete twelve-asset split-scene set', () => {

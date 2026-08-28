@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import type { PlayerId } from '../src/core/variant';
 import { ABM_LETHAL_TO_RESULT_MS, ABM_RESULT_TO_COUNTER_PICK_MS, attackBlockManaRules } from '../src/variants/attackBlockMana/attackBlockManaRules';
 import type { AbmCommand, AbmMove, AbmState } from '../src/variants/attackBlockMana/attackBlockManaTypes';
@@ -98,6 +98,49 @@ describe('Attack Block Mana rules', () => {
     ]);
   });
 
+  test.each([
+    ['p1', 'mana', 'attack'],
+    ['p2', 'attack', 'mana'],
+  ] as const)('lets %s Lucky survive Attack versus Mana on a successful roll', (lucky, p1Move, p2Move) => {
+    let state = startedWith(lucky === 'p1' ? 'lucky' : 'advantaged', lucky === 'p2' ? 'lucky' : 'advantaged');
+    state = send(state, 'p1', { type: 'choose-move', move: p1Move });
+    const resolution = attackBlockManaRules.resolve(state, 'p2', { type: 'choose-move', move: p2Move }, { ...context, random: () => 0.249 });
+
+    expect(resolution.state).toMatchObject({ phase: 'idle', turn: 2, score: { p1: 0, p2: 0 }, luckyProcPlayer: lucky });
+    expect(resolution.state.players[lucky].mana).toBe(2);
+    expect(attackBlockManaRules.project(resolution.state, lucky).luckyProcPlayer).toBe(lucky);
+  });
+
+  test('Lucky loses normally when its roll fails', () => {
+    let state = startedWith('lucky', 'advantaged');
+    state = send(state, 'p1', { type: 'choose-move', move: 'mana' });
+    const resolution = attackBlockManaRules.resolve(state, 'p2', { type: 'choose-move', move: 'attack' }, { ...context, random: () => 0.25 });
+
+    expect(resolution.state).toMatchObject({ phase: 'counter-picking', score: { p1: 0, p2: 1 } });
+    expect(resolution.state.luckyProcPlayer).toBeUndefined();
+    expect(resolution.state.players.p1.mana).toBe(2);
+  });
+
+  test('does not roll for a non-Lucky Mana player', () => {
+    const random = vi.fn(() => 0);
+    let state = startedWith('advantaged', 'advantaged');
+    state = send(state, 'p1', { type: 'choose-move', move: 'mana' });
+    const resolution = attackBlockManaRules.resolve(state, 'p2', { type: 'choose-move', move: 'attack' }, { ...context, random });
+
+    expect(random).not.toHaveBeenCalled();
+    expect(resolution.state).toMatchObject({ phase: 'counter-picking', score: { p1: 0, p2: 1 } });
+  });
+
+  test('holds the Lucky proc through selection and clears it on the next reveal', () => {
+    let state = startedWith('lucky', 'advantaged');
+    state = send(state, 'p1', { type: 'choose-move', move: 'mana' });
+    state = attackBlockManaRules.resolve(state, 'p2', { type: 'choose-move', move: 'attack' }, { ...context, random: () => 0 }).state;
+    state = send(state, 'p1', { type: 'choose-move', move: 'block' }, 2_000);
+    expect(state).toMatchObject({ phase: 'waiting', luckyProcPlayer: 'p1' });
+    state = send(state, 'p2', { type: 'choose-move', move: 'block' }, 2_100);
+    expect(state.luckyProcPlayer).toBeUndefined();
+  });
+
   test('makes all nine classes cosmetic with neutral starting resources', () => {
     for (const classId of ['lucky', 'advantaged', 'thief', 'investor', 'sumo', 'cheater', 'duplicator', 'stunner', 'juggernaut'] as const) {
       let state = attackBlockManaRules.initialize(context);
@@ -165,9 +208,13 @@ describe('Attack Block Mana rules', () => {
 });
 
 function started(): AbmState {
+  return startedWith('advantaged', 'advantaged');
+}
+
+function startedWith(p1Class: AbmState['players']['p1']['classId'], p2Class: AbmState['players']['p2']['classId']): AbmState {
   let state = attackBlockManaRules.initialize(context);
-  state = send(state, 'p1', { type: 'lock-class', classId: 'advantaged' });
-  return send(state, 'p2', { type: 'lock-class', classId: 'advantaged' });
+  state = send(state, 'p1', { type: 'lock-class', classId: p1Class! });
+  return send(state, 'p2', { type: 'lock-class', classId: p2Class! });
 }
 
 function playTurn(state: AbmState, p1: AbmMove, p2: AbmMove): AbmState {

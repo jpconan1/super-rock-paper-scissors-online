@@ -1,0 +1,118 @@
+
+**Lucky** 🍀 
+• If you are attacked when you use mana, you have a **1 in 4** chance of surviving and getting the mana anyway.
+
+**Advantaged** 🔪 
+• Using mana on any of the first **three turns** gives you **2 mana** instead of 1.
+
+**Thief** 💰 
+• **Steal:** Before making your moves, you may choose to steal 1 mana from your opponent. This mana will be stolen **after the moves have been resolved**.
+• It may **not** be on the **first four turns** of the game.
+• You may use the ability **once per game**.
+• If your opponent has **zero mana** following moves being resolved, you will gain nothing and your ability will have been wasted.
+• If **both players** attempt to steal on the same turn, the abilities are both wasted.
+
+**Juggernaut** 💪 
+• If you attack **two turns in a row**, your opponent cannot block on the **next turn**.
+*Example: Player one attacks on Turns 1 & 2, player two cannot block on Turn 3.*
+• This effect only activates on even numbers of consecutive attacks (i.e. it will only activate on 2 attacks in a row, 4 attacks in a row, etc.)
+
+**Stunner** 💥 
+• When you attack, your opponent's attack cost **next turn** will **double**.
+• When you use something other than an attack, their attack cost will **reset to one**.
+*Example: Player one attacks on Turn 1, Player two's attack cost on Turn 2 will be 2 mana. If Player one attack's on Turn 2, player two's attack cost on Turn 3 will be 4 mana. If they use a block or mana, it would reset to 1 mana.*
+
+**Duplicator** 🦠 
+• When you mana, the mana you will gain **next turn** if you use mana will **double**.
+• When you use something other than mana, the mana gained will reset to **one mana**.
+*Example: Player one uses mana, they gain 1 mana. If they use mana on the next turn, and gain 2 mana. If they use anything else, then the mana gained on the next turn resets to 1.*
+
+**Gambler** 🎰 
+• On blocking, one of eight random effects happens, with the following chances:
+  **30% chance**: Nothing happens.
+  **10% chance**: Lose 1 block.
+  **15% chance**: Gain 1 block.
+  **5% chance**: Gain 2 blocks.
+  **10% chance**: Lose all your mana.
+  **10% chance**: Double your mana.
+  **19% chance**: Gain one mana.
+  **1% chance**: Gain 2 mana.
+• You can only block **3 times in a row**, as opposed to 5. Using anything other than a block will reset blocks to 3.
+
+**Tax Collector** 🧾 
+• **Collect:** Before making your moves, you can choose to deduct 1 mana from both players. This will occur **after the moves have been resolved**.
+• You must have **at least 1 mana** to use this ability.
+• You may only use it **three times per game**.
+• If a player only has **0 mana** when **mana is deducted**, they will **not lose any mana**.
+
+**Copywriter** ✍️ 
+• When your opponent does any move **three times in a row**, you gain **1 mana**.
+• This mana is added **before moves are resolved**.
+
+**Conjurer** 🪄 
+• **Conjure:** Before making your moves, you may choose to make this round **conjured**.
+• On a conjured round, your **opponent** will make their move before you, and you will be told what their move was.
+• Using this ability costs **1 mana**.
+• You may use this ability **two times per game**.
+If **both players** select conjurer and they **both** decide to **conjure** nothing will happen.
+
+**The Sumo** 🤼 
+• If both you and your opponent **both attack**, you do **not lose a mana**.
+• This effect may only happen **three times per game**.
+
+**Fireborne** 🔥 
+• **Flame:** Before making your moves, you can choose to gain an extra life. This will occur **after the moves have been resolved**.
+• The extra life lasts for **5 turns**.
+• If you would have lost the game while you have the extra life, your **extra life is consumed** and you remain in the game.
+• After **5 turns**, the extra life expires.
+• Using the ability costs **1 mana**.
+• You may use this ability **once per game**.
+
+**Retired** 👴 
+• Start with **7 mana**.
+• You cannot gain mana **for any reason**. You may still use the mana move, but it will not provide any mana.
+• If both players are **retired**, and you both drop to **0 mana**, the game will **reset without classes**.
+• You can only block **4 times in a row**, as opposed to 5. Using anything other than a block will reset blocks to 4.
+
+**Parrymaster** 🌟 
+• **Parry:** Before making your moves, you may choose to attempt to **parry** this turn.
+• If you parry, and your opponent **attacks this turn**, they **lose 2 mana**.
+• If they do not attack, nothing happens, and the ability is **wasted**.
+• You may use this ability **once per game**.
+
+
+**Cheater** 🤫 
+• When you mana, you have a **1 in 3 chance** of gaining **2 mana**, instead of 1.
+
+**Cupid** 💘 
+• **Golden Arrow:** Before making your moves, you can choose to use this ability. This will occur **after the moves have been resolved**.
+• The ability will last for **5 turns**.
+• If during the ability, both players use the **same move** (excluding skip), the following effects will occur:
+  **Both players attack:** You will **not lose 1 mana** for your attack.
+  **Both players block:** Your opponent **loses 1 extra block**.
+  **Both players mana:** You gain **1 extra mana**.
+• You may use this move **once per game**.
+
+**Investor** 📉 
+• Start with **5 mana**.
+• Every third turn, lose **1 mana**.
+• If both opponents use mana on the same turn, you will gain 2 mana instead of 1
+
+**Defender** 🛡️ 
+• When you **successfully block an attack**, it will **not cause you to lose one of your consecutive blocks remaining**.
+
+**Last Ditch** 🙏 
+• If both **you and your opponent** drop to **0 mana**, you will gain **2 mana** instead of 1, but every 2nd reset that happens will have your mana gain increased by 1. 2-3-3-4-4-5-5 etc.
+
+**Null** ⚫ 
+• **Reset:** Before making your moves, you may choose to **reset the game**.
+• This occurs **before all abilities and moves**.
+• This will reset the game to **an initial state**.
+• This will **not reset strikes, nor will it reset the turn count**.
+• You may use this ability **once per game**.
+
+**Joe** 👨 
+**THIS ROLE IS NOT LEGAL IN LEAGUE/TOURNAMENT PLAY UNLESS OTHERWISE STATED**
+• **Every turn**, you have a **1 in a million chance** to gain **infinite mana**.
+• Otherwise, does **nothing**.
+• Good luck.

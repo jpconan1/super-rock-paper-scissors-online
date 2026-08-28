@@ -1,4 +1,4 @@
-import type { PlayerId, VariantRules, VariantResolution } from '../../core/variant';
+import type { DeterministicContext, PlayerId, VariantRules, VariantResolution } from '../../core/variant';
 import { beats, STARBURST_WIPE_MS } from '../../core/time';
 import { ABM_CLASS_BY_ID } from './attackBlockManaCatalog';
 import type { AbmClassId, AbmCommand, AbmMove, AbmPlayerState, AbmProjection, AbmResult, AbmState } from './attackBlockManaTypes';
@@ -19,7 +19,7 @@ export const attackBlockManaRules: VariantRules<AbmState, AbmCommand, AbmProject
     if (state.winner) throw new Error('Game is complete.');
     if (!command || typeof command !== 'object') throw new Error('Invalid ABM command.');
     if (command.type === 'lock-class') return lockClass(state, player, command.classId, context.now);
-    if (command.type === 'choose-move') return chooseMove(state, player, command.move, context.now);
+    if (command.type === 'choose-move') return chooseMove(state, player, command.move, context);
     throw new Error('Unknown ABM command.');
   },
   nextDeadline: (state) => state.phase === 'waiting' ? state.waitingDeadlineAt : undefined,
@@ -40,6 +40,7 @@ export const attackBlockManaRules: VariantRules<AbmState, AbmCommand, AbmProject
       opponentReady: Boolean(state.pendingClasses[opponent] || state.pendingMoves[opponent]),
       legalActions: legalActions(state, viewer),
       ...(state.lastCompleteMoves ? { lastCompleteMoves: { ...state.lastCompleteMoves } } : {}),
+      ...(state.luckyProcPlayer ? { luckyProcPlayer: state.luckyProcPlayer } : {}),
       ...(state.earlyPlayer ? { earlyPlayer: state.earlyPlayer } : {}), ...(state.latePlayer ? { latePlayer: state.latePlayer } : {}),
       ...(state.waitingStartsAt !== undefined ? { waitingStartsAt: state.waitingStartsAt } : {}),
       ...(state.waitingDeadlineAt !== undefined ? { waitingDeadlineAt: state.waitingDeadlineAt } : {}),
@@ -72,7 +73,7 @@ function lockClass(state: AbmState, player: PlayerId, classId: AbmClassId, now: 
     players[OTHER[player]] = resetPlayer(players[OTHER[player]], players[OTHER[player]].classId);
     return {
       state: { ...state, phase: 'idle', turn: 1, players, pendingClasses: {}, pendingMoves: {}, counterPicker: undefined,
-        counterPickAvailableAt: undefined, resultRevealAt: undefined, lastCompleteMoves: undefined, heldSplitFor: undefined },
+        counterPickAvailableAt: undefined, resultRevealAt: undefined, lastCompleteMoves: undefined, heldSplitFor: undefined, luckyProcPlayer: undefined },
       events: [cue('class-reveal', now, 800, { classes: classMap(players), round: state.round })],
     };
   }
@@ -87,7 +88,8 @@ function lockClass(state: AbmState, player: PlayerId, classId: AbmClassId, now: 
     events: [cue('class-reveal', now, 800, { classes: classMap(players), round: state.round })] };
 }
 
-function chooseMove(state: AbmState, player: PlayerId, move: AbmMove, now: number): VariantResolution<AbmState> {
+function chooseMove(state: AbmState, player: PlayerId, move: AbmMove, context: DeterministicContext): VariantResolution<AbmState> {
+  const { now } = context;
   if (!isActionPhase(state.phase)) throw new Error('Move cannot be chosen now.');
   if (!isMove(move)) throw new Error('Unknown ABM move.');
   if (state.pendingMoves[player]) throw new Error('Move is already locked.');
@@ -102,17 +104,20 @@ function chooseMove(state: AbmState, player: PlayerId, move: AbmMove, now: numbe
     return { state: { ...state, phase: 'waiting', pendingMoves, earlyPlayer, latePlayer: OTHER[player], waitingStartsAt, waitingDeadlineAt },
       events: [cue('move-ready', now, ABM_READY_SPLIT_MS + ABM_WAITING_MS, { earlyPlayer, waitingStartsAt, waitingDeadlineAt })] };
   }
-  return resolveTurn(clearWaiting(state), pendingMoves as Record<PlayerId, AbmMove>, now, forcedMana);
+  return resolveTurn(clearWaiting(state), pendingMoves as Record<PlayerId, AbmMove>, context, forcedMana);
 }
 
-function resolveTurn(state: AbmState, moves: Record<PlayerId, AbmMove>, now: number, forced: boolean): VariantResolution<AbmState> {
+function resolveTurn(state: AbmState, moves: Record<PlayerId, AbmMove>, context: DeterministicContext, forced: boolean): VariantResolution<AbmState> {
+  const { now } = context;
   const players = clonePlayers(state.players);
   for (const id of ['p1', 'p2'] as const) applyMove(players[id], moves[id]);
-  const loser = moves.p1 === 'mana' && moves.p2 === 'attack' ? 'p1' : moves.p2 === 'mana' && moves.p1 === 'attack' ? 'p2' : undefined;
-  const revealDuration = loser ? ABM_LETHAL_TO_RESULT_MS : 800;
+  const loser: PlayerId | undefined = moves.p1 === 'mana' && moves.p2 === 'attack' ? 'p1' : moves.p2 === 'mana' && moves.p1 === 'attack' ? 'p2' : undefined;
+  const luckyProcPlayer = loser && players[loser].classId === 'lucky' && context.random() < 0.25 ? loser : undefined;
+  const defeatedPlayer = luckyProcPlayer ? undefined : loser;
+  const revealDuration = defeatedPlayer ? ABM_LETHAL_TO_RESULT_MS : 800;
   const events = [cue('move-reveal', now, revealDuration, { moves, turn: state.turn, forced })];
-  const revealed = { ...state, players, pendingMoves: {}, lastCompleteMoves: moves, heldSplitFor: undefined };
-  if (loser) return finishRound(revealed, OTHER[loser], events, now + revealDuration);
+  const revealed = { ...state, players, pendingMoves: {}, lastCompleteMoves: moves, heldSplitFor: undefined, luckyProcPlayer };
+  if (defeatedPlayer) return finishRound(revealed, OTHER[defeatedPlayer], events, now + revealDuration);
   return { state: { ...revealed, phase: 'idle', turn: state.turn + 1 }, events };
 }
 

@@ -132,7 +132,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   const config = (id: string) => layoutDocument.elements.find((element) => element.id === id)!;
   const sprites: BoilingSprite[] = [];
   const buttons: GameButton[] = [];
-  let selected = ABM_CLASSES.findIndex(({ id }) => id === 'advantaged');
+  let selected = 0;
   let projection: AbmProjection | undefined;
   let orientation: LayoutOrientation = 'landscape';
   let revealTimer: ReturnType<typeof setTimeout> | undefined;
@@ -313,10 +313,12 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
       const ownClass = nextProjection.players[nextProjection.self].classId; const index = ABM_CLASSES.findIndex(({ id }) => id === ownClass); if (index >= 0) selected = index;
     }
     layout.setArtwork('turn', turnArtwork(nextProjection.turn)); layout.setArtwork('p1Wins', winArtwork('p1', nextProjection.score.p1)); layout.setArtwork('p2Wins', winArtwork('p2', nextProjection.score.p2));
-    const scene = nextProjection.phase === 'waiting' && nextProjection.waitingStartsAt !== undefined && serverTime >= nextProjection.waitingStartsAt
-      ? resolveAbmSplitScene(nextProjection.lastCompleteMoves, nextProjection.earlyPlayer!)
-      : nextProjection.heldSplitFor ? resolveAbmSplitScene(nextProjection.lastCompleteMoves, nextProjection.heldSplitFor)
-        : resolveAbmScene(nextProjection.lastCompleteMoves);
+    const scene = nextProjection.luckyProcPlayer
+      ? resolveAbmScene(nextProjection.lastCompleteMoves, nextProjection.luckyProcPlayer)
+      : nextProjection.phase === 'waiting' && nextProjection.waitingStartsAt !== undefined && serverTime >= nextProjection.waitingStartsAt
+        ? resolveAbmSplitScene(nextProjection.lastCompleteMoves, nextProjection.earlyPlayer!)
+        : nextProjection.heldSplitFor ? resolveAbmSplitScene(nextProjection.lastCompleteMoves, nextProjection.heldSplitFor)
+          : resolveAbmScene(nextProjection.lastCompleteMoves);
     layout.setArtwork('scene', { src: scene.src, alt: 'Attack Block Mana scene.' });
     sceneArtwork.classList.toggle('is-flipped', scene.flip);
     renderStatus(p1Status, nextProjection, 'p1', picking); renderStatus(p2Status, nextProjection, 'p2', picking);

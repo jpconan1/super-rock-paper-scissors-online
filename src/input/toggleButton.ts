@@ -17,6 +17,7 @@ export interface ToggleButtonOptions {
   clock: BoilClock;
   depressedSound?: string;
   releasedSound?: string;
+  minimumPressedMs?: number;
 }
 
 export interface ToggleButton {
@@ -47,6 +48,8 @@ export function createToggleButton(options: ToggleButtonOptions): ToggleButton {
     on: options.onSheet,
   };
   let currentVisual: ToggleButtonVisual = options.pressed ? 'on' : 'off';
+  let currentPressed = options.pressed;
+  let pressedAt = options.pressed ? Date.now() : Number.NEGATIVE_INFINITY;
 
   function applyAnchor(visual: ToggleButtonVisual): void {
     void detectSheetTextAnchor(sheets[visual], 'colored').then((anchor) => {
@@ -67,6 +70,7 @@ export function createToggleButton(options: ToggleButtonOptions): ToggleButton {
       });
     },
     render(view) {
+      currentPressed = view.pressed;
       currentVisual = view.visual;
       art.setSource(sheets[view.visual]);
       juice.element.hidden = view.juiceOpacity === 0;
@@ -80,15 +84,20 @@ export function createToggleButton(options: ToggleButtonOptions): ToggleButton {
 
   let suppressClick = false;
   let disabled = false;
+  const toggle = () => {
+    if (currentPressed && Date.now() - pressedAt < (options.minimumPressedMs ?? 0)) return;
+    const pressed = state.toggle();
+    if (pressed) pressedAt = Date.now();
+  };
   const onPointerDown = (event: PointerEvent) => {
     if (disabled || event.button !== 0) return;
     suppressClick = true;
-    state.toggle();
+    toggle();
     event.preventDefault();
   };
   const onKeyDown = (event: KeyboardEvent) => {
     if (disabled || (event.key !== ' ' && event.key !== 'Enter') || event.repeat) return;
-    state.toggle();
+    toggle();
     event.preventDefault();
   };
   const onClick = () => {
@@ -97,7 +106,7 @@ export function createToggleButton(options: ToggleButtonOptions): ToggleButton {
       suppressClick = false;
       return;
     }
-    state.toggle();
+    toggle();
   };
   element.addEventListener('pointerdown', onPointerDown);
   element.addEventListener('keydown', onKeyDown);
@@ -105,7 +114,10 @@ export function createToggleButton(options: ToggleButtonOptions): ToggleButton {
 
   return {
     element,
-    setPressed: (pressed) => state.setPressed(pressed),
+    setPressed: (pressed) => {
+      if (pressed && !currentPressed) pressedAt = Date.now();
+      state.setPressed(pressed);
+    },
     setDisabled(nextDisabled) {
       disabled = nextDisabled;
       if (disabled) suppressClick = false;

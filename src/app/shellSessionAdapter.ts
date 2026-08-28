@@ -11,6 +11,7 @@ export interface ShellSessionListener {
   snapshot(snapshot: ServerSnapshot): void;
   whiteboard?(message: WhiteboardServerMessage): void;
   roster?(players: LobbyPlayer[], selfId: string): void;
+  matchmakingRejected?(): void;
 }
 
 export interface ShellSessionAdapter {
@@ -38,6 +39,8 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
   private pollTimer?: ReturnType<typeof setTimeout>;
   private matchmakingRequest?: AbortController;
   private matchmakingGeneration = 0;
+  private matchmakingAttemptId?: string;
+  private announcedMatchmakingAttemptId?: string;
   private socket?: WebSocket;
   private latest?: ServerSnapshot;
   private stopped = true;
@@ -114,14 +117,16 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
   startMatchmaking(): void {
     if (!this.stopped) return;
     this.stopped = false;
+    this.matchmakingAttemptId = crypto.randomUUID();
     this.intentionallyClosed = false;
-    this.setLobbyPresence('ready');
-    this.sendWhiteboard({ type: 'status', clientOperationId: crypto.randomUUID(), displayName: this.playerName || 'Guest', status: 'ready' });
     const generation = ++this.matchmakingGeneration;
-    void this.pollMatchmaking(generation);
+    void this.pollMatchmaking(generation, this.matchmakingAttemptId);
   }
   cancelMatchmaking(): void {
     if (this.stopped && !this.pollTimer && !this.matchmakingRequest) return;
+    const attemptId = this.matchmakingAttemptId;
+    this.matchmakingAttemptId = undefined;
+    this.announcedMatchmakingAttemptId = undefined;
     this.stopped = true;
     this.matchmakingGeneration++;
     this.matchmakingRequest?.abort();
@@ -129,9 +134,10 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
     if (this.pollTimer) clearTimeout(this.pollTimer);
     this.pollTimer = undefined;
     this.setLobbyPresence('idle');
+    if (!attemptId) return;
     void fetch(`${this.baseUrl}/matchmaking`, {
       method: 'DELETE', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ guestId: this.guestId, guestSecret: this.guestSecret }),
+      body: JSON.stringify({ guestId: this.guestId, guestSecret: this.guestSecret, attemptId }),
     }).catch(() => {});
   }
   selectSlot(slotId: SlotId): void { this.sendPayload({ type: 'select-slot', slotId }); }
@@ -186,31 +192,43 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
     });
   }
 
-  private async pollMatchmaking(generation: number): Promise<void> {
+  private async pollMatchmaking(generation: number, attemptId: string): Promise<void> {
     if (this.stopped || generation !== this.matchmakingGeneration) return;
     const request = new AbortController();
     this.matchmakingRequest = request;
     try {
       const response = await fetch(`${this.baseUrl}/matchmaking`, {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ guestId: this.guestId, guestSecret: this.guestSecret, name: this.playerName || 'Guest' }),
+        body: JSON.stringify({ guestId: this.guestId, guestSecret: this.guestSecret, attemptId, name: this.playerName || 'Guest' }),
         signal: request.signal,
       });
       if (!response.ok) throw new Error(`Matchmaking failed: ${response.status}`);
-      const result = await response.json() as { status: 'waiting' } | { status: 'matched'; matchId: string; seat: string; token: string };
+      const result = await response.json() as { status: 'waiting' | 'owned-elsewhere' } | { status: 'matched'; matchId: string; seat: string; token: string };
       if (this.stopped || generation !== this.matchmakingGeneration) return;
       this.listener?.connection('connected');
+      if (result.status === 'owned-elsewhere') {
+        this.stopped = true;
+        this.matchmakingAttemptId = undefined;
+        this.setLobbyPresence('idle');
+        this.listener?.matchmakingRejected?.();
+        return;
+      }
+      if (this.announcedMatchmakingAttemptId !== attemptId) {
+        this.announcedMatchmakingAttemptId = attemptId;
+        this.setLobbyPresence('ready');
+        this.sendWhiteboard({ type: 'status', clientOperationId: crypto.randomUUID(), displayName: this.playerName || 'Guest', status: 'ready' });
+      }
       if (result.status === 'matched') { this.stopped = true; this.connect(result.matchId, result.seat, result.token); return; }
       this.pollTimer = setTimeout(() => {
         this.pollTimer = undefined;
-        void this.pollMatchmaking(generation);
+        void this.pollMatchmaking(generation, attemptId);
       }, 750);
     } catch (error) {
       if (request.signal.aborted || this.stopped || generation !== this.matchmakingGeneration) return;
       this.listener?.connection('reconnecting');
       this.pollTimer = setTimeout(() => {
         this.pollTimer = undefined;
-        void this.pollMatchmaking(generation);
+        void this.pollMatchmaking(generation, attemptId);
       }, 1_500);
     } finally {
       if (this.matchmakingRequest === request) this.matchmakingRequest = undefined;

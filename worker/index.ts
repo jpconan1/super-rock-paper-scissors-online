@@ -113,10 +113,10 @@ export class MatchObject extends DurableObject<Env> {
   async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void> {
     const attachment = socket.deserializeAttachment() as SocketAttachment | null;
     if (!attachment || !this.record) return;
+    if (!allowSocketMessage(socket, attachment, Date.now())) return;
     if (!messageFitsUtf8Limit(message, MATCH_MESSAGE_MAX_BYTES)) {
       socket.send(JSON.stringify({ type: 'error', message: 'Message too large.' })); return;
     }
-    if (!allowSocketMessage(socket, attachment, Date.now())) return;
     try {
       const command = parseClientCommand(JSON.parse(message));
       if (command.matchId !== this.record.matchId) throw new Error('Wrong match.');
@@ -231,16 +231,18 @@ const MATCHMAKING_QUEUE_TTL_MS = 5_000;
 const MATCH_TICKET_TTL_MS = 30_000;
 
 export class MatchmakerObject extends DurableObject<Env> {
-  async enqueue(guestId: string, guestSecret: string, name: string): Promise<{ status: 'waiting' } | ({ status: 'matched' } & MatchTicket)> {
+  async enqueue(guestId: string, guestSecret: string, attemptId: string, name: string): Promise<{ status: 'waiting' | 'owned-elsewhere' } | ({ status: 'matched' } & MatchTicket)> {
     const player = await authenticateGuest(this.env.DB, guestId, guestSecret, name);
     const now = Date.now();
-    const ticket = await this.ctx.storage.get<MatchTicket>(`ticket:${guestId}`);
+    const ticketKey = `ticket:${guestId}:${attemptId}`;
+    const ticket = await this.ctx.storage.get<MatchTicket>(ticketKey);
     if (ticket) {
-      await this.ctx.storage.delete(`ticket:${guestId}`);
+      await this.ctx.storage.delete(ticketKey);
       if (ticket.expiresAt > now) return { status: 'matched', ...ticket };
     }
     const queue = (await this.ctx.storage.get<MatchmakingQueueEntry[]>('queue')) ?? [];
-    const refreshed = refreshMatchmakingQueue(queue, guestId, name, player.rating, now, MATCHMAKING_QUEUE_TTL_MS);
+    const refreshed = refreshMatchmakingQueue(queue, guestId, attemptId, name, player.rating, now, MATCHMAKING_QUEUE_TTL_MS);
+    if (refreshed.ownedElsewhere) return { status: 'owned-elsewhere' };
     const opponent = refreshed.opponent;
     if (!opponent) {
       await this.ctx.storage.put('queue', refreshed.queue);
@@ -257,16 +259,16 @@ export class MatchmakerObject extends DurableObject<Env> {
     const expiresAt = now + MATCH_TICKET_TTL_MS;
     const first: MatchTicket = { matchId, seat: 'p1', token: initialized.seats.p1, expiresAt };
     const second: MatchTicket = { matchId, seat: 'p2', token: initialized.seats.p2, expiresAt };
-    await this.ctx.storage.put(`ticket:${opponent.guestId}`, first);
+    await this.ctx.storage.put(`ticket:${opponent.guestId}:${opponent.attemptId}`, first);
     await this.scheduleCleanup(expiresAt);
     return { status: 'matched', ...second };
   }
 
-  async cancel(guestId: string, guestSecret: string): Promise<void> {
+  async cancel(guestId: string, guestSecret: string, attemptId: string): Promise<void> {
     await authenticateExistingGuest(this.env.DB, guestId, guestSecret);
     const queue = (await this.ctx.storage.get<MatchmakingQueueEntry[]>('queue')) ?? [];
-    await this.ctx.storage.put('queue', queue.filter((entry) => entry.guestId !== guestId));
-    await this.ctx.storage.delete(`ticket:${guestId}`);
+    await this.ctx.storage.put('queue', queue.filter((entry) => entry.guestId !== guestId || entry.attemptId !== attemptId));
+    await this.ctx.storage.delete(`ticket:${guestId}:${attemptId}`);
   }
 
   async alarm(): Promise<void> {
@@ -343,13 +345,12 @@ export class LobbyObject extends DurableObject<Env> {
   }
 
   async webSocketMessage(socket: WebSocket, raw: string | ArrayBuffer): Promise<void> {
+    const attachment = socket.deserializeAttachment() as LobbyAttachment | null;
+    if (!attachment || !allowSocketMessage(socket, attachment, Date.now())) return;
     if (typeof raw !== 'string' || raw.length > 2_000) return;
     try {
       const message = JSON.parse(raw) as { type?: unknown; presence?: unknown };
       if (message.type !== 'presence' || !isLobbyPresence(message.presence)) throw new Error('Invalid presence.');
-      const attachment = socket.deserializeAttachment() as LobbyAttachment | null;
-      if (!attachment) return;
-      if (!allowSocketMessage(socket, attachment, Date.now())) return;
       if (attachment.presence === message.presence) return;
       for (const candidate of this.ctx.getWebSockets()) {
         const player = candidate.deserializeAttachment() as LobbyAttachment | null;
@@ -400,7 +401,7 @@ export class LobbyObject extends DurableObject<Env> {
   }
 }
 
-interface WhiteboardAttachment { guestId: string; displayName: string; clientKey: string }
+interface WhiteboardAttachment { guestId: string; displayName: string; clientKey: string; messageTimes: number[] }
 interface WhiteboardPrune { throughSequence: number; removed: WhiteboardOperation[] }
 const WHITEBOARD_MAX_OPERATIONS = 800;
 const WHITEBOARD_PRUNE_OPERATIONS = 200;
@@ -436,7 +437,7 @@ export class WhiteboardObject extends DurableObject<Env> {
     if (connections.filter((player) => player.guestId === guestId).length >= CHANNEL_SOCKETS_PER_GUEST
       || connections.filter((player) => player.clientKey === clientKey).length >= CHANNEL_SOCKETS_PER_CLIENT) return rateLimited();
     const pair = new WebSocketPair(); const [client, server] = Object.values(pair);
-    this.ctx.acceptWebSocket(server); server.serializeAttachment({ guestId, displayName, clientKey } satisfies WhiteboardAttachment);
+    this.ctx.acceptWebSocket(server); server.serializeAttachment({ guestId, displayName, clientKey, messageTimes: [] } satisfies WhiteboardAttachment);
     this.send(server, { type: 'snapshot', board: this.board });
     const visit = url.searchParams.get('visit');
     if (visit && validClientId(visit) && !this.board.operations.some((operation) => operation.clientOperationId === `join:${visit}`)) {
@@ -452,14 +453,14 @@ export class WhiteboardObject extends DurableObject<Env> {
   }
 
   async webSocketMessage(socket: WebSocket, raw: string | ArrayBuffer): Promise<void> {
+    const attachment = socket.deserializeAttachment() as WhiteboardAttachment | null;
+    if (!attachment || !allowSocketMessage(socket, attachment, Date.now())) return;
     if (typeof raw !== 'string' || new TextEncoder().encode(raw).byteLength > 16_000) { this.error(socket, 'message-too-large', 'Message too large.'); return; }
     try {
       const message = JSON.parse(raw) as WhiteboardClientMessage;
       if (!message || !['chat', 'status', 'stroke', 'erase'].includes(message.type) || !validClientId(message.clientOperationId)) throw new Error('Invalid whiteboard message.');
       const duplicate = this.board.operations.find((operation) => operation.clientOperationId === message.clientOperationId);
       if (duplicate) { this.send(socket, { type: 'operation', operation: duplicate }); return; }
-      const attachment = socket.deserializeAttachment() as WhiteboardAttachment | null;
-      if (!attachment) throw new Error('Missing guest identity.');
       const operation = this.createOperation(message, attachment.displayName);
       if (!operation) throw new Error('Invalid whiteboard content.');
       const category: WhiteboardRateCategory = message.type === 'stroke' || message.type === 'erase' ? 'draw' : 'text';
@@ -618,10 +619,10 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
     if (url.pathname === '/matchmaking' && request.method === 'POST') {
       try {
         if (!await allowed(env.MATCHMAKING_IP_RATE, clientKey)) return rateLimited();
-        const body = await readJsonBody<{ guestId?: string; guestSecret?: string; name?: string }>(request);
-        if (!body.guestId || !body.guestSecret || !body.name) return json({ error: 'guestId, guestSecret, and name are required.' }, 400);
+        const body = await readJsonBody<{ guestId?: string; guestSecret?: string; attemptId?: string; name?: string }>(request);
+        if (!body.guestId || !body.guestSecret || !validClientId(body.attemptId) || !body.name) return json({ error: 'guestId, guestSecret, attemptId, and name are required.' }, 400);
         if (!await allowed(env.MATCHMAKING_GUEST_RATE, body.guestId)) return rateLimited();
-        return json(await env.MATCHMAKER.getByName('global').enqueue(body.guestId, body.guestSecret, sanitizeText(body.name, 50) || 'Guest'));
+        return json(await env.MATCHMAKER.getByName('global').enqueue(body.guestId, body.guestSecret, body.attemptId, sanitizeText(body.name, 50) || 'Guest'));
       } catch (error) {
         if (error instanceof RequestBodyError) return json({ error: error.message }, error.status);
         return json({ error: error instanceof Error ? error.message : 'Matchmaking failed.' }, 401);
@@ -630,10 +631,10 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
     if (url.pathname === '/matchmaking' && request.method === 'DELETE') {
       try {
         if (!await allowed(env.MATCHMAKING_IP_RATE, clientKey)) return rateLimited();
-        const body = await readJsonBody<{ guestId?: string; guestSecret?: string }>(request);
-        if (!body.guestId || !body.guestSecret) return json({ error: 'guestId and guestSecret are required.' }, 400);
+        const body = await readJsonBody<{ guestId?: string; guestSecret?: string; attemptId?: string }>(request);
+        if (!body.guestId || !body.guestSecret || !validClientId(body.attemptId)) return json({ error: 'guestId, guestSecret, and attemptId are required.' }, 400);
         if (!await allowed(env.MATCHMAKING_GUEST_RATE, body.guestId)) return rateLimited();
-        await env.MATCHMAKER.getByName('global').cancel(body.guestId, body.guestSecret);
+        await env.MATCHMAKER.getByName('global').cancel(body.guestId, body.guestSecret, body.attemptId);
         return new Response(null, { status: 204 });
       } catch (error) {
         if (error instanceof RequestBodyError) return json({ error: error.message }, error.status);
@@ -666,7 +667,10 @@ const SOCKET_MESSAGE_WINDOW_MS = 10_000;
 function allowSocketMessage<T extends { messageTimes: number[] }>(socket: WebSocket, attachment: T, now: number): boolean {
   const result = consumeSlidingWindow(attachment.messageTimes ?? [], now, SOCKET_MESSAGE_LIMIT, SOCKET_MESSAGE_WINDOW_MS);
   attachment.messageTimes = result.times;
-  if (!result.allowed) return false;
+  if (!result.allowed) {
+    socket.close(1008, 'Message rate limit exceeded.');
+    return false;
+  }
   socket.serializeAttachment(attachment); return true;
 }
 

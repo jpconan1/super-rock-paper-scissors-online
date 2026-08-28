@@ -60,7 +60,7 @@ describe('matchmaking session adapters', () => {
     expect(fetchMock.mock.calls[1]?.[1]?.method).toBe('DELETE');
     expect(fetchMock.mock.calls[1]?.[1]?.headers).toEqual({ 'content-type': 'application/json' });
     expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({
-      guestId: expect.any(String), guestSecret: expect.any(String),
+      guestId: expect.any(String), guestSecret: expect.any(String), attemptId: expect.any(String),
     });
   });
 
@@ -119,6 +119,20 @@ describe('matchmaking session adapters', () => {
     expect(url.searchParams.has('token')).toBe(false);
     expect(protocols).toEqual(['super-rps-match-v1', 'private-seat-token']);
     expect(url.toString()).not.toContain('private-seat-token');
+  });
+
+  test('a second tab is quietly released when another tab owns the guest queue entry', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ status: 'owned-elsewhere' }), {
+      status: 200, headers: { 'content-type': 'application/json' },
+    })));
+    const rejected = vi.fn();
+    const adapter = new WebSocketShellSessionAdapter('https://example.test');
+    adapter.subscribe({ connection: vi.fn(), matchFound: vi.fn(), snapshot: vi.fn(), matchmakingRejected: rejected });
+
+    adapter.startMatchmaking();
+    for (let index = 0; index < 6; index++) await Promise.resolve();
+
+    expect(rejected).toHaveBeenCalledOnce();
   });
 
   test('local matchmaking timer is cleared by cancellation', () => {

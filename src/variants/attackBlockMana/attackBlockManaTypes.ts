@@ -35,6 +35,7 @@ export interface AbmState {
   classReadyAt?: number;
   pendingMoves: Partial<Record<PlayerId, AbmMove>>;
   lastCompleteMoves?: Record<PlayerId, AbmMove>;
+  luckyProcPlayer?: PlayerId;
   earlyPlayer?: PlayerId;
   latePlayer?: PlayerId;
   waitingStartsAt?: number;
@@ -69,6 +70,7 @@ export interface AbmProjection {
   lastRoundWinner?: PlayerId;
   winner?: PlayerId;
   lastCompleteMoves?: Record<PlayerId, AbmMove>;
+  luckyProcPlayer?: PlayerId;
   earlyPlayer?: PlayerId;
   latePlayer?: PlayerId;
   waitingStartsAt?: number;

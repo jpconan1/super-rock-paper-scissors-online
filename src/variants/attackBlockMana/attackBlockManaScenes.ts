@@ -4,7 +4,8 @@ import type { AbmMove } from './attackBlockManaTypes';
 const ROOT = '/variants/abm/scenes';
 export interface AbmScene { src: string; flip: boolean }
 
-export function resolveAbmScene(moves?: Readonly<Record<PlayerId, AbmMove>>): AbmScene {
+export function resolveAbmScene(moves?: Readonly<Record<PlayerId, AbmMove>>, luckyProcPlayer?: PlayerId): AbmScene {
+  if (luckyProcPlayer) return scene('lucky-proc', luckyProcPlayer === 'p2');
   if (!moves) return scene('abm-standoff');
   if (moves.p1 === moves.p2) return scene(moves.p1 === 'attack' ? 'attack-draw' : moves.p1 === 'block' ? 'block-draw' : 'mana-draw');
   const pair = new Set<AbmMove>([moves.p1, moves.p2]);
@@ -27,7 +28,7 @@ export function resolveAbmSplitScene(moves: Readonly<Record<PlayerId, AbmMove>> 
 }
 
 export const ABM_SCENE_URLS = [
-  'abm-standoff', 'block-mana', 'block-draw', 'block-attack', 'mana-draw', 'mana-attack', 'attack-draw',
+  'abm-standoff', 'block-mana', 'block-draw', 'block-attack', 'mana-draw', 'mana-attack', 'attack-draw', 'lucky-proc',
 ].map((name) => `${ROOT}/${name}-sheet.webp`).concat([
   'abm-standoff-p1-ready', 'abm-standoff-p2-ready', 'block-draw-p1-ready', 'block-draw-p2-ready',
   'attack-draw-p1-ready', 'attack-draw-p2-ready', 'mana-draw-p1-ready', 'mana-draw-p2-ready',
