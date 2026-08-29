@@ -12,7 +12,7 @@ import { createBoilingSprite, type BoilingSprite } from '../../renderer/boilingS
 import { playStarburstWipe } from '../../renderer/starburstWipe';
 import { createTextbox } from '../../ui/textbox';
 import { ABM_CLASSES } from './attackBlockManaCatalog';
-import { ABM_SCENE_URLS, resolveAbmScene, resolveAbmSplitScene } from './attackBlockManaScenes';
+import { ABM_SCENE_URLS, resolveAbmScene, resolveAbmSplitScene, resolveThiefScene } from './attackBlockManaScenes';
 import type { AbmCommand, AbmMove, AbmProjection } from './attackBlockManaTypes';
 import { playCatalogSound, type SoundId } from '../../audio/soundCatalog';
 import type { MusicDirector } from '../../audio/musicDirector';
@@ -143,6 +143,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   const playedTransitionIds = new Set<string>();
   const playedSoundIds = new Set<string>();
   let wipeRunning = false;
+  let stealArmed = false;
   const transitionAbort = new AbortController();
 
   const moveStatus = (player: 'p1' | 'p2') => {
@@ -166,11 +167,16 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     const choice = ABM_CLASSES[selected]!; if (choice.implemented) send({ type: 'lock-class', classId: choice.id });
   }, upSheet: ABM_SELECT_ART.up, betweenSheet: ABM_SELECT_ART.between, depressedSheet: ABM_SELECT_ART.depressed });
   lock.element.classList.add('abm-controls__lock', 'game-button--baked-label'); buttons.push(lock); controls.append(lock.element);
+  const steal = createGameButton({ label: 'Steal', clock, activateAtReleaseStart: true, onActivate: () => {
+    stealArmed = !stealArmed;
+    steal.setLockedDepressed(stealArmed);
+  }, upSheet: `${ABM_ROOT}/steal-button-up-sheet.webp`, betweenSheet: `${ABM_ROOT}/steal-button-between-sheet.webp`, depressedSheet: `${ABM_ROOT}/steal-button-depressed-sheet.webp` });
+  steal.element.classList.add('abm-controls__steal', 'game-button--baked-label'); buttons.push(steal); controls.append(steal.element);
   const moves = (['attack', 'block', 'mana'] as const).map((move) => {
     let button!: GameButton;
     button = createGameButton({ label: move, clock, activateAtReleaseStart: true, onActivate: () => {
       button.setLockedDepressed(true);
-      send({ type: 'choose-move', move });
+      send({ type: 'choose-move', move, ...(stealArmed ? { useSteal: true as const } : {}) });
     },
       upSheet: CONTROL_ART[move].up, betweenSheet: CONTROL_ART[move].between, depressedSheet: CONTROL_ART[move].depressed });
     button.element.classList.add('abm-controls__move', `abm-controls__move--${move}`, 'game-button--baked-label');
@@ -215,6 +221,11 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     onMenu,
   });
   layout.slots.scene.append(picker, waiting, result.element);
+  const thiefTransfer = createBoilingSprite({ src: `${ABM_ROOT}/thief/thief-transfer-sheet.webp`, clock, className: 'abm-thief-transfer', alt: 'Mana stolen' });
+  const thiefTransferMirror = createBoilingSprite({ src: `${ABM_ROOT}/thief/thief-transfer-mirror-sheet.webp`, clock, className: 'abm-thief-transfer abm-thief-transfer--mirror', alt: 'Simultaneous steals' });
+  thiefTransfer.element.hidden = true; thiefTransferMirror.element.hidden = true; sprites.push(thiefTransfer, thiefTransferMirror);
+  layout.slots.scene.append(thiefTransfer.element, thiefTransferMirror.element);
+  layout.composition.append(steal.element);
   layout.composition.append(classReadyArt.element, classReadyOpponentTag.element);
   sceneArtwork = layout.slots.scene.querySelector<HTMLElement>('.game-layout__scene')!;
   sceneArtwork.hidden = true;
@@ -236,7 +247,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   }
 
   function applyVariantLayout() {
-    const bindings: readonly [string, HTMLElement][] = [['picker-prev', previous.element], ['picker-next', next.element], ['lock-class', lock.element],
+    const bindings: readonly [string, HTMLElement][] = [['picker-prev', previous.element], ['picker-next', next.element], ['lock-class', lock.element], ['steal', steal.element],
       ['back-lobby', lobby.element],
       ['class-ready', classReadyArt.element], ['class-ready-opponent-tag', classReadyOpponentTag.element],
       ...(sceneArtwork ? [['scene-art', sceneArtwork] as [string, HTMLElement]] : []),
@@ -297,9 +308,15 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     layout.setYouTagVisible(shouldShowAbmYouTag(nextProjection.phase));
     const showingResult = (counterLocked || complete) && resultRevealed;
     const transitioning = counterLocked || complete;
+    const thiefFeedback = Boolean(nextProjection.thiefAttemptPlayers?.length);
     picker.hidden = !picking; sceneArtwork.hidden = picking; lock.element.hidden = !picking; for (const [, button] of moves) button.element.hidden = picking || transitioning;
     for (const [, arrow] of arrows) arrow.hidden = picking || transitioning;
     previous.element.hidden = !picking; next.element.hidden = !picking;
+    const ownPlayer = nextProjection.players[nextProjection.self];
+    stealArmed = Boolean(nextProjection.ownPendingSteal) || (stealArmed && !nextProjection.ownPendingMove && !thiefFeedback);
+    steal.element.hidden = picking || transitioning || ownPlayer.classId !== 'thief' || thiefFeedback;
+    steal.setDisabled(!nextProjection.legalActions.includes('steal'));
+    steal.setLockedDepressed(stealArmed);
     lobby.element.hidden = !complete || !showingResult;
     result.element.hidden = !showingResult;
     if (showingResult) {
@@ -313,14 +330,22 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
       const ownClass = nextProjection.players[nextProjection.self].classId; const index = ABM_CLASSES.findIndex(({ id }) => id === ownClass); if (index >= 0) selected = index;
     }
     layout.setArtwork('turn', turnArtwork(nextProjection.turn)); layout.setArtwork('p1Wins', winArtwork('p1', nextProjection.score.p1)); layout.setArtwork('p2Wins', winArtwork('p2', nextProjection.score.p2));
-    const scene = nextProjection.luckyProcPlayer
-      ? resolveAbmScene(nextProjection.lastCompleteMoves, nextProjection.luckyProcPlayer)
+    const thiefScene = resolveThiefScene(nextProjection.lastCompleteMoves, nextProjection.thiefAttemptPlayers, {
+      p1: nextProjection.players.p1.classId, p2: nextProjection.players.p2.classId,
+    });
+    const classProcActive = nextProjection.luckyProcPlayer || nextProjection.advantagedProcPlayers?.length;
+    const scene = thiefScene ?? (classProcActive
+      ? resolveAbmScene(nextProjection.lastCompleteMoves, nextProjection.luckyProcPlayer, nextProjection.advantagedProcPlayers)
       : nextProjection.phase === 'waiting' && nextProjection.waitingStartsAt !== undefined && serverTime >= nextProjection.waitingStartsAt
         ? resolveAbmSplitScene(nextProjection.lastCompleteMoves, nextProjection.earlyPlayer!)
         : nextProjection.heldSplitFor ? resolveAbmSplitScene(nextProjection.lastCompleteMoves, nextProjection.heldSplitFor)
-          : resolveAbmScene(nextProjection.lastCompleteMoves);
+          : resolveAbmScene(nextProjection.lastCompleteMoves));
     layout.setArtwork('scene', { src: scene.src, alt: 'Attack Block Mana scene.' });
     sceneArtwork.classList.toggle('is-flipped', scene.flip);
+    const simultaneousSteals = Boolean(thiefScene) && nextProjection.thiefAttemptPlayers?.length === 2;
+    thiefTransfer.element.hidden = !thiefScene || (!nextProjection.thiefTransferPlayer && !simultaneousSteals);
+    thiefTransferMirror.element.hidden = !simultaneousSteals;
+    thiefTransfer.element.classList.toggle('is-flipped', nextProjection.thiefTransferPlayer === 'p2');
     renderStatus(p1Status, nextProjection, 'p1', picking); renderStatus(p2Status, nextProjection, 'p2', picking);
     renderResources(p1Resources, nextProjection, 'p1'); renderResources(p2Resources, nextProjection, 'p2');
     const showWaiting = nextProjection.phase === 'waiting';
@@ -400,10 +425,10 @@ export function soundForAbmMoves(moves: Readonly<Record<'p1' | 'p2', AbmMove>>):
 
 export function playAbmEventSounds(events: readonly TimedSemanticEvent[], serverTime: number, played: Set<string>): void {
   for (const event of events) {
-    if (event.type !== 'move-reveal' || event.startsAt > serverTime || event.endsAt <= serverTime || played.has(event.id)) continue;
-    const payload = event.payload as { moves?: Record<'p1' | 'p2', AbmMove> };
-    if (!payload.moves) continue;
-    const sound = soundForAbmMoves(payload.moves);
+    if (!['move-reveal', 'move-timeout'].includes(event.type) || event.startsAt > serverTime || event.endsAt <= serverTime || played.has(event.id)) continue;
+    const payload = event.payload as { moves?: Record<'p1' | 'p2', AbmMove>; luckyProcPlayer?: 'p1' | 'p2'; advantagedProcPlayers?: ('p1' | 'p2')[] };
+    const sound = payload.luckyProcPlayer ? 'abm-lucky' : payload.advantagedProcPlayers?.length ? 'abm-charge'
+      : event.type === 'move-reveal' && payload.moves ? soundForAbmMoves(payload.moves) : undefined;
     if (!sound) continue;
     played.add(event.id);
     playCatalogSound(sound);

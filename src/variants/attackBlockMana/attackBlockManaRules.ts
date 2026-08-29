@@ -13,13 +13,13 @@ export const attackBlockManaRules: VariantRules<AbmState, AbmCommand, AbmProject
   variantId: 'attack-block-mana', rulesVersion: 1,
   initialize: () => ({
     phase: 'selecting-classes', turn: 0, round: 1, score: { p1: 0, p2: 0 },
-    players: { p1: freshPlayer(), p2: freshPlayer() }, pendingClasses: {}, pendingMoves: {},
+    players: { p1: freshPlayer(), p2: freshPlayer() }, pendingClasses: {}, pendingMoves: {}, pendingSteals: {},
   }),
   resolve(state, player, command, context) {
     if (state.winner) throw new Error('Game is complete.');
     if (!command || typeof command !== 'object') throw new Error('Invalid ABM command.');
     if (command.type === 'lock-class') return lockClass(state, player, command.classId, context.now);
-    if (command.type === 'choose-move') return chooseMove(state, player, command.move, context);
+    if (command.type === 'choose-move') return chooseMove(state, player, command.move, command.useSteal, context);
     throw new Error('Unknown ABM command.');
   },
   nextDeadline: (state) => state.phase === 'waiting' ? state.waitingDeadlineAt : undefined,
@@ -31,16 +31,21 @@ export const attackBlockManaRules: VariantRules<AbmState, AbmCommand, AbmProject
     const opponent = OTHER[viewer];
     const ownPendingClass = state.pendingClasses[viewer];
     const ownPendingMove = state.pendingMoves[viewer];
+    const ownPendingSteal = state.pendingSteals?.[viewer];
     return {
       self: viewer, phase: projectedPhase(state, viewer), turn: state.turn, round: state.round,
       score: { ...state.score }, players: clonePlayers(state.players),
       ...(ownPendingClass ? { ownPendingClass } : {}), ...(ownPendingMove ? { ownPendingMove } : {}),
+      ...(ownPendingSteal ? { ownPendingSteal } : {}),
       ...(state.classReadyPlayer ? { classReadyPlayer: state.classReadyPlayer } : {}),
       ...(state.classReadyAt !== undefined ? { classReadyAt: state.classReadyAt } : {}),
       opponentReady: Boolean(state.pendingClasses[opponent] || state.pendingMoves[opponent]),
       legalActions: legalActions(state, viewer),
       ...(state.lastCompleteMoves ? { lastCompleteMoves: { ...state.lastCompleteMoves } } : {}),
       ...(state.luckyProcPlayer ? { luckyProcPlayer: state.luckyProcPlayer } : {}),
+      ...(state.advantagedProcPlayers?.length ? { advantagedProcPlayers: [...state.advantagedProcPlayers] } : {}),
+      ...(state.thiefAttemptPlayers?.length ? { thiefAttemptPlayers: [...state.thiefAttemptPlayers] } : {}),
+      ...(state.thiefTransferPlayer ? { thiefTransferPlayer: state.thiefTransferPlayer } : {}),
       ...(state.earlyPlayer ? { earlyPlayer: state.earlyPlayer } : {}), ...(state.latePlayer ? { latePlayer: state.latePlayer } : {}),
       ...(state.waitingStartsAt !== undefined ? { waitingStartsAt: state.waitingStartsAt } : {}),
       ...(state.waitingDeadlineAt !== undefined ? { waitingDeadlineAt: state.waitingDeadlineAt } : {}),
@@ -72,8 +77,9 @@ function lockClass(state: AbmState, player: PlayerId, classId: AbmClassId, now: 
     players[player] = resetPlayer(players[player], classId);
     players[OTHER[player]] = resetPlayer(players[OTHER[player]], players[OTHER[player]].classId);
     return {
-      state: { ...state, phase: 'idle', turn: 1, players, pendingClasses: {}, pendingMoves: {}, counterPicker: undefined,
-        counterPickAvailableAt: undefined, resultRevealAt: undefined, lastCompleteMoves: undefined, heldSplitFor: undefined, luckyProcPlayer: undefined },
+      state: { ...state, phase: 'idle', turn: 1, players, pendingClasses: {}, pendingMoves: {}, pendingSteals: {}, counterPicker: undefined,
+        counterPickAvailableAt: undefined, resultRevealAt: undefined, lastCompleteMoves: undefined, heldSplitFor: undefined,
+        luckyProcPlayer: undefined, advantagedProcPlayers: undefined, thiefAttemptPlayers: undefined, thiefTransferPlayer: undefined },
       events: [cue('class-reveal', now, 800, { classes: classMap(players), round: state.round })],
     };
   }
@@ -84,11 +90,11 @@ function lockClass(state: AbmState, player: PlayerId, classId: AbmClassId, now: 
     events: [cue('class-ready', now, 7 * 58, { player })],
   };
   const players = { p1: freshPlayer(pendingClasses.p1), p2: freshPlayer(pendingClasses.p2) };
-  return { state: { ...state, phase: 'idle', turn: 1, players, pendingClasses: {}, pendingMoves: {}, classReadyPlayer: undefined, classReadyAt: undefined },
+  return { state: { ...state, phase: 'idle', turn: 1, players, pendingClasses: {}, pendingMoves: {}, pendingSteals: {}, classReadyPlayer: undefined, classReadyAt: undefined },
     events: [cue('class-reveal', now, 800, { classes: classMap(players), round: state.round })] };
 }
 
-function chooseMove(state: AbmState, player: PlayerId, move: AbmMove, context: DeterministicContext): VariantResolution<AbmState> {
+function chooseMove(state: AbmState, player: PlayerId, move: AbmMove, useSteal: true | undefined, context: DeterministicContext): VariantResolution<AbmState> {
   const { now } = context;
   if (!isActionPhase(state.phase)) throw new Error('Move cannot be chosen now.');
   if (!isMove(move)) throw new Error('Unknown ABM move.');
@@ -96,27 +102,33 @@ function chooseMove(state: AbmState, player: PlayerId, move: AbmMove, context: D
   const forcedMana = bothPlayersHaveNoMana(state);
   if (forcedMana && move !== 'mana') throw new Error('Mana is the only move available at 0–0 Mana.');
   validateMove(state.players[player], move);
+  if (useSteal) validateSteal(state, player);
   const pendingMoves = { ...state.pendingMoves, [player]: move };
+  const pendingSteals = { ...(state.pendingSteals ?? {}), ...(useSteal ? { [player]: true as const } : {}) };
   if (!pendingMoves.p1 || !pendingMoves.p2) {
     const earlyPlayer = player;
     const waitingStartsAt = now + ABM_READY_SPLIT_MS;
     const waitingDeadlineAt = waitingStartsAt + ABM_WAITING_MS;
-    return { state: { ...state, phase: 'waiting', pendingMoves, earlyPlayer, latePlayer: OTHER[player], waitingStartsAt, waitingDeadlineAt },
+    return { state: { ...state, phase: 'waiting', pendingMoves, pendingSteals, earlyPlayer, latePlayer: OTHER[player], waitingStartsAt, waitingDeadlineAt },
       events: [cue('move-ready', now, ABM_READY_SPLIT_MS + ABM_WAITING_MS, { earlyPlayer, waitingStartsAt, waitingDeadlineAt })] };
   }
-  return resolveTurn(clearWaiting(state), pendingMoves as Record<PlayerId, AbmMove>, context, forcedMana);
+  return resolveTurn(clearWaiting({ ...state, pendingSteals }), pendingMoves as Record<PlayerId, AbmMove>, context, forcedMana);
 }
 
 function resolveTurn(state: AbmState, moves: Record<PlayerId, AbmMove>, context: DeterministicContext, forced: boolean): VariantResolution<AbmState> {
   const { now } = context;
   const players = clonePlayers(state.players);
-  for (const id of ['p1', 'p2'] as const) applyMove(players[id], moves[id]);
+  const advantagedProcPlayers = (['p1', 'p2'] as const).filter((id) => isAdvantagedManaProc(players[id], moves[id], state.turn));
+  for (const id of ['p1', 'p2'] as const) applyMove(players[id], moves[id], manaGainFor(players[id], state.turn));
+  const { attemptPlayers: thiefAttemptPlayers, transferPlayer: thiefTransferPlayer } = resolveSteals(players, state.pendingSteals ?? {});
   const loser: PlayerId | undefined = moves.p1 === 'mana' && moves.p2 === 'attack' ? 'p1' : moves.p2 === 'mana' && moves.p1 === 'attack' ? 'p2' : undefined;
   const luckyProcPlayer = loser && players[loser].classId === 'lucky' && context.random() < 0.25 ? loser : undefined;
   const defeatedPlayer = luckyProcPlayer ? undefined : loser;
   const revealDuration = defeatedPlayer ? ABM_LETHAL_TO_RESULT_MS : 800;
-  const events = [cue('move-reveal', now, revealDuration, { moves, turn: state.turn, forced })];
-  const revealed = { ...state, players, pendingMoves: {}, lastCompleteMoves: moves, heldSplitFor: undefined, luckyProcPlayer };
+  const events = [cue('move-reveal', now, revealDuration, { moves, turn: state.turn, forced, luckyProcPlayer, advantagedProcPlayers })];
+  const revealed = { ...state, players, pendingMoves: {}, pendingSteals: {}, lastCompleteMoves: moves, heldSplitFor: undefined,
+    luckyProcPlayer, advantagedProcPlayers: advantagedProcPlayers.length ? advantagedProcPlayers : undefined,
+    thiefAttemptPlayers: thiefAttemptPlayers.length ? thiefAttemptPlayers : undefined, thiefTransferPlayer };
   if (defeatedPlayer) return finishRound(revealed, OTHER[defeatedPlayer], events, now + revealDuration);
   return { state: { ...revealed, phase: 'idle', turn: state.turn + 1 }, events };
 }
@@ -124,13 +136,17 @@ function resolveTurn(state: AbmState, moves: Record<PlayerId, AbmMove>, context:
 function resolveTimeout(state: AbmState, now: number): VariantResolution<AbmState> {
   const early = state.earlyPlayer!; const late = state.latePlayer!; const move = state.pendingMoves[early]!;
   const players = clonePlayers(state.players);
-  applyMove(players[early], move);
+  const advantagedProcPlayers = isAdvantagedManaProc(players[early], move, state.turn) ? [early] : undefined;
+  applyMove(players[early], move, manaGainFor(players[early], state.turn));
   players[late].mana = Math.max(0, players[late].mana - 1);
   players[late].strikes = (players[late].strikes ?? 0) + 1;
   players[late].lastMove = 'skip';
+  const { attemptPlayers: thiefAttemptPlayers, transferPlayer: thiefTransferPlayer } = resolveSteals(players, state.pendingSteals ?? {});
   const revealDuration = move === 'attack' || players[late].strikes >= 2 ? ABM_LETHAL_TO_RESULT_MS : 800;
-  const events = [cue('move-timeout', now, revealDuration, { earlyPlayer: early, latePlayer: late, move, strikes: players[late].strikes, turn: state.turn })];
-  const timedOut = { ...clearWaiting(state), players, pendingMoves: {}, heldSplitFor: early };
+  const events = [cue('move-timeout', now, revealDuration, { earlyPlayer: early, latePlayer: late, move, strikes: players[late].strikes,
+    turn: state.turn, advantagedProcPlayers, thiefAttemptPlayers, thiefTransferPlayer })];
+  const timedOut = { ...clearWaiting(state), players, pendingMoves: {}, pendingSteals: {}, heldSplitFor: early, luckyProcPlayer: undefined,
+    advantagedProcPlayers, thiefAttemptPlayers: undefined, thiefTransferPlayer: undefined };
   if (players[late].strikes >= 2) return { state: { ...timedOut, phase: 'match-complete', winner: early, resultReason: 'forfeit', resultRevealAt: now + revealDuration }, events };
   if (move === 'attack') return finishRound(timedOut, early, events, now + revealDuration);
   return { state: { ...timedOut, phase: 'idle', turn: state.turn + 1 }, events };
@@ -142,18 +158,37 @@ function finishRound(state: AbmState, winner: PlayerId, events: ReturnType<typeo
   if (score[winner] >= 3) return { state: { ...state, phase: 'match-complete', score, winner, lastRoundWinner: winner, resultRevealAt: startsAt }, events };
   const loser = OTHER[winner];
   events.push(cue('counter-pick', startsAt + ABM_RESULT_TO_COUNTER_PICK_MS, 600, { winner, loser, classId: state.players[winner].classId }));
-  return { state: { ...state, phase: 'counter-picking', turn: 0, round: state.round + 1, score, pendingClasses: {}, pendingMoves: {},
+  return { state: { ...state, phase: 'counter-picking', turn: 0, round: state.round + 1, score, pendingClasses: {}, pendingMoves: {}, pendingSteals: {},
     counterPicker: loser, counterPickAvailableAt: startsAt + ABM_RESULT_TO_COUNTER_PICK_MS, resultRevealAt: startsAt, lastRoundWinner: winner }, events };
 }
 
-function applyMove(player: AbmPlayerState, move: AbmMove, record = true): void {
-  if (move === 'attack') player.mana--; else if (move === 'block') player.blocks--; else player.mana++;
+function applyMove(player: AbmPlayerState, move: AbmMove, manaGain = 1, record = true): void {
+  if (move === 'attack') player.mana--; else if (move === 'block') player.blocks--; else player.mana += manaGain;
   if (move !== 'block') player.blocks = 5;
   if (record) player.lastMove = move;
+}
+function manaGainFor(player: Readonly<AbmPlayerState>, turn: number): number { return player.classId === 'advantaged' && turn <= 3 ? 2 : 1; }
+function isAdvantagedManaProc(player: Readonly<AbmPlayerState>, move: AbmMove, turn: number): boolean {
+  return player.classId === 'advantaged' && move === 'mana' && turn <= 3;
 }
 function validateMove(player: AbmPlayerState, move: AbmMove): void {
   if (move === 'attack' && player.mana < 1) throw new Error('Attack requires 1 Mana.');
   if (move === 'block' && player.blocks < 1) throw new Error('No Blocks remain.');
+}
+function validateSteal(state: AbmState, player: PlayerId): void {
+  const target = state.players[player];
+  if (target.classId !== 'thief') throw new Error('Only Thief can use Steal.');
+  if (state.turn < 5) throw new Error('Steal is unavailable before Turn 5.');
+  if (target.stealUsed) throw new Error('Steal has already been used.');
+}
+function resolveSteals(players: Record<PlayerId, AbmPlayerState>, pending: Partial<Record<PlayerId, true>>) {
+  const attemptPlayers = (['p1', 'p2'] as const).filter((id) => pending[id]);
+  for (const id of attemptPlayers) players[id].stealUsed = true;
+  if (attemptPlayers.length !== 1) return { attemptPlayers, transferPlayer: undefined };
+  const thief = attemptPlayers[0]!; const victim = OTHER[thief];
+  if (players[victim].mana <= 0) return { attemptPlayers, transferPlayer: undefined };
+  players[victim].mana--; players[thief].mana++;
+  return { attemptPlayers, transferPlayer: thief };
 }
 function legalActions(state: AbmState, viewer: PlayerId) {
   if ((state.phase === 'selecting-classes' || state.phase === 'waiting-for-class') && !state.pendingClasses[viewer]) return ['lock-class'] as const;
@@ -161,7 +196,8 @@ function legalActions(state: AbmState, viewer: PlayerId) {
   if (isActionPhase(state.phase) && !state.pendingMoves[viewer]) {
     if (bothPlayersHaveNoMana(state)) return ['mana'] as const;
     const target = state.players[viewer];
-    return (['attack', 'block', 'mana'] as const).filter((move) => move !== 'attack' || target.mana > 0).filter((move) => move !== 'block' || target.blocks > 0);
+    const moves = (['attack', 'block', 'mana'] as const).filter((move) => move !== 'attack' || target.mana > 0).filter((move) => move !== 'block' || target.blocks > 0);
+    return target.classId === 'thief' && state.turn >= 5 && !target.stealUsed ? [...moves, 'steal' as const] : moves;
   }
   return [];
 }

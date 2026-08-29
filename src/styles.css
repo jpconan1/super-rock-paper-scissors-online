@@ -767,6 +767,9 @@ input {
 .abm-picker__arrow > .game-button__art { inset: 0; width: 100%; height: 100%; transform: none; }
 .abm-controls { position: relative; width: 100%; height: 100%; }
 .abm-arrow { position: absolute; overflow: visible; }
+.abm-thief-transfer { position: absolute; z-index: 5; top: 100%; left: 50%; width: 113px; transform: translateX(-50%); overflow: visible; pointer-events: none; }
+.abm-thief-transfer--mirror { top: auto; bottom: 100%; }
+.abm-thief-transfer.is-flipped > .boiling-sprite__canvas { transform: scaleX(-1); }
 .abm-controls__move--attack { color: #ac3235; }
 .abm-controls__move--block { color: #1857a6; }
 .abm-controls__move--mana { color: #3f7d31; }

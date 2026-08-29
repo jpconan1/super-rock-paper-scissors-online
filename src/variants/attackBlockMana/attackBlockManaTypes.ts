@@ -14,7 +14,7 @@ export type AbmPhase =
 
 export type AbmCommand =
   | { type: 'lock-class'; classId: AbmClassId }
-  | { type: 'choose-move'; move: AbmMove };
+  | { type: 'choose-move'; move: AbmMove; useSteal?: true };
 
 export interface AbmPlayerState {
   classId?: AbmClassId;
@@ -22,6 +22,7 @@ export interface AbmPlayerState {
   blocks: number;
   strikes: number;
   lastMove?: AbmDisplayMove;
+  stealUsed?: boolean;
 }
 
 export interface AbmState {
@@ -34,8 +35,12 @@ export interface AbmState {
   classReadyPlayer?: PlayerId;
   classReadyAt?: number;
   pendingMoves: Partial<Record<PlayerId, AbmMove>>;
+  pendingSteals?: Partial<Record<PlayerId, true>>;
   lastCompleteMoves?: Record<PlayerId, AbmMove>;
   luckyProcPlayer?: PlayerId;
+  advantagedProcPlayers?: PlayerId[];
+  thiefAttemptPlayers?: PlayerId[];
+  thiefTransferPlayer?: PlayerId;
   earlyPlayer?: PlayerId;
   latePlayer?: PlayerId;
   waitingStartsAt?: number;
@@ -49,7 +54,7 @@ export interface AbmState {
   resultReason?: 'forfeit';
 }
 
-export type AbmLegalAction = 'lock-class' | 'attack' | 'block' | 'mana';
+export type AbmLegalAction = 'lock-class' | 'attack' | 'block' | 'mana' | 'steal';
 
 export interface AbmProjection {
   self: PlayerId;
@@ -62,6 +67,7 @@ export interface AbmProjection {
   classReadyPlayer?: PlayerId;
   classReadyAt?: number;
   ownPendingMove?: AbmMove;
+  ownPendingSteal?: true;
   opponentReady: boolean;
   legalActions: readonly AbmLegalAction[];
   counterPicker?: PlayerId;
@@ -71,6 +77,9 @@ export interface AbmProjection {
   winner?: PlayerId;
   lastCompleteMoves?: Record<PlayerId, AbmMove>;
   luckyProcPlayer?: PlayerId;
+  advantagedProcPlayers?: PlayerId[];
+  thiefAttemptPlayers?: PlayerId[];
+  thiefTransferPlayer?: PlayerId;
   earlyPlayer?: PlayerId;
   latePlayer?: PlayerId;
   waitingStartsAt?: number;

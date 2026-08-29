@@ -1133,6 +1133,20 @@
       }
     },
     {
+      "id": "steal",
+      "type": "button",
+      "label": "Steal",
+      "assets": {
+        "up": "/variants/abm/steal-button-up-sheet.webp",
+        "between": "/variants/abm/steal-button-between-sheet.webp",
+        "depressed": "/variants/abm/steal-button-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": { "x": 430, "y": 286, "width": 100, "height": 50, "aspectLock": true },
+        "portrait": { "x": 145, "y": 421, "width": 100, "height": 50, "aspectLock": true }
+      }
+    },
+    {
       "id": "back-lobby",
       "type": "button",
       "parent": "controls",

@@ -66,7 +66,7 @@ describe('Attack Block Mana rules', () => {
   });
 
   test('locks winner, allows only loser counter-pick, and reports a 3-N result', () => {
-    let state = started();
+    let state = startedWith('advantaged', 'advantaged');
     for (let round = 1; round <= 3; round++) {
       state = playTurn(state, 'attack', 'mana');
       if (round < 3) {
@@ -109,6 +109,7 @@ describe('Attack Block Mana rules', () => {
     expect(resolution.state).toMatchObject({ phase: 'idle', turn: 2, score: { p1: 0, p2: 0 }, luckyProcPlayer: lucky });
     expect(resolution.state.players[lucky].mana).toBe(2);
     expect(attackBlockManaRules.project(resolution.state, lucky).luckyProcPlayer).toBe(lucky);
+    expect(resolution.events?.[0]?.payload).toMatchObject({ luckyProcPlayer: lucky });
   });
 
   test('Lucky loses normally when its roll fails', () => {
@@ -141,15 +142,162 @@ describe('Attack Block Mana rules', () => {
     expect(state.luckyProcPlayer).toBeUndefined();
   });
 
-  test('makes all nine classes cosmetic with neutral starting resources', () => {
+  test('keeps neutral starting resources across all nine classes', () => {
     for (const classId of ['lucky', 'advantaged', 'thief', 'investor', 'sumo', 'cheater', 'duplicator', 'stunner', 'juggernaut'] as const) {
       let state = attackBlockManaRules.initialize(context);
       state = send(state, 'p1', { type: 'lock-class', classId });
       state = send(state, 'p2', { type: 'lock-class', classId });
       expect(state.players.p1).toMatchObject({ classId, mana: 1, blocks: 5 });
       state = playTurn(state, 'mana', 'block');
-      expect(state.players.p1.mana).toBe(2);
+      expect(state.players.p1.mana).toBe(classId === 'advantaged' ? 3 : 2);
     }
+  });
+
+  test('gives Advantaged 2 Mana on turns 1-3 and ordinary Mana from turn 4', () => {
+    let state = startedWith('advantaged', 'lucky');
+    for (const expectedMana of [3, 5, 7, 8]) {
+      state = playTurn(state, 'mana', 'block');
+      expect(state.players.p1.mana).toBe(expectedMana);
+    }
+    expect(state.turn).toBe(5);
+    expect(state.advantagedProcPlayers).toBeUndefined();
+  });
+
+  test('applies Advantaged against Mana and records both mirror procs', () => {
+    let state = playTurn(startedWith('advantaged', 'lucky'), 'mana', 'mana');
+    expect(state.players.p1.mana).toBe(3);
+    expect(state.players.p2.mana).toBe(2);
+    expect(state.advantagedProcPlayers).toEqual(['p1']);
+
+    state = playTurn(startedWith('advantaged', 'advantaged'), 'mana', 'mana');
+    expect(state.players.p1.mana).toBe(3);
+    expect(state.players.p2.mana).toBe(3);
+    expect(state.advantagedProcPlayers).toEqual(['p1', 'p2']);
+  });
+
+  test('applies Advantaged Mana before an Attack loss', () => {
+    let state = startedWith('advantaged', 'lucky');
+    state = send(state, 'p1', { type: 'choose-move', move: 'mana' });
+    const resolution = attackBlockManaRules.resolve(state, 'p2', { type: 'choose-move', move: 'attack' }, context);
+    expect(resolution.state).toMatchObject({ phase: 'counter-picking', score: { p1: 0, p2: 1 }, advantagedProcPlayers: ['p1'] });
+    expect(resolution.state.players.p1.mana).toBe(3);
+  });
+
+  test('applies Advantaged on a forced zero-zero Mana turn', () => {
+    let state = playTurn(startedWith('advantaged', 'lucky'), 'attack', 'attack');
+    state = playTurn(state, 'mana', 'mana');
+    expect(state.players.p1.mana).toBe(2);
+    expect(state.players.p2.mana).toBe(1);
+    expect(state.advantagedProcPlayers).toEqual(['p1']);
+  });
+
+  test('applies Advantaged when the opponent times out', () => {
+    let state = startedWith('advantaged', 'lucky');
+    state = send(state, 'p1', { type: 'choose-move', move: 'mana' }, 2_000);
+    const resolution = attackBlockManaRules.advanceDeadline!(state, { ...context, now: state.waitingDeadlineAt! })!;
+    expect(resolution.state.players.p1.mana).toBe(3);
+    expect(resolution.state.advantagedProcPlayers).toEqual(['p1']);
+    expect(resolution.events?.[0]?.payload).toMatchObject({ advantagedProcPlayers: ['p1'] });
+  });
+
+  test('holds the Advantaged proc through selection and clears it on the next reveal', () => {
+    let state = playTurn(startedWith('advantaged', 'lucky'), 'mana', 'block');
+    state = send(state, 'p1', { type: 'choose-move', move: 'block' }, 2_000);
+    expect(state).toMatchObject({ phase: 'waiting', advantagedProcPlayers: ['p1'] });
+    state = send(state, 'p2', { type: 'choose-move', move: 'block' }, 2_100);
+    expect(state.advantagedProcPlayers).toBeUndefined();
+  });
+
+  test('keeps Steal unavailable through Turn 4 and private when armed on Turn 5', () => {
+    let state = thiefTurnFive();
+    expect(attackBlockManaRules.project(state, 'p1').legalActions).toContain('steal');
+    const waiting = attackBlockManaRules.resolve(state, 'p1', { type: 'choose-move', move: 'block', useSteal: true }, context).state;
+    expect(attackBlockManaRules.project(waiting, 'p1').ownPendingSteal).toBe(true);
+    expect(attackBlockManaRules.project(waiting, 'p2').ownPendingSteal).toBeUndefined();
+    expect(waiting.players.p1.stealUsed).toBeUndefined();
+
+    state = startedWith('thief', 'lucky');
+    expect(attackBlockManaRules.project(state, 'p1').legalActions).not.toContain('steal');
+    expect(() => send(state, 'p1', { type: 'choose-move', move: 'block', useSteal: true })).toThrow('Turn 5');
+  });
+
+  test('transfers Mana after moves and spends Thief Steal', () => {
+    let state = thiefTurnFive();
+    state = send(state, 'p1', { type: 'choose-move', move: 'block', useSteal: true });
+    state = send(state, 'p2', { type: 'choose-move', move: 'mana' });
+    expect(state.players.p1).toMatchObject({ mana: 2, stealUsed: true });
+    expect(state.players.p2.mana).toBe(1);
+    expect(state).toMatchObject({ thiefAttemptPlayers: ['p1'], thiefTransferPlayer: 'p1' });
+    expect(attackBlockManaRules.project(state, 'p1').legalActions).not.toContain('steal');
+  });
+
+  test('spends Steal without transfer when target reaches zero', () => {
+    let state = thiefTurnFive();
+    state = send(state, 'p1', { type: 'choose-move', move: 'block', useSteal: true });
+    state = send(state, 'p2', { type: 'choose-move', move: 'attack' });
+    expect(state.players.p1.stealUsed).toBe(true);
+    expect(state.players.p2.mana).toBe(0);
+    expect(state.thiefAttemptPlayers).toEqual(['p1']);
+    expect(state.thiefTransferPlayer).toBeUndefined();
+  });
+
+  test('cancels simultaneous Steals and spends both charges', () => {
+    let state = thiefTurnFive('thief');
+    state = send(state, 'p1', { type: 'choose-move', move: 'block', useSteal: true });
+    state = send(state, 'p2', { type: 'choose-move', move: 'block', useSteal: true });
+    expect(state.players.p1).toMatchObject({ mana: 1, stealUsed: true });
+    expect(state.players.p2).toMatchObject({ mana: 1, stealUsed: true });
+    expect(state.thiefAttemptPlayers).toEqual(['p1', 'p2']);
+    expect(state.thiefTransferPlayer).toBeUndefined();
+  });
+
+  test('resolves Steal before an Attack-Mana round loss', () => {
+    let state = thiefTurnFive();
+    state.players.p2.mana = 2;
+    state = send(state, 'p1', { type: 'choose-move', move: 'mana', useSteal: true });
+    state = send(state, 'p2', { type: 'choose-move', move: 'attack' });
+    expect(state).toMatchObject({ phase: 'counter-picking', score: { p1: 0, p2: 1 }, thiefTransferPlayer: 'p1' });
+    expect(state.players.p1.mana).toBe(3);
+    expect(state.players.p2.mana).toBe(0);
+  });
+
+  test('allows Steal on a forced Mana turn and restores its charge next round', () => {
+    let state = thiefTurnFive();
+    state.players.p1.mana = 0; state.players.p2.mana = 0;
+    state = send(state, 'p1', { type: 'choose-move', move: 'mana', useSteal: true });
+    state = send(state, 'p2', { type: 'choose-move', move: 'mana' });
+    expect(state.players.p1.mana).toBe(2);
+    expect(state.players.p2.mana).toBe(0);
+
+    state.players.p2.mana = 1;
+    state = send(state, 'p1', { type: 'choose-move', move: 'attack' });
+    state = send(state, 'p2', { type: 'choose-move', move: 'mana' });
+    state = send(state, 'p2', { type: 'lock-class', classId: 'thief' }, state.counterPickAvailableAt);
+    expect(state.players.p1.stealUsed).toBeUndefined();
+    expect(state.players.p2.stealUsed).toBeUndefined();
+  });
+
+  test('resolves an armed Steal after timeout resources without showing turn feedback', () => {
+    let state = thiefTurnFive();
+    state.players.p2.mana = 2;
+    state = send(state, 'p1', { type: 'choose-move', move: 'mana', useSteal: true }, 2_000);
+    const resolution = attackBlockManaRules.advanceDeadline!(state, { ...context, now: state.waitingDeadlineAt! })!;
+    expect(resolution.state.players.p1).toMatchObject({ mana: 3, stealUsed: true });
+    expect(resolution.state.players.p2.mana).toBe(0);
+    expect(resolution.state.thiefAttemptPlayers).toBeUndefined();
+    expect(resolution.state.thiefTransferPlayer).toBeUndefined();
+    expect(resolution.events?.[0]?.payload).toMatchObject({ thiefAttemptPlayers: ['p1'], thiefTransferPlayer: 'p1' });
+  });
+
+  test('holds Thief feedback through selection and clears it on the next reveal', () => {
+    let state = thiefTurnFive();
+    state = send(state, 'p1', { type: 'choose-move', move: 'block', useSteal: true });
+    state = send(state, 'p2', { type: 'choose-move', move: 'mana' });
+    state = send(state, 'p1', { type: 'choose-move', move: 'mana' }, 2_000);
+    expect(state.thiefAttemptPlayers).toEqual(['p1']);
+    state = send(state, 'p2', { type: 'choose-move', move: 'block' }, 2_100);
+    expect(state.thiefAttemptPlayers).toBeUndefined();
+    expect(state.thiefTransferPlayer).toBeUndefined();
   });
 
   test('exhausts Blocks and restores them after a non-Block move', () => {
@@ -208,13 +356,19 @@ describe('Attack Block Mana rules', () => {
 });
 
 function started(): AbmState {
-  return startedWith('advantaged', 'advantaged');
+  return startedWith('lucky', 'lucky');
 }
 
 function startedWith(p1Class: AbmState['players']['p1']['classId'], p2Class: AbmState['players']['p2']['classId']): AbmState {
   let state = attackBlockManaRules.initialize(context);
   state = send(state, 'p1', { type: 'lock-class', classId: p1Class! });
   return send(state, 'p2', { type: 'lock-class', classId: p2Class! });
+}
+
+function thiefTurnFive(p2Class: AbmState['players']['p2']['classId'] = 'lucky'): AbmState {
+  let state = startedWith('thief', p2Class);
+  for (let turn = 1; turn < 5; turn++) state = playTurn(state, 'block', 'block');
+  return state;
 }
 
 function playTurn(state: AbmState, p1: AbmMove, p2: AbmMove): AbmState {

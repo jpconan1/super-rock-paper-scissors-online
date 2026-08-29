@@ -2,7 +2,7 @@ import { createSoundEffect, type SoundEffect } from './soundEffect';
 
 export type SoundId =
   | 'button-down' | 'button-up' | 'ready'
-  | 'abm-charge' | 'abm-block' | 'abm-collision'
+  | 'abm-charge' | 'abm-block' | 'abm-collision' | 'abm-lucky'
   | 'win' | 'lose' | 'starburst' | 'curtain-close' | 'curtain-open';
 
 export const SOUND_CATALOG: Readonly<Record<SoundId, string>> = {
@@ -12,6 +12,7 @@ export const SOUND_CATALOG: Readonly<Record<SoundId, string>> = {
   'abm-charge': '/audio/charge.mp3',
   'abm-block': '/audio/block.m4a',
   'abm-collision': '/audio/collision.mp3',
+  'abm-lucky': '/audio/lucky.mp3',
   win: '/audio/win_sound.mp3',
   lose: '/audio/lose_jingle.mp3',
   starburst: '/audio/starburst.mp3',

@@ -31,4 +31,22 @@ describe('ABM sound mapping', () => {
     expect(sound.playCatalogSound).toHaveBeenCalledWith('abm-collision');
     expect([...played]).toEqual(['active']);
   });
+
+  it('plays Lucky sound for a successful proc reveal', () => {
+    const event: TimedSemanticEvent = {
+      id: 'lucky', type: 'move-reveal', startsAt: 100, endsAt: 900,
+      payload: { moves: { p1: 'mana', p2: 'attack' }, luckyProcPlayer: 'p1' },
+    };
+    playAbmEventSounds([event], 150, new Set());
+    expect(sound.playCatalogSound).toHaveBeenCalledWith('abm-lucky');
+  });
+
+  it.each(['move-reveal', 'move-timeout'] as const)('plays charge for an Advantaged %s proc', (type) => {
+    const event: TimedSemanticEvent = {
+      id: `advantaged-${type}`, type, startsAt: 100, endsAt: 900,
+      payload: { moves: { p1: 'mana', p2: 'block' }, advantagedProcPlayers: ['p1'] },
+    };
+    playAbmEventSounds([event], 150, new Set());
+    expect(sound.playCatalogSound).toHaveBeenCalledWith('abm-charge');
+  });
 });

@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { ABM_CLASSES } from '../src/variants/attackBlockMana/attackBlockManaCatalog';
 import { ABM_BACK_LOBBY_ART, ABM_LAYOUTS, ABM_RESULT_SCENES, ABM_SELECT_ART, blockSegments, getAbmClassReadyFrame, getAbmResultScene, getAbmWaitingVisual, sceneForMoves, shouldShowAbmYouTag, shouldShowClassReadyOpponentTag } from '../src/variants/attackBlockMana/attackBlockManaPresentation';
 import type { AbmProjection } from '../src/variants/attackBlockMana/attackBlockManaTypes';
-import { resolveAbmScene, resolveAbmSplitScene } from '../src/variants/attackBlockMana/attackBlockManaScenes';
+import { resolveAbmScene, resolveAbmSplitScene, resolveThiefScene } from '../src/variants/attackBlockMana/attackBlockManaScenes';
 import { getLayoutDocument } from '../src/layout/layoutDocuments';
 import { ABM_EDITOR_FIXTURES, getAbmEditorFixture } from '../src/editor/abmFixtures';
 
@@ -58,6 +58,35 @@ describe('Attack Block Mana presentation data', () => {
     expect(resolveAbmScene({ p1: 'attack', p2: 'mana' }, 'p2')).toEqual({
       src: '/variants/abm/scenes/lucky-proc-sheet.webp', flip: true,
     });
+  });
+
+  test('shows authored Advantaged proc art facing the powered player', () => {
+    expect(resolveAbmScene({ p1: 'mana', p2: 'mana' }, undefined, ['p1'])).toEqual({
+      src: '/variants/abm/scenes/both-mana-adv-proc-sheet.webp', flip: false,
+    });
+    expect(resolveAbmScene({ p1: 'mana', p2: 'mana' }, undefined, ['p2'])).toEqual({
+      src: '/variants/abm/scenes/both-mana-adv-proc-sheet.webp', flip: true,
+    });
+    expect(resolveAbmScene({ p1: 'block', p2: 'mana' }, undefined, ['p2'])).toEqual({
+      src: '/variants/abm/scenes/mana-block-adv-proc-sheet.webp', flip: true,
+    });
+    expect(resolveAbmScene({ p1: 'mana', p2: 'attack' }, undefined, ['p1'])).toEqual({
+      src: '/variants/abm/scenes/mana-block-adv-proc-sheet.webp', flip: false,
+    });
+    expect(resolveAbmScene({ p1: 'mana', p2: 'mana' }, undefined, ['p1', 'p2'])).toEqual({
+      src: '/variants/abm/scenes/both-mana-both-proc-adv-sheet.webp', flip: false,
+    });
+  });
+
+  test('maps single and mirror Thief feedback scenes', () => {
+    const single = { p1: 'thief', p2: 'lucky' } as const;
+    const mirror = { p1: 'thief', p2: 'thief' } as const;
+    expect(resolveThiefScene({ p1: 'attack', p2: 'attack' }, ['p1'], single)).toEqual({ src: '/variants/abm/thief/thief-attack-draw-sheet.webp', flip: false });
+    expect(resolveThiefScene({ p1: 'block', p2: 'attack' }, ['p1'], single)).toEqual({ src: '/variants/abm/thief/block-attack-thief-blocking-sheet.webp', flip: false });
+    expect(resolveThiefScene({ p1: 'block', p2: 'mana' }, ['p2'], { p1: 'lucky', p2: 'thief' })).toEqual({ src: '/variants/abm/thief/mana-block-thief-manaing-sheet.webp', flip: true });
+    expect(resolveThiefScene({ p1: 'mana', p2: 'mana' }, ['p1'], mirror)).toEqual({ src: '/variants/abm/thief/both-charge-both-thief-sheet.webp', flip: false });
+    expect(resolveThiefScene({ p1: 'block', p2: 'block' }, ['p1', 'p2'], mirror)).toEqual({ src: '/variants/abm/thief/both-block-both-theif-sheet.webp', flip: false });
+    expect(resolveThiefScene({ p1: 'mana', p2: 'attack' }, ['p1'], single)).toBeUndefined();
   });
 
   test('maps the complete twelve-asset split-scene set', () => {
