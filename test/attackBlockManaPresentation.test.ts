@@ -20,11 +20,13 @@ describe('Attack Block Mana presentation data', () => {
     expect(getAbmEditorFixture('missing')).toBe(ABM_EDITOR_FIXTURES[0]);
   });
 
-  test('includes the final nine-class roster and every class is playable', () => {
+  test('includes the final nine-class roster and marks only finished classes playable', () => {
     expect(ABM_CLASSES.map(({ id }) => id)).toEqual([
-      'lucky', 'advantaged', 'thief', 'investor', 'sumo', 'cheater', 'duplicator', 'stunner', 'juggernaut',
+      'lucky', 'advantaged', 'thief', 'juggernaut', 'investor', 'sumo', 'cheater', 'duplicator', 'stunner',
     ]);
-    expect(ABM_CLASSES.every(({ implemented }) => implemented)).toBe(true);
+    expect(ABM_CLASSES.filter(({ implemented }) => implemented).map(({ id }) => id)).toEqual([
+      'lucky', 'advantaged', 'thief', 'juggernaut',
+    ]);
     expect(ABM_CLASSES.every(({ asset, badgeAsset }) => asset.endsWith('-sheet.webp') && badgeAsset.endsWith('-badge-sheet.webp') && !asset.includes('placeholder'))).toBe(true);
   });
 

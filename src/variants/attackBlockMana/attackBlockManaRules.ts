@@ -162,8 +162,11 @@ function finishRound(state: AbmState, winner: PlayerId, events: ReturnType<typeo
   events.push(cue('round-result', startsAt, ABM_RESULT_TO_COUNTER_PICK_MS, { winner, score, round: state.round }));
   if (score[winner] >= 3) return { state: { ...state, phase: 'match-complete', score, winner, lastRoundWinner: winner, resultRevealAt: startsAt }, events };
   const loser = OTHER[winner];
+  const players = clonePlayers(state.players);
+  players.p1.mana = 1;
+  players.p2.mana = 1;
   events.push(cue('counter-pick', startsAt + ABM_RESULT_TO_COUNTER_PICK_MS, 600, { winner, loser, classId: state.players[winner].classId }));
-  return { state: { ...state, phase: 'counter-picking', turn: 0, round: state.round + 1, score, pendingClasses: {}, pendingMoves: {}, pendingSteals: {},
+  return { state: { ...state, phase: 'counter-picking', turn: 0, round: state.round + 1, score, players, pendingClasses: {}, pendingMoves: {}, pendingSteals: {},
     counterPicker: loser, counterPickAvailableAt: startsAt + ABM_RESULT_TO_COUNTER_PICK_MS, resultRevealAt: startsAt, lastRoundWinner: winner }, events };
 }
 

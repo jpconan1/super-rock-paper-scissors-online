@@ -279,7 +279,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     const definition = ABM_CLASSES[selected]!; portrait.setSource(definition.asset); portrait.element.setAttribute('aria-label', definition.name);
     className.textContent = definition.name; description.textContent = definition.description;
     const canPick = Boolean(projection?.legalActions.includes('lock-class'));
-    status.textContent = projection?.ownPendingClass ? 'LOCKED · WAITING' : projection?.phase === 'counter-picking' && projection.counterPicker !== projection.self ? 'WINNER STAYS' : definition.implemented ? 'PLAYABLE' : 'NOT YET PLAYABLE';
+    status.textContent = projection?.ownPendingClass ? 'LOCKED · WAITING' : projection?.phase === 'counter-picking' && projection.counterPicker !== projection.self ? 'WINNER STAYS' : definition.implemented ? 'PLAYABLE' : 'UNFINISHED';
     lock.setDisabled(!definition.implemented || !canPick); previous.setDisabled(!canPick); next.setDisabled(!canPick);
   }
 

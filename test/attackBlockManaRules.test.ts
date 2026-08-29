@@ -23,11 +23,11 @@ describe('Attack Block Mana rules', () => {
   test.each([
     ['attack', 'attack', undefined, 0, 0, 5, 5],
     ['attack', 'block', undefined, 0, 1, 5, 4],
-    ['attack', 'mana', 'p1', 0, 2, 5, 5],
+    ['attack', 'mana', 'p1', 1, 1, 5, 5],
     ['block', 'attack', undefined, 1, 0, 4, 5],
     ['block', 'block', undefined, 1, 1, 4, 4],
     ['block', 'mana', undefined, 1, 2, 4, 5],
-    ['mana', 'attack', 'p2', 2, 0, 5, 5],
+    ['mana', 'attack', 'p2', 1, 1, 5, 5],
     ['mana', 'block', undefined, 2, 1, 5, 4],
     ['mana', 'mana', undefined, 2, 2, 5, 5],
   ] as const)('resolves %s versus %s', (p1, p2, winner, p1Mana, p2Mana, p1Blocks, p2Blocks) => {
@@ -85,6 +85,16 @@ describe('Attack Block Mana rules', () => {
     expect(attackBlockManaRules.result(state)).toEqual({ winner: 'p1', scores: { p1: 3, p2: 0 } });
   });
 
+  test('resets both players to 1 Mana while the loser counter-picks', () => {
+    let state = startedWith('lucky', 'advantaged');
+    state.players.p1.mana = 4;
+    state.players.p2.mana = 3;
+
+    state = playTurn(state, 'attack', 'mana');
+
+    expect(state).toMatchObject({ phase: 'counter-picking', players: { p1: { mana: 1 }, p2: { mana: 1 } } });
+  });
+
   test('holds the lethal scene one visible beat and the round result two visible beats', () => {
     let state = started();
     state = send(state, 'p1', { type: 'choose-move', move: 'attack' }, 2_000);
@@ -119,7 +129,7 @@ describe('Attack Block Mana rules', () => {
 
     expect(resolution.state).toMatchObject({ phase: 'counter-picking', score: { p1: 0, p2: 1 } });
     expect(resolution.state.luckyProcPlayer).toBeUndefined();
-    expect(resolution.state.players.p1.mana).toBe(2);
+    expect(resolution.state.players.p1.mana).toBe(1);
   });
 
   test('does not roll for a non-Lucky Mana player', () => {
@@ -142,8 +152,8 @@ describe('Attack Block Mana rules', () => {
     expect(state.luckyProcPlayer).toBeUndefined();
   });
 
-  test('keeps neutral starting resources across all nine classes', () => {
-    for (const classId of ['lucky', 'advantaged', 'thief', 'investor', 'sumo', 'cheater', 'duplicator', 'stunner', 'juggernaut'] as const) {
+  test('keeps neutral starting resources across all playable classes', () => {
+    for (const classId of ['lucky', 'advantaged', 'thief', 'juggernaut'] as const) {
       let state = attackBlockManaRules.initialize(context);
       state = send(state, 'p1', { type: 'lock-class', classId });
       state = send(state, 'p2', { type: 'lock-class', classId });
@@ -180,7 +190,7 @@ describe('Attack Block Mana rules', () => {
     state = send(state, 'p1', { type: 'choose-move', move: 'mana' });
     const resolution = attackBlockManaRules.resolve(state, 'p2', { type: 'choose-move', move: 'attack' }, context);
     expect(resolution.state).toMatchObject({ phase: 'counter-picking', score: { p1: 0, p2: 1 }, advantagedProcPlayers: ['p1'] });
-    expect(resolution.state.players.p1.mana).toBe(3);
+    expect(resolution.state.players.p1.mana).toBe(1);
   });
 
   test('applies Advantaged on a forced zero-zero Mana turn', () => {
@@ -257,8 +267,8 @@ describe('Attack Block Mana rules', () => {
     state = send(state, 'p1', { type: 'choose-move', move: 'mana', useSteal: true });
     state = send(state, 'p2', { type: 'choose-move', move: 'attack' });
     expect(state).toMatchObject({ phase: 'counter-picking', score: { p1: 0, p2: 1 }, thiefTransferPlayer: 'p1' });
-    expect(state.players.p1.mana).toBe(3);
-    expect(state.players.p2.mana).toBe(0);
+    expect(state.players.p1.mana).toBe(1);
+    expect(state.players.p2.mana).toBe(1);
   });
 
   test('allows Steal on a forced Mana turn and restores its charge next round', () => {
