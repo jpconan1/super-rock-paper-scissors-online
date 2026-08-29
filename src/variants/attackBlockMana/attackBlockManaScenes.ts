@@ -9,8 +9,10 @@ export function resolveAbmScene(
   moves?: Readonly<Record<PlayerId, AbmMove>>,
   luckyProcPlayer?: PlayerId,
   advantagedProcPlayers?: readonly PlayerId[],
+  juggernautProcPlayers?: readonly PlayerId[],
 ): AbmScene {
   if (luckyProcPlayer) return scene('lucky-proc', luckyProcPlayer === 'p2');
+  if (juggernautProcPlayers?.length) return scene('juggernaut-proc', juggernautProcPlayers[0] === 'p2');
   if (advantagedProcPlayers?.length === 2) return scene('both-mana-both-proc-adv');
   if (advantagedProcPlayers?.length === 1) {
     const procPlayer = advantagedProcPlayers[0]!;
@@ -61,7 +63,7 @@ export function resolveThiefScene(
 
 export const ABM_SCENE_URLS = [
   'abm-standoff', 'block-mana', 'block-draw', 'block-attack', 'mana-draw', 'mana-attack', 'attack-draw', 'lucky-proc',
-  'both-mana-adv-proc', 'mana-block-adv-proc', 'both-mana-both-proc-adv',
+  'both-mana-adv-proc', 'mana-block-adv-proc', 'both-mana-both-proc-adv', 'juggernaut-proc',
 ].map((name) => `${ROOT}/${name}-sheet.webp`).concat([
   'abm-standoff-p1-ready', 'abm-standoff-p2-ready', 'block-draw-p1-ready', 'block-draw-p2-ready',
   'attack-draw-p1-ready', 'attack-draw-p2-ready', 'mana-draw-p1-ready', 'mana-draw-p2-ready',

@@ -3,7 +3,8 @@ import { getVerticalSheetFrameSize } from '../src/renderer/boilingSprite';
 
 describe('vertical boiling sheet dimensions', () => {
   test.each([
-    ['logo', 512, 1104, 512, 368],
+    ['title logo', 512, 1104, 512, 368],
+    ['ABM title logo', 512, 1188, 512, 396],
     ['button', 256, 384, 256, 128],
     ['juice', 384, 576, 384, 192],
     ['curtain', 960, 1620, 960, 540],

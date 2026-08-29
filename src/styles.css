@@ -766,6 +766,8 @@ input {
 .game-button.abm-picker__arrow { z-index: 5; min-width: 0; min-height: 0; aspect-ratio: 2; padding: 0; border: 0; background: none; }
 .abm-picker__arrow > .game-button__art { inset: 0; width: 100%; height: 100%; transform: none; }
 .abm-controls { position: relative; width: 100%; height: 100%; }
+.abm-game__composition.is-class-picking :is(.abm-controls__move, .abm-controls__steal) { display: none; }
+.abm-controls > .game-button[hidden] { display: none; }
 .abm-arrow { position: absolute; overflow: visible; }
 .abm-thief-transfer { position: absolute; z-index: 5; top: 100%; left: 50%; width: 113px; transform: translateX(-50%); overflow: visible; pointer-events: none; }
 .abm-thief-transfer--mirror { top: auto; bottom: 100%; }

@@ -46,6 +46,7 @@ export const attackBlockManaRules: VariantRules<AbmState, AbmCommand, AbmProject
       ...(state.advantagedProcPlayers?.length ? { advantagedProcPlayers: [...state.advantagedProcPlayers] } : {}),
       ...(state.thiefAttemptPlayers?.length ? { thiefAttemptPlayers: [...state.thiefAttemptPlayers] } : {}),
       ...(state.thiefTransferPlayer ? { thiefTransferPlayer: state.thiefTransferPlayer } : {}),
+      ...(state.juggernautProcPlayers?.length ? { juggernautProcPlayers: [...state.juggernautProcPlayers] } : {}),
       ...(state.earlyPlayer ? { earlyPlayer: state.earlyPlayer } : {}), ...(state.latePlayer ? { latePlayer: state.latePlayer } : {}),
       ...(state.waitingStartsAt !== undefined ? { waitingStartsAt: state.waitingStartsAt } : {}),
       ...(state.waitingDeadlineAt !== undefined ? { waitingDeadlineAt: state.waitingDeadlineAt } : {}),
@@ -79,7 +80,8 @@ function lockClass(state: AbmState, player: PlayerId, classId: AbmClassId, now: 
     return {
       state: { ...state, phase: 'idle', turn: 1, players, pendingClasses: {}, pendingMoves: {}, pendingSteals: {}, counterPicker: undefined,
         counterPickAvailableAt: undefined, resultRevealAt: undefined, lastCompleteMoves: undefined, heldSplitFor: undefined,
-        luckyProcPlayer: undefined, advantagedProcPlayers: undefined, thiefAttemptPlayers: undefined, thiefTransferPlayer: undefined },
+        luckyProcPlayer: undefined, advantagedProcPlayers: undefined, thiefAttemptPlayers: undefined, thiefTransferPlayer: undefined,
+        juggernautProcPlayers: undefined },
       events: [cue('class-reveal', now, 800, { classes: classMap(players), round: state.round })],
     };
   }
@@ -101,7 +103,7 @@ function chooseMove(state: AbmState, player: PlayerId, move: AbmMove, useSteal: 
   if (state.pendingMoves[player]) throw new Error('Move is already locked.');
   const forcedMana = bothPlayersHaveNoMana(state);
   if (forcedMana && move !== 'mana') throw new Error('Mana is the only move available at 0–0 Mana.');
-  validateMove(state.players[player], move);
+  validateMove(state, player, move);
   if (useSteal) validateSteal(state, player);
   const pendingMoves = { ...state.pendingMoves, [player]: move };
   const pendingSteals = { ...(state.pendingSteals ?? {}), ...(useSteal ? { [player]: true as const } : {}) };
@@ -120,15 +122,17 @@ function resolveTurn(state: AbmState, moves: Record<PlayerId, AbmMove>, context:
   const players = clonePlayers(state.players);
   const advantagedProcPlayers = (['p1', 'p2'] as const).filter((id) => isAdvantagedManaProc(players[id], moves[id], state.turn));
   for (const id of ['p1', 'p2'] as const) applyMove(players[id], moves[id], manaGainFor(players[id], state.turn));
+  const juggernautProcPlayers = (['p1', 'p2'] as const).filter((id) => didJuggernautProc(players[id], moves[id]));
   const { attemptPlayers: thiefAttemptPlayers, transferPlayer: thiefTransferPlayer } = resolveSteals(players, state.pendingSteals ?? {});
   const loser: PlayerId | undefined = moves.p1 === 'mana' && moves.p2 === 'attack' ? 'p1' : moves.p2 === 'mana' && moves.p1 === 'attack' ? 'p2' : undefined;
   const luckyProcPlayer = loser && players[loser].classId === 'lucky' && context.random() < 0.25 ? loser : undefined;
   const defeatedPlayer = luckyProcPlayer ? undefined : loser;
   const revealDuration = defeatedPlayer ? ABM_LETHAL_TO_RESULT_MS : 800;
-  const events = [cue('move-reveal', now, revealDuration, { moves, turn: state.turn, forced, luckyProcPlayer, advantagedProcPlayers })];
+  const events = [cue('move-reveal', now, revealDuration, { moves, turn: state.turn, forced, luckyProcPlayer, advantagedProcPlayers, juggernautProcPlayers })];
   const revealed = { ...state, players, pendingMoves: {}, pendingSteals: {}, lastCompleteMoves: moves, heldSplitFor: undefined,
     luckyProcPlayer, advantagedProcPlayers: advantagedProcPlayers.length ? advantagedProcPlayers : undefined,
     thiefAttemptPlayers: thiefAttemptPlayers.length ? thiefAttemptPlayers : undefined, thiefTransferPlayer };
+  revealed.juggernautProcPlayers = juggernautProcPlayers.length ? juggernautProcPlayers : undefined;
   if (defeatedPlayer) return finishRound(revealed, OTHER[defeatedPlayer], events, now + revealDuration);
   return { state: { ...revealed, phase: 'idle', turn: state.turn + 1 }, events };
 }
@@ -141,12 +145,13 @@ function resolveTimeout(state: AbmState, now: number): VariantResolution<AbmStat
   players[late].mana = Math.max(0, players[late].mana - 1);
   players[late].strikes = (players[late].strikes ?? 0) + 1;
   players[late].lastMove = 'skip';
+  if (players[late].classId === 'juggernaut') players[late].attackStreak = 0;
   const { attemptPlayers: thiefAttemptPlayers, transferPlayer: thiefTransferPlayer } = resolveSteals(players, state.pendingSteals ?? {});
   const revealDuration = move === 'attack' || players[late].strikes >= 2 ? ABM_LETHAL_TO_RESULT_MS : 800;
   const events = [cue('move-timeout', now, revealDuration, { earlyPlayer: early, latePlayer: late, move, strikes: players[late].strikes,
     turn: state.turn, advantagedProcPlayers, thiefAttemptPlayers, thiefTransferPlayer })];
   const timedOut = { ...clearWaiting(state), players, pendingMoves: {}, pendingSteals: {}, heldSplitFor: early, luckyProcPlayer: undefined,
-    advantagedProcPlayers, thiefAttemptPlayers: undefined, thiefTransferPlayer: undefined };
+    advantagedProcPlayers, thiefAttemptPlayers: undefined, thiefTransferPlayer: undefined, juggernautProcPlayers: undefined };
   if (players[late].strikes >= 2) return { state: { ...timedOut, phase: 'match-complete', winner: early, resultReason: 'forfeit', resultRevealAt: now + revealDuration }, events };
   if (move === 'attack') return finishRound(timedOut, early, events, now + revealDuration);
   return { state: { ...timedOut, phase: 'idle', turn: state.turn + 1 }, events };
@@ -165,15 +170,18 @@ function finishRound(state: AbmState, winner: PlayerId, events: ReturnType<typeo
 function applyMove(player: AbmPlayerState, move: AbmMove, manaGain = 1, record = true): void {
   if (move === 'attack') player.mana--; else if (move === 'block') player.blocks--; else player.mana += manaGain;
   if (move !== 'block') player.blocks = 5;
+  if (player.classId === 'juggernaut') player.attackStreak = move === 'attack' ? (player.attackStreak ?? 0) + 1 : 0;
   if (record) player.lastMove = move;
 }
 function manaGainFor(player: Readonly<AbmPlayerState>, turn: number): number { return player.classId === 'advantaged' && turn <= 3 ? 2 : 1; }
 function isAdvantagedManaProc(player: Readonly<AbmPlayerState>, move: AbmMove, turn: number): boolean {
   return player.classId === 'advantaged' && move === 'mana' && turn <= 3;
 }
-function validateMove(player: AbmPlayerState, move: AbmMove): void {
+function validateMove(state: AbmState, playerId: PlayerId, move: AbmMove): void {
+  const player = state.players[playerId];
   if (move === 'attack' && player.mana < 1) throw new Error('Attack requires 1 Mana.');
   if (move === 'block' && player.blocks < 1) throw new Error('No Blocks remain.');
+  if (move === 'block' && isBlockDisabled(state, playerId)) throw new Error('Juggernaut prevents Blocking this turn.');
 }
 function validateSteal(state: AbmState, player: PlayerId): void {
   const target = state.players[player];
@@ -196,7 +204,9 @@ function legalActions(state: AbmState, viewer: PlayerId) {
   if (isActionPhase(state.phase) && !state.pendingMoves[viewer]) {
     if (bothPlayersHaveNoMana(state)) return ['mana'] as const;
     const target = state.players[viewer];
-    const moves = (['attack', 'block', 'mana'] as const).filter((move) => move !== 'attack' || target.mana > 0).filter((move) => move !== 'block' || target.blocks > 0);
+    const moves = (['attack', 'block', 'mana'] as const)
+      .filter((move) => move !== 'attack' || target.mana > 0)
+      .filter((move) => move !== 'block' || (target.blocks > 0 && !isBlockDisabled(state, viewer)));
     return target.classId === 'thief' && state.turn >= 5 && !target.stealUsed ? [...moves, 'steal' as const] : moves;
   }
   return [];
@@ -212,6 +222,13 @@ function clonePlayers(players: Record<PlayerId, AbmPlayerState>): Record<PlayerI
 function classMap(players: Record<PlayerId, AbmPlayerState>) { return { p1: players.p1.classId, p2: players.p2.classId }; }
 function isMove(value: unknown): value is AbmMove { return value === 'attack' || value === 'block' || value === 'mana'; }
 function bothPlayersHaveNoMana(state: AbmState): boolean { return state.players.p1.mana === 0 && state.players.p2.mana === 0; }
+function didJuggernautProc(player: Readonly<AbmPlayerState>, move: AbmMove): boolean {
+  return player.classId === 'juggernaut' && move === 'attack' && (player.attackStreak ?? 0) > 0 && (player.attackStreak ?? 0) % 2 === 0;
+}
+function isBlockDisabled(state: Readonly<AbmState>, player: PlayerId): boolean {
+  const opponent = state.players[OTHER[player]];
+  return opponent.classId === 'juggernaut' && (opponent.attackStreak ?? 0) > 0 && (opponent.attackStreak ?? 0) % 2 === 0;
+}
 function isActionPhase(phase: AbmState['phase']): boolean { return ['idle', 'waiting', 'selecting-actions', 'waiting-for-action'].includes(phase as string); }
 function cue(type: 'class-ready' | 'class-reveal' | 'move-ready' | 'move-reveal' | 'move-timeout' | 'forced-mana' | 'round-result' | 'counter-pick', startsAt: number, duration: number, payload: unknown) {
   return { type, startsAt, endsAt: startsAt + duration, payload } as const;

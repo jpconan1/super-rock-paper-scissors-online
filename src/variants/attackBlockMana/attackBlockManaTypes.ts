@@ -23,6 +23,7 @@ export interface AbmPlayerState {
   strikes: number;
   lastMove?: AbmDisplayMove;
   stealUsed?: boolean;
+  attackStreak?: number;
 }
 
 export interface AbmState {
@@ -41,6 +42,7 @@ export interface AbmState {
   advantagedProcPlayers?: PlayerId[];
   thiefAttemptPlayers?: PlayerId[];
   thiefTransferPlayer?: PlayerId;
+  juggernautProcPlayers?: PlayerId[];
   earlyPlayer?: PlayerId;
   latePlayer?: PlayerId;
   waitingStartsAt?: number;
@@ -80,6 +82,7 @@ export interface AbmProjection {
   advantagedProcPlayers?: PlayerId[];
   thiefAttemptPlayers?: PlayerId[];
   thiefTransferPlayer?: PlayerId;
+  juggernautProcPlayers?: PlayerId[];
   earlyPlayer?: PlayerId;
   latePlayer?: PlayerId;
   waitingStartsAt?: number;

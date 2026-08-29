@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { ABM_CLASSES } from '../src/variants/attackBlockMana/attackBlockManaCatalog';
-import { ABM_BACK_LOBBY_ART, ABM_LAYOUTS, ABM_RESULT_SCENES, ABM_SELECT_ART, blockSegments, getAbmClassReadyFrame, getAbmResultScene, getAbmWaitingVisual, sceneForMoves, shouldShowAbmYouTag, shouldShowClassReadyOpponentTag } from '../src/variants/attackBlockMana/attackBlockManaPresentation';
+import { ABM_BACK_LOBBY_ART, ABM_LAYOUTS, ABM_RESULT_SCENES, ABM_SELECT_ART, blockSegments, getAbmClassReadyFrame, getAbmResultScene, getAbmThiefControlGeometry, getAbmWaitingVisual, sceneForMoves, shouldShowAbmYouTag, shouldShowClassReadyOpponentTag } from '../src/variants/attackBlockMana/attackBlockManaPresentation';
 import type { AbmProjection } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 import { resolveAbmScene, resolveAbmSplitScene, resolveThiefScene } from '../src/variants/attackBlockMana/attackBlockManaScenes';
 import { getLayoutDocument } from '../src/layout/layoutDocuments';
@@ -30,6 +30,14 @@ describe('Attack Block Mana presentation data', () => {
 
   test('starts the class-select order with Lucky', () => {
     expect(ABM_CLASSES[0]?.id).toBe('lucky');
+  });
+
+  test('keeps full-size controls and shifts the Thief cluster right', () => {
+    const base = { x: 60, y: 95, width: 120, height: 60, aspectLock: true };
+    expect(getAbmThiefControlGeometry('block', 'portrait', base)).toEqual({ ...base, x: 105 });
+    expect(getAbmThiefControlGeometry('block', 'landscape', base)).toEqual({ ...base, x: 150 });
+    expect(getAbmThiefControlGeometry('steal', 'portrait', base)).toEqual({ x: 8, y: 550, width: 100, height: 50, aspectLock: true });
+    expect(getAbmThiefControlGeometry('steal', 'landscape', base)).toEqual({ x: 205, y: 412, width: 134, height: 67, aspectLock: true });
   });
 
   test('maps every move pairing to renamed ABM scene art', () => {
@@ -76,6 +84,34 @@ describe('Attack Block Mana presentation data', () => {
     expect(resolveAbmScene({ p1: 'mana', p2: 'mana' }, undefined, ['p1', 'p2'])).toEqual({
       src: '/variants/abm/scenes/both-mana-both-proc-adv-sheet.webp', flip: false,
     });
+  });
+
+  test('shows authored Juggernaut proc art facing the triggering player', () => {
+    expect(resolveAbmScene({ p1: 'attack', p2: 'block' }, undefined, undefined, ['p1'])).toEqual({
+      src: '/variants/abm/scenes/juggernaut-proc-sheet.webp', flip: false,
+    });
+    expect(resolveAbmScene({ p1: 'block', p2: 'attack' }, undefined, undefined, ['p2'])).toEqual({
+      src: '/variants/abm/scenes/juggernaut-proc-sheet.webp', flip: true,
+    });
+  });
+
+  test('uses the old-project landscape hierarchy for battle composition', () => {
+    const document = getLayoutDocument('variant-abm');
+    const landscape = (id: string) => document.elements.find((element) => element.id === id)!.layouts.landscape;
+
+    expect(landscape('p1-info')).toMatchObject({ x: 20, y: 18, width: 220 });
+    expect(landscape('p2-info')).toMatchObject({ x: 720, y: 18, width: 220 });
+    expect(landscape('turn')).toMatchObject({ x: 330, y: -10, width: 310, height: 155 });
+    expect(landscape('p1-wins-label')).toMatchObject({ x: 245, width: 144, height: 72 });
+    expect(landscape('p2-wins-label')).toMatchObject({ x: 571, width: 144, height: 72 });
+    expect(landscape('scene')).toMatchObject({ x: 288, y: 122, width: 384, height: 192 });
+    expect(landscape('p1-resources').x).toBeLessThan(50);
+    expect(landscape('p2-resources').x).toBeGreaterThan(700);
+    expect(landscape('attack')).toMatchObject({ width: 192, height: 102.4 });
+    expect(landscape('block')).toMatchObject({ width: 192, height: 96 });
+    expect(landscape('mana').width).toBe(180);
+    expect(landscape('menu')).toMatchObject({ x: 12, y: 464 });
+    expect(landscape('rules')).toMatchObject({ x: 884, y: 464 });
   });
 
   test('maps single and mirror Thief feedback scenes', () => {

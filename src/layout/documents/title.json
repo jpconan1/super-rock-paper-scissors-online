@@ -28,7 +28,7 @@
       "layer": 1,
       "protected": true,
       "assets": {
-        "src": "/LOGO_sheet.webp"
+        "src": "/title/abm-logo-sheet.webp"
       },
       "alt": "Super Rock Paper Scissors Online",
       "layouts": {
@@ -36,14 +36,14 @@
           "x": 333,
           "y": 0,
           "width": 294,
-          "height": 211.3125,
+          "height": 227.390625,
           "aspectLock": true
         },
         "portrait": {
           "x": 90,
           "y": 36,
           "width": 360,
-          "height": 258.75,
+          "height": 278.4375,
           "aspectLock": true
         }
       },

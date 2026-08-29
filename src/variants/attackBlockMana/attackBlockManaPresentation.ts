@@ -6,7 +6,7 @@ import { createGameButton, type GameButton } from '../../input/gameButton';
 import { createGameLayout, type GameLayout } from '../../layout/gameLayout';
 import { getLayoutDocument } from '../../layout/layoutDocuments';
 import { applyConfiguredElement } from '../../layout/layoutRuntime';
-import type { LayoutDocument, LayoutOrientation } from '../../layout/layoutDocument';
+import { applyLayoutGeometry, type LayoutDocument, type LayoutGeometry, type LayoutOrientation } from '../../layout/layoutDocument';
 import type { ResponsiveScaleBoxLayout } from '../../layout/scaleBox';
 import { createBoilingSprite, type BoilingSprite } from '../../renderer/boilingSprite';
 import { playStarburstWipe } from '../../renderer/starburstWipe';
@@ -40,6 +40,13 @@ const CONTROL_ART: Record<AbmMove, { up: string; between: string; depressed: str
   block: sheets(`${ABM_ROOT}/block-button`),
   mana: sheets(`${ABM_ROOT}/mana`),
 };
+const THIEF_MOVE_LAYOUT_IDS = new Set(['attack', 'block', 'mana', 'arrow-attack-block', 'arrow-block-mana', 'arrow-mana-attack']);
+export function getAbmThiefControlGeometry(id: string, orientation: LayoutOrientation, base: LayoutGeometry): LayoutGeometry {
+  if (id === 'steal') return orientation === 'portrait'
+    ? { x: 8, y: 550, width: 100, height: 50, aspectLock: true }
+    : { x: 205, y: 412, width: 134, height: 67, aspectLock: true };
+  return THIEF_MOVE_LAYOUT_IDS.has(id) ? { ...base, x: base.x + (orientation === 'portrait' ? 45 : 90) } : base;
+}
 
 export const ABM_LAYOUTS: readonly ResponsiveScaleBoxLayout<LayoutOrientation>[] = [
   { name: 'landscape', width: 960, height: 540, minAspectRatio: 1 },
@@ -144,6 +151,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   const playedSoundIds = new Set<string>();
   let wipeRunning = false;
   let stealArmed = false;
+  let usingThiefControlLayout = false;
   const transitionAbort = new AbortController();
 
   const moveStatus = (player: 'p1' | 'p2') => {
@@ -171,7 +179,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     stealArmed = !stealArmed;
     steal.setLockedDepressed(stealArmed);
   }, upSheet: `${ABM_ROOT}/steal-button-up-sheet.webp`, betweenSheet: `${ABM_ROOT}/steal-button-between-sheet.webp`, depressedSheet: `${ABM_ROOT}/steal-button-depressed-sheet.webp` });
-  steal.element.classList.add('abm-controls__steal', 'game-button--baked-label'); buttons.push(steal); controls.append(steal.element);
+  steal.element.classList.add('abm-controls__steal', 'game-button--baked-label'); steal.element.hidden = true; buttons.push(steal); controls.append(steal.element);
   const moves = (['attack', 'block', 'mana'] as const).map((move) => {
     let button!: GameButton;
     button = createGameButton({ label: move, clock, activateAtReleaseStart: true, onActivate: () => {
@@ -180,6 +188,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     },
       upSheet: CONTROL_ART[move].up, betweenSheet: CONTROL_ART[move].between, depressedSheet: CONTROL_ART[move].depressed });
     button.element.classList.add('abm-controls__move', `abm-controls__move--${move}`, 'game-button--baked-label');
+    button.element.hidden = true;
     buttons.push(button); controls.append(button.element); return [move, button] as const;
   });
   const lobby = createGameButton({ label: 'Back to Lobby', clock, onActivate: () => backToLobby?.(),
@@ -257,7 +266,13 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
       ...p1Resources.bindings, ...p2Resources.bindings,
       ...arrows,
       ...moves.map(([move, button]) => [move, button.element] as [string, HTMLElement])];
-    for (const [id, target] of bindings) applyConfiguredElement(target, config(id), orientation);
+    for (const [id, target] of bindings) {
+      const definition = config(id);
+      applyConfiguredElement(target, definition, orientation);
+      if (usingThiefControlLayout && (id === 'steal' || THIEF_MOVE_LAYOUT_IDS.has(id))) {
+        applyLayoutGeometry(target, getAbmThiefControlGeometry(id, orientation, definition.layouts[orientation]));
+      }
+    }
   }
 
   function updatePicker() {
@@ -305,6 +320,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     }
     const picking = ['selecting-classes', 'waiting-for-class'].includes(nextProjection.phase)
       || (nextProjection.phase === 'counter-picking' && !counterLocked);
+    layout.composition.classList.toggle('is-class-picking', picking);
     layout.setYouTagVisible(shouldShowAbmYouTag(nextProjection.phase));
     const showingResult = (counterLocked || complete) && resultRevealed;
     const transitioning = counterLocked || complete;
@@ -313,6 +329,11 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     for (const [, arrow] of arrows) arrow.hidden = picking || transitioning;
     previous.element.hidden = !picking; next.element.hidden = !picking;
     const ownPlayer = nextProjection.players[nextProjection.self];
+    const nextThiefControlLayout = !picking && ownPlayer.classId === 'thief';
+    if (usingThiefControlLayout !== nextThiefControlLayout) {
+      usingThiefControlLayout = nextThiefControlLayout;
+      applyVariantLayout();
+    }
     stealArmed = Boolean(nextProjection.ownPendingSteal) || (stealArmed && !nextProjection.ownPendingMove && !thiefFeedback);
     steal.element.hidden = picking || transitioning || ownPlayer.classId !== 'thief' || thiefFeedback;
     steal.setDisabled(!nextProjection.legalActions.includes('steal'));
@@ -333,9 +354,9 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     const thiefScene = resolveThiefScene(nextProjection.lastCompleteMoves, nextProjection.thiefAttemptPlayers, {
       p1: nextProjection.players.p1.classId, p2: nextProjection.players.p2.classId,
     });
-    const classProcActive = nextProjection.luckyProcPlayer || nextProjection.advantagedProcPlayers?.length;
+    const classProcActive = nextProjection.luckyProcPlayer || nextProjection.advantagedProcPlayers?.length || nextProjection.juggernautProcPlayers?.length;
     const scene = thiefScene ?? (classProcActive
-      ? resolveAbmScene(nextProjection.lastCompleteMoves, nextProjection.luckyProcPlayer, nextProjection.advantagedProcPlayers)
+      ? resolveAbmScene(nextProjection.lastCompleteMoves, nextProjection.luckyProcPlayer, nextProjection.advantagedProcPlayers, nextProjection.juggernautProcPlayers)
       : nextProjection.phase === 'waiting' && nextProjection.waitingStartsAt !== undefined && serverTime >= nextProjection.waitingStartsAt
         ? resolveAbmSplitScene(nextProjection.lastCompleteMoves, nextProjection.earlyPlayer!)
         : nextProjection.heldSplitFor ? resolveAbmSplitScene(nextProjection.lastCompleteMoves, nextProjection.heldSplitFor)

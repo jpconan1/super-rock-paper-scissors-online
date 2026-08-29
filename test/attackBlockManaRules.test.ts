@@ -311,6 +311,62 @@ describe('Attack Block Mana rules', () => {
     expect(state.players.p1.blocks).toBe(5);
   });
 
+  test('Juggernaut disables Block after each even consecutive Attack', () => {
+    let state = startedWith('juggernaut', 'lucky');
+    state.players.p1.mana = 5;
+
+    state = playTurn(state, 'attack', 'block');
+    expect(state.players.p1.attackStreak).toBe(1);
+    expect(attackBlockManaRules.project(state, 'p2').legalActions).toContain('block');
+
+    state = playTurn(state, 'attack', 'block');
+    expect(state.players.p1.attackStreak).toBe(2);
+    expect(state.juggernautProcPlayers).toEqual(['p1']);
+    expect(attackBlockManaRules.project(state, 'p2').legalActions).not.toContain('block');
+    expect(() => send(state, 'p2', { type: 'choose-move', move: 'block' })).toThrow('prevents Blocking');
+
+    state = playTurn(state, 'attack', 'attack');
+    expect(state.players.p1.attackStreak).toBe(3);
+    expect(attackBlockManaRules.project(state, 'p2').legalActions).toContain('block');
+
+    state = playTurn(state, 'attack', 'block');
+    expect(state.players.p1.attackStreak).toBe(4);
+    expect(state.juggernautProcPlayers).toEqual(['p1']);
+    expect(attackBlockManaRules.project(state, 'p2').legalActions).not.toContain('block');
+  });
+
+  test('Juggernaut Mana or Block breaks its streak without draining opponent Blocks', () => {
+    let state = startedWith('juggernaut', 'lucky');
+    state.players.p1.mana = 4;
+    state = playTurn(state, 'attack', 'block');
+    state = playTurn(state, 'attack', 'block');
+    expect(state.players.p2.blocks).toBe(3);
+    state = playTurn(state, 'mana', 'mana');
+    expect(state.players.p1.attackStreak).toBe(0);
+    expect(state.players.p2.blocks).toBe(5);
+    state = playTurn(state, 'block', 'block');
+    expect(state.players.p1.attackStreak).toBe(0);
+  });
+
+  test('mirror Juggernauts both proc and both lose Block on the restricted turn', () => {
+    let state = startedWith('juggernaut', 'juggernaut');
+    state.players.p1.mana = 4;
+    state.players.p2.mana = 4;
+    state = playTurn(state, 'attack', 'attack');
+    state = playTurn(state, 'attack', 'attack');
+    expect(state.juggernautProcPlayers).toEqual(['p1', 'p2']);
+    expect(attackBlockManaRules.project(state, 'p1').legalActions).not.toContain('block');
+    expect(attackBlockManaRules.project(state, 'p2').legalActions).not.toContain('block');
+  });
+
+  test('Juggernaut Skip breaks its Attack streak', () => {
+    let state = startedWith('lucky', 'juggernaut');
+    state.players.p2.attackStreak = 1;
+    state = send(state, 'p1', { type: 'choose-move', move: 'block' }, 2_000);
+    state = attackBlockManaRules.advanceDeadline!(state, { ...context, now: state.waitingDeadlineAt! })!.state;
+    expect(state.players.p2).toMatchObject({ lastMove: 'skip', attackStreak: 0 });
+  });
+
   test('records the absolute early and late players without revealing the early move', () => {
     let state = started();
     state = send(state, 'p2', { type: 'choose-move', move: 'mana' }, 2_000);
