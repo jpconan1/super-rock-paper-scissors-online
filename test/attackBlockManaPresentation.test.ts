@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import { ABM_CLASSES } from '../src/variants/attackBlockMana/attackBlockManaCatalog';
-import { ABM_BACK_LOBBY_ART, ABM_LAYOUTS, ABM_RESULT_SCENES, ABM_SELECT_ART, blockSegments, getAbmClassReadyFrame, getAbmResultScene, getAbmThiefControlGeometry, getAbmWaitingVisual, sceneForMoves, shouldShowAbmYouTag, shouldShowClassReadyOpponentTag } from '../src/variants/attackBlockMana/attackBlockManaPresentation';
+import { ABM_BACK_LOBBY_ART, ABM_LAYOUTS, ABM_RESULT_SCENES, ABM_SELECT_ART, blockSegments, getAbmClassReadyFrame, getAbmResultScene, getAbmThiefControlGeometry, getAbmWaitingVisual, sceneForMoves, shouldShowAbmContinuingRoundProcTags, shouldShowAbmYouTag, shouldShowClassReadyOpponentTag } from '../src/variants/attackBlockMana/attackBlockManaPresentation';
 import type { AbmProjection } from '../src/variants/attackBlockMana/attackBlockManaTypes';
-import { resolveAbmClassProcSplitScene, resolveAbmScene, resolveAbmSplitScene, resolveThiefScene, resolveThiefSplitScene } from '../src/variants/attackBlockMana/attackBlockManaScenes';
+import { ABM_SCENE_URLS, resolveAbmProcTags, resolveAbmScene, resolveAbmSplitScene } from '../src/variants/attackBlockMana/attackBlockManaScenes';
 import { getLayoutDocument } from '../src/layout/layoutDocuments';
 import { ABM_EDITOR_FIXTURES, getAbmEditorFixture } from '../src/editor/abmFixtures';
 
@@ -56,55 +56,54 @@ describe('Attack Block Mana presentation data', () => {
     expect(resolveAbmScene({ p1: 'attack', p2: 'block' })).toMatchObject({ flip: true });
     expect(resolveAbmScene({ p1: 'mana', p2: 'attack' })).toMatchObject({ flip: false });
     expect(resolveAbmScene({ p1: 'attack', p2: 'mana' })).toMatchObject({ flip: true });
-    expect(resolveAbmSplitScene(undefined, 'p1').src).toContain('abm-standoff-p1-ready');
+    expect(resolveAbmSplitScene(undefined, 'p1').src).toContain('standoff-p1-ready');
     expect(resolveAbmSplitScene({ p1: 'attack', p2: 'block' }, 'p1')).toMatchObject({ flip: true });
-    expect(resolveAbmSplitScene({ p1: 'attack', p2: 'block' }, 'p1').src).toContain('block-attack-attack-ready');
+    expect(resolveAbmSplitScene({ p1: 'attack', p2: 'block' }, 'p1').src).toContain('block-attack-p2-ready');
   });
 
   test('shows authored Lucky proc art facing the Lucky player', () => {
     expect(resolveAbmScene({ p1: 'mana', p2: 'attack' }, 'p1')).toEqual({
-      src: '/variants/abm/scenes/lucky-proc-sheet.webp', flip: false,
+      src: '/variants/abm/scenes/exceptions/lucky-survival-sheet.webp', flip: false,
     });
     expect(resolveAbmScene({ p1: 'attack', p2: 'mana' }, 'p2')).toEqual({
-      src: '/variants/abm/scenes/lucky-proc-sheet.webp', flip: true,
+      src: '/variants/abm/scenes/exceptions/lucky-survival-sheet.webp', flip: true,
     });
   });
 
-  test('shows authored Advantaged proc art facing the powered player', () => {
-    expect(resolveAbmScene({ p1: 'mana', p2: 'mana' }, undefined, ['p1'])).toEqual({
-      src: '/variants/abm/scenes/both-mana-adv-proc-sheet.webp', flip: false,
-    });
-    expect(resolveAbmScene({ p1: 'mana', p2: 'mana' }, undefined, ['p2'])).toEqual({
-      src: '/variants/abm/scenes/both-mana-adv-proc-sheet.webp', flip: true,
-    });
-    expect(resolveAbmScene({ p1: 'block', p2: 'mana' }, undefined, ['p2'])).toEqual({
-      src: '/variants/abm/scenes/mana-block-adv-proc-sheet.webp', flip: true,
-    });
-    expect(resolveAbmScene({ p1: 'mana', p2: 'attack' }, undefined, ['p1'])).toEqual({
-      src: '/variants/abm/scenes/mana-block-adv-proc-sheet.webp', flip: false,
-    });
-    expect(resolveAbmScene({ p1: 'mana', p2: 'mana' }, undefined, ['p1', 'p2'])).toEqual({
-      src: '/variants/abm/scenes/both-mana-both-proc-adv-sheet.webp', flip: false,
-    });
+  test('maps class feedback to player-side tags and supports stacking', () => {
+    expect(resolveAbmProcTags({ advantagedProcPlayers: ['p1'], stunnedPlayers: ['p1'], juggernautProcPlayers: ['p2'] }))
+      .toMatchObject([
+        { kind: 'advantaged', player: 'p1' }, { kind: 'juggernaut', player: 'p1' }, { kind: 'stunned', player: 'p1' },
+      ]);
+    expect(resolveAbmProcTags({ luckyProcPlayer: 'p1', thiefAttemptPlayers: ['p2'] }).map(({ src }) => src))
+      .toEqual(['/variants/abm/scenes/tags/lucky-sheet.webp', '/variants/abm/scenes/tags/thief-sheet.webp']);
   });
 
-  test('shows authored Juggernaut proc art facing the triggering player', () => {
-    expect(resolveAbmScene({ p1: 'attack', p2: 'block' }, undefined, undefined, ['p1'])).toEqual({
-      src: '/variants/abm/scenes/juggernaut-proc-sheet.webp', flip: false,
-    });
-    expect(resolveAbmScene({ p1: 'block', p2: 'attack' }, undefined, undefined, ['p2'])).toEqual({
-      src: '/variants/abm/scenes/juggernaut-proc-sheet.webp', flip: true,
-    });
+  test('attaches Juggernaut tag to victim and retains it when Juggernaut readies first', () => {
+    expect(resolveAbmProcTags({ juggernautProcPlayers: ['p1'] })).toMatchObject([
+      { kind: 'juggernaut', player: 'p2' },
+    ]);
+    expect(resolveAbmProcTags({ juggernautProcPlayers: ['p1'] }, 'p1')).toMatchObject([
+      { kind: 'juggernaut', player: 'p2' },
+    ]);
+    expect(resolveAbmProcTags({ juggernautProcPlayers: ['p1'] }, 'p2')).toEqual([]);
   });
 
-  test('maps proc split survivors and flips P2-authored roles', () => {
-    const moves = { p1: 'attack', p2: 'block' } as const;
-    expect(resolveAbmClassProcSplitScene(moves, 'p1', 'p1')?.src).toContain('lucky-victim-survivor');
-    expect(resolveAbmClassProcSplitScene(moves, 'p2', 'p1')).toMatchObject({ flip: false });
-    expect(resolveAbmClassProcSplitScene(moves, 'p1', undefined, undefined, ['p2'])).toMatchObject({
-      src: '/variants/abm/scenes/split-scenes/juggernaut-survivor-sheet.webp', flip: true,
+  test('limits Advantaged and Juggernaut proc scenes to rounds that continue', () => {
+    expect(shouldShowAbmContinuingRoundProcTags('idle')).toBe(true);
+    expect(shouldShowAbmContinuingRoundProcTags('waiting')).toBe(true);
+    expect(shouldShowAbmContinuingRoundProcTags('counter-picking')).toBe(false);
+    expect(shouldShowAbmContinuingRoundProcTags('match-complete')).toBe(false);
+  });
+
+  test('uses Lucky exception splits and hides tags belonging to READY player', () => {
+    expect(resolveAbmSplitScene({ p1: 'mana', p2: 'attack' }, 'p1', 'p1').src).toContain('lucky-survival-p1-ready');
+    expect(resolveAbmSplitScene({ p1: 'attack', p2: 'mana' }, 'p2', 'p2')).toMatchObject({
+      src: '/variants/abm/scenes/splits/exceptions/lucky-survival-p1-ready-sheet.webp', flip: true,
     });
-    expect(resolveAbmClassProcSplitScene({ p1: 'mana', p2: 'mana' }, 'p1', undefined, ['p1', 'p2'])).toMatchObject({ flip: true });
+    expect(resolveAbmProcTags({ luckyProcPlayer: 'p1', thiefAttemptPlayers: ['p2'] }, 'p1')).toMatchObject([
+      { kind: 'thief', player: 'p2' },
+    ]);
   });
 
   test('uses the old-project landscape hierarchy for battle composition', () => {
@@ -126,42 +125,20 @@ describe('Attack Block Mana presentation data', () => {
     expect(landscape('rules')).toMatchObject({ x: 884, y: 464 });
   });
 
-  test('maps single and mirror Thief feedback scenes', () => {
-    const single = { p1: 'thief', p2: 'lucky' } as const;
-    const mirror = { p1: 'thief', p2: 'thief' } as const;
-    expect(resolveThiefScene({ p1: 'attack', p2: 'attack' }, ['p1'], single)).toEqual({ src: '/variants/abm/thief/thief-attack-draw-sheet.webp', flip: false });
-    expect(resolveThiefScene({ p1: 'block', p2: 'attack' }, ['p1'], single)).toEqual({ src: '/variants/abm/thief/block-attack-thief-blocking-sheet.webp', flip: false });
-    expect(resolveThiefScene({ p1: 'block', p2: 'mana' }, ['p2'], { p1: 'lucky', p2: 'thief' })).toEqual({ src: '/variants/abm/thief/mana-block-thief-manaing-sheet.webp', flip: true });
-    expect(resolveThiefScene({ p1: 'mana', p2: 'mana' }, ['p1'], mirror)).toEqual({ src: '/variants/abm/thief/both-charge-both-thief-sheet.webp', flip: false });
-    expect(resolveThiefScene({ p1: 'block', p2: 'block' }, ['p1', 'p2'], mirror)).toEqual({ src: '/variants/abm/thief/both-block-both-theif-sheet.webp', flip: false });
-    expect(resolveThiefScene({ p1: 'mana', p2: 'attack' }, ['p1'], single)).toBeUndefined();
-  });
-
-  test('reuses Thief survivor sheets by remaining move and side', () => {
-    const single = { p1: 'thief', p2: 'lucky' } as const;
-    expect(resolveThiefSplitScene({ p1: 'block', p2: 'attack' }, ['p1'], single, 'p2')).toEqual({
-      src: '/variants/abm/scenes/split-scenes/thief-blocking-vs-attack-survivor-sheet.webp', flip: false,
-    });
-    expect(resolveThiefSplitScene({ p1: 'block', p2: 'mana' }, ['p2'], { p1: 'lucky', p2: 'thief' }, 'p1')).toEqual({
-      src: '/variants/abm/scenes/split-scenes/thief-mana-survivor-sheet.webp', flip: true,
-    });
-    expect(resolveThiefSplitScene({ p1: 'block', p2: 'block' }, ['p1', 'p2'], { p1: 'thief', p2: 'thief' }, 'p1')).toEqual({
-      src: '/variants/abm/scenes/split-scenes/thief-blocking-survivor-sheet.webp', flip: true,
-    });
-  });
-
   test('maps the complete twelve-asset split-scene set', () => {
     const mappings = [
-      [undefined, 'p1', 'abm-standoff-p1-ready'], [undefined, 'p2', 'abm-standoff-p2-ready'],
+      [undefined, 'p1', 'standoff-p1-ready'], [undefined, 'p2', 'standoff-p2-ready'],
       [{ p1: 'block', p2: 'block' }, 'p1', 'block-draw-p1-ready'], [{ p1: 'block', p2: 'block' }, 'p2', 'block-draw-p2-ready'],
       [{ p1: 'attack', p2: 'attack' }, 'p1', 'attack-draw-p1-ready'], [{ p1: 'attack', p2: 'attack' }, 'p2', 'attack-draw-p2-ready'],
       [{ p1: 'mana', p2: 'mana' }, 'p1', 'mana-draw-p1-ready'], [{ p1: 'mana', p2: 'mana' }, 'p2', 'mana-draw-p2-ready'],
-      [{ p1: 'block', p2: 'mana' }, 'p1', 'block-mana-block-ready'], [{ p1: 'block', p2: 'mana' }, 'p2', 'block-mana-mana-ready'],
-      [{ p1: 'block', p2: 'attack' }, 'p1', 'block-attack-block-ready'], [{ p1: 'block', p2: 'attack' }, 'p2', 'block-attack-attack-ready'],
+      [{ p1: 'block', p2: 'mana' }, 'p1', 'block-mana-p1-ready'], [{ p1: 'block', p2: 'mana' }, 'p2', 'block-mana-p2-ready'],
+      [{ p1: 'block', p2: 'attack' }, 'p1', 'block-attack-p1-ready'], [{ p1: 'block', p2: 'attack' }, 'p2', 'block-attack-p2-ready'],
     ] as const;
     for (const [moves, early, expected] of mappings) expect(resolveAbmSplitScene(moves, early).src).toContain(expected);
     expect(resolveAbmSplitScene({ p1: 'mana', p2: 'block' }, 'p1').flip).toBe(true);
     expect(resolveAbmSplitScene({ p1: 'attack', p2: 'block' }, 'p1').flip).toBe(true);
+    expect(ABM_SCENE_URLS.some((src) => src.includes('mana-attack-p1-ready'))).toBe(false);
+    expect(ABM_SCENE_URLS.some((src) => src.includes('proc-sheet') || src.includes('survivor'))).toBe(false);
   });
 
   test('uses the shared authored landscape and portrait compositions', () => {

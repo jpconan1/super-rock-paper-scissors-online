@@ -43,6 +43,7 @@ export interface AbmState {
   thiefAttemptPlayers?: PlayerId[];
   thiefTransferPlayer?: PlayerId;
   juggernautProcPlayers?: PlayerId[];
+  stunnedPlayers?: PlayerId[];
   earlyPlayer?: PlayerId;
   latePlayer?: PlayerId;
   waitingStartsAt?: number;
@@ -83,6 +84,7 @@ export interface AbmProjection {
   thiefAttemptPlayers?: PlayerId[];
   thiefTransferPlayer?: PlayerId;
   juggernautProcPlayers?: PlayerId[];
+  stunnedPlayers?: PlayerId[];
   earlyPlayer?: PlayerId;
   latePlayer?: PlayerId;
   waitingStartsAt?: number;

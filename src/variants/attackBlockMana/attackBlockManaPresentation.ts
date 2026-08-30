@@ -12,7 +12,7 @@ import { createBoilingSprite, type BoilingSprite } from '../../renderer/boilingS
 import { playStarburstWipe } from '../../renderer/starburstWipe';
 import { createTextbox } from '../../ui/textbox';
 import { ABM_CLASSES } from './attackBlockManaCatalog';
-import { ABM_SCENE_URLS, resolveAbmClassProcSplitScene, resolveAbmScene, resolveAbmSplitScene, resolveThiefScene, resolveThiefSplitScene } from './attackBlockManaScenes';
+import { ABM_SCENE_URLS, resolveAbmProcTags, resolveAbmScene, resolveAbmSplitScene, type AbmProcTagKind } from './attackBlockManaScenes';
 import type { AbmCommand, AbmMove, AbmProjection } from './attackBlockManaTypes';
 import { playCatalogSound, type SoundId } from '../../audio/soundCatalog';
 import type { MusicDirector } from '../../audio/musicDirector';
@@ -75,6 +75,10 @@ export function shouldShowClassReadyOpponentTag(serverTime: number, classReadyAt
 
 export function shouldShowAbmYouTag(phase: AbmProjection['phase']): boolean {
   return phase === 'idle';
+}
+
+export function shouldShowAbmContinuingRoundProcTags(phase: AbmProjection['phase']): boolean {
+  return phase === 'idle' || phase === 'waiting';
 }
 
 export function getAbmResultScene(projection: AbmProjection): { src: string; alt: string } | undefined {
@@ -215,6 +219,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   let resultAsset: string = ABM_RESULT_SCENES.roundWon;
   let sceneArtwork: HTMLElement;
   let classBadges: { player: 'p1' | 'p2'; badge: BoilingSprite; asset: string }[] = [];
+  const procTagSprites = new Map<string, BoilingSprite>();
 
   const layout: GameLayout = createGameLayout({
     container, clock, layouts: ABM_LAYOUTS, screenClassName: 'abm-game', compositionClassName: 'abm-game__composition', ariaLabel: 'Attack Block Mana',
@@ -230,8 +235,19 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     onMenu,
   });
   layout.slots.scene.append(picker, waiting, result.element);
-  const thiefTransfer = createBoilingSprite({ src: `${ABM_ROOT}/thief/thief-transfer-sheet.webp`, clock, className: 'abm-thief-transfer', alt: 'Mana stolen' });
-  const thiefTransferMirror = createBoilingSprite({ src: `${ABM_ROOT}/thief/thief-transfer-mirror-sheet.webp`, clock, className: 'abm-thief-transfer abm-thief-transfer--mirror', alt: 'Simultaneous steals' });
+  const procTagSlots = (['p1', 'p2'] as const).map((player) => {
+    const slot = element('div', `abm-proc-tags abm-proc-tags--${player}`);
+    const labels: Record<AbmProcTagKind, string> = {
+      lucky: 'Lucky', advantaged: 'Advantaged plus one Mana', juggernaut: 'Block broken', thief: 'Yoink', stunned: 'Stunned',
+    };
+    for (const kind of ['lucky', 'advantaged', 'juggernaut', 'thief', 'stunned'] as const satisfies readonly AbmProcTagKind[]) {
+      const tag = createBoilingSprite({ src: `${ABM_ROOT}/scenes/tags/${kind}-sheet.webp`, clock, className: `abm-proc-tag abm-proc-tag--${kind}`, alt: labels[kind] });
+      tag.element.hidden = true; sprites.push(tag); slot.append(tag.element); procTagSprites.set(`${player}:${kind}`, tag);
+    }
+    layout.slots.scene.append(slot); return slot;
+  });
+  const thiefTransfer = createBoilingSprite({ src: `${ABM_ROOT}/scenes/effects/thief-transfer-sheet.webp`, clock, className: 'abm-thief-transfer', alt: 'Mana stolen' });
+  const thiefTransferMirror = createBoilingSprite({ src: `${ABM_ROOT}/scenes/effects/thief-transfer-mirror-sheet.webp`, clock, className: 'abm-thief-transfer abm-thief-transfer--mirror', alt: 'Simultaneous steals' });
   thiefTransfer.element.hidden = true; thiefTransferMirror.element.hidden = true; sprites.push(thiefTransfer, thiefTransferMirror);
   layout.slots.scene.append(thiefTransfer.element, thiefTransferMirror.element);
   layout.composition.append(steal.element);
@@ -351,28 +367,25 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
       const ownClass = nextProjection.players[nextProjection.self].classId; const index = ABM_CLASSES.findIndex(({ id }) => id === ownClass); if (index >= 0) selected = index;
     }
     layout.setArtwork('turn', turnArtwork(nextProjection.turn)); layout.setArtwork('p1Wins', winArtwork('p1', nextProjection.score.p1)); layout.setArtwork('p2Wins', winArtwork('p2', nextProjection.score.p2));
-    const thiefScene = resolveThiefScene(nextProjection.lastCompleteMoves, nextProjection.thiefAttemptPlayers, {
-      p1: nextProjection.players.p1.classId, p2: nextProjection.players.p2.classId,
-    });
-    const classProcActive = nextProjection.luckyProcPlayer || nextProjection.advantagedProcPlayers?.length || nextProjection.juggernautProcPlayers?.length;
+    const continuingRoundProc = shouldShowAbmContinuingRoundProcTags(nextProjection.phase);
+    const advantagedProcPlayers = continuingRoundProc ? nextProjection.advantagedProcPlayers : undefined;
+    const juggernautProcPlayers = continuingRoundProc ? nextProjection.juggernautProcPlayers : undefined;
     const splitPlayer = nextProjection.phase === 'waiting' && nextProjection.waitingStartsAt !== undefined && serverTime >= nextProjection.waitingStartsAt
       ? nextProjection.earlyPlayer : nextProjection.heldSplitFor;
-    const classes = { p1: nextProjection.players.p1.classId, p2: nextProjection.players.p2.classId };
-    const splitThiefScene = splitPlayer && nextProjection.lastCompleteMoves
-      ? resolveThiefSplitScene(nextProjection.lastCompleteMoves, nextProjection.thiefAttemptPlayers, classes, splitPlayer) : undefined;
-    const splitProcScene = splitPlayer && nextProjection.lastCompleteMoves
-      ? resolveAbmClassProcSplitScene(nextProjection.lastCompleteMoves, splitPlayer, nextProjection.luckyProcPlayer,
-        nextProjection.advantagedProcPlayers, nextProjection.juggernautProcPlayers) : undefined;
-    const scene = splitThiefScene ?? (thiefScene && !splitPlayer ? thiefScene : undefined)
-      ?? splitProcScene ?? (classProcActive && !splitPlayer
-        ? resolveAbmScene(nextProjection.lastCompleteMoves, nextProjection.luckyProcPlayer, nextProjection.advantagedProcPlayers, nextProjection.juggernautProcPlayers)
-        : splitPlayer ? resolveAbmSplitScene(nextProjection.lastCompleteMoves, splitPlayer)
-          : resolveAbmScene(nextProjection.lastCompleteMoves));
+    const scene = splitPlayer
+      ? resolveAbmSplitScene(nextProjection.lastCompleteMoves, splitPlayer, nextProjection.luckyProcPlayer)
+      : resolveAbmScene(nextProjection.lastCompleteMoves, nextProjection.luckyProcPlayer);
     layout.setArtwork('scene', { src: scene.src, alt: 'Attack Block Mana scene.' });
     sceneArtwork.classList.toggle('is-flipped', scene.flip);
-    const simultaneousSteals = Boolean(thiefScene) && nextProjection.thiefAttemptPlayers?.length === 2;
-    thiefTransfer.element.hidden = Boolean(splitPlayer) || !thiefScene || (!nextProjection.thiefTransferPlayer && !simultaneousSteals);
-    thiefTransferMirror.element.hidden = Boolean(splitPlayer) || !simultaneousSteals;
+    const visibleTags = !picking && !showingResult ? resolveAbmProcTags({
+      ...nextProjection, advantagedProcPlayers, juggernautProcPlayers,
+    }, splitPlayer) : [];
+    const visibleTagKeys = new Set(visibleTags.map(({ player, kind }) => `${player}:${kind}`));
+    for (const [key, tag] of procTagSprites) tag.element.hidden = !visibleTagKeys.has(key);
+    for (const slot of procTagSlots) slot.hidden = picking || showingResult;
+    const simultaneousSteals = nextProjection.thiefAttemptPlayers?.length === 2;
+    thiefTransfer.element.hidden = Boolean(splitPlayer) || showingResult || (!nextProjection.thiefTransferPlayer && !simultaneousSteals);
+    thiefTransferMirror.element.hidden = Boolean(splitPlayer) || showingResult || !simultaneousSteals;
     thiefTransfer.element.classList.toggle('is-flipped', nextProjection.thiefTransferPlayer === 'p2');
     renderStatus(p1Status, nextProjection, 'p1', picking); renderStatus(p2Status, nextProjection, 'p2', picking);
     renderResources(p1Resources, nextProjection, 'p1'); renderResources(p2Resources, nextProjection, 'p2');

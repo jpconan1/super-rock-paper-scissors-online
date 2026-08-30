@@ -38,6 +38,16 @@ export const ABM_EDITOR_FIXTURES: readonly AbmEditorFixture[] = [
   fixture('class-locked', 'Class locked · waiting', { projection: projection({ phase: 'waiting-for-class', ownPendingClass: 'advantaged', legalActions: [], opponentReady: false }) }),
   fixture('class-ready', 'Class READY cue', { projection: projection({ phase: 'waiting-for-class', classReadyPlayer: 'p2', classReadyAt: T - 174, legalActions: [] }) }),
   fixture('battle', 'Battle · resources', { projection: projection() }),
+  fixture('proc-tags', 'Battle · proc tags', { projection: projection({
+    lastCompleteMoves: { p1: 'mana', p2: 'attack' }, advantagedProcPlayers: ['p1'],
+    juggernautProcPlayers: ['p2'], thiefAttemptPlayers: ['p2'],
+  }) }),
+  fixture('proc-tags-stacked', 'Battle · stacked proc tags', { projection: projection({
+    lastCompleteMoves: { p1: 'mana', p2: 'attack' }, advantagedProcPlayers: ['p1'], stunnedPlayers: ['p1'],
+  }) }),
+  fixture('lucky-survival', 'Battle · Lucky survival', { projection: projection({
+    lastCompleteMoves: { p1: 'mana', p2: 'attack' }, luckyProcPlayer: 'p1',
+  }) }),
   fixture('move-locked', 'Battle · move locked', { projection: projection({ ownPendingMove: 'mana', opponentReady: true, legalActions: [] }) }),
   fixture('waiting-ready', 'Waiting · READY', { projection: projection({ phase: 'waiting', earlyPlayer: 'p1', latePlayer: 'p2', waitingStartsAt: T + 174, waitingDeadlineAt: T + 30_174, legalActions: [] }) }),
   fixture('waiting-dots', 'Waiting · dots', { projection: projection({ phase: 'waiting', earlyPlayer: 'p1', latePlayer: 'p2', waitingStartsAt: T - 2_000, waitingDeadlineAt: T + 28_000, legalActions: [] }) }),

@@ -772,6 +772,12 @@ input {
 .abm-thief-transfer { position: absolute; z-index: 5; top: 100%; left: 50%; width: 113px; transform: translateX(-50%); overflow: visible; pointer-events: none; }
 .abm-thief-transfer--mirror { top: auto; bottom: 100%; }
 .abm-thief-transfer.is-flipped > .boiling-sprite__canvas { transform: scaleX(-1); }
+.abm-proc-tags { position: absolute; z-index: 4; bottom: 72%; display: flex; width: 46%; flex-direction: column-reverse; align-items: center; pointer-events: none; }
+.abm-proc-tags[hidden] { display: none; }
+.abm-proc-tags--p1 { left: 0; }
+.abm-proc-tags--p2 { right: 0; }
+.abm-proc-tag { width: 72%; margin-top: -12%; overflow: visible; }
+.abm-proc-tag[hidden] { display: none; }
 .abm-controls__move--attack { color: #ac3235; }
 .abm-controls__move--block { color: #1857a6; }
 .abm-controls__move--mana { color: #3f7d31; }

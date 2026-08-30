@@ -274,7 +274,7 @@
       "type": "sprite",
       "parent": "scene",
       "assets": {
-        "src": "/variants/abm/scenes/abm-standoff-sheet.webp"
+        "src": "/variants/abm/scenes/base/standoff-sheet.webp"
       },
       "layouts": {
         "landscape": {
