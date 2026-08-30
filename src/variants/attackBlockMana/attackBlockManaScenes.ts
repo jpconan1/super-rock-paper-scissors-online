@@ -39,6 +39,29 @@ export function resolveAbmSplitScene(moves: Readonly<Record<PlayerId, AbmMove>> 
   return full;
 }
 
+export function resolveAbmClassProcSplitScene(
+  moves: Readonly<Record<PlayerId, AbmMove>>,
+  early: PlayerId,
+  luckyProcPlayer?: PlayerId,
+  advantagedProcPlayers?: readonly PlayerId[],
+  juggernautProcPlayers?: readonly PlayerId[],
+): AbmScene | undefined {
+  if (luckyProcPlayer) return split(
+    early === luckyProcPlayer ? 'lucky-victim-survivor' : 'lucky-survivor',
+    luckyProcPlayer === 'p2',
+  );
+  if (juggernautProcPlayers?.length) {
+    const juggernaut = juggernautProcPlayers[0]!;
+    return split(early === juggernaut ? 'juggernaut-victim-survivor' : 'juggernaut-survivor', juggernaut === 'p2');
+  }
+  if (advantagedProcPlayers?.length === 2) return split('advantaged-survivor', early === 'p1');
+  if (advantagedProcPlayers?.length === 1) {
+    const advantaged = advantagedProcPlayers[0]!;
+    return early === advantaged ? resolveAbmSplitScene(moves, early) : split('advantaged-survivor', advantaged === 'p2');
+  }
+  return undefined;
+}
+
 export function resolveThiefScene(
   moves: Readonly<Record<PlayerId, AbmMove>> | undefined,
   attemptPlayers: readonly PlayerId[] | undefined,
@@ -61,6 +84,22 @@ export function resolveThiefScene(
   return thiefScene(name, thief === 'p2');
 }
 
+export function resolveThiefSplitScene(
+  moves: Readonly<Record<PlayerId, AbmMove>>,
+  attemptPlayers: readonly PlayerId[] | undefined,
+  classes: Readonly<Record<PlayerId, AbmClassId | undefined>>,
+  early: PlayerId,
+): AbmScene | undefined {
+  if (!resolveThiefScene(moves, attemptPlayers, classes)) return undefined;
+  const remaining: PlayerId = early === 'p1' ? 'p2' : 'p1';
+  if (classes[remaining] !== 'thief') return resolveAbmSplitScene(moves, early);
+  const move = moves[remaining];
+  const name = move === 'attack' ? 'thief-attacking-survivor'
+    : move === 'mana' ? 'thief-mana-survivor'
+      : moves[early] === 'attack' ? 'thief-blocking-vs-attack-survivor' : 'thief-blocking-survivor';
+  return split(name, remaining === 'p2');
+}
+
 export const ABM_SCENE_URLS = [
   'abm-standoff', 'block-mana', 'block-draw', 'block-attack', 'mana-draw', 'mana-attack', 'attack-draw', 'lucky-proc',
   'both-mana-adv-proc', 'mana-block-adv-proc', 'both-mana-both-proc-adv', 'juggernaut-proc',
@@ -68,6 +107,9 @@ export const ABM_SCENE_URLS = [
   'abm-standoff-p1-ready', 'abm-standoff-p2-ready', 'block-draw-p1-ready', 'block-draw-p2-ready',
   'attack-draw-p1-ready', 'attack-draw-p2-ready', 'mana-draw-p1-ready', 'mana-draw-p2-ready',
   'block-mana-mana-ready', 'block-mana-block-ready', 'block-attack-attack-ready', 'block-attack-block-ready',
+].map((name) => `${ROOT}/split-scenes/${name}-sheet.webp`)).concat([
+  'advantaged-survivor', 'juggernaut-survivor', 'juggernaut-victim-survivor', 'lucky-survivor', 'lucky-victim-survivor',
+  'thief-attacking-survivor', 'thief-blocking-survivor', 'thief-blocking-vs-attack-survivor', 'thief-mana-survivor',
 ].map((name) => `${ROOT}/split-scenes/${name}-sheet.webp`)).concat([
   'attack-block-thief-attacking', 'block-attack-both-thief', 'block-attack-thief-blocking', 'block-mana-both-thief',
   'block-mana-thief-blocking', 'both-block-both-theif', 'both-block-theif', 'both-charge-both-thief', 'both-charge-thief',

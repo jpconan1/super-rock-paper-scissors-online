@@ -12,7 +12,7 @@ import { createBoilingSprite, type BoilingSprite } from '../../renderer/boilingS
 import { playStarburstWipe } from '../../renderer/starburstWipe';
 import { createTextbox } from '../../ui/textbox';
 import { ABM_CLASSES } from './attackBlockManaCatalog';
-import { ABM_SCENE_URLS, resolveAbmScene, resolveAbmSplitScene, resolveThiefScene } from './attackBlockManaScenes';
+import { ABM_SCENE_URLS, resolveAbmClassProcSplitScene, resolveAbmScene, resolveAbmSplitScene, resolveThiefScene, resolveThiefSplitScene } from './attackBlockManaScenes';
 import type { AbmCommand, AbmMove, AbmProjection } from './attackBlockManaTypes';
 import { playCatalogSound, type SoundId } from '../../audio/soundCatalog';
 import type { MusicDirector } from '../../audio/musicDirector';
@@ -355,17 +355,24 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
       p1: nextProjection.players.p1.classId, p2: nextProjection.players.p2.classId,
     });
     const classProcActive = nextProjection.luckyProcPlayer || nextProjection.advantagedProcPlayers?.length || nextProjection.juggernautProcPlayers?.length;
-    const scene = thiefScene ?? (classProcActive
-      ? resolveAbmScene(nextProjection.lastCompleteMoves, nextProjection.luckyProcPlayer, nextProjection.advantagedProcPlayers, nextProjection.juggernautProcPlayers)
-      : nextProjection.phase === 'waiting' && nextProjection.waitingStartsAt !== undefined && serverTime >= nextProjection.waitingStartsAt
-        ? resolveAbmSplitScene(nextProjection.lastCompleteMoves, nextProjection.earlyPlayer!)
-        : nextProjection.heldSplitFor ? resolveAbmSplitScene(nextProjection.lastCompleteMoves, nextProjection.heldSplitFor)
+    const splitPlayer = nextProjection.phase === 'waiting' && nextProjection.waitingStartsAt !== undefined && serverTime >= nextProjection.waitingStartsAt
+      ? nextProjection.earlyPlayer : nextProjection.heldSplitFor;
+    const classes = { p1: nextProjection.players.p1.classId, p2: nextProjection.players.p2.classId };
+    const splitThiefScene = splitPlayer && nextProjection.lastCompleteMoves
+      ? resolveThiefSplitScene(nextProjection.lastCompleteMoves, nextProjection.thiefAttemptPlayers, classes, splitPlayer) : undefined;
+    const splitProcScene = splitPlayer && nextProjection.lastCompleteMoves
+      ? resolveAbmClassProcSplitScene(nextProjection.lastCompleteMoves, splitPlayer, nextProjection.luckyProcPlayer,
+        nextProjection.advantagedProcPlayers, nextProjection.juggernautProcPlayers) : undefined;
+    const scene = splitThiefScene ?? (thiefScene && !splitPlayer ? thiefScene : undefined)
+      ?? splitProcScene ?? (classProcActive && !splitPlayer
+        ? resolveAbmScene(nextProjection.lastCompleteMoves, nextProjection.luckyProcPlayer, nextProjection.advantagedProcPlayers, nextProjection.juggernautProcPlayers)
+        : splitPlayer ? resolveAbmSplitScene(nextProjection.lastCompleteMoves, splitPlayer)
           : resolveAbmScene(nextProjection.lastCompleteMoves));
     layout.setArtwork('scene', { src: scene.src, alt: 'Attack Block Mana scene.' });
     sceneArtwork.classList.toggle('is-flipped', scene.flip);
     const simultaneousSteals = Boolean(thiefScene) && nextProjection.thiefAttemptPlayers?.length === 2;
-    thiefTransfer.element.hidden = !thiefScene || (!nextProjection.thiefTransferPlayer && !simultaneousSteals);
-    thiefTransferMirror.element.hidden = !simultaneousSteals;
+    thiefTransfer.element.hidden = Boolean(splitPlayer) || !thiefScene || (!nextProjection.thiefTransferPlayer && !simultaneousSteals);
+    thiefTransferMirror.element.hidden = Boolean(splitPlayer) || !simultaneousSteals;
     thiefTransfer.element.classList.toggle('is-flipped', nextProjection.thiefTransferPlayer === 'p2');
     renderStatus(p1Status, nextProjection, 'p1', picking); renderStatus(p2Status, nextProjection, 'p2', picking);
     renderResources(p1Resources, nextProjection, 'p1'); renderResources(p2Resources, nextProjection, 'p2');

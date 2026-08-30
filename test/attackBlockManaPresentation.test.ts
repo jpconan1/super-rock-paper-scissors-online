@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { ABM_CLASSES } from '../src/variants/attackBlockMana/attackBlockManaCatalog';
 import { ABM_BACK_LOBBY_ART, ABM_LAYOUTS, ABM_RESULT_SCENES, ABM_SELECT_ART, blockSegments, getAbmClassReadyFrame, getAbmResultScene, getAbmThiefControlGeometry, getAbmWaitingVisual, sceneForMoves, shouldShowAbmYouTag, shouldShowClassReadyOpponentTag } from '../src/variants/attackBlockMana/attackBlockManaPresentation';
 import type { AbmProjection } from '../src/variants/attackBlockMana/attackBlockManaTypes';
-import { resolveAbmScene, resolveAbmSplitScene, resolveThiefScene } from '../src/variants/attackBlockMana/attackBlockManaScenes';
+import { resolveAbmClassProcSplitScene, resolveAbmScene, resolveAbmSplitScene, resolveThiefScene, resolveThiefSplitScene } from '../src/variants/attackBlockMana/attackBlockManaScenes';
 import { getLayoutDocument } from '../src/layout/layoutDocuments';
 import { ABM_EDITOR_FIXTURES, getAbmEditorFixture } from '../src/editor/abmFixtures';
 
@@ -97,6 +97,16 @@ describe('Attack Block Mana presentation data', () => {
     });
   });
 
+  test('maps proc split survivors and flips P2-authored roles', () => {
+    const moves = { p1: 'attack', p2: 'block' } as const;
+    expect(resolveAbmClassProcSplitScene(moves, 'p1', 'p1')?.src).toContain('lucky-victim-survivor');
+    expect(resolveAbmClassProcSplitScene(moves, 'p2', 'p1')).toMatchObject({ flip: false });
+    expect(resolveAbmClassProcSplitScene(moves, 'p1', undefined, undefined, ['p2'])).toMatchObject({
+      src: '/variants/abm/scenes/split-scenes/juggernaut-survivor-sheet.webp', flip: true,
+    });
+    expect(resolveAbmClassProcSplitScene({ p1: 'mana', p2: 'mana' }, 'p1', undefined, ['p1', 'p2'])).toMatchObject({ flip: true });
+  });
+
   test('uses the old-project landscape hierarchy for battle composition', () => {
     const document = getLayoutDocument('variant-abm');
     const landscape = (id: string) => document.elements.find((element) => element.id === id)!.layouts.landscape;
@@ -125,6 +135,19 @@ describe('Attack Block Mana presentation data', () => {
     expect(resolveThiefScene({ p1: 'mana', p2: 'mana' }, ['p1'], mirror)).toEqual({ src: '/variants/abm/thief/both-charge-both-thief-sheet.webp', flip: false });
     expect(resolveThiefScene({ p1: 'block', p2: 'block' }, ['p1', 'p2'], mirror)).toEqual({ src: '/variants/abm/thief/both-block-both-theif-sheet.webp', flip: false });
     expect(resolveThiefScene({ p1: 'mana', p2: 'attack' }, ['p1'], single)).toBeUndefined();
+  });
+
+  test('reuses Thief survivor sheets by remaining move and side', () => {
+    const single = { p1: 'thief', p2: 'lucky' } as const;
+    expect(resolveThiefSplitScene({ p1: 'block', p2: 'attack' }, ['p1'], single, 'p2')).toEqual({
+      src: '/variants/abm/scenes/split-scenes/thief-blocking-vs-attack-survivor-sheet.webp', flip: false,
+    });
+    expect(resolveThiefSplitScene({ p1: 'block', p2: 'mana' }, ['p2'], { p1: 'lucky', p2: 'thief' }, 'p1')).toEqual({
+      src: '/variants/abm/scenes/split-scenes/thief-mana-survivor-sheet.webp', flip: true,
+    });
+    expect(resolveThiefSplitScene({ p1: 'block', p2: 'block' }, ['p1', 'p2'], { p1: 'thief', p2: 'thief' }, 'p1')).toEqual({
+      src: '/variants/abm/scenes/split-scenes/thief-blocking-survivor-sheet.webp', flip: true,
+    });
   });
 
   test('maps the complete twelve-asset split-scene set', () => {
