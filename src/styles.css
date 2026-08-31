@@ -181,7 +181,7 @@ body::before {
   justify-items: center;
   gap: 1rem;
   padding: clamp(24px, 5vw, 44px) clamp(20px, 5vw, 48px);
-  background: url('/community-letter/paper-bg.png') center / 100% 100% no-repeat;
+  background: url('/community-letter/paper-bg.webp') center / 100% 100% no-repeat;
   text-align: left;
   user-select: text;
 }

@@ -33,7 +33,7 @@ export function createClientSeasonManifest(
     title: 'Attack Block Mana',
     rulesCopy: ['Attack costs 1 Mana and defeats Mana.', 'Block stops Attack. Mana gains Mana.', 'First to three rounds wins.'],
     assetBundleId: 'variant:abm' as const,
-    thumbnail: '/variants/abm/advantaged-placeholder-sheet.webp',
+    thumbnail: '/variants/abm/advantaged-sheet.webp',
     loadPresentation: async () => {
       const { createAttackBlockManaPresentation } = await import('./attackBlockMana/attackBlockManaPresentation');
       return createAttackBlockManaPresentation(clock);

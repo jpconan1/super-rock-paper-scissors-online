@@ -20,7 +20,7 @@ const VISUALS: Readonly<Record<string, { src: string; alt: string; className: st
     boils: true,
   },
   '(pic of variant grid)': {
-    src: '/community-letter/variant-select-mockup.png',
+    src: '/community-letter/variant-select-mockup.webp',
     alt: 'Season 1 variant selection grid with Attack Block Mana featured in the centre',
     className: 'abm-letter__variant-grid',
     boils: false,
