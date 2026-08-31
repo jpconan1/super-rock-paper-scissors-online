@@ -22,6 +22,7 @@ import { beats } from '../core/time';
 import { MusicDirector } from '../audio/musicDirector';
 import { destroySoundCatalog } from '../audio/soundCatalog';
 import { LocalAbmMatch } from './localAbmMatch';
+import { hasSeenAbmLetter, mountAbmLetterModal } from './abmLetterModal';
 
 export type ConnectionState = 'connected' | 'reconnecting' | 'offline';
 export type ShellDestination = 'title' | 'lobby' | 'match-found' | 'slot-picker' | 'scoreboard' | 'gameplay';
@@ -43,6 +44,7 @@ export class AppController {
   private lifecycle?: AbortController;
   private screenCleanup?: () => void;
   private modalCleanup?: () => void;
+  private letterCleanup?: () => void;
   private unsubscribeSession?: () => void;
   private timeline?: AnimationTimeline;
   private loadRevision = 0;
@@ -234,7 +236,7 @@ export class AppController {
       const title = mountTitleScreen(this.screenLayer, options.clock, (name) => {
         this.playerName = name;
         void options.session.enterLobby(name).then(() => this.navigate('lobby'));
-      }, () => options.session.getOnlinePlayerCount());
+      }, () => options.session.getOnlinePlayerCount(), (trigger) => this.openAbmLetter(trigger));
       this.screenCleanup = title;
       this.screenReady = title.ready;
     } else if (destination === 'lobby') {
@@ -260,6 +262,7 @@ export class AppController {
       lobby.setConnectionState(this.connectionState);
       this.lobbyScreen = lobby;
       this.screenCleanup = lobby;
+      if (!hasSeenAbmLetter()) this.openAbmLetter();
     } else if (destination === 'match-found') {
       const projection = this.matchProjection;
       if (!projection) throw new Error('Match information is unavailable.');
@@ -343,6 +346,7 @@ export class AppController {
   }
 
   private clearScreen(): void {
+    this.closeAbmLetter();
     this.screenCleanup?.();
     this.screenCleanup = undefined;
     this.lobbyScreen = undefined;
@@ -375,6 +379,19 @@ export class AppController {
       : this.screenLayer.firstElementChild instanceof HTMLElement ? this.screenLayer.firstElementChild : this.screenLayer;
     this.universalMenu = mountUniversalMenu(scaleContent ?? this.screenLayer, background, this.options.clock,
       () => this.quitToTitle(), () => this.closeUniversalMenu());
+  }
+
+  private openAbmLetter(trigger?: HTMLElement): void {
+    this.closeAbmLetter();
+    const focused = trigger ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+    const modal = mountAbmLetterModal(this.modalLayer, this.options.clock, focused);
+    this.letterCleanup = modal.dismiss;
+  }
+
+  private closeAbmLetter(): void {
+    const cleanup = this.letterCleanup;
+    this.letterCleanup = undefined;
+    cleanup?.();
   }
 
   private closeUniversalMenu(): void {

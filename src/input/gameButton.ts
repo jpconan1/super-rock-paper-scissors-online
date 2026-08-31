@@ -23,6 +23,7 @@ export interface GameButtonOptions {
 
 export interface GameButton {
   element: HTMLButtonElement;
+  readonly ready: Promise<void>;
   setDisabled(disabled: boolean): void;
   setLockedDepressed(locked: boolean): void;
   destroy(): void;
@@ -119,11 +120,12 @@ export function createGameButton(options: GameButtonOptions): GameButton {
   if (options.lockedDepressed) element.setAttribute('aria-pressed', 'true');
   const isDisabled = () => requestedDisabled || !assetsReady;
   setControlDisabled(element, true);
-  void Promise.all([artLease.ready, art.whenReady()]).then(() => {
+  const ready = Promise.all([artLease.ready, art.whenReady()]).then(() => {
     if (destroyed) return;
     assetsReady = true;
     setControlDisabled(element, requestedDisabled);
-  }).catch((error) => {
+  });
+  void ready.catch((error) => {
     console.error(`Could not prepare button art for ${options.label}.`, error);
   });
 
@@ -190,6 +192,7 @@ export function createGameButton(options: GameButtonOptions): GameButton {
 
   return {
     element,
+    ready,
     setDisabled(nextDisabled) {
       if (requestedDisabled === nextDisabled) return;
       requestedDisabled = nextDisabled;
