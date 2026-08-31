@@ -114,7 +114,7 @@ Large replay archives and historical whiteboards move to R2 only when retention 
 The browser build uses its page origin for the game server. Official builds hosted elsewhere must embed the trusted server origin at build time:
 
 ```sh
-VITE_SERVER_URL=https://api.abm.jpconan.ca npm run build
+VITE_SERVER_URL=https://rps.jpconan.ca npm run build
 ```
 
 The value must be an absolute HTTP(S) origin without credentials, a path, query parameters, or a fragment. Runtime URL parameters cannot override it.

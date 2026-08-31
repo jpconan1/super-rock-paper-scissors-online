@@ -1,11 +1,9 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "super-rps-online",
+  "name": "super-rps-online-v1",
   "main": "worker/index.ts",
   "compatibility_date": "2026-08-12",
-  "routes": [
-    { "pattern": "abm.jpconan.ca", "custom_domain": true }
-  ],
+  "workers_dev": true,
   "assets": {
     "directory": "./dist",
     "not_found_handling": "single-page-application",
@@ -33,13 +31,13 @@
   }],
   "d1_databases": [{
     "binding": "DB",
-    "database_name": "super-rps-online",
-    "database_id": "78998a29-8eb7-43ae-bced-80a2123c57c9",
+    "database_name": "super-rps-online-v1",
+    "database_id": "dd004c87-de06-4aa3-9936-0dba82a93e9f",
     "migrations_dir": "worker/migrations"
   }],
   "ratelimits": [
-    { "name": "SOCKET_RATE", "namespace_id": "731001", "simple": { "limit": 120, "period": 60 } },
-    { "name": "MATCHMAKING_IP_RATE", "namespace_id": "731002", "simple": { "limit": 600, "period": 60 } },
-    { "name": "MATCHMAKING_GUEST_RATE", "namespace_id": "731003", "simple": { "limit": 120, "period": 60 } }
+    { "name": "SOCKET_RATE", "namespace_id": "732001", "simple": { "limit": 120, "period": 60 } },
+    { "name": "MATCHMAKING_IP_RATE", "namespace_id": "732002", "simple": { "limit": 600, "period": 60 } },
+    { "name": "MATCHMAKING_GUEST_RATE", "namespace_id": "732003", "simple": { "limit": 120, "period": 60 } }
   ]
 }

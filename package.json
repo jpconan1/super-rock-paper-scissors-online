@@ -11,8 +11,8 @@
     "worker:check": "tsc -p worker/tsconfig.json",
     "worker:dev": "wrangler dev",
     "worker:deploy": "npm run build && wrangler deploy",
-    "d1:migrate:local": "wrangler d1 migrations apply super-rps-online --local",
-    "d1:migrate:remote": "wrangler d1 migrations apply super-rps-online --remote",
+    "d1:migrate:local": "wrangler d1 migrations apply super-rps-online-v1 --local",
+    "d1:migrate:remote": "wrangler d1 migrations apply super-rps-online-v1 --remote",
     "assets:compress-staged": "scripts/compress-staged-assets.sh",
     "assets:check": "scripts/check-compressed-assets.sh && node scripts/validate-music-assets.mjs",
     "audio:check": "node scripts/validate-music-assets.mjs"
