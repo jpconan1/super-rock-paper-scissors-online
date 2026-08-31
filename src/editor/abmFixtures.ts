@@ -44,6 +44,10 @@ export const ABM_EDITOR_FIXTURES: readonly AbmEditorFixture[] = [
   }) }),
   fixture('proc-tags-stacked', 'Battle · stacked proc tags', { projection: projection({
     lastCompleteMoves: { p1: 'mana', p2: 'attack' }, advantagedProcPlayers: ['p1'], stunnedPlayers: ['p1'],
+    players: {
+      p1: { classId: 'advantaged', mana: 8, blocks: 4, strikes: 0, lastMove: 'mana', attackCost: 8 },
+      p2: { classId: 'stunner', mana: 5, blocks: 5, strikes: 0, lastMove: 'attack', attackCost: 1 },
+    },
   }) }),
   fixture('lucky-survival', 'Battle · Lucky survival', { projection: projection({
     lastCompleteMoves: { p1: 'mana', p2: 'attack' }, luckyProcPlayer: 'p1',

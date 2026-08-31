@@ -68,6 +68,8 @@ Each player normally begins with:
 - no last move;
 - zero strikes.
 
+Mana is capped at 9. Gains beyond 9 are discarded.
+
 A normal turn resolves one move from each player simultaneously. Turn 0 is the
 initial state; the first chosen moves produce Turn 1. The turn embed shows state
 after that turn resolves.
@@ -196,8 +198,10 @@ TopNep, game 1, turns 1-2. The bot says “received 2 mana instead of 1.”
 State: `opponentAttackCost`, initially 1.
 
 - After Stunner uses Attack, double the opponent's attack cost for the next
-  turn: 1 -> 2 -> 4 -> 8 for consecutive Stunner attacks.
+  turn: 1 -> 2 -> 4 -> 8 for consecutive Stunner attacks. The cost is capped
+  at 8.
 - After Stunner uses Block or Mana, reset the opponent's next attack cost to 1.
+- A Stunner Skip also resets the opponent's next attack cost to 1.
 - The modified player pays that entire cost when attacking.
 - The cost changes because of Stunner's selected move, even when that attack is
   blocked or meets another Attack.

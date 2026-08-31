@@ -12,12 +12,13 @@ import { createBoilingSprite, type BoilingSprite } from '../../renderer/boilingS
 import { playStarburstWipe } from '../../renderer/starburstWipe';
 import { createTextbox } from '../../ui/textbox';
 import { ABM_CLASSES } from './attackBlockManaCatalog';
-import { ABM_SCENE_URLS, resolveAbmProcTags, resolveAbmScene, resolveAbmSplitScene, type AbmProcTagKind } from './attackBlockManaScenes';
-import type { AbmCommand, AbmMove, AbmProjection } from './attackBlockManaTypes';
+import { ABM_SCENE_URLS, resolveAbmProcBackgrounds, resolveAbmProcTags, resolveAbmScene, resolveAbmSplitScene, type AbmProcBackgroundKind, type AbmProcTagKind } from './attackBlockManaScenes';
+import type { AbmCommand, AbmMove, AbmPlayerState, AbmProjection } from './attackBlockManaTypes';
 import { playCatalogSound, type SoundId } from '../../audio/soundCatalog';
 import type { MusicDirector } from '../../audio/musicDirector';
 
 const ABM_ROOT = '/variants/abm';
+const STUNNED_BUTTON_TAG = `${ABM_ROOT}/stunned-button-tag-sheet.webp`;
 const SYSTEM_SCENE_ROOT = '/visual-elements/system-scenes';
 export const ABM_RESULT_SCENES = {
   roundWon: `${SYSTEM_SCENE_ROOT}/round-won-sheet.webp`,
@@ -74,11 +75,16 @@ export function shouldShowClassReadyOpponentTag(serverTime: number, classReadyAt
 }
 
 export function shouldShowAbmYouTag(phase: AbmProjection['phase']): boolean {
-  return phase === 'idle';
+  return phase === 'idle' || phase === 'waiting';
 }
 
 export function shouldShowAbmContinuingRoundProcTags(phase: AbmProjection['phase']): boolean {
   return phase === 'idle' || phase === 'waiting';
+}
+
+export function getAbmAttackCostDisplay(player: Readonly<AbmPlayerState>): { visible: boolean; cost: number; label: string } {
+  const cost = player.attackCost ?? 1;
+  return { visible: cost > 1, cost, label: `Attack, costs ${cost} Mana` };
 }
 
 export function getAbmResultScene(projection: AbmProjection): { src: string; alt: string } | undefined {
@@ -113,7 +119,7 @@ export function createAttackBlockManaPresentation(
         ...Array.from({ length: 10 }, (_, index) => `/visual-elements/resource-counters/times${index}-sheet.webp`),
         ...Array.from({ length: 5 }, (_, index) => `/visual-elements/ready-waiting/countdown${index + 1}-sheet.webp`),
         ...Object.values(ABM_RESULT_SCENES), ...Object.values(ABM_BACK_LOBBY_ART),
-        ...ABM_SCENE_URLS];
+        STUNNED_BUTTON_TAG, ...ABM_SCENE_URLS];
       const lease = assetLoader.retainUrls(urls); await lease.ready; return lease;
     },
     mount({ container, send, openMenu, backToLobby, self, players, music }) {
@@ -195,6 +201,11 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     button.element.hidden = true;
     buttons.push(button); controls.append(button.element); return [move, button] as const;
   });
+  const attackButton = moves.find(([move]) => move === 'attack')![1];
+  const stunnedCost = element('span', 'abm-stunned-cost');
+  const stunnedCostArt = createBoilingSprite({ src: STUNNED_BUTTON_TAG, clock, className: 'abm-stunned-cost__art', alt: '' });
+  const stunnedCostValue = element('span', 'abm-stunned-cost__value');
+  stunnedCost.hidden = true; stunnedCost.append(stunnedCostArt.element, stunnedCostValue); attackButton.element.append(stunnedCost); sprites.push(stunnedCostArt);
   const lobby = createGameButton({ label: 'Back to Lobby', clock, onActivate: () => backToLobby?.(),
     upSheet: ABM_BACK_LOBBY_ART.up, betweenSheet: ABM_BACK_LOBBY_ART.between, depressedSheet: ABM_BACK_LOBBY_ART.depressed });
   lobby.element.classList.add('abm-controls__back-lobby', 'game-button--baked-label'); lobby.element.hidden = true;
@@ -220,6 +231,8 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   let sceneArtwork: HTMLElement;
   let classBadges: { player: 'p1' | 'p2'; badge: BoilingSprite; asset: string }[] = [];
   const procTagSprites = new Map<string, BoilingSprite>();
+  const procTagAssets = new Map<string, string>();
+  const procBackgroundSprites = new Map<string, BoilingSprite>();
 
   const layout: GameLayout = createGameLayout({
     container, clock, layouts: ABM_LAYOUTS, screenClassName: 'abm-game', compositionClassName: 'abm-game__composition', ariaLabel: 'Attack Block Mana',
@@ -239,13 +252,24 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     const slot = element('div', `abm-proc-tags abm-proc-tags--${player}`);
     const labels: Record<AbmProcTagKind, string> = {
       lucky: 'Lucky', advantaged: 'Advantaged plus one Mana', juggernaut: 'Block broken', thief: 'Yoink', stunned: 'Stunned',
+      bull: 'Bull Market', bear: 'Bear Market', cheater: 'Cheater bonus Mana', duplicator: 'Mana duplicated', sumo: 'Free Attack',
     };
-    for (const kind of ['lucky', 'advantaged', 'juggernaut', 'thief', 'stunned'] as const satisfies readonly AbmProcTagKind[]) {
-      const tag = createBoilingSprite({ src: `${ABM_ROOT}/scenes/tags/${kind}-sheet.webp`, clock, className: `abm-proc-tag abm-proc-tag--${kind}`, alt: labels[kind] });
-      tag.element.hidden = true; sprites.push(tag); slot.append(tag.element); procTagSprites.set(`${player}:${kind}`, tag);
+    for (const kind of ['lucky', 'advantaged', 'juggernaut', 'thief', 'stunned', 'bull', 'bear', 'cheater', 'duplicator', 'sumo'] as const satisfies readonly AbmProcTagKind[]) {
+      const src = kind === 'sumo' ? `${ABM_ROOT}/scenes/tags/sumo-2-left-sheet.webp` : `${ABM_ROOT}/scenes/tags/${kind}-sheet.webp`;
+      const tag = createBoilingSprite({ src, clock, className: `abm-proc-tag abm-proc-tag--${kind}`, alt: labels[kind] });
+      const key = `${player}:${kind}`;
+      tag.element.hidden = true; sprites.push(tag); slot.append(tag.element); procTagSprites.set(key, tag); procTagAssets.set(key, src);
     }
     layout.slots.scene.append(slot); return slot;
   });
+  for (const player of ['p1', 'p2'] as const) {
+    for (const kind of ['bull', 'bear'] as const satisfies readonly AbmProcBackgroundKind[]) {
+      const background = createBoilingSprite({ src: `${ABM_ROOT}/scenes/backgrounds/${kind}-sheet.webp`, clock,
+        className: `abm-proc-background abm-proc-background--${player}`, alt: '' });
+      background.element.hidden = true; sprites.push(background); layout.slots.scene.prepend(background.element);
+      procBackgroundSprites.set(`${player}:${kind}`, background);
+    }
+  }
   const thiefTransfer = createBoilingSprite({ src: `${ABM_ROOT}/scenes/effects/thief-transfer-sheet.webp`, clock, className: 'abm-thief-transfer', alt: 'Mana stolen' });
   const thiefTransferMirror = createBoilingSprite({ src: `${ABM_ROOT}/scenes/effects/thief-transfer-mirror-sheet.webp`, clock, className: 'abm-thief-transfer abm-thief-transfer--mirror', alt: 'Simultaneous steals' });
   thiefTransfer.element.hidden = true; thiefTransferMirror.element.hidden = true; sprites.push(thiefTransfer, thiefTransferMirror);
@@ -370,6 +394,12 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     const continuingRoundProc = shouldShowAbmContinuingRoundProcTags(nextProjection.phase);
     const advantagedProcPlayers = continuingRoundProc ? nextProjection.advantagedProcPlayers : undefined;
     const juggernautProcPlayers = continuingRoundProc ? nextProjection.juggernautProcPlayers : undefined;
+    const stunnedPlayers = continuingRoundProc ? nextProjection.stunnedPlayers : undefined;
+    const investorBullPlayers = continuingRoundProc ? nextProjection.investorBullPlayers : undefined;
+    const investorBearPlayers = continuingRoundProc ? nextProjection.investorBearPlayers : undefined;
+    const duplicatorProcPlayers = continuingRoundProc ? nextProjection.duplicatorProcPlayers : undefined;
+    const sumoProcRemaining = continuingRoundProc ? nextProjection.sumoProcRemaining : undefined;
+    const cheaterProcPlayers = continuingRoundProc ? nextProjection.cheaterProcPlayers : undefined;
     const splitPlayer = nextProjection.phase === 'waiting' && nextProjection.waitingStartsAt !== undefined && serverTime >= nextProjection.waitingStartsAt
       ? nextProjection.earlyPlayer : nextProjection.heldSplitFor;
     const scene = splitPlayer
@@ -378,11 +408,25 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     layout.setArtwork('scene', { src: scene.src, alt: 'Attack Block Mana scene.' });
     sceneArtwork.classList.toggle('is-flipped', scene.flip);
     const visibleTags = !picking && !showingResult ? resolveAbmProcTags({
-      ...nextProjection, advantagedProcPlayers, juggernautProcPlayers,
+      ...nextProjection, advantagedProcPlayers, juggernautProcPlayers, stunnedPlayers, investorBullPlayers, investorBearPlayers, duplicatorProcPlayers,
+      sumoProcRemaining, cheaterProcPlayers,
     }, splitPlayer) : [];
     const visibleTagKeys = new Set(visibleTags.map(({ player, kind }) => `${player}:${kind}`));
     for (const [key, tag] of procTagSprites) tag.element.hidden = !visibleTagKeys.has(key);
-    for (const slot of procTagSlots) slot.hidden = picking || showingResult;
+    for (const visibleTag of visibleTags) {
+      const key = `${visibleTag.player}:${visibleTag.kind}`;
+      const tag = procTagSprites.get(key);
+      if (tag && procTagAssets.get(key) !== visibleTag.src) {
+        tag.setSource(visibleTag.src); procTagAssets.set(key, visibleTag.src);
+      }
+    }
+    const visibleBackgrounds = !picking && !showingResult ? resolveAbmProcBackgrounds({ investorBullPlayers, investorBearPlayers }, splitPlayer) : [];
+    const visibleBackgroundKeys = new Set(visibleBackgrounds.map(({ player, kind }) => `${player}:${kind}`));
+    for (const [key, background] of procBackgroundSprites) background.element.hidden = !visibleBackgroundKeys.has(key);
+    const countdownActive = nextProjection.phase === 'waiting'
+      && nextProjection.waitingStartsAt !== undefined && nextProjection.waitingDeadlineAt !== undefined
+      && getAbmWaitingVisual(serverTime, nextProjection.waitingStartsAt, nextProjection.waitingDeadlineAt).countdown !== undefined;
+    for (const slot of procTagSlots) slot.hidden = picking || showingResult || countdownActive;
     const simultaneousSteals = nextProjection.thiefAttemptPlayers?.length === 2;
     thiefTransfer.element.hidden = Boolean(splitPlayer) || showingResult || (!nextProjection.thiefTransferPlayer && !simultaneousSteals);
     thiefTransferMirror.element.hidden = Boolean(splitPlayer) || showingResult || !simultaneousSteals;
@@ -413,6 +457,10 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
       button.setLockedDepressed(nextProjection.ownPendingMove === move);
       button.setDisabled(transitioning || !nextProjection.legalActions.includes(move));
     }
+    const attackCostDisplay = getAbmAttackCostDisplay(ownPlayer);
+    stunnedCost.hidden = !attackCostDisplay.visible;
+    stunnedCostValue.textContent = String(attackCostDisplay.cost);
+    attackButton.element.setAttribute('aria-label', attackCostDisplay.label);
     updatePicker();
   }
 

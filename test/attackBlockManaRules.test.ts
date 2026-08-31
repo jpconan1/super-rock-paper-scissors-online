@@ -218,6 +218,326 @@ describe('Attack Block Mana rules', () => {
     expect(state.advantagedProcPlayers).toBeUndefined();
   });
 
+  test('starts and resets Investor at 5 Mana', () => {
+    let state = startedWith('investor', 'lucky');
+    expect(state.players).toMatchObject({ p1: { mana: 5 }, p2: { mana: 1 } });
+    state = playTurn(state, 'attack', 'mana');
+    expect(state).toMatchObject({ phase: 'counter-picking', players: { p1: { mana: 5 }, p2: { mana: 1 } } });
+    state = send(state, 'p2', { type: 'lock-class', classId: 'investor' }, state.counterPickAvailableAt);
+    expect(state.players).toMatchObject({ p1: { classId: 'investor', mana: 5 }, p2: { classId: 'investor', mana: 5 } });
+  });
+
+  test('gives Investor 2 Mana when both players Mana, including mirror and cap', () => {
+    let state = playTurn(startedWith('investor', 'lucky'), 'mana', 'mana');
+    expect(state.players).toMatchObject({ p1: { mana: 7 }, p2: { mana: 2 } });
+    expect(state.investorBullPlayers).toEqual(['p1']);
+
+    state = startedWith('investor', 'investor');
+    state.players.p1.mana = 8; state.players.p2.mana = 9;
+    state = playTurn(state, 'mana', 'mana');
+    expect(state.players).toMatchObject({ p1: { mana: 9 }, p2: { mana: 9 } });
+    expect(state.investorBullPlayers).toEqual(['p1', 'p2']);
+  });
+
+  test('applies Investor Bull on a forced zero-zero Mana turn', () => {
+    let state = startedWith('investor', 'lucky');
+    state.players.p1.mana = 0; state.players.p2.mana = 0;
+    state = playTurn(state, 'mana', 'mana');
+    expect(state.players).toMatchObject({ p1: { mana: 2 }, p2: { mana: 1 } });
+    expect(state.investorBullPlayers).toEqual(['p1']);
+  });
+
+  test('taxes Investor after moves on absolute third turns and records Bear only for an actual drain', () => {
+    let state = startedWith('investor', 'lucky');
+    state = playTurn(state, 'block', 'block');
+    state = playTurn(state, 'block', 'block');
+    state = playTurn(state, 'mana', 'mana');
+    expect(state.players.p1.mana).toBe(6);
+    expect(state.investorBullPlayers).toEqual(['p1']);
+    expect(state.investorBearPlayers).toEqual(['p1']);
+    expect(attackBlockManaRules.project(state, 'p1')).toMatchObject({ investorBullPlayers: ['p1'], investorBearPlayers: ['p1'] });
+
+    state = playTurn(state, 'block', 'block');
+    expect(state.investorBullPlayers).toBeUndefined();
+    expect(state.investorBearPlayers).toBeUndefined();
+
+    state.turn = 6; state.players.p1.mana = 0;
+    state = playTurn(state, 'block', 'block');
+    expect(state.players.p1.mana).toBe(0);
+    expect(state.investorBearPlayers).toBeUndefined();
+  });
+
+  test('taxes Investors after timeout move and strike deductions', () => {
+    let state = startedWith('investor', 'investor');
+    state.turn = 3; state.players.p1.mana = 2; state.players.p2.mana = 1;
+    state = send(state, 'p1', { type: 'choose-move', move: 'block' }, 2_000);
+    state = attackBlockManaRules.advanceDeadline!(state, { ...context, now: state.waitingDeadlineAt! })!.state;
+    expect(state.players).toMatchObject({ p1: { mana: 1 }, p2: { mana: 0, strikes: 1 } });
+    expect(state.investorBearPlayers).toEqual(['p1']);
+  });
+
+  test('grows Duplicator Mana gains 1, 2, 4, 8 and marks only duplicated gains', () => {
+    let state = startedWith('duplicator', 'duplicator');
+    for (const [mana, nextGain, proc] of [[2, 2, undefined], [4, 4, ['p1', 'p2']], [8, 8, ['p1', 'p2']], [9, 16, ['p1', 'p2']]] as const) {
+      state = playTurn(state, 'mana', 'mana');
+      expect(state.players.p1).toMatchObject({ mana, nextManaGain: nextGain });
+      expect(state.players.p2).toMatchObject({ mana, nextManaGain: nextGain });
+      expect(state.duplicatorProcPlayers).toEqual(proc);
+    }
+  });
+
+  test('advances Duplicator on forced Mana and keeps advancing at the Mana cap', () => {
+    let state = startedWith('duplicator', 'lucky');
+    state.players.p1.mana = 0; state.players.p2.mana = 0;
+    state.players.p1.nextManaGain = undefined;
+    state = playTurn(state, 'mana', 'mana');
+    expect(state.players.p1).toMatchObject({ mana: 1, nextManaGain: 2 });
+    expect(state.duplicatorProcPlayers).toBeUndefined();
+    state.players.p1.mana = 9;
+    state = playTurn(state, 'mana', 'block');
+    expect(state.players.p1).toMatchObject({ mana: 9, nextManaGain: 4 });
+    expect(state.duplicatorProcPlayers).toEqual(['p1']);
+  });
+
+  test('resets Duplicator chain on Attack, Block, Skip, and round reset', () => {
+    let attack = startedWith('duplicator', 'lucky');
+    attack.players.p1.nextManaGain = 8;
+    attack = playTurn(attack, 'attack', 'block');
+    expect(attack.players.p1.nextManaGain).toBe(1);
+
+    let block = startedWith('duplicator', 'lucky');
+    block.players.p1.nextManaGain = 8;
+    block = playTurn(block, 'block', 'block');
+    expect(block.players.p1.nextManaGain).toBe(1);
+
+    let skip = startedWith('lucky', 'duplicator');
+    skip.players.p2.nextManaGain = 8;
+    skip = send(skip, 'p1', { type: 'choose-move', move: 'block' }, 2_000);
+    skip = attackBlockManaRules.advanceDeadline!(skip, { ...context, now: skip.waitingDeadlineAt! })!.state;
+    expect(skip.players.p2.nextManaGain).toBe(1);
+
+    let round = startedWith('duplicator', 'lucky');
+    round.players.p1.nextManaGain = 8;
+    round = playTurn(round, 'attack', 'mana');
+    expect(round).toMatchObject({ phase: 'counter-picking', players: { p1: { nextManaGain: 1 } } });
+  });
+
+  test('holds Duplicator feedback while waiting and clears it on next reveal', () => {
+    let state = startedWith('duplicator', 'lucky');
+    state.players.p1.nextManaGain = 2;
+    state = playTurn(state, 'mana', 'block');
+    expect(state.duplicatorProcPlayers).toEqual(['p1']);
+    expect(attackBlockManaRules.project(state, 'p1').duplicatorProcPlayers).toEqual(['p1']);
+    state = send(state, 'p1', { type: 'choose-move', move: 'block' }, 2_000);
+    expect(state.duplicatorProcPlayers).toEqual(['p1']);
+    const resolution = attackBlockManaRules.resolve(state, 'p2', { type: 'choose-move', move: 'block' }, context);
+    expect(resolution.state.duplicatorProcPlayers).toBeUndefined();
+    expect(resolution.events?.[0]?.payload).toMatchObject({ duplicatorProcPlayers: [] });
+  });
+
+  test('gives Sumo three Attack-draw refunds with 2, 1, 0 charge feedback', () => {
+    let state = startedWith('sumo', 'sumo');
+    for (const remaining of [2, 1, 0] as const) {
+      state = playTurn(state, 'attack', 'attack');
+      expect(state.players.p1).toMatchObject({ mana: 1, refundsRemaining: remaining });
+      expect(state.players.p2).toMatchObject({ mana: 1, refundsRemaining: remaining });
+      expect(state.sumoProcRemaining).toEqual({ p1: remaining, p2: remaining });
+    }
+    state = playTurn(state, 'attack', 'attack');
+    expect(state.players).toMatchObject({ p1: { mana: 0, refundsRemaining: 0 }, p2: { mana: 0, refundsRemaining: 0 } });
+    expect(state.sumoProcRemaining).toBeUndefined();
+  });
+
+  test('charges Sumo normally outside Attack versus Attack and still requires Attack Mana', () => {
+    let state = startedWith('sumo', 'lucky');
+    state = playTurn(state, 'attack', 'block');
+    expect(state.players.p1).toMatchObject({ mana: 0, refundsRemaining: 3 });
+    expect(state.sumoProcRemaining).toBeUndefined();
+    expect(attackBlockManaRules.project(state, 'p1').legalActions).not.toContain('attack');
+    expect(() => send(state, 'p1', { type: 'choose-move', move: 'attack' })).toThrow('Attack requires 1 Mana.');
+  });
+
+  test('refunds Sumo full Stunner-modified Attack cost', () => {
+    let state = startedWith('sumo', 'stunner');
+    state.players.p1.mana = 5; state.players.p2.mana = 5;
+    state = playTurn(state, 'attack', 'attack');
+    expect(state.players.p1).toMatchObject({ mana: 5, attackCost: 2, refundsRemaining: 2 });
+    state = playTurn(state, 'attack', 'attack');
+    expect(state.players.p1).toMatchObject({ mana: 5, attackCost: 4, refundsRemaining: 1 });
+  });
+
+  test('defaults and resets Sumo refunds to three', () => {
+    let state = startedWith('sumo', 'lucky');
+    state.players.p1.refundsRemaining = undefined;
+    state = playTurn(state, 'attack', 'attack');
+    expect(state.players.p1.refundsRemaining).toBe(2);
+
+    state.players.p1.refundsRemaining = 0;
+    state = playTurn(state, 'attack', 'mana');
+    expect(state).toMatchObject({ phase: 'counter-picking', players: { p1: { mana: 1, refundsRemaining: 3 } } });
+  });
+
+  test('holds Sumo feedback while waiting and clears it next reveal', () => {
+    let state = playTurn(startedWith('sumo', 'lucky'), 'attack', 'attack');
+    expect(state.sumoProcRemaining).toEqual({ p1: 2 });
+    expect(attackBlockManaRules.project(state, 'p1').sumoProcRemaining).toEqual({ p1: 2 });
+    state = send(state, 'p1', { type: 'choose-move', move: 'block' }, 2_000);
+    expect(state.sumoProcRemaining).toEqual({ p1: 2 });
+    const resolution = attackBlockManaRules.resolve(state, 'p2', { type: 'choose-move', move: 'block' }, context);
+    expect(resolution.state.sumoProcRemaining).toBeUndefined();
+    expect(resolution.events?.[0]?.payload).toMatchObject({ sumoProcRemaining: {} });
+  });
+
+  test('gives Cheater 2 Mana below one third and 1 Mana at the boundary', () => {
+    let success = startedWith('cheater', 'lucky');
+    success = send(success, 'p1', { type: 'choose-move', move: 'mana' });
+    const successResolution = attackBlockManaRules.resolve(success, 'p2', { type: 'choose-move', move: 'block' }, { ...context, random: () => 1 / 3 - .0001 });
+    expect(successResolution.state.players.p1.mana).toBe(3);
+    expect(successResolution.state.cheaterProcPlayers).toEqual(['p1']);
+    expect(successResolution.events?.[0]?.payload).toMatchObject({ cheaterProcPlayers: ['p1'] });
+
+    let failure = startedWith('cheater', 'lucky');
+    failure = send(failure, 'p1', { type: 'choose-move', move: 'mana' });
+    failure = attackBlockManaRules.resolve(failure, 'p2', { type: 'choose-move', move: 'block' }, { ...context, random: () => 1 / 3 }).state;
+    expect(failure.players.p1.mana).toBe(2);
+    expect(failure.cheaterProcPlayers).toBeUndefined();
+  });
+
+  test('does not roll Cheater RNG for other classes or non-Mana moves', () => {
+    const random = vi.fn(() => 0);
+    let ordinary = startedWith('lucky', 'lucky');
+    ordinary = send(ordinary, 'p1', { type: 'choose-move', move: 'mana' });
+    attackBlockManaRules.resolve(ordinary, 'p2', { type: 'choose-move', move: 'block' }, { ...context, random });
+    expect(random).not.toHaveBeenCalled();
+
+    let cheater = startedWith('cheater', 'lucky');
+    cheater = send(cheater, 'p1', { type: 'choose-move', move: 'block' });
+    attackBlockManaRules.resolve(cheater, 'p2', { type: 'choose-move', move: 'block' }, { ...context, random });
+    expect(random).not.toHaveBeenCalled();
+  });
+
+  test('rolls mirror Cheaters independently in P1 then P2 order on forced Mana', () => {
+    const random = vi.fn().mockReturnValueOnce(.1).mockReturnValueOnce(.9);
+    let state = startedWith('cheater', 'cheater');
+    state.players.p1.mana = 0; state.players.p2.mana = 0;
+    state = send(state, 'p1', { type: 'choose-move', move: 'mana' });
+    state = attackBlockManaRules.resolve(state, 'p2', { type: 'choose-move', move: 'mana' }, { ...context, random }).state;
+    expect(state.players).toMatchObject({ p1: { mana: 2 }, p2: { mana: 1 } });
+    expect(state.cheaterProcPlayers).toEqual(['p1']);
+    expect(random).toHaveBeenCalledTimes(2);
+  });
+
+  test('rolls Cheater Mana on timeout and caps successful gain at 9', () => {
+    let timeout = startedWith('cheater', 'lucky');
+    timeout = send(timeout, 'p1', { type: 'choose-move', move: 'mana' }, 2_000);
+    timeout = attackBlockManaRules.advanceDeadline!(timeout, { ...context, now: timeout.waitingDeadlineAt!, random: () => 0 })!.state;
+    expect(timeout.players.p1.mana).toBe(3);
+    expect(timeout.cheaterProcPlayers).toEqual(['p1']);
+
+    let capped = startedWith('cheater', 'lucky');
+    capped.players.p1.mana = 9;
+    capped = send(capped, 'p1', { type: 'choose-move', move: 'mana' });
+    capped = attackBlockManaRules.resolve(capped, 'p2', { type: 'choose-move', move: 'block' }, { ...context, random: () => 0 }).state;
+    expect(capped.players.p1.mana).toBe(9);
+    expect(capped.cheaterProcPlayers).toEqual(['p1']);
+  });
+
+  test('holds Cheater feedback while waiting and clears it next reveal', () => {
+    let state = startedWith('cheater', 'lucky');
+    state = send(state, 'p1', { type: 'choose-move', move: 'mana' });
+    state = attackBlockManaRules.resolve(state, 'p2', { type: 'choose-move', move: 'block' }, { ...context, random: () => 0 }).state;
+    expect(attackBlockManaRules.project(state, 'p1').cheaterProcPlayers).toEqual(['p1']);
+    state = send(state, 'p1', { type: 'choose-move', move: 'block' }, 2_000);
+    expect(state.cheaterProcPlayers).toEqual(['p1']);
+    const resolution = attackBlockManaRules.resolve(state, 'p2', { type: 'choose-move', move: 'block' }, context);
+    expect(resolution.state.cheaterProcPlayers).toBeUndefined();
+    expect(resolution.events?.[0]?.payload).toMatchObject({ cheaterProcPlayers: [] });
+  });
+
+  test('doubles Stunner Attack cost through 2, 4, and capped 8', () => {
+    let state = startedWith('stunner', 'lucky');
+    state.players.p1.mana = 9;
+    state.players.p2.mana = 9;
+    for (const cost of [2, 4, 8, 8]) {
+      state = playTurn(state, 'attack', 'block');
+      expect(state.players.p2.attackCost).toBe(cost);
+      expect(state.stunnedPlayers).toEqual(['p2']);
+    }
+  });
+
+  test('requires and spends the full stunned Attack cost before Stunner resets it', () => {
+    let state = startedWith('stunner', 'lucky');
+    state.players.p1.mana = 9;
+    state.players.p2.mana = 9;
+    state = playTurn(state, 'attack', 'block');
+    state = playTurn(state, 'attack', 'block');
+    expect(state.players.p2.attackCost).toBe(4);
+    state.players.p2.mana = 3;
+    expect(attackBlockManaRules.project(state, 'p2').legalActions).not.toContain('attack');
+    expect(() => send(state, 'p2', { type: 'choose-move', move: 'attack' })).toThrow('Attack requires 4 Mana.');
+    state.players.p2.mana = 9;
+    state = playTurn(state, 'block', 'attack');
+    expect(state.players.p2).toMatchObject({ mana: 5, attackCost: 1 });
+    expect(state.stunnedPlayers).toBeUndefined();
+  });
+
+  test('resets Stunner cost with Mana and Skip', () => {
+    let manaState = startedWith('stunner', 'lucky');
+    manaState.players.p2.attackCost = 8;
+    manaState = playTurn(manaState, 'mana', 'block');
+    expect(manaState.players.p2.attackCost).toBe(1);
+
+    let skipState = startedWith('lucky', 'stunner');
+    skipState.players.p1.attackCost = 4;
+    skipState = send(skipState, 'p1', { type: 'choose-move', move: 'block' }, 2_000);
+    skipState = attackBlockManaRules.advanceDeadline!(skipState, { ...context, now: skipState.waitingDeadlineAt! })!.state;
+    expect(skipState.players.p1.attackCost).toBe(1);
+  });
+
+  test('mirror Stunners stun each other independently', () => {
+    let state = startedWith('stunner', 'stunner');
+    state.players.p1.mana = 9;
+    state.players.p2.mana = 9;
+    state = playTurn(state, 'attack', 'attack');
+    expect(state.players.p1.attackCost).toBe(2);
+    expect(state.players.p2.attackCost).toBe(2);
+    expect(state.stunnedPlayers).toEqual(['p2', 'p1']);
+  });
+
+  test('stacks Lucky survival with Stunner feedback and clears stale feedback next reveal', () => {
+    let state = startedWith('lucky', 'stunner');
+    state = send(state, 'p1', { type: 'choose-move', move: 'mana' });
+    state = attackBlockManaRules.resolve(state, 'p2', { type: 'choose-move', move: 'attack' }, { ...context, random: () => 0 }).state;
+    expect(state).toMatchObject({ phase: 'idle', luckyProcPlayer: 'p1', stunnedPlayers: ['p1'] });
+    expect(state.players.p1.attackCost).toBe(2);
+    state = playTurn(state, 'block', 'mana');
+    expect(state.stunnedPlayers).toBeUndefined();
+  });
+
+  test('caps ordinary, Advantaged, forced, and stolen Mana at 9', () => {
+    let ordinary = startedWith('lucky', 'lucky');
+    ordinary.players.p1.mana = 9;
+    ordinary = playTurn(ordinary, 'mana', 'block');
+    expect(ordinary.players.p1.mana).toBe(9);
+
+    let advantaged = startedWith('advantaged', 'lucky');
+    advantaged.players.p1.mana = 8;
+    advantaged = playTurn(advantaged, 'mana', 'block');
+    expect(advantaged.players.p1.mana).toBe(9);
+
+    let forced = startedWith('advantaged', 'lucky');
+    forced.players.p1.mana = 0; forced.players.p2.mana = 0;
+    forced = playTurn(forced, 'mana', 'mana');
+    expect(forced.players.p1.mana).toBe(2);
+
+    let thief = thiefTurnFive();
+    thief.players.p1.mana = 9; thief.players.p2.mana = 2;
+    thief = send(thief, 'p1', { type: 'choose-move', move: 'block', useSteal: true });
+    thief = send(thief, 'p2', { type: 'choose-move', move: 'block' });
+    expect(thief.players.p1.mana).toBe(9);
+    expect(thief.players.p2.mana).toBe(1);
+  });
+
   test('keeps Steal unavailable through Turn 4 and private when armed on Turn 5', () => {
     let state = thiefTurnFive();
     expect(attackBlockManaRules.project(state, 'p1').legalActions).toContain('steal');

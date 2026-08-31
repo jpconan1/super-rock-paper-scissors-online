@@ -1,8 +1,8 @@
 import type { PlayerId, VariantGameResult } from '../../core/variant';
 
 export const ABM_CLASS_IDS = [
-  'lucky', 'advantaged', 'thief', 'investor', 'sumo', 'cheater', 'duplicator',
-  'stunner', 'juggernaut',
+  'lucky', 'advantaged', 'thief', 'juggernaut', 'stunner', 'duplicator', 'sumo',
+  'cheater', 'investor',
 ] as const;
 
 export type AbmClassId = typeof ABM_CLASS_IDS[number];
@@ -24,6 +24,12 @@ export interface AbmPlayerState {
   lastMove?: AbmDisplayMove;
   stealUsed?: boolean;
   attackStreak?: number;
+  /** Missing on matches persisted before Stunner; treat as the ordinary cost of 1. */
+  attackCost?: number;
+  /** Missing on matches persisted before Duplicator; treat as 1. */
+  nextManaGain?: number;
+  /** Missing on matches persisted before Sumo; treat as 3. */
+  refundsRemaining?: number;
 }
 
 export interface AbmState {
@@ -44,6 +50,11 @@ export interface AbmState {
   thiefTransferPlayer?: PlayerId;
   juggernautProcPlayers?: PlayerId[];
   stunnedPlayers?: PlayerId[];
+  investorBullPlayers?: PlayerId[];
+  investorBearPlayers?: PlayerId[];
+  duplicatorProcPlayers?: PlayerId[];
+  sumoProcRemaining?: Partial<Record<PlayerId, 0 | 1 | 2>>;
+  cheaterProcPlayers?: PlayerId[];
   earlyPlayer?: PlayerId;
   latePlayer?: PlayerId;
   waitingStartsAt?: number;
@@ -85,6 +96,11 @@ export interface AbmProjection {
   thiefTransferPlayer?: PlayerId;
   juggernautProcPlayers?: PlayerId[];
   stunnedPlayers?: PlayerId[];
+  investorBullPlayers?: PlayerId[];
+  investorBearPlayers?: PlayerId[];
+  duplicatorProcPlayers?: PlayerId[];
+  sumoProcRemaining?: Partial<Record<PlayerId, 0 | 1 | 2>>;
+  cheaterProcPlayers?: PlayerId[];
   earlyPlayer?: PlayerId;
   latePlayer?: PlayerId;
   waitingStartsAt?: number;

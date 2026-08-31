@@ -6,10 +6,13 @@ const BASE_ROOT = `${ROOT}/base`;
 const EXCEPTION_ROOT = `${ROOT}/exceptions`;
 const SPLIT_ROOT = `${ROOT}/splits`;
 const TAG_ROOT = `${ROOT}/tags`;
+const BACKGROUND_ROOT = `${ROOT}/backgrounds`;
 
 export interface AbmScene { src: string; flip: boolean }
-export type AbmProcTagKind = 'advantaged' | 'juggernaut' | 'lucky' | 'stunned' | 'thief';
+export type AbmProcTagKind = 'advantaged' | 'bear' | 'bull' | 'cheater' | 'duplicator' | 'juggernaut' | 'lucky' | 'stunned' | 'sumo' | 'thief';
 export interface AbmProcTag { kind: AbmProcTagKind; player: PlayerId; src: string }
+export type AbmProcBackgroundKind = 'bear' | 'bull';
+export interface AbmProcBackground { kind: AbmProcBackgroundKind; player: PlayerId; src: string }
 
 interface ProcTagState {
   luckyProcPlayer?: PlayerId;
@@ -17,6 +20,11 @@ interface ProcTagState {
   thiefAttemptPlayers?: readonly PlayerId[];
   juggernautProcPlayers?: readonly PlayerId[];
   stunnedPlayers?: readonly PlayerId[];
+  investorBullPlayers?: readonly PlayerId[];
+  investorBearPlayers?: readonly PlayerId[];
+  duplicatorProcPlayers?: readonly PlayerId[];
+  sumoProcRemaining?: Partial<Record<PlayerId, 0 | 1 | 2>>;
+  cheaterProcPlayers?: readonly PlayerId[];
 }
 
 export function resolveAbmScene(moves?: Readonly<Record<PlayerId, AbmMove>>, luckyProcPlayer?: PlayerId): AbmScene {
@@ -48,12 +56,32 @@ export function resolveAbmProcTags(state: ProcTagState, hiddenPlayer?: PlayerId)
   add('juggernaut', state.juggernautProcPlayers?.map(other));
   add('thief', state.thiefAttemptPlayers);
   add('stunned', state.stunnedPlayers);
+  add('bull', state.investorBullPlayers);
+  add('bear', state.investorBearPlayers);
+  add('duplicator', state.duplicatorProcPlayers);
+  add('cheater', state.cheaterProcPlayers);
+  for (const player of ['p1', 'p2'] as const) {
+    const remaining = state.sumoProcRemaining?.[player];
+    if (remaining !== undefined && player !== hiddenPlayer) tags.push({ kind: 'sumo', player, src: `${TAG_ROOT}/sumo-${remaining}-left-sheet.webp` });
+  }
   return tags;
+}
+
+export function resolveAbmProcBackgrounds(state: ProcTagState, hiddenPlayer?: PlayerId): AbmProcBackground[] {
+  const bull = new Set(state.investorBullPlayers ?? []);
+  const bear = new Set(state.investorBearPlayers ?? []);
+  const backgrounds: AbmProcBackground[] = [];
+  for (const player of ['p1', 'p2'] as const) {
+    if (player === hiddenPlayer || (bull.has(player) && bear.has(player))) continue;
+    const kind: AbmProcBackgroundKind | undefined = bull.has(player) ? 'bull' : bear.has(player) ? 'bear' : undefined;
+    if (kind) backgrounds.push({ kind, player, src: `${BACKGROUND_ROOT}/${kind}-sheet.webp` });
+  }
+  return backgrounds;
 }
 
 const SPLIT_BASE_SCENE_NAMES = ['standoff', 'attack-draw', 'block-attack', 'block-draw', 'block-mana', 'mana-draw'] as const;
 const BASE_SCENE_NAMES = [...SPLIT_BASE_SCENE_NAMES, 'mana-attack'] as const;
-const TAG_NAMES: readonly AbmProcTagKind[] = ['advantaged', 'juggernaut', 'lucky', 'stunned', 'thief'];
+const TAG_NAMES: readonly Exclude<AbmProcTagKind, 'sumo'>[] = ['advantaged', 'bear', 'bull', 'cheater', 'duplicator', 'juggernaut', 'lucky', 'stunned', 'thief'];
 
 export const ABM_SCENE_URLS = [
   ...BASE_SCENE_NAMES.map((name) => `${BASE_ROOT}/${name}-sheet.webp`),
@@ -61,6 +89,8 @@ export const ABM_SCENE_URLS = [
   ...SPLIT_BASE_SCENE_NAMES.flatMap((name) => (['p1', 'p2'] as const).map((player) => `${SPLIT_ROOT}/base/${name}-${player}-ready-sheet.webp`)),
   ...(['p1', 'p2'] as const).map((player) => `${SPLIT_ROOT}/exceptions/lucky-survival-${player}-ready-sheet.webp`),
   ...TAG_NAMES.map((name) => `${TAG_ROOT}/${name}-sheet.webp`),
+  ...([0, 1, 2] as const).map((remaining) => `${TAG_ROOT}/sumo-${remaining}-left-sheet.webp`),
+  ...(['bear', 'bull'] as const).map((name) => `${BACKGROUND_ROOT}/${name}-sheet.webp`),
   `${ROOT}/effects/thief-transfer-sheet.webp`, `${ROOT}/effects/thief-transfer-mirror-sheet.webp`,
 ];
 
