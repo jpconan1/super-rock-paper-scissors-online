@@ -5,6 +5,9 @@ import { BoilClock } from './animation/boilClock';
 import { isBoilEnabled } from './input/boilToggle';
 import { createClientSeasonManifest } from './variants/clientSeasonManifest';
 import { resolveServerUrl } from './app/serverUrl';
+import { installStaleChunkRecovery } from './app/staleChunkRecovery';
+
+installStaleChunkRecovery();
 
 const app = document.querySelector<HTMLElement>('#app');
 if (!app) throw new Error('Missing #app mount point.');
