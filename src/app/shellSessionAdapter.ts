@@ -341,7 +341,8 @@ export class LocalShellSessionAdapter implements ShellSessionAdapter {
 
 export function serializeVariantCommand(command: unknown): unknown {
   if (typeof command === 'object' && command !== null && 'type' in command
-    && ((command as { type?: unknown }).type === 'choose-move' || (command as { type?: unknown }).type === 'lock-class')) return command;
+    && ((command as { type?: unknown }).type === 'choose-move' || (command as { type?: unknown }).type === 'lock-class'
+      || (command as { type?: unknown }).type === 'preview-class')) return command;
   if (typeof command === 'object' && command !== null && 'move' in command) return (command as { move: unknown }).move;
   return command;
 }

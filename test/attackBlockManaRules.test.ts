@@ -95,6 +95,21 @@ describe('Attack Block Mana rules', () => {
     expect(state).toMatchObject({ phase: 'counter-picking', players: { p1: { mana: 1 }, p2: { mana: 1 } } });
   });
 
+  test('broadcasts only the active loser\'s available counter-pick previews', () => {
+    const state = playTurn(startedWith('lucky', 'advantaged'), 'attack', 'mana');
+    const availableAt = state.counterPickAvailableAt!;
+    expect(() => attackBlockManaRules.resolve(state, 'p1', { type: 'preview-class', classId: 'investor' }, { ...context, now: availableAt }))
+      .toThrow('cannot be previewed');
+    expect(() => attackBlockManaRules.resolve(state, 'p2', { type: 'preview-class', classId: 'investor' }, { ...context, now: availableAt - 1 }))
+      .toThrow('not available');
+
+    const resolution = attackBlockManaRules.resolve(state, 'p2', { type: 'preview-class', classId: 'investor' }, { ...context, now: availableAt });
+    expect(resolution.state).toBe(state);
+    expect(resolution.events).toEqual([{ type: 'class-preview', startsAt: availableAt, endsAt: availableAt + 600, payload: { player: 'p2', classId: 'investor' } }]);
+    expect(resolution.state.players.p2.classId).toBe('advantaged');
+    expect(attackBlockManaRules.project(resolution.state, 'p1').legalActions).toEqual([]);
+  });
+
   test('holds the lethal scene one visible beat and the round result two visible beats', () => {
     let state = started();
     state = send(state, 'p1', { type: 'choose-move', move: 'attack' }, 2_000);

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { ABM_CLASSES } from '../src/variants/attackBlockMana/attackBlockManaCatalog';
-import { ABM_BACK_LOBBY_ART, ABM_LAYOUTS, ABM_RESULT_SCENES, ABM_SELECT_ART, blockSegments, getAbmAttackCostDisplay, getAbmClassReadyFrame, getAbmResultScene, getAbmThiefControlGeometry, getAbmWaitingVisual, sceneForMoves, shouldShowAbmContinuingRoundProcTags, shouldShowAbmYouTag, shouldShowClassReadyOpponentTag } from '../src/variants/attackBlockMana/attackBlockManaPresentation';
+import { ABM_BACK_LOBBY_ART, ABM_LAYOUTS, ABM_RESULT_SCENES, ABM_SELECT_ART, blockSegments, getAbmAttackCostDisplay, getAbmClassReadyFrame, getAbmResultScene, getAbmThiefControlGeometry, getAbmWaitingVisual, initialManaForClass, latestClassPreview, sceneForMoves, shouldShowAbmContinuingRoundProcTags, shouldShowAbmYouTag, shouldShowClassBadge, shouldShowClassReadyOpponentTag } from '../src/variants/attackBlockMana/attackBlockManaPresentation';
 import type { AbmProjection } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 import { ABM_CLASS_IDS } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 import { ABM_SCENE_URLS, resolveAbmProcBackgrounds, resolveAbmProcTags, resolveAbmScene, resolveAbmSplitScene } from '../src/variants/attackBlockMana/attackBlockManaScenes';
@@ -34,6 +34,24 @@ describe('Attack Block Mana presentation data', () => {
 
   test('starts the class-select order with Lucky', () => {
     expect(ABM_CLASSES[0]?.id).toBe('lucky');
+  });
+
+  test('previews class starting Mana and reads the newest counter-pick event', () => {
+    for (const definition of ABM_CLASSES) expect(initialManaForClass(definition.id)).toBe(definition.id === 'investor' ? 5 : 1);
+    const events = [
+      { id: 'one', type: 'class-preview' as const, startsAt: 1, endsAt: 2, payload: { player: 'p2', classId: 'lucky' } },
+      { id: 'two', type: 'class-preview' as const, startsAt: 2, endsAt: 3, payload: { player: 'p2', classId: 'investor' } },
+    ];
+    expect(latestClassPreview(events, 'p2')).toBe('investor');
+    expect(latestClassPreview(events, 'p1')).toBeUndefined();
+  });
+
+  test('keeps only the winner class badge during a counter-pick', () => {
+    const counterPick = { phase: 'counter-picking' as const, counterPicker: 'p2' as const };
+    expect(shouldShowClassBadge(counterPick, 'p1')).toBe(true);
+    expect(shouldShowClassBadge(counterPick, 'p2')).toBe(false);
+    expect(shouldShowClassBadge({ phase: 'selecting-classes' }, 'p1')).toBe(false);
+    expect(shouldShowClassBadge({ phase: 'idle' }, 'p1')).toBe(true);
   });
 
   test('keeps full-size controls and shifts the Thief cluster right', () => {
@@ -215,6 +233,7 @@ describe('Attack Block Mana presentation data', () => {
     expect(document.elements.map(({ id }) => id)).toEqual(expect.arrayContaining([
       'p1-info', 'p2-info', 'turn', 'scene', 'scene-art', 'menu', 'rules',
       'picker-portrait', 'picker-copy', 'picker-prev', 'picker-next', 'lock-class', 'p1-class-badge', 'p2-class-badge',
+      'p2-counterpick-tag',
       'attack', 'block', 'mana', 'back-lobby', 'arrow-attack-block', 'arrow-block-mana', 'arrow-mana-attack', 'waiting-ready', 'waiting-dots',
       'p1-mana-group', 'p1-mana-icon', 'p1-mana-count', 'p1-block-group', 'p1-block-1', 'p1-block-5',
       'p2-mana-group', 'p2-mana-icon', 'p2-mana-count', 'p2-block-group', 'p2-block-1', 'p2-block-5',
@@ -250,6 +269,7 @@ describe('Attack Block Mana presentation data', () => {
     expect(assets('p1-mana-icon')?.src).toBe('/variants/abm/mana-icon-sheet.webp');
     expect(assets('p1-mana-count')?.src).toBe('/visual-elements/resource-counters/times1-sheet.webp');
     expect(assets('p1-block-1')?.src).toBe('/variants/abm/block-icon-sheet.webp');
+    expect(assets('p2-counterpick-tag')?.src).toBe('/variants/abm/counterpick-tag-sheet.webp');
     for (const element of document.elements) expect(Object.keys(element.layouts).sort()).toEqual(['landscape', 'portrait']);
   });
 

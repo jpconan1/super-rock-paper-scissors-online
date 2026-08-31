@@ -761,6 +761,7 @@ input {
 .abm-picker__copy { display: grid; align-content: center; justify-items: center; gap: 5px; width: 176px; height: 176px; padding: 10px 12px; overflow: hidden; text-align: center; }
 .abm-picker__name { color: #ac3235; font-size: 22px; line-height: 1; }
 .abm-class-badge { position: absolute; overflow: visible; }
+.abm-counterpick-tag { position: absolute; z-index: 5; overflow: visible; pointer-events: none; }
 .abm-picker__description { margin: 0; font-size: 14px; line-height: 1.08; }
 .abm-picker__status { font-size: 10px; font-weight: 900; letter-spacing: .04em; }
 .game-button.abm-picker__arrow { z-index: 5; min-width: 0; min-height: 0; aspect-ratio: 2; padding: 0; border: 0; background: none; }

@@ -14,6 +14,7 @@ export type AbmPhase =
 
 export type AbmCommand =
   | { type: 'lock-class'; classId: AbmClassId }
+  | { type: 'preview-class'; classId: AbmClassId }
   | { type: 'choose-move'; move: AbmMove; useSteal?: true };
 
 export interface AbmPlayerState {

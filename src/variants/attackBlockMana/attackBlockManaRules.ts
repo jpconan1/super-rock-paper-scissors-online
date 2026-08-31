@@ -21,6 +21,7 @@ export const attackBlockManaRules: VariantRules<AbmState, AbmCommand, AbmProject
     if (state.winner) throw new Error('Game is complete.');
     if (!command || typeof command !== 'object') throw new Error('Invalid ABM command.');
     if (command.type === 'lock-class') return lockClass(state, player, command.classId, context.now);
+    if (command.type === 'preview-class') return previewClass(state, player, command.classId, context.now);
     if (command.type === 'choose-move') return chooseMove(state, player, command.move, command.useSteal, context);
     throw new Error('Unknown ABM command.');
   },
@@ -70,6 +71,14 @@ export const attackBlockManaRules: VariantRules<AbmState, AbmCommand, AbmProject
     winner: state.winner, scores: { ...state.score }, ...(state.resultReason ? { reason: state.resultReason } : {}),
   } : undefined,
 };
+
+function previewClass(state: AbmState, player: PlayerId, classId: AbmClassId, now: number): VariantResolution<AbmState> {
+  const definition = ABM_CLASS_BY_ID.get(classId);
+  if (!definition?.implemented) throw new Error('Unknown or unavailable ABM class.');
+  if (state.phase !== 'counter-picking' || state.counterPicker !== player) throw new Error('Class cannot be previewed now.');
+  if (state.counterPickAvailableAt !== undefined && now < state.counterPickAvailableAt) throw new Error('Counter-pick is not available yet.');
+  return { state, events: [cue('class-preview', now, 600, { player, classId })] };
+}
 
 function lockClass(state: AbmState, player: PlayerId, classId: AbmClassId, now: number): VariantResolution<AbmState> {
   const definition = ABM_CLASS_BY_ID.get(classId);
@@ -336,6 +345,6 @@ function isBlockDisabled(state: Readonly<AbmState>, player: PlayerId): boolean {
   return opponent.classId === 'juggernaut' && (opponent.attackStreak ?? 0) > 0 && (opponent.attackStreak ?? 0) % 2 === 0;
 }
 function isActionPhase(phase: AbmState['phase']): boolean { return ['idle', 'waiting', 'selecting-actions', 'waiting-for-action'].includes(phase as string); }
-function cue(type: 'class-ready' | 'class-reveal' | 'move-ready' | 'move-reveal' | 'move-timeout' | 'forced-mana' | 'round-result' | 'counter-pick', startsAt: number, duration: number, payload: unknown) {
+function cue(type: 'class-ready' | 'class-reveal' | 'class-preview' | 'move-ready' | 'move-reveal' | 'move-timeout' | 'forced-mana' | 'round-result' | 'counter-pick', startsAt: number, duration: number, payload: unknown) {
   return { type, startsAt, endsAt: startsAt + duration, payload } as const;
 }

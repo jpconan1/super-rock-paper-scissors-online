@@ -11,6 +11,8 @@ describe('matchmaking session adapters', () => {
   test('preserves ABM command envelopes while unwrapping legacy move commands', () => {
     const abm = { type: 'choose-move', move: 'attack' } as const;
     expect(serializeVariantCommand(abm)).toBe(abm);
+    const preview = { type: 'preview-class', classId: 'investor' };
+    expect(serializeVariantCommand(preview)).toBe(preview);
     expect(serializeVariantCommand({ type: 'move', move: 'fireball' })).toBe('fireball');
   });
   beforeEach(() => {

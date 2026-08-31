@@ -13,12 +13,13 @@ import { playStarburstWipe } from '../../renderer/starburstWipe';
 import { createTextbox } from '../../ui/textbox';
 import { ABM_CLASSES } from './attackBlockManaCatalog';
 import { ABM_SCENE_URLS, resolveAbmProcBackgrounds, resolveAbmProcTags, resolveAbmScene, resolveAbmSplitScene, type AbmProcBackgroundKind, type AbmProcTagKind } from './attackBlockManaScenes';
-import type { AbmCommand, AbmMove, AbmPlayerState, AbmProjection } from './attackBlockManaTypes';
+import type { AbmClassId, AbmCommand, AbmMove, AbmPlayerState, AbmProjection } from './attackBlockManaTypes';
 import { playCatalogSound, type SoundId } from '../../audio/soundCatalog';
 import type { MusicDirector } from '../../audio/musicDirector';
 
 const ABM_ROOT = '/variants/abm';
 const STUNNED_BUTTON_TAG = `${ABM_ROOT}/stunned-button-tag-sheet.webp`;
+const COUNTERPICK_TAG = `${ABM_ROOT}/counterpick-tag-sheet.webp`;
 const SYSTEM_SCENE_ROOT = '/visual-elements/system-scenes';
 export const ABM_RESULT_SCENES = {
   roundWon: `${SYSTEM_SCENE_ROOT}/round-won-sheet.webp`,
@@ -119,7 +120,7 @@ export function createAttackBlockManaPresentation(
         ...Array.from({ length: 10 }, (_, index) => `/visual-elements/resource-counters/times${index}-sheet.webp`),
         ...Array.from({ length: 5 }, (_, index) => `/visual-elements/ready-waiting/countdown${index + 1}-sheet.webp`),
         ...Object.values(ABM_RESULT_SCENES), ...Object.values(ABM_BACK_LOBBY_ART),
-        STUNNED_BUTTON_TAG, ...ABM_SCENE_URLS];
+        STUNNED_BUTTON_TAG, COUNTERPICK_TAG, ...ABM_SCENE_URLS];
       const lease = assetLoader.retainUrls(urls); await lease.ready; return lease;
     },
     mount({ container, send, openMenu, backToLobby, self, players, music }) {
@@ -230,6 +231,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   let resultAsset: string = ABM_RESULT_SCENES.roundWon;
   let sceneArtwork: HTMLElement;
   let classBadges: { player: 'p1' | 'p2'; badge: BoilingSprite; asset: string }[] = [];
+  let counterpickTag: BoilingSprite | undefined;
   const procTagSprites = new Map<string, BoilingSprite>();
   const procTagAssets = new Map<string, string>();
   const procBackgroundSprites = new Map<string, BoilingSprite>();
@@ -276,6 +278,8 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   layout.slots.scene.append(thiefTransfer.element, thiefTransferMirror.element);
   layout.composition.append(steal.element);
   layout.composition.append(classReadyArt.element, classReadyOpponentTag.element);
+  counterpickTag = createBoilingSprite({ src: COUNTERPICK_TAG, clock, className: 'abm-counterpick-tag', alt: 'Counterpick' });
+  counterpickTag.element.hidden = true; sprites.push(counterpickTag); layout.composition.append(counterpickTag.element);
   sceneArtwork = layout.slots.scene.querySelector<HTMLElement>('.game-layout__scene')!;
   sceneArtwork.hidden = true;
   controls.append(previous.element, next.element);
@@ -288,9 +292,15 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     sprites.push(badge); layout.composition.append(badge.element);
     return { player, badge, asset: '' };
   });
+  applyVariantLayout();
 
   function arrow(label: string, key: string, delta: number) {
-    const button = createGameButton({ label, clock, onActivate: () => { selected = (selected + delta + ABM_CLASSES.length) % ABM_CLASSES.length; updatePicker(); },
+    const button = createGameButton({ label, clock, onActivate: () => {
+      selected = (selected + delta + ABM_CLASSES.length) % ABM_CLASSES.length; updatePicker();
+      if (projection?.phase === 'counter-picking' && projection.counterPicker === projection.self) {
+        send({ type: 'preview-class', classId: ABM_CLASSES[selected]!.id });
+      }
+    },
       upSheet: `${ABM_ROOT}/${key}-button-up-sheet.webp`, betweenSheet: `${ABM_ROOT}/${key}-button-between-sheet.webp`, depressedSheet: `${ABM_ROOT}/${key}-button-depressed-sheet.webp` });
     button.element.classList.add('abm-picker__arrow', `abm-picker__arrow--${key.toLowerCase()}`, 'game-button--baked-label'); buttons.push(button); return button;
   }
@@ -299,6 +309,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     const bindings: readonly [string, HTMLElement][] = [['picker-prev', previous.element], ['picker-next', next.element], ['lock-class', lock.element], ['steal', steal.element],
       ['back-lobby', lobby.element],
       ['class-ready', classReadyArt.element], ['class-ready-opponent-tag', classReadyOpponentTag.element],
+      ...(counterpickTag ? [['p2-counterpick-tag', counterpickTag.element] as [string, HTMLElement]] : []),
       ...(sceneArtwork ? [['scene-art', sceneArtwork] as [string, HTMLElement]] : []),
       ['picker-portrait', portrait.element], ['picker-copy', copy.element], ['waiting-ready', readyArt.element], ['waiting-dots', dotsArt.element],
       ['waiting-ready', countdownArt.element],
@@ -318,6 +329,11 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   function updatePicker() {
     const definition = ABM_CLASSES[selected]!; portrait.setSource(definition.asset); portrait.element.setAttribute('aria-label', definition.name);
     className.textContent = definition.name; description.textContent = definition.description;
+    if (projection && (projection.phase === 'selecting-classes' || projection.phase === 'waiting-for-class' || projection.phase === 'counter-picking')) {
+      const previewPlayer = projection.phase === 'counter-picking' ? projection.counterPicker : projection.self;
+      if (previewPlayer === 'p1') setManaDisplay(p1Resources, initialManaForClass(definition.id));
+      if (previewPlayer === 'p2') setManaDisplay(p2Resources, initialManaForClass(definition.id));
+    }
     const canPick = Boolean(projection?.legalActions.includes('lock-class'));
     status.textContent = projection?.ownPendingClass ? 'LOCKED · WAITING' : projection?.phase === 'counter-picking' && projection.counterPicker !== projection.self ? 'WINNER STAYS' : definition.implemented ? 'PLAYABLE' : 'UNFINISHED';
     lock.setDisabled(!definition.implemented || !canPick); previous.setDisabled(!canPick); next.setDisabled(!canPick);
@@ -390,6 +406,12 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     if (picking && nextProjection.phase === 'counter-picking' && nextProjection.counterPicker !== nextProjection.self) {
       const ownClass = nextProjection.players[nextProjection.self].classId; const index = ABM_CLASSES.findIndex(({ id }) => id === ownClass); if (index >= 0) selected = index;
     }
+    const preview = latestClassPreview(events, nextProjection.counterPicker);
+    if (picking && preview) {
+      const index = ABM_CLASSES.findIndex(({ id }) => id === preview); if (index >= 0) selected = index;
+    }
+    const showCounterpickTags = picking && nextProjection.phase === 'counter-picking';
+    if (counterpickTag) counterpickTag.element.hidden = !showCounterpickTags;
     layout.setArtwork('turn', turnArtwork(nextProjection.turn)); layout.setArtwork('p1Wins', winArtwork('p1', nextProjection.score.p1)); layout.setArtwork('p2Wins', winArtwork('p2', nextProjection.score.p2));
     const continuingRoundProc = shouldShowAbmContinuingRoundProcTags(nextProjection.phase);
     const advantagedProcPlayers = continuingRoundProc ? nextProjection.advantagedProcPlayers : undefined;
@@ -432,7 +454,10 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     thiefTransferMirror.element.hidden = Boolean(splitPlayer) || showingResult || !simultaneousSteals;
     thiefTransfer.element.classList.toggle('is-flipped', nextProjection.thiefTransferPlayer === 'p2');
     renderStatus(p1Status, nextProjection, 'p1', picking); renderStatus(p2Status, nextProjection, 'p2', picking);
-    renderResources(p1Resources, nextProjection, 'p1'); renderResources(p2Resources, nextProjection, 'p2');
+    const previewPlayer = picking ? (nextProjection.phase === 'counter-picking' ? nextProjection.counterPicker : nextProjection.self) : undefined;
+    const previewMana = initialManaForClass(ABM_CLASSES[selected]!.id);
+    renderResources(p1Resources, nextProjection, 'p1', previewPlayer === 'p1' ? previewMana : undefined);
+    renderResources(p2Resources, nextProjection, 'p2', previewPlayer === 'p2' ? previewMana : undefined);
     const showWaiting = nextProjection.phase === 'waiting';
     const showClassReady = picking && nextProjection.classReadyPlayer !== undefined && nextProjection.classReadyAt !== undefined;
     waiting.hidden = !showWaiting;
@@ -443,7 +468,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     for (const item of classBadges) {
       const classId = nextProjection.players[item.player].classId;
       const definition = ABM_CLASSES.find(({ id }) => id === classId);
-      item.badge.element.hidden = picking || !definition;
+      item.badge.element.hidden = !definition || !shouldShowClassBadge(nextProjection, item.player);
       if (definition && item.asset !== definition.badgeAsset) {
         item.asset = definition.badgeAsset; item.badge.setSource(definition.badgeAsset); item.badge.element.setAttribute('aria-label', `${definition.name} badge`);
       }
@@ -560,15 +585,35 @@ function resourceDisplay(label: string, player: 'p1' | 'p2', clock: BoilClock, s
     ...blocks.map(({ item }, index) => [`${player}-block-${index + 1}`, item] as [string, HTMLElement]),
   ] };
 }
-function renderResources(target: ResourceDisplay, projection: AbmProjection, player: 'p1' | 'p2') {
-  const state = projection.players[player]; const mana = Math.max(0, Math.min(9, state.mana));
-  target.manaCountElement.hidden = false;
-  target.manaMultiplier.setSource(`/visual-elements/resource-counters/times${mana}-sheet.webp`);
+function renderResources(target: ResourceDisplay, projection: AbmProjection, player: 'p1' | 'p2', manaOverride?: number) {
+  const state = projection.players[player]; const mana = Math.max(0, Math.min(9, manaOverride ?? state.mana));
+  setManaDisplay(target, mana);
   target.blocks.forEach((sprite, index) => {
     const filled = blockSegments(player, state.blocks)[index];
     sprite.element.classList.toggle('is-filled', Boolean(filled));
     sprite.setSource(filled ? `${ABM_ROOT}/block-icon-sheet.webp` : `${ABM_ROOT}/block-icon-empty-sheet.webp`);
   });
+}
+function setManaDisplay(target: ResourceDisplay, mana: number) {
+  target.manaCountElement.hidden = false;
+  target.manaMultiplier.setSource(`/visual-elements/resource-counters/times${Math.max(0, Math.min(9, mana))}-sheet.webp`);
+}
+export function initialManaForClass(classId: AbmClassId): number {
+  return classId === 'investor' ? 5 : 1;
+}
+export function shouldShowClassBadge(projection: Pick<AbmProjection, 'phase' | 'counterPicker'>, player: 'p1' | 'p2'): boolean {
+  if (projection.phase === 'counter-picking') return projection.counterPicker !== player;
+  return projection.phase !== 'selecting-classes' && projection.phase !== 'waiting-for-class';
+}
+export function latestClassPreview(events: readonly TimedSemanticEvent[], player?: 'p1' | 'p2'): AbmClassId | undefined {
+  for (let index = events.length - 1; index >= 0; index--) {
+    const event = events[index]!; const payload = event.payload as { player?: unknown; classId?: unknown } | undefined;
+    const classId = payload?.classId;
+    if (event.type === 'class-preview' && payload?.player === player && ABM_CLASSES.some(({ id }) => id === classId)) {
+      return classId as AbmClassId;
+    }
+  }
+  return undefined;
 }
 function element<K extends keyof HTMLElementTagNameMap>(tag: K, className: string) { const target = document.createElement(tag); target.className = className; return target; }
 function isWipeCue(type: TimedSemanticEvent['type']) {
