@@ -1,10 +1,31 @@
-import type { AbmProjection } from '../variants/attackBlockMana/attackBlockManaTypes';
+import type { PlayerId } from '../core/variant';
+import type { MusicBase } from './musicManifest';
 import { playMusicInterrupt, preloadMusic, queueMusicBaseOnce, setMusicBase, setMusicBaseImmediately, setMusicTopper, setMusicVariationsEnabled, stopMusic } from './soundEffect';
 
+export type MusicProfileId = 'shared-match';
+
+interface MusicProfile {
+  readonly base: MusicBase;
+  readonly variations: boolean;
+  readonly preloadGroup: string;
+}
+
+const MUSIC_PROFILES: Readonly<Record<MusicProfileId, MusicProfile>> = {
+  'shared-match': { base: 'drums-bass', variations: true, preloadGroup: 'match' },
+};
+
+export interface MatchMusicProjection {
+  self: PlayerId;
+  score: Readonly<Record<PlayerId, number>>;
+  winner?: PlayerId;
+  resultWinner?: PlayerId;
+  complete: boolean;
+}
+
 export class MusicDirector {
-  private mode: 'menu' | 'abm' | 'stopped' = 'stopped';
+  private mode: 'menu' | 'match' | 'stopped' = 'stopped';
   private score = { p1: 0, p2: 0 };
-  private winner: AbmProjection['winner'];
+  private winner?: PlayerId;
 
   enterMenu(immediate = false): void {
     this.mode = 'menu';
@@ -17,22 +38,23 @@ export class MusicDirector {
     void preloadMusic('title');
   }
 
-  enterAbm(): void {
-    this.mode = 'abm';
+  enterMatch(profileId: MusicProfileId): void {
+    const profile = MUSIC_PROFILES[profileId];
+    this.mode = 'match';
     this.score = { p1: 0, p2: 0 };
     this.winner = undefined;
     setMusicTopper('none');
-    setMusicVariationsEnabled(true);
-    setMusicBase('drums-bass');
-    void preloadMusic('match');
+    setMusicVariationsEnabled(profile.variations);
+    setMusicBase(profile.base);
+    void preloadMusic(profile.preloadGroup);
   }
 
-  updateAbm(projection: AbmProjection): void {
-    if (this.mode !== 'abm') return;
+  updateMatch(projection: MatchMusicProjection): void {
+    if (this.mode !== 'match') return;
     const scoreChanged = projection.score.p1 !== this.score.p1 || projection.score.p2 !== this.score.p2;
-    const becameComplete = projection.phase === 'match-complete' && projection.winner !== undefined && this.winner === undefined;
+    const becameComplete = projection.complete && projection.winner !== undefined && this.winner === undefined;
 
-    const resultWinner = projection.lastRoundWinner ?? projection.winner;
+    const resultWinner = projection.resultWinner ?? projection.winner;
     if ((scoreChanged || becameComplete) && resultWinner) {
       const won = resultWinner === projection.self;
       setMusicTopper('none');
@@ -40,13 +62,13 @@ export class MusicDirector {
       if (won && !becameComplete) void queueMusicBaseOnce('drums-bass-sax');
     }
 
-    if (!becameComplete) setMusicTopper(topperForScore(projection.score, projection.phase === 'match-complete'));
+    if (!becameComplete) setMusicTopper(topperForScore(projection.score, projection.complete));
     this.score = { ...projection.score };
     this.winner = projection.winner;
   }
 
-  leaveAbm(): void {
-    if (this.mode !== 'abm') return;
+  leaveMatch(): void {
+    if (this.mode !== 'match') return;
     this.mode = 'stopped';
     this.score = { p1: 0, p2: 0 };
     this.winner = undefined;

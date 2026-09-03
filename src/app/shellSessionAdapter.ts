@@ -4,6 +4,7 @@ import type { SlotId } from '../core/slots';
 import { isWhiteboardServerMessage, type WhiteboardClientMessage, type WhiteboardServerMessage } from '../whiteboard/protocol';
 import { isLobbyServerMessage, type LobbyPlayer, type LobbyPresence } from '../lobby/protocol';
 import { LOBBY_SOCKET_PROTOCOL, MATCH_SOCKET_PROTOCOL, WHITEBOARD_SOCKET_PROTOCOL } from '../protocol/webSocketAuth';
+import { randomUuid } from '../core/randomUuid';
 
 export interface ShellSessionListener {
   connection(state: ConnectionState): void;
@@ -75,7 +76,7 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
       const health = await response.json() as { ok?: boolean };
       if (health.ok !== true) throw new Error('Server health check returned an invalid response.');
       this.listener?.connection('connected');
-      if (!this.whiteboardActive) this.lobbyVisitId = crypto.randomUUID();
+      if (!this.whiteboardActive) this.lobbyVisitId = randomUuid();
       this.onlineActive = true;
       this.connectLobbyPresence();
       this.setLobbyPresence('idle');
@@ -117,7 +118,7 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
   startMatchmaking(): void {
     if (!this.stopped) return;
     this.stopped = false;
-    this.matchmakingAttemptId = crypto.randomUUID();
+    this.matchmakingAttemptId = randomUuid();
     this.intentionallyClosed = false;
     const generation = ++this.matchmakingGeneration;
     void this.pollMatchmaking(generation, this.matchmakingAttemptId);
@@ -216,7 +217,7 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
       if (this.announcedMatchmakingAttemptId !== attemptId) {
         this.announcedMatchmakingAttemptId = attemptId;
         this.setLobbyPresence('ready');
-        this.sendWhiteboard({ type: 'status', clientOperationId: crypto.randomUUID(), displayName: this.playerName || 'Guest', status: 'ready' });
+        this.sendWhiteboard({ type: 'status', clientOperationId: randomUuid(), displayName: this.playerName || 'Guest', status: 'ready' });
       }
       if (result.status === 'matched') { this.stopped = true; this.connect(result.matchId, result.seat, result.token); return; }
       this.pollTimer = setTimeout(() => {
@@ -263,7 +264,7 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
   private sendPayload(payload: MatchCommandPayload): void {
     if (!this.latest || this.socket?.readyState !== WebSocket.OPEN) return;
     this.socket.send(JSON.stringify({
-      protocolVersion: PROTOCOL_VERSION, commandId: crypto.randomUUID(), matchId: this.latest.matchId,
+      protocolVersion: PROTOCOL_VERSION, commandId: randomUuid(), matchId: this.latest.matchId,
       expectedRevision: this.latest.revision, type: payload.type, payload,
     }));
   }
@@ -272,8 +273,8 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
 const GUEST_ID_KEY = 'super-rps-guest';
 const GUEST_SECRET_KEY = 'super-rps-guest-secret';
 function loadGuestIdentity(): { id: string; secret: string } {
-  const id = localStorage.getItem(GUEST_ID_KEY) ?? crypto.randomUUID();
-  const secret = localStorage.getItem(GUEST_SECRET_KEY) ?? `${crypto.randomUUID()}${crypto.randomUUID()}`;
+  const id = localStorage.getItem(GUEST_ID_KEY) ?? randomUuid();
+  const secret = localStorage.getItem(GUEST_SECRET_KEY) ?? `${randomUuid()}${randomUuid()}`;
   localStorage.setItem(GUEST_ID_KEY, id);
   localStorage.setItem(GUEST_SECRET_KEY, secret);
   sessionStorage.removeItem(GUEST_ID_KEY);

@@ -156,47 +156,6 @@ body::before {
   transform: rotate(-0.35deg);
 }
 
-.abm-letter-modal {
-  position: absolute;
-  z-index: 1;
-  inset: 0;
-  display: grid;
-  padding: clamp(12px, 3vw, 28px);
-  place-items: center;
-  background: rgba(29, 27, 24, .68);
-  pointer-events: auto;
-}
-.abm-letter-modal__textbox {
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
-  width: min(820px, 100%);
-  max-height: 100%;
-  padding: clamp(16px, 3vw, 30px);
-  gap: 14px;
-  overflow: hidden;
-}
-.abm-letter-modal__scroll { min-height: 0; padding: clamp(8px, 2vw, 16px); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
-.abm-letter__content {
-  display: grid;
-  justify-items: center;
-  gap: 1rem;
-  padding: clamp(24px, 5vw, 44px) clamp(20px, 5vw, 48px);
-  background: url('/community-letter/paper-bg.webp') center / 100% 100% no-repeat;
-  text-align: left;
-  user-select: text;
-}
-.abm-letter__content :is(h1, h3, p) { width: 100%; margin: 0; }
-.abm-letter__content h1 { color: #ac3235; font-size: clamp(1.65rem, 5vw, 2.75rem); text-align: center; }
-.abm-letter__content h3 { margin-top: .75rem; color: #ac3235; font-size: clamp(1.2rem, 3.5vw, 1.75rem); }
-.abm-letter__content p { font-size: clamp(1rem, 2.7vw, 1.25rem); line-height: 1.45; }
-.boiling-sprite.abm-letter__image { display: block; max-width: 100%; height: auto; overflow: hidden; }
-.abm-letter__static-image { display: block; max-width: 100%; height: auto; object-fit: contain; }
-.abm-letter__s-rps-o-logo { width: min(360px, 80%); }
-.abm-letter__meme { width: min(420px, 100%); }
-.abm-letter__variant-grid { width: 100%; }
-.abm-letter__placeholder { padding: 12px; border: 2px dashed rgba(33,29,25,.45); text-align: center; opacity: .72; }
-.game-button.abm-letter-modal__dismiss { justify-self: center; width: 128px; min-width: 0; }
-
 .universal-menu { position: absolute; z-index: 100; inset: 0; display: grid; padding: 20px; place-items: center; background: rgba(29, 27, 24, .48); pointer-events: auto; }
 .universal-menu__box { width: min(560px, 100%); padding: clamp(20px, 5vw, 42px); }
 .universal-menu__controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: center; justify-items: center; gap: 26px 44px; }
@@ -347,9 +306,7 @@ input {
   user-select: none;
 }
 
-.game-button.title-screen__logo { position: absolute; width: auto; max-width: none; }
-.title-screen__logo > .game-button__art { inset: 0; }
-.title-screen__logo > .game-button__juice { display: none; }
+.title-screen__logo { position: absolute; width: auto; max-width: none; }
 .title-screen__online-count { position: absolute; margin: 0; color: rgba(23,20,18,.72); font-size: 22px; font-weight: 950; line-height: 1; text-align: center; transform: rotate(.25deg); }
 
 .title-screen__primary-actions,
@@ -482,13 +439,28 @@ input {
 }
 
 .scoreboard-screen__header { position: absolute; }
-.scoreboard-screen__board-anchor { position: absolute; }
+.scoreboard-screen__board-anchor { position: absolute; container-type: inline-size; }
 .scoreboard-screen__board { width: 100%; height: 100%; }
 .game-button.scoreboard-screen__back { position: absolute; }
-.scoreboard-screen__results { position: absolute; z-index: 4; inset: 20% 15%; display: grid; align-content: center; gap: 14px; margin: 0; padding: 0; list-style: none; text-align: center; font-size: 24px; font-weight: 900; }
-.scoreboard-screen__winner { color: #ac3235; font-size: 30px; }
-.scoreboard-screen__result { display: grid; grid-template-columns: 180px 1fr; align-items: center; gap: 12px; }
-.scoreboard-screen__variant { width: 180px; }
+.scoreboard-screen__name { position: absolute; top: 11.73%; z-index: 8; width: 27.78%; font-size: 3.125cqi; font-weight: 800; line-height: 1; overflow-wrap: anywhere; }
+.scoreboard-screen__name--p1 { left: 21.06%; text-align: right; }
+.scoreboard-screen__name--p2 { right: 21.06%; text-align: left; }
+.scoreboard-screen__results { position: absolute; z-index: 7; top: 27.5%; left: 27%; display: flex; width: 46%; flex-direction: column; gap: 1cqi; margin: 0; padding: 0; list-style: none; }
+.scoreboard-screen__winner { position: absolute; right: 0; bottom: 3%; left: 0; color: #ac3235; font-size: 3.47cqi; text-align: center; }
+.scoreboard-screen__result { display: grid; grid-template-columns: 13.68% 52.14% 13.68%; column-gap: 10.25%; align-items: center; width: 100%; }
+.scoreboard-screen__result--placeholder { display: flex; justify-content: center; }
+.scoreboard-screen__variant { width: 100%; }
+.scoreboard-screen__counter { width: 100%; }
+.scoreboard-screen__tiebreaker { width: 55.56%; margin-top: -0.35cqi; }
+.scoreboard-screen__variant-empty { display: grid; width: 100%; aspect-ratio: 244 / 96; place-items: center; font-size: 3cqi; }
+
+.menu-canvas__composition[data-layout='portrait'] .scoreboard-screen__name { top: 8%; width: 31%; font-size: 4cqi; }
+.menu-canvas__composition[data-layout='portrait'] .scoreboard-screen__name--p1 { left: 14%; }
+.menu-canvas__composition[data-layout='portrait'] .scoreboard-screen__name--p2 { right: 14%; }
+.menu-canvas__composition[data-layout='portrait'] .scoreboard-screen__results { top: 21%; left: 15%; width: 70%; gap: 3cqi; }
+.menu-canvas__composition[data-layout='portrait'] .scoreboard-screen__winner { bottom: -2%; font-size: 4.5cqi; }
+.menu-canvas__composition[data-layout='portrait'] .scoreboard-screen__tiebreaker { width: 58%; margin-top: 0; }
+.menu-canvas__composition[data-layout='portrait'] .scoreboard-screen__variant-empty { font-size: 4cqi; }
 
 .menu-canvas__composition[data-layout='landscape'] .portrait-curtain-piece { display: none; }
 
@@ -794,6 +766,53 @@ input {
 .dummy-game__controls { width: 180px; }
 .dummy-game__controls .game-button { width: 100%; }
 .dummy-game--locked .dummy-game__controls { pointer-events: none; opacity: .72; }
+
+.rps-game .game-layout__slot--scene { overflow: visible; }
+.rps-game .game-layout__scene.is-flipped > .boiling-sprite__canvas { transform: scaleX(-1); }
+.rps-controls { position: relative; width: 100%; height: 100%; }
+.rps-control { position: absolute; z-index: 2; min-width: 0; min-height: 0; padding: 0; border: 0; background: none; }
+.rps-arrow { position: absolute; z-index: 1; overflow: visible; pointer-events: none; }
+.rps-move-status { display: grid; width: 100%; height: 100%; place-items: center; font-size: 20px; font-weight: 900; text-align: center; }
+.rps-waiting { position: absolute; z-index: 7; inset: 0; pointer-events: none; }
+.rps-waiting[hidden] { display: none; }
+.rps-waiting__ready, .rps-waiting__countdown { position: absolute; z-index: 2; top: 28px; width: 120px; }
+.rps-waiting__dots { position: absolute; z-index: 3; top: 0; width: 50px; transform: translateY(-15px); }
+.rps-round-result.boiling-sprite { position: absolute; z-index: 6; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.rps-round-result[hidden] { display: none; }
+.rps-game .game-layout[data-layout='portrait'] .rps-move-status { font-size: 16px; }
+.tap-tap-shoot-game .game-layout__slot--scene { overflow: visible; }
+.tap-tap-shoot-game .game-layout__scene.is-flipped > .boiling-sprite__canvas { transform: scaleX(-1); }
+.tap-tap-shoot-controls { position: relative; width: 100%; height: 100%; }
+.tap-tap-shoot-control { position: absolute; z-index: 2; min-width: 0; min-height: 0; padding: 0; border: 0; background: none; }
+.tap-tap-shoot-arrow { position: absolute; z-index: 1; overflow: visible; pointer-events: none; }
+.tap-tap-shoot-move-status { display: grid; width: 100%; height: 100%; place-items: center; font-size: 20px; font-weight: 900; text-align: center; }
+.tap-tap-shoot-waiting { position: absolute; z-index: 7; inset: 0; pointer-events: none; }
+.tap-tap-shoot-waiting[hidden] { display: none; }
+.tap-tap-shoot-waiting__ready, .tap-tap-shoot-waiting__countdown { position: absolute; z-index: 2; top: 28px; width: 120px; }
+.tap-tap-shoot-waiting__dots { position: absolute; z-index: 3; top: 0; width: 50px; transform: translateY(-15px); }
+.tap-tap-shoot-round-result.boiling-sprite { position: absolute; z-index: 6; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.tap-tap-shoot-round-result[hidden] { display: none; }
+.tap-tap-shoot-resource { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
+.tap-tap-shoot-resource__icon, .tap-tap-shoot-resource__count { flex: 0 0 auto; width: auto; height: 42px; }
+.tap-tap-shoot-game .game-layout[data-layout='portrait'] .tap-tap-shoot-resource__icon,
+.tap-tap-shoot-game .game-layout[data-layout='portrait'] .tap-tap-shoot-resource__count { height: 32px; }
+.tap-tap-shoot-game .game-layout[data-layout='portrait'] .tap-tap-shoot-move-status { font-size: 16px; }
+.gun-knife-fist-game .game-layout__slot--scene { overflow: visible; }
+.gun-knife-fist-game .game-layout__scene.is-flipped > .boiling-sprite__canvas { transform: scaleX(-1); }
+.gun-knife-fist-controls { position: relative; width: 100%; height: 100%; }
+.gun-knife-fist-control { position: absolute; z-index: 2; min-width: 0; min-height: 0; padding: 0; border: 0; background: none; }
+.gun-knife-fist-arrow { position: absolute; z-index: 1; overflow: visible; pointer-events: none; }
+.gun-knife-fist-move-status { display: grid; width: 100%; height: 100%; place-items: center; font-size: 20px; font-weight: 900; text-align: center; }
+.gun-knife-fist-waiting { position: absolute; z-index: 7; inset: 0; pointer-events: none; }
+.gun-knife-fist-waiting[hidden] { display: none; }
+.gun-knife-fist-waiting__ready, .gun-knife-fist-waiting__countdown { position: absolute; z-index: 2; top: 28px; width: 120px; }
+.gun-knife-fist-waiting__dots { position: absolute; z-index: 3; top: 0; width: 50px; transform: translateY(-15px); }
+.gun-knife-fist-round-result.boiling-sprite { position: absolute; z-index: 6; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.gun-knife-fist-round-result[hidden] { display: none; }
+.gun-knife-fist-health { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; gap: 3px; }
+.gun-knife-fist-health__icon { flex: 0 0 auto; width: auto; height: 42px; }
+.gun-knife-fist-game .game-layout[data-layout='portrait'] .gun-knife-fist-health__icon { height: 32px; }
+.gun-knife-fist-game .game-layout[data-layout='portrait'] .gun-knife-fist-move-status { font-size: 16px; }
 
 .abm-game .game-layout__slot--scene { overflow: visible; }
 .abm-game .game-layout__scene[hidden] { display: none; }

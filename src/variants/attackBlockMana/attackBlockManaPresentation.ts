@@ -364,7 +364,13 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
       && nextProjection.counterPickAvailableAt !== undefined && serverTime < nextProjection.counterPickAvailableAt;
     const complete = nextProjection.phase === 'match-complete';
     const resultRevealed = nextProjection.resultRevealAt === undefined || serverTime >= nextProjection.resultRevealAt;
-    music?.updateAbm(nextProjection);
+    music?.updateMatch({
+      self: nextProjection.self,
+      score: nextProjection.score,
+      winner: nextProjection.winner,
+      resultWinner: nextProjection.lastRoundWinner ?? nextProjection.winner,
+      complete: nextProjection.phase === 'match-complete',
+    });
     const nextCue = events.filter((event) => isWipeCue(event.type) && !playedTransitionIds.has(event.id) && event.startsAt > serverTime)
       .sort((a, b) => a.startsAt - b.startsAt)[0]?.startsAt;
     const nextBoundary = [nextProjection.resultRevealAt, counterLocked ? nextProjection.counterPickAvailableAt : undefined, nextCue]

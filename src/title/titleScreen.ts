@@ -10,6 +10,7 @@ import {
 } from '../audio/soundEffect';
 import { createBoilToggle } from '../input/boilToggle';
 import { createGameButton } from '../input/gameButton';
+import { createBoilingSprite } from '../renderer/boilingSprite';
 import { createSoundToggle } from '../input/soundToggle';
 import { createTextEntry, isNonBlankText } from '../input/textEntry';
 import { createMenuCanvas } from '../layout/menuLayout';
@@ -26,8 +27,7 @@ export type TitleScreenMount = (() => void) & { readonly ready: Promise<void> };
 export function formatOnlinePlayerCount(count: number | null): string { return `players online: ${count ?? '?'}`; }
 
 export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPlay: (playerName: string) => void,
-  getOnlinePlayerCount: () => Promise<number | null> = async () => null,
-  onOpenLetter: (trigger: HTMLElement) => void = () => {}): TitleScreenMount {
+  getOnlinePlayerCount: () => Promise<number | null> = async () => null): TitleScreenMount {
   const screen = document.createElement('section');
   screen.className = 'title-screen';
   screen.setAttribute('aria-labelledby', 'title-screen-heading');
@@ -53,15 +53,12 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
   void updateCount();
   const countTimer = window.setInterval(() => void updateCount(), 5_000);
 
-  const logo = createGameButton({
-    label: 'Open letter to the ABM community',
-    onActivate: () => onOpenLetter(logo.element),
-    upSheet: titleElement('logo').assets!.src!,
-    betweenSheet: '/title/abm-logo-between-sheet.webp',
-    depressedSheet: '/title/abm-logo-depressed-sheet.webp',
+  const logo = createBoilingSprite({
+    src: titleElement('logo').assets!.src!,
+    alt: titleElement('logo').alt,
     clock,
   });
-  logo.element.classList.add('title-screen__logo', 'game-button--baked-label');
+  logo.element.classList.add('title-screen__logo');
   const soundToggle = createSoundToggle(clock);
   const boilToggle = createBoilToggle(clock);
   const musicVolume = createVolumeSlider('music', clock, getMusicVolume(), setMusicVolume);
@@ -149,6 +146,6 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
     countStopped = true; window.clearInterval(countTimer);
     screen.remove();
   }) as TitleScreenMount;
-  Object.defineProperty(cleanup, 'ready', { value: logo.ready });
+  Object.defineProperty(cleanup, 'ready', { value: logo.whenReady() });
   return cleanup;
 }

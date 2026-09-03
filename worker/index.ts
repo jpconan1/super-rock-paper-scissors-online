@@ -255,7 +255,7 @@ export class MatchmakerObject extends DurableObject<Env> {
     const initialized = await this.env.MATCHES.get(id).initialize(matchId, {
       p1: { name: opponent.name, platform: 'Web', rating: opponent.rating },
       p2: { name, platform: 'Web', rating: player.rating },
-    }, { p1: opponent.guestId, p2: guestId }, 'abm-only');
+    }, { p1: opponent.guestId, p2: guestId }, 'multi-slot');
     const expiresAt = now + MATCH_TICKET_TTL_MS;
     const first: MatchTicket = { matchId, seat: 'p1', token: initialized.seats.p1, expiresAt };
     const second: MatchTicket = { matchId, seat: 'p2', token: initialized.seats.p2, expiresAt };

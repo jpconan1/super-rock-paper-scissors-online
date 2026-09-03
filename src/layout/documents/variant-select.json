@@ -161,7 +161,7 @@
       "id": "slot-5",
       "type": "button",
       "protected": true,
-      "label": "Kitchen Sink",
+      "label": "Attack Block Mana",
       "assets": {
         "up": "/interactive-elements/variant-buttons/kitchensink-up-sheet.webp",
         "between": "/interactive-elements/variant-buttons/kitchensink-between-sheet.webp",

@@ -30,19 +30,27 @@ describe('client season manifest', () => {
     expect(() => validateClientSeason({ ...valid(), slots: valid().slots.slice(0, 8) })).toThrow('exactly nine');
   });
 
-  test('maps the dormant multi-variant season to all nine button designs', () => {
-    const season = createClientSeasonManifest(new BoilClock({ hidden: false, addEventListener() {}, removeEventListener() {} } as unknown as Document), 'multi-variant');
+  test('ships the active nine-variant season with ABM in the center slot', () => {
+    const season = createClientSeasonManifest(new BoilClock({ hidden: false, addEventListener() {}, removeEventListener() {} } as unknown as Document));
+    expect(season.mode).toBe('multi-variant');
     expect(season.slots.map(({ variant }) => variant.buttonAssetKey)).toEqual([
       'rps', 'dragonspear', 'picktwo', 'gkf', 'kitchensink', 'fireballwar', 'rpg', 'poker', 'taptapshoot',
     ]);
+    expect(season.slots.map(({ slotId, variant }) => [slotId, variant.variantId])).toContainEqual(['slot-5', 'attack-block-mana']);
+    expect(season.slots.map(({ slotId, variant }) => [slotId, variant.variantId])).toContainEqual(['slot-1', 'rock-paper-scissors']);
+    expect(season.slots.find(({ slotId }) => slotId === 'slot-1')?.variant.assetBundleId).toBe('variant:rps');
+    expect(season.slots.find(({ slotId }) => slotId === 'slot-9')?.variant).toMatchObject({ variantId: 'tap-tap-shoot', assetBundleId: 'variant:tap-tap-shoot', musicProfileId: 'shared-match' });
+    expect(season.slots.find(({ slotId }) => slotId === 'slot-4')?.variant).toMatchObject({ variantId: 'gun-knife-fist', assetBundleId: 'variant:gun-knife-fist', musicProfileId: 'shared-match' });
+    expect(season.slots.every(({ variant }) => variant.musicProfileId === 'shared-match')).toBe(true);
+    expect(season.slots.map(({ variant }) => variant.variantId)).not.toContain('dummy-kitchen-sink');
     expect(season.slots.every(({ variant }) => variant.rulesCopy.length > 0)).toBe(true);
   });
 
-  test('ships the active prototype with ABM as its only slot', () => {
-    const season = createClientSeasonManifest(new BoilClock({ hidden: false, addEventListener() {}, removeEventListener() {} } as unknown as Document));
+  test('keeps the single-variant compatibility mode on ABM slot 5', () => {
+    const season = createClientSeasonManifest(new BoilClock({ hidden: false, addEventListener() {}, removeEventListener() {} } as unknown as Document), 'single-variant');
     expect(season.mode).toBe('single-variant');
     expect(season.slots.map(({ slotId, variant }) => [slotId, variant.variantId])).toEqual([
-      ['slot-1', 'attack-block-mana'],
+      ['slot-5', 'attack-block-mana'],
     ]);
     expect(validateClientSeason(season).size).toBe(1);
   });

@@ -9,9 +9,9 @@ describe('layout documents', () => {
     for (const document of layoutDocuments.values()) expect(validateLayoutDocument(document)).toBe(document);
   });
 
-  it('ships every requested shared document and nine variants', () => {
+  it('ships every requested shared document and the authored variant library', () => {
     expect([...layoutDocuments.keys()]).toEqual(expect.arrayContaining(['title', 'lobby', 'variant-select', 'scoreboard', 'game-parent']));
-    expect(variantLayoutDocuments).toHaveLength(9);
+    expect(variantLayoutDocuments).toHaveLength(10);
     for (const variant of variantLayoutDocuments) {
       expect(variant.rules?.lead).toBeTruthy();
       expect(variant.copy?.buttonAssetKey).toBeTruthy();

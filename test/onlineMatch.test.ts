@@ -20,17 +20,17 @@ const players = {
 };
 
 describe('online match', () => {
-  test('runs an ABM-only match directly in slot one and holds its final result', () => {
+  test('runs an ABM-only match directly in slot five and holds its final result', () => {
     const state = createOnlineMatch('abm', players, 1, 0, 'abm-only');
     advanceMatchDeadline(state, 1_500);
     expect(state.phase).toBe('playing');
-    expect(state.activeSlot).toBe('slot-1');
-    send(state, 'p1', { type: 'variant-command', slotId: 'slot-1', command: { type: 'lock-class', classId: 'advantaged' } });
-    send(state, 'p2', { type: 'variant-command', slotId: 'slot-1', command: { type: 'lock-class', classId: 'advantaged' } });
+    expect(state.activeSlot).toBe('slot-5');
+    send(state, 'p1', { type: 'variant-command', slotId: 'slot-5', command: { type: 'lock-class', classId: 'advantaged' } });
+    send(state, 'p2', { type: 'variant-command', slotId: 'slot-5', command: { type: 'lock-class', classId: 'advantaged' } });
     for (let round = 0; round < 3; round++) {
-      send(state, 'p1', { type: 'variant-command', slotId: 'slot-1', command: { type: 'choose-move', move: 'attack' } });
-      send(state, 'p2', { type: 'variant-command', slotId: 'slot-1', command: { type: 'choose-move', move: 'mana' } });
-      if (round < 2) send(state, 'p2', { type: 'variant-command', slotId: 'slot-1', command: { type: 'lock-class', classId: 'advantaged' } });
+      send(state, 'p1', { type: 'variant-command', slotId: 'slot-5', command: { type: 'choose-move', move: 'attack' } });
+      send(state, 'p2', { type: 'variant-command', slotId: 'slot-5', command: { type: 'choose-move', move: 'mana' } });
+      if (round < 2) send(state, 'p2', { type: 'variant-command', slotId: 'slot-5', command: { type: 'lock-class', classId: 'advantaged' } });
     }
     expect(state.games).toHaveLength(1);
     expect(state.winner).toBe('p1');
@@ -46,9 +46,9 @@ describe('online match', () => {
   test('schedules and resolves the late ABM player deadline', () => {
     const state = createOnlineMatch('abm-timeout', players, 1, 0, 'abm-only');
     advanceMatchDeadline(state, 1_500);
-    send(state, 'p1', { type: 'variant-command', slotId: 'slot-1', command: { type: 'lock-class', classId: 'lucky' } });
-    send(state, 'p2', { type: 'variant-command', slotId: 'slot-1', command: { type: 'lock-class', classId: 'thief' } });
-    send(state, 'p1', { type: 'variant-command', slotId: 'slot-1', command: { type: 'choose-move', move: 'mana' } });
+    send(state, 'p1', { type: 'variant-command', slotId: 'slot-5', command: { type: 'lock-class', classId: 'lucky' } });
+    send(state, 'p2', { type: 'variant-command', slotId: 'slot-5', command: { type: 'lock-class', classId: 'thief' } });
+    send(state, 'p1', { type: 'variant-command', slotId: 'slot-5', command: { type: 'choose-move', move: 'mana' } });
     const deadline = state.deadlineAt!;
     expect(deadline).toBeGreaterThan(0);
     expect(advanceMatchDeadline(state, deadline - 1)).toBe(false);
@@ -120,9 +120,10 @@ describe('online match', () => {
     expect(state.phase).toBe('scoreboard');
     advanceMatchDeadline(state, state.deadlineAt!);
     expect(state.activeSlot).toBe('slot-4');
-    send(state, 'p1', { type: 'variant-command', slotId: 'slot-4', command: 'advance' });
-    const variant = projectOnlineMatch(state, 'p2').variant as { ready: Record<PlayerId, boolean> };
-    expect(variant.ready.p1).toBe(true);
+    send(state, 'p1', { type: 'variant-command', slotId: 'slot-4', command: { type: 'choose-move', move: 'shoot' } });
+    const variant = projectOnlineMatch(state, 'p2').variant as { opponentReady: boolean; ownPendingMove?: string };
+    expect(variant.opponentReady).toBe(true);
+    expect(variant).not.toHaveProperty('ownPendingMove');
   });
 
   test('rejects duplicate/stale commands and locks six unique bans', () => {
@@ -191,6 +192,18 @@ function findSplitSeries(samePick: boolean): ReturnType<typeof createOnlineMatch
 function playGame(state: ReturnType<typeof createOnlineMatch>): void {
   advanceMatchDeadline(state, state.deadlineAt!);
   const slotId = state.activeSlot!;
+  if (slotId === 'slot-4') {
+    for (let round = 0; round < 3; round++) {
+      send(state, 'p1', { type: 'variant-command', slotId, command: { type: 'choose-move', move: 'shoot' } });
+      send(state, 'p2', { type: 'variant-command', slotId, command: { type: 'choose-move', move: 'stab' } });
+      if (round < 2) {
+        send(state, 'p1', { type: 'variant-command', slotId, command: { type: 'continue' } });
+        send(state, 'p2', { type: 'variant-command', slotId, command: { type: 'continue' } });
+      }
+    }
+    advanceMatchDeadline(state, state.deadlineAt!);
+    return;
+  }
   send(state, 'p1', { type: 'variant-command', slotId, command: 'advance' });
   send(state, 'p2', { type: 'variant-command', slotId, command: 'advance' });
 }

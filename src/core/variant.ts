@@ -1,7 +1,7 @@
 import type { SlotId } from './slots';
 import type { MatchPlayer, TimedSemanticEvent } from '../protocol/protocol';
 import type { AssetBundleId } from '../assets/assetBundleTypes';
-import type { MusicDirector } from '../audio/musicDirector';
+import type { MusicDirector, MusicProfileId } from '../audio/musicDirector';
 
 export type PlayerId = 'p1' | 'p2';
 
@@ -72,6 +72,7 @@ export interface ClientVariantDescriptor {
   readonly rulesCopy: readonly string[];
   readonly thumbnail?: string;
   readonly assetBundleId?: AssetBundleId;
+  readonly musicProfileId?: MusicProfileId;
   readonly loadPresentation: PresentationLoader;
 }
 

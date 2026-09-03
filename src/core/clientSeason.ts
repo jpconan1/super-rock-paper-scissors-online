@@ -23,7 +23,7 @@ export function validateClientSeason(manifest: SeasonClientManifest): ReadonlyMa
     result.set(entry.slotId, descriptor);
     variants.add(descriptor.variantId);
   }
-  if (manifest.mode === 'single-variant' && !result.has('slot-1')) throw new Error('Single-variant client season must use slot-1.');
+  if (manifest.mode === 'single-variant' && !result.has('slot-5')) throw new Error('Single-variant client season must use slot-5.');
   if (manifest.mode === 'multi-variant') for (const slot of SLOT_IDS) if (!result.has(slot)) throw new Error(`Missing client slot: ${slot}`);
   return result;
 }

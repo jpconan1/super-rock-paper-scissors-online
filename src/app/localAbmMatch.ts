@@ -9,6 +9,7 @@ import type { PlayerId } from '../core/variant';
 import { PROTOCOL_VERSION, type MatchPlayer, type ServerSnapshot } from '../protocol/protocol';
 import { ABM_CLASSES } from '../variants/attackBlockMana/attackBlockManaCatalog';
 import type { AbmCommand, AbmMove, AbmProjection } from '../variants/attackBlockMana/attackBlockManaTypes';
+import { randomUuid } from '../core/randomUuid';
 
 interface LocalAbmMatchOptions {
   playerName: string;
@@ -44,7 +45,7 @@ export class LocalAbmMatch {
       p2: { name: 'Computer', platform: 'CPU', rating: 0 },
     };
     const now = this.now();
-    this.state = createOnlineMatch(`practice-${crypto.randomUUID()}`, players, Math.floor(this.random() * 0x7fffffff), now, 'abm-only');
+    this.state = createOnlineMatch(`practice-${randomUuid()}`, players, Math.floor(this.random() * 0x7fffffff), now, 'abm-only');
     advanceMatchDeadline(this.state, this.state.deadlineAt!);
   }
 
@@ -68,7 +69,7 @@ export class LocalAbmMatch {
     acceptMatchCommand(this.state, player, {
       commandId: `local-${++this.commandSequence}`,
       expectedRevision: this.state.revision,
-      payload: { type: 'variant-command', slotId: 'slot-1', command },
+      payload: { type: 'variant-command', slotId: 'slot-5', command },
     }, this.now());
     this.publish();
     this.scheduleNextAction();

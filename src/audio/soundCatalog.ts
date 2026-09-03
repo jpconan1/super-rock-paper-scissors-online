@@ -3,6 +3,9 @@ import { createSoundEffect, type SoundEffect } from './soundEffect';
 export type SoundId =
   | 'button-down' | 'button-up' | 'ready'
   | 'abm-charge' | 'abm-block' | 'abm-collision' | 'abm-lucky'
+  | 'rps-rock-draw' | 'rps-scissors-draw'
+  | 'tts-reload' | 'tts-wiff' | 'tts-collision' | 'tts-gunshot' | 'tts-counterstab' | 'tts-clash' | 'tts-stab'
+  | 'gkf-punch' | 'gkf-punch-kill'
   | 'win' | 'lose' | 'starburst' | 'curtain-close' | 'curtain-open';
 
 export const SOUND_CATALOG: Readonly<Record<SoundId, string>> = {
@@ -13,6 +16,17 @@ export const SOUND_CATALOG: Readonly<Record<SoundId, string>> = {
   'abm-block': '/audio/block.m4a',
   'abm-collision': '/audio/collision.mp3',
   'abm-lucky': '/audio/lucky.mp3',
+  'rps-rock-draw': '/audio/collision.mp3',
+  'rps-scissors-draw': '/audio/clash.mp3',
+  'tts-reload': '/audio/reload.mp3',
+  'tts-wiff': '/audio/wiff.mp3',
+  'tts-collision': '/audio/collision.mp3',
+  'tts-gunshot': '/audio/gunshot.mp3',
+  'tts-counterstab': '/audio/counterstab.mp3',
+  'tts-clash': '/audio/clash.mp3',
+  'tts-stab': '/audio/stab.mp3',
+  'gkf-punch': '/audio/punch.mp3',
+  'gkf-punch-kill': '/audio/punch-kill.mp3',
   win: '/audio/win_sound.mp3',
   lose: '/audio/lose_jingle.mp3',
   starburst: '/audio/starburst.mp3',

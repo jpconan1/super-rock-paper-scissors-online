@@ -5,6 +5,7 @@ import scoreboardSource from './documents/scoreboard.json';
 import gameParentSource from './documents/game-parent.json';
 import fireballWarSource from './documents/variants/fireball-war.json';
 import abmSource from './documents/variants/abm.json';
+import rpsSource from './documents/variants/rps.json';
 import dragonSpearSource from './documents/variants/dragon-spear.json';
 import pickTwoSource from './documents/variants/pick-two.json';
 import gunKnifeFistSource from './documents/variants/gun-knife-fist.json';
@@ -16,7 +17,7 @@ import rpsDetailSource from './documents/variant-details/rps.json';
 import dragonSpearDetailSource from './documents/variant-details/dragon-spear.json';
 import pickTwoDetailSource from './documents/variant-details/pick-two.json';
 import gunKnifeFistDetailSource from './documents/variant-details/gun-knife-fist.json';
-import kitchenSinkDetailSource from './documents/variant-details/kitchen-sink.json';
+import abmDetailSource from './documents/variant-details/abm.json';
 import fireballWarDetailSource from './documents/variant-details/fireball-war.json';
 import rpsRpgDetailSource from './documents/variant-details/rps-rpg.json';
 import rpsPokerDetailSource from './documents/variant-details/rps-poker.json';
@@ -24,10 +25,10 @@ import tapTapShootDetailSource from './documents/variant-details/tap-tap-shoot.j
 import { validateLayoutDocument, type LayoutDocument } from './layoutDocument';
 
 const sources: unknown[] = [titleSource, lobbySource, variantSelectSource, scoreboardSource, gameParentSource,
-  fireballWarSource, abmSource, dragonSpearSource, pickTwoSource, gunKnifeFistSource, kitchenSinkSource,
+  fireballWarSource, abmSource, rpsSource, dragonSpearSource, pickTwoSource, gunKnifeFistSource, kitchenSinkSource,
   rpsRpgSource, rpsPokerSource, tapTapShootSource];
 sources.push(rpsDetailSource, dragonSpearDetailSource, pickTwoDetailSource, gunKnifeFistDetailSource,
-  kitchenSinkDetailSource, fireballWarDetailSource, rpsRpgDetailSource, rpsPokerDetailSource, tapTapShootDetailSource);
+  abmDetailSource, fireballWarDetailSource, rpsRpgDetailSource, rpsPokerDetailSource, tapTapShootDetailSource);
 
 export const layoutDocuments = new Map<string, LayoutDocument>(sources.map((source) => {
   const document = validateLayoutDocument(source);

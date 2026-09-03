@@ -1,6 +1,7 @@
 import type { BoilClock, BoilFrame } from '../animation/boilClock';
 import { createBoilingSprite, type BoilingSprite } from '../renderer/boilingSprite';
 import { WhiteboardModel } from './model';
+import { randomUuid } from '../core/randomUuid';
 import {
   WHITEBOARD_COLORS, type WhiteboardClientMessage, type WhiteboardColor, type WhiteboardOperation,
   type WhiteboardPoint, type WhiteboardServerMessage, type WhiteboardSnapshot,
@@ -167,7 +168,7 @@ export function mountWhiteboard(options: {
     const stroke = active; active = undefined;
     drawCanvas.releasePointerCapture?.(event.pointerId);
     if (stroke.points.length > 1) {
-      const clientOperationId = crypto.randomUUID();
+      const clientOperationId = randomUuid();
       const operation: WhiteboardOperation = stroke.tool === 'erase'
         ? { kind: 'erase', id: `local:${clientOperationId}`, sequence: model.snapshot().sequence + 1, clientOperationId, width: 120, points: stroke.points }
         : { kind: 'stroke', id: `local:${clientOperationId}`, sequence: model.snapshot().sequence + 1, clientOperationId, color: markerColor, width: 5, points: stroke.points };

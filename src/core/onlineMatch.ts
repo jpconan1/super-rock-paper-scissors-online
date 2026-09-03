@@ -122,7 +122,7 @@ export function advanceMatchDeadline(state: OnlineMatchState, now: number): bool
   const nextRevision = state.revision + 1;
   state.deadlineAt = undefined;
   state.events = [];
-  if (state.phase === 'match-found' && state.format === 'abm-only') startGame(state, 'slot-1', now, nextRevision);
+  if (state.phase === 'match-found' && state.format === 'abm-only') startGame(state, 'slot-5', now, nextRevision);
   else if (state.phase === 'match-found') state.phase = 'selecting';
   else if (state.phase === 'scoreboard' && state.activeSlot) startGame(state, state.activeSlot, now, nextRevision);
   else if (state.phase === 'scoreboard') state.phase = 'banning';

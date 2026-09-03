@@ -14,6 +14,7 @@ import { createTextbox } from '../ui/textbox';
 import { mountWhiteboard } from '../whiteboard/whiteboard';
 import type { WhiteboardClientMessage, WhiteboardServerMessage } from '../whiteboard/protocol';
 import type { LobbyPlayer } from '../lobby/protocol';
+import { randomUuid } from '../core/randomUuid';
 
 export type ScreenCleanup = () => void;
 export type LobbyScreenMount = ScreenCleanup & {
@@ -212,7 +213,7 @@ export function mountLobbyScreen(
     event.preventDefault();
     const text = chatEntry.input.value.trim().replace(/\s+/g, ' ');
     if (!text) return;
-    sendWhiteboard({ type: 'chat', clientOperationId: crypto.randomUUID(), displayName: playerName, text, color: whiteboardController.color() });
+    sendWhiteboard({ type: 'chat', clientOperationId: randomUuid(), displayName: playerName, text, color: whiteboardController.color() });
     chatEntry.input.value = '';
   };
   chat.addEventListener('submit', submitChat);

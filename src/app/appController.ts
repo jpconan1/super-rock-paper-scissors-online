@@ -21,8 +21,6 @@ import type { LobbyPlayer } from '../lobby/protocol';
 import { beats } from '../core/time';
 import { MusicDirector } from '../audio/musicDirector';
 import { destroySoundCatalog } from '../audio/soundCatalog';
-import { LocalAbmMatch } from './localAbmMatch';
-import { hasSeenAbmLetter, mountAbmLetterModal } from './abmLetterModal';
 
 export type ConnectionState = 'connected' | 'reconnecting' | 'offline';
 export type ShellDestination = 'title' | 'lobby' | 'match-found' | 'slot-picker' | 'scoreboard' | 'gameplay';
@@ -44,7 +42,6 @@ export class AppController {
   private lifecycle?: AbortController;
   private screenCleanup?: () => void;
   private modalCleanup?: () => void;
-  private letterCleanup?: () => void;
   private unsubscribeSession?: () => void;
   private timeline?: AnimationTimeline;
   private loadRevision = 0;
@@ -64,7 +61,6 @@ export class AppController {
   private lobbyPlayers: LobbyPlayer[] = [];
   private lobbySelfId = '';
   private terminalCleanup?: () => void;
-  private localMatch?: LocalAbmMatch;
   private readonly music = new MusicDirector();
   private readonly onGlobalKeyDown = (event: KeyboardEvent) => {
     if (event.key !== 'Escape' || event.repeat || this.destination === 'title') return;
@@ -158,10 +154,9 @@ export class AppController {
     this.mounted = presentation;
     this.assetLease = lease;
     this.activeSlot = slotId;
-    if (descriptor?.variantId === 'attack-block-mana') this.music.enterAbm();
+    if (descriptor?.musicProfileId) this.music.enterMatch(descriptor.musicProfileId);
     const emit = send ?? ((command: unknown) => {
-      if (this.localMatch) this.localMatch.send(command);
-      else if (this.connectionState === 'connected') this.options.session.send(command);
+      if (this.connectionState === 'connected') this.options.session.send(command);
     });
     presentation.mount({
       container: this.screenLayer, signal: this.lifecycle.signal, send: emit,
@@ -176,8 +171,8 @@ export class AppController {
     });
   }
 
-  receiveSnapshot(snapshot: ServerSnapshot, local = false): void {
-    if (isControllerOptions(this.optionsOrRegistry) && (local ? !this.localMatch : this.connectionState !== 'connected' || Boolean(this.localMatch))) return;
+  receiveSnapshot(snapshot: ServerSnapshot): void {
+    if (isControllerOptions(this.optionsOrRegistry) && this.connectionState !== 'connected') return;
     if (this.latestSnapshot?.matchId === snapshot.matchId && snapshot.revision < this.latestSnapshot.revision) return;
     this.latestSnapshot = snapshot;
     if (isMatchProjection(snapshot.projection)) this.matchFlowDirector?.receiveSnapshot(snapshot as ServerSnapshot<MatchProjection>);
@@ -197,7 +192,7 @@ export class AppController {
     this.terminalCleanup?.();
     this.terminalCleanup = undefined;
     this.lobbyScreen?.setConnectionState(state);
-    if (state !== 'connected' && this.destination !== 'lobby' && !this.localMatch) {
+    if (state !== 'connected' && this.destination !== 'lobby') {
       this.timeline?.cancel(true);
       this.modalCleanup = showConnectionModal(this.modalLayer, state);
     }
@@ -222,9 +217,7 @@ export class AppController {
     this.curtain = undefined;
     this.setMatchmaking(false);
     this.matchFlowDirector?.cancel();
-    this.localMatch?.destroy();
-    this.localMatch = undefined;
-    this.music.leaveAbm();
+    this.music.leaveMatch();
     destroySoundCatalog();
     if (isControllerOptions(this.optionsOrRegistry)) this.optionsOrRegistry.session.destroy();
   }
@@ -236,7 +229,7 @@ export class AppController {
       const title = mountTitleScreen(this.screenLayer, options.clock, (name) => {
         this.playerName = name;
         void options.session.enterLobby(name).then(() => this.navigate('lobby'));
-      }, () => options.session.getOnlinePlayerCount(), (trigger) => this.openAbmLetter(trigger));
+      }, () => options.session.getOnlinePlayerCount());
       this.screenCleanup = title;
       this.screenReady = title.ready;
     } else if (destination === 'lobby') {
@@ -250,7 +243,7 @@ export class AppController {
         this.playerName,
         this.matchmakingActive,
         (active) => this.setMatchmaking(active),
-        () => this.startPractice(),
+        () => void this.navigate('slot-picker'),
         () => {},
         () => void this.navigate('scoreboard'),
         () => this.openUniversalMenu(),
@@ -262,7 +255,6 @@ export class AppController {
       lobby.setConnectionState(this.connectionState);
       this.lobbyScreen = lobby;
       this.screenCleanup = lobby;
-      if (!hasSeenAbmLetter()) this.openAbmLetter();
     } else if (destination === 'match-found') {
       const projection = this.matchProjection;
       if (!projection) throw new Error('Match information is unavailable.');
@@ -287,11 +279,12 @@ export class AppController {
       this.variantSelectScreen = screen;
       this.screenCleanup = () => screen.destroy();
     } else if (destination === 'scoreboard') {
+      const projection = this.matchProjection;
       this.screenCleanup = mountScoreboardScreen({
         container: this.screenLayer,
         clock: options.clock,
-        onBack: () => void this.navigate('lobby'),
-        projection: this.matchProjection,
+        onBack: () => projection ? this.returnToLobbyFromMatch() : void this.navigate('lobby'),
+        projection,
         variants: this.variants,
       });
     } else if (destination === 'gameplay') {
@@ -330,7 +323,7 @@ export class AppController {
         this.destination = 'gameplay';
         await this.loadSlot(slot);
         if (revision + 1 !== this.loadRevision || signal.aborted) return;
-        if (this.latestSnapshot) this.receiveSnapshot(this.latestSnapshot, Boolean(this.localMatch));
+        if (this.latestSnapshot) this.receiveSnapshot(this.latestSnapshot);
       }, signal);
     } catch (error) { if (!signal.aborted) this.showError(error); }
   }
@@ -346,7 +339,6 @@ export class AppController {
   }
 
   private clearScreen(): void {
-    this.closeAbmLetter();
     this.screenCleanup?.();
     this.screenCleanup = undefined;
     this.lobbyScreen = undefined;
@@ -363,7 +355,7 @@ export class AppController {
     this.assetLease?.release();
     this.assetLease = undefined;
     this.activeSlot = undefined;
-    this.music.leaveAbm();
+    this.music.leaveMatch();
   }
 
   private showError(error: unknown): void {
@@ -381,19 +373,6 @@ export class AppController {
       () => this.quitToTitle(), () => this.closeUniversalMenu());
   }
 
-  private openAbmLetter(trigger?: HTMLElement): void {
-    this.closeAbmLetter();
-    const focused = trigger ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
-    const modal = mountAbmLetterModal(this.modalLayer, this.options.clock, focused);
-    this.letterCleanup = modal.dismiss;
-  }
-
-  private closeAbmLetter(): void {
-    const cleanup = this.letterCleanup;
-    this.letterCleanup = undefined;
-    cleanup?.();
-  }
-
   private closeUniversalMenu(): void {
     const menu = this.universalMenu;
     this.universalMenu = undefined;
@@ -404,8 +383,7 @@ export class AppController {
     const wasInMatch = Boolean(this.matchProjection) || this.destination === 'gameplay' || this.destination === 'match-found';
     this.closeUniversalMenu();
     this.setMatchmaking(false);
-    if (this.localMatch) { this.localMatch.destroy(); this.localMatch = undefined; }
-    else if (wasInMatch) this.options.session.leaveMatch();
+    if (wasInMatch) this.options.session.leaveMatch();
     this.options.session.disconnectOnline();
     this.latestSnapshot = undefined;
     this.matchFlowDirector?.cancel();
@@ -431,19 +409,6 @@ export class AppController {
     this.lobbyScreen?.setMatchmaking(active);
     if (active) this.options.session.startMatchmaking();
     else this.options.session.cancelMatchmaking();
-  }
-
-  private startPractice(): void {
-    this.setMatchmaking(false);
-    this.latestSnapshot = undefined;
-    this.matchFlowDirector?.cancel();
-    this.options.session.setLobbyPresence('playing-computer');
-    this.localMatch?.destroy();
-    this.localMatch = new LocalAbmMatch({
-      playerName: this.playerName,
-      publish: (snapshot) => this.receiveSnapshot(snapshot, true),
-    });
-    this.localMatch.start();
   }
 
   private async syncMatchScreen(projection: MatchProjection): Promise<void> {
@@ -492,11 +457,7 @@ export class AppController {
   private returnToLobbyFromMatch(): void {
     this.terminalCleanup?.();
     this.terminalCleanup = undefined;
-    if (this.localMatch) {
-      this.localMatch.destroy();
-      this.localMatch = undefined;
-      this.options.session.setLobbyPresence('idle');
-    } else this.options.session.leaveMatch();
+    this.options.session.leaveMatch();
     this.latestSnapshot = undefined;
     this.matchFlowDirector?.cancel();
     this.music.enterMenu(true);
