@@ -2,12 +2,15 @@ import type { PlayerId, VariantGameResult } from '../../core/variant';
 
 export const ABM_CLASS_IDS = [
   'lucky', 'advantaged', 'thief', 'juggernaut', 'stunner', 'duplicator', 'sumo',
-  'cheater', 'investor',
+  'cheater', 'investor', 'gambler',
 ] as const;
 
 export type AbmClassId = typeof ABM_CLASS_IDS[number];
 export type AbmMove = 'attack' | 'block' | 'mana';
 export type AbmDisplayMove = AbmMove | 'skip';
+export type AbmGamblerOutcome =
+  | 'plus-2-mana' | 'plus-1-mana' | 'mana-drain' | 'mana-double'
+  | 'plus-1-block' | 'plus-2-block' | 'minus-1-block' | 'nothing';
 export type AbmPhase =
   | 'selecting-classes' | 'waiting-for-class'
   | 'idle' | 'waiting' | 'counter-picking' | 'match-complete';
@@ -56,6 +59,7 @@ export interface AbmState {
   duplicatorProcPlayers?: PlayerId[];
   sumoProcRemaining?: Partial<Record<PlayerId, 0 | 1 | 2>>;
   cheaterProcPlayers?: PlayerId[];
+  gamblerOutcomes?: Partial<Record<PlayerId, AbmGamblerOutcome>>;
   earlyPlayer?: PlayerId;
   latePlayer?: PlayerId;
   waitingStartsAt?: number;
@@ -102,6 +106,7 @@ export interface AbmProjection {
   duplicatorProcPlayers?: PlayerId[];
   sumoProcRemaining?: Partial<Record<PlayerId, 0 | 1 | 2>>;
   cheaterProcPlayers?: PlayerId[];
+  gamblerOutcomes?: Partial<Record<PlayerId, AbmGamblerOutcome>>;
   earlyPlayer?: PlayerId;
   latePlayer?: PlayerId;
   waitingStartsAt?: number;

@@ -13,8 +13,8 @@ export function createDummyPresentation(clock: BoilClock): VariantPresentation<D
     async preload(): Promise<AssetLease> {
       const lease = assetLoader.retainUrls([
         '/variants/dummy/scenes/dummy-scene.webp',
-        '/variants/dummy/scenes/split-scenes/dummy-scene-p1-rdy.webp',
-        '/variants/dummy/scenes/split-scenes/dummy-scene-p2-rdy.webp',
+        '/variants/dummy/scenes/split-scenes/dummy-scene-left-ready.webp',
+        '/variants/dummy/scenes/split-scenes/dummy-scene-right-ready.webp',
       ]);
       await lease.ready;
       return lease;

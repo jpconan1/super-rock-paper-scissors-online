@@ -242,6 +242,72 @@ describe('Attack Block Mana rules', () => {
     expect(state.players).toMatchObject({ p1: { classId: 'investor', mana: 5 }, p2: { classId: 'investor', mana: 5 } });
   });
 
+  test('starts Gambler with 3 Blocks and resets non-Block moves to its class maximum', () => {
+    let state = startedWith('gambler', 'lucky');
+    expect(state.players.p1).toMatchObject({ mana: 1, blocks: 3 });
+    state.players.p1.blocks = 7;
+    state = playTurn(state, 'mana', 'block');
+    expect(state.players.p1.blocks).toBe(3);
+    state = playTurn(state, 'attack', 'block');
+    expect(state).toMatchObject({ phase: 'idle', players: { p1: { mana: 1, blocks: 3 } } });
+  });
+
+  test.each([
+    [0, 'plus-2-mana', 3, 2],
+    [0.01, 'plus-1-mana', 2, 2],
+    [0.20, 'mana-drain', 0, 2],
+    [0.30, 'mana-double', 2, 2],
+    [0.40, 'plus-1-block', 1, 3],
+    [0.55, 'plus-2-block', 1, 4],
+    [0.60, 'minus-1-block', 1, 1],
+    [0.70, 'nothing', 1, 2],
+  ] as const)('resolves Gambler boundary roll %s as %s', (random, outcome, mana, blocks) => {
+    let state = startedWith('gambler', 'lucky');
+    state = send(state, 'p1', { type: 'choose-move', move: 'block' });
+    const resolution = attackBlockManaRules.resolve(state, 'p2', { type: 'choose-move', move: 'block' }, { ...context, random: () => random });
+    expect(resolution.state.players.p1).toMatchObject({ mana, blocks });
+    expect(resolution.state.gamblerOutcomes).toEqual({ p1: outcome });
+    expect(attackBlockManaRules.project(resolution.state, 'p2').gamblerOutcomes).toEqual({ p1: outcome });
+    expect(resolution.events?.[0]?.payload).toMatchObject({ gamblerOutcomes: { p1: outcome } });
+  });
+
+  test('lets Gambler exceed 3 Blocks and caps Mana outcomes at 9', () => {
+    let blocks = startedWith('gambler', 'lucky');
+    blocks.players.p1.blocks = 5;
+    blocks = send(blocks, 'p1', { type: 'choose-move', move: 'block' });
+    blocks = attackBlockManaRules.resolve(blocks, 'p2', { type: 'choose-move', move: 'attack' }, { ...context, random: () => 0.55 }).state;
+    expect(blocks.players.p1.blocks).toBe(6);
+
+    let mana = startedWith('gambler', 'lucky');
+    mana.players.p1.mana = 8;
+    mana = send(mana, 'p1', { type: 'choose-move', move: 'block' });
+    mana = attackBlockManaRules.resolve(mana, 'p2', { type: 'choose-move', move: 'block' }, { ...context, random: () => 0 }).state;
+    expect(mana.players.p1.mana).toBe(9);
+    mana.players.p1.mana = 6;
+    mana = send(mana, 'p1', { type: 'choose-move', move: 'block' });
+    mana = attackBlockManaRules.resolve(mana, 'p2', { type: 'choose-move', move: 'block' }, { ...context, random: () => 0.30 }).state;
+    expect(mana.players.p1.mana).toBe(9);
+  });
+
+  test('rolls simultaneous Gamblers in deterministic player order', () => {
+    const random = vi.fn().mockReturnValueOnce(0.40).mockReturnValueOnce(0.55);
+    let state = startedWith('gambler', 'gambler');
+    state = send(state, 'p1', { type: 'choose-move', move: 'block' });
+    state = attackBlockManaRules.resolve(state, 'p2', { type: 'choose-move', move: 'block' }, { ...context, random }).state;
+    expect(random).toHaveBeenCalledTimes(2);
+    expect(state.players).toMatchObject({ p1: { blocks: 3 }, p2: { blocks: 4 } });
+    expect(state.gamblerOutcomes).toEqual({ p1: 'plus-1-block', p2: 'plus-2-block' });
+  });
+
+  test('resolves an early Gambler Block when the opponent times out', () => {
+    let state = startedWith('gambler', 'lucky');
+    state = send(state, 'p1', { type: 'choose-move', move: 'block' }, 2_000);
+    const resolution = attackBlockManaRules.advanceDeadline!(state, { ...context, now: state.waitingDeadlineAt!, random: () => 0 })!;
+    expect(resolution.state.players.p1).toMatchObject({ mana: 3, blocks: 2 });
+    expect(resolution.state.gamblerOutcomes).toEqual({ p1: 'plus-2-mana' });
+    expect(resolution.events?.[0]?.payload).toMatchObject({ gamblerOutcomes: { p1: 'plus-2-mana' } });
+  });
+
   test('gives Investor 2 Mana when both players Mana, including mirror and cap', () => {
     let state = playTurn(startedWith('investor', 'lucky'), 'mana', 'mana');
     expect(state.players).toMatchObject({ p1: { mana: 7 }, p2: { mana: 2 } });

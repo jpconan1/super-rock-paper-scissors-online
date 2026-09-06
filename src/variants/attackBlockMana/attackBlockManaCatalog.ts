@@ -28,10 +28,18 @@ export const ABM_CLASSES: readonly AbmClassDefinition[] = [
   entry('duplicator', 'Duplicator', 'Consecutive Mana moves double the amount gained each time.', true),
   entry('sumo', 'The Sumo', 'Avoids paying for an Attack when both players Attack, up to three times.', true),
   entry('cheater', 'Cheater', 'Has a 1-in-3 chance to gain 2 Mana instead of 1.', true),
-  entry('investor', 'Investor', 'Starts with 5 Mana, loses 1 every third turn, and gains extra Mana when both players Mana.', true),
+  entry('investor', 'Investor', 'Starts with 5 Mana, loses 1 every third turn, and gains extra Mana when both players Mana.', true, { initialMana: 5 }),
+  entry('gambler', 'Gambler', 'Every Block rolls for a random Mana or Block effect. Starts with 3 Blocks.', true, { maximumBlocks: 3 }),
 ];
 
 export const ABM_CLASS_BY_ID = new Map(ABM_CLASSES.map((definition) => [definition.id, definition]));
+
+export interface AbmStartingResources { mana: number; blocks: number }
+
+export function startingResourcesForClass(classId?: AbmClassId): AbmStartingResources {
+  const hooks = classId ? ABM_CLASS_BY_ID.get(classId)?.hooks : undefined;
+  return { mana: hooks?.initialMana ?? 1, blocks: hooks?.maximumBlocks ?? 5 };
+}
 
 function entry(
   id: AbmClassId,

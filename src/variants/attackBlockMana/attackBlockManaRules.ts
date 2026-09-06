@@ -1,7 +1,7 @@
 import type { DeterministicContext, PlayerId, VariantRules, VariantResolution } from '../../core/variant';
 import { beats, STARBURST_WIPE_MS } from '../../core/time';
-import { ABM_CLASS_BY_ID } from './attackBlockManaCatalog';
-import type { AbmClassId, AbmCommand, AbmMove, AbmPlayerState, AbmProjection, AbmResult, AbmState } from './attackBlockManaTypes';
+import { ABM_CLASS_BY_ID, startingResourcesForClass } from './attackBlockManaCatalog';
+import type { AbmClassId, AbmCommand, AbmGamblerOutcome, AbmMove, AbmPlayerState, AbmProjection, AbmResult, AbmState } from './attackBlockManaTypes';
 
 const OTHER: Record<PlayerId, PlayerId> = { p1: 'p2', p2: 'p1' };
 const MAX_MANA = 9;
@@ -56,6 +56,7 @@ export const attackBlockManaRules: VariantRules<AbmState, AbmCommand, AbmProject
       ...(state.duplicatorProcPlayers?.length ? { duplicatorProcPlayers: [...state.duplicatorProcPlayers] } : {}),
       ...(state.sumoProcRemaining && Object.keys(state.sumoProcRemaining).length ? { sumoProcRemaining: { ...state.sumoProcRemaining } } : {}),
       ...(state.cheaterProcPlayers?.length ? { cheaterProcPlayers: [...state.cheaterProcPlayers] } : {}),
+      ...(state.gamblerOutcomes && Object.keys(state.gamblerOutcomes).length ? { gamblerOutcomes: { ...state.gamblerOutcomes } } : {}),
       ...(state.earlyPlayer ? { earlyPlayer: state.earlyPlayer } : {}), ...(state.latePlayer ? { latePlayer: state.latePlayer } : {}),
       ...(state.waitingStartsAt !== undefined ? { waitingStartsAt: state.waitingStartsAt } : {}),
       ...(state.waitingDeadlineAt !== undefined ? { waitingDeadlineAt: state.waitingDeadlineAt } : {}),
@@ -99,7 +100,7 @@ function lockClass(state: AbmState, player: PlayerId, classId: AbmClassId, now: 
         counterPickAvailableAt: undefined, resultRevealAt: undefined, lastCompleteMoves: undefined, heldSplitFor: undefined,
         luckyProcPlayer: undefined, advantagedProcPlayers: undefined, thiefAttemptPlayers: undefined, thiefTransferPlayer: undefined,
         juggernautProcPlayers: undefined, stunnedPlayers: undefined, investorBullPlayers: undefined, investorBearPlayers: undefined,
-        duplicatorProcPlayers: undefined, sumoProcRemaining: undefined, cheaterProcPlayers: undefined },
+        duplicatorProcPlayers: undefined, sumoProcRemaining: undefined, cheaterProcPlayers: undefined, gamblerOutcomes: undefined },
       events: [cue('class-reveal', now, 800, { classes: classMap(players), round: state.round })],
     };
   }
@@ -143,10 +144,14 @@ function resolveTurn(state: AbmState, moves: Record<PlayerId, AbmMove>, context:
   const duplicatorProcPlayers = (['p1', 'p2'] as const).filter((id) => isDuplicatorProc(players[id], moves[id]));
   const cheaterProcPlayers = (['p1', 'p2'] as const).filter((id) => isCheaterMana(players[id], moves[id]) && context.random() < 1 / 3);
   const sumoProcRemaining: Partial<Record<PlayerId, 0 | 1 | 2>> = {};
+  const gamblerOutcomes: Partial<Record<PlayerId, AbmGamblerOutcome>> = {};
   for (const id of ['p1', 'p2'] as const) {
     const sumoRefund = isSumoRefund(players[id], moves);
     const manaGain = cheaterProcPlayers.includes(id) ? 2 : manaGainFor(players[id], moves, id, state.turn);
     applyMove(players[id], moves[id], manaGain, true, sumoRefund);
+    if (players[id].classId === 'gambler' && moves[id] === 'block') {
+      gamblerOutcomes[id] = applyGamblerRoll(players[id], context.random());
+    }
     if (sumoRefund) {
       const remaining = Math.max(0, sumoRefundsFor(players[id]) - 1) as 0 | 1 | 2;
       players[id].refundsRemaining = remaining;
@@ -162,7 +167,7 @@ function resolveTurn(state: AbmState, moves: Record<PlayerId, AbmMove>, context:
   const defeatedPlayer = luckyProcPlayer ? undefined : loser;
   const revealDuration = defeatedPlayer ? ABM_LETHAL_TO_RESULT_MS : 800;
   const events = [cue('move-reveal', now, revealDuration, { moves, turn: state.turn, forced, luckyProcPlayer, advantagedProcPlayers,
-    juggernautProcPlayers, stunnedPlayers, investorBullPlayers, investorBearPlayers, duplicatorProcPlayers, sumoProcRemaining, cheaterProcPlayers })];
+    juggernautProcPlayers, stunnedPlayers, investorBullPlayers, investorBearPlayers, duplicatorProcPlayers, sumoProcRemaining, cheaterProcPlayers, gamblerOutcomes })];
   const revealed = { ...state, players, pendingMoves: {}, pendingSteals: {}, lastCompleteMoves: moves, heldSplitFor: undefined,
     luckyProcPlayer, advantagedProcPlayers: advantagedProcPlayers.length ? advantagedProcPlayers : undefined,
     thiefAttemptPlayers: thiefAttemptPlayers.length ? thiefAttemptPlayers : undefined, thiefTransferPlayer,
@@ -171,7 +176,8 @@ function resolveTurn(state: AbmState, moves: Record<PlayerId, AbmMove>, context:
     investorBearPlayers: investorBearPlayers.length ? investorBearPlayers : undefined,
     duplicatorProcPlayers: duplicatorProcPlayers.length ? duplicatorProcPlayers : undefined,
     sumoProcRemaining: Object.keys(sumoProcRemaining).length ? sumoProcRemaining : undefined,
-    cheaterProcPlayers: cheaterProcPlayers.length ? cheaterProcPlayers : undefined };
+    cheaterProcPlayers: cheaterProcPlayers.length ? cheaterProcPlayers : undefined,
+    gamblerOutcomes: Object.keys(gamblerOutcomes).length ? gamblerOutcomes : undefined };
   revealed.juggernautProcPlayers = juggernautProcPlayers.length ? juggernautProcPlayers : undefined;
   if (defeatedPlayer) return finishRound(revealed, OTHER[defeatedPlayer], events, now + revealDuration);
   return { state: { ...revealed, phase: 'idle', turn: state.turn + 1 }, events };
@@ -185,6 +191,8 @@ function resolveTimeout(state: AbmState, context: DeterministicContext): Variant
   const duplicatorProcPlayers = isDuplicatorProc(players[early], move) ? [early] : undefined;
   const cheaterProcPlayers = isCheaterMana(players[early], move) && context.random() < 1 / 3 ? [early] : undefined;
   applyMove(players[early], move, cheaterProcPlayers ? 2 : manaGainFor(players[early], undefined, early, state.turn));
+  const gamblerOutcomes: Partial<Record<PlayerId, AbmGamblerOutcome>> = {};
+  if (players[early].classId === 'gambler' && move === 'block') gamblerOutcomes[early] = applyGamblerRoll(players[early], context.random());
   players[late].mana = Math.max(0, players[late].mana - 1);
   players[late].strikes = (players[late].strikes ?? 0) + 1;
   players[late].lastMove = 'skip';
@@ -195,11 +203,12 @@ function resolveTimeout(state: AbmState, context: DeterministicContext): Variant
   const investorBearPlayers = resolveInvestorTax(players, state.turn);
   const revealDuration = move === 'attack' || players[late].strikes >= 2 ? ABM_LETHAL_TO_RESULT_MS : 800;
   const events = [cue('move-timeout', now, revealDuration, { earlyPlayer: early, latePlayer: late, move, strikes: players[late].strikes,
-    turn: state.turn, advantagedProcPlayers, thiefAttemptPlayers, thiefTransferPlayer, stunnedPlayers, investorBearPlayers, duplicatorProcPlayers, cheaterProcPlayers })];
+    turn: state.turn, advantagedProcPlayers, thiefAttemptPlayers, thiefTransferPlayer, stunnedPlayers, investorBearPlayers, duplicatorProcPlayers, cheaterProcPlayers, gamblerOutcomes })];
   const timedOut = { ...clearWaiting(state), players, pendingMoves: {}, pendingSteals: {}, heldSplitFor: early, luckyProcPlayer: undefined,
     advantagedProcPlayers, thiefAttemptPlayers: undefined, thiefTransferPlayer: undefined, juggernautProcPlayers: undefined,
     stunnedPlayers: stunnedPlayers.length ? stunnedPlayers : undefined, investorBullPlayers: undefined,
-    investorBearPlayers: investorBearPlayers.length ? investorBearPlayers : undefined, duplicatorProcPlayers, sumoProcRemaining: undefined, cheaterProcPlayers };
+    investorBearPlayers: investorBearPlayers.length ? investorBearPlayers : undefined, duplicatorProcPlayers, sumoProcRemaining: undefined, cheaterProcPlayers,
+    gamblerOutcomes: Object.keys(gamblerOutcomes).length ? gamblerOutcomes : undefined };
   if (players[late].strikes >= 2) return { state: { ...timedOut, phase: 'match-complete', winner: early, resultReason: 'forfeit', resultRevealAt: now + revealDuration }, events };
   if (move === 'attack') return finishRound(timedOut, early, events, now + revealDuration);
   return { state: { ...timedOut, phase: 'idle', turn: state.turn + 1 }, events };
@@ -211,8 +220,11 @@ function finishRound(state: AbmState, winner: PlayerId, events: ReturnType<typeo
   if (score[winner] >= 3) return { state: { ...state, phase: 'match-complete', score, winner, lastRoundWinner: winner, resultRevealAt: startsAt }, events };
   const loser = OTHER[winner];
   const players = clonePlayers(state.players);
-  players.p1.mana = initialManaFor(players.p1.classId);
-  players.p2.mana = initialManaFor(players.p2.classId);
+  for (const id of ['p1', 'p2'] as const) {
+    const resources = startingResourcesForClass(players[id].classId);
+    players[id].mana = resources.mana;
+    players[id].blocks = resources.blocks;
+  }
   if (players.p1.classId === 'duplicator') players.p1.nextManaGain = 1;
   if (players.p2.classId === 'duplicator') players.p2.nextManaGain = 1;
   if (players.p1.classId === 'sumo') players.p1.refundsRemaining = 3;
@@ -228,7 +240,7 @@ function applyMove(player: AbmPlayerState, move: AbmMove, manaGain = 1, record =
   }
   else if (move === 'block') player.blocks--;
   else player.mana = Math.min(MAX_MANA, player.mana + manaGain);
-  if (move !== 'block') player.blocks = 5;
+  if (move !== 'block') player.blocks = startingResourcesForClass(player.classId).blocks;
   if (player.classId === 'juggernaut') player.attackStreak = move === 'attack' ? (player.attackStreak ?? 0) + 1 : 0;
   if (player.classId === 'duplicator') player.nextManaGain = move === 'mana' ? duplicatorGainFor(player) * 2 : 1;
   if (record) player.lastMove = move;
@@ -281,10 +293,9 @@ function projectedPhase(state: AbmState, viewer: PlayerId): AbmState['phase'] {
   if (state.phase === 'waiting-for-class' && !state.pendingClasses[viewer]) return 'selecting-classes';
   return state.phase;
 }
-function initialManaFor(classId?: AbmClassId): number { return classId === 'investor' ? 5 : 1; }
-function freshPlayer(classId?: AbmClassId): AbmPlayerState { return { ...(classId ? { classId } : {}), mana: initialManaFor(classId), blocks: 5, strikes: 0,
+function freshPlayer(classId?: AbmClassId): AbmPlayerState { const resources = startingResourcesForClass(classId); return { ...(classId ? { classId } : {}), mana: resources.mana, blocks: resources.blocks, strikes: 0,
   attackCost: 1, ...(classId === 'duplicator' ? { nextManaGain: 1 } : {}), ...(classId === 'sumo' ? { refundsRemaining: 3 } : {}) }; }
-function resetPlayer(player: AbmPlayerState, classId?: AbmClassId): AbmPlayerState { return { ...(classId ? { classId } : {}), mana: initialManaFor(classId), blocks: 5,
+function resetPlayer(player: AbmPlayerState, classId?: AbmClassId): AbmPlayerState { const resources = startingResourcesForClass(classId); return { ...(classId ? { classId } : {}), mana: resources.mana, blocks: resources.blocks,
   strikes: player.strikes ?? 0, attackCost: 1, ...(classId === 'duplicator' ? { nextManaGain: 1 } : {}), ...(classId === 'sumo' ? { refundsRemaining: 3 } : {}) }; }
 function clearWaiting(state: AbmState): AbmState { return { ...state, earlyPlayer: undefined, latePlayer: undefined, waitingStartsAt: undefined, waitingDeadlineAt: undefined }; }
 function clonePlayers(players: Record<PlayerId, AbmPlayerState>): Record<PlayerId, AbmPlayerState> { return { p1: { ...players.p1 }, p2: { ...players.p2 } }; }
@@ -297,6 +308,17 @@ function isDuplicatorProc(player: Readonly<AbmPlayerState>, move: AbmMove): bool
   return player.classId === 'duplicator' && move === 'mana' && duplicatorGainFor(player) >= 2;
 }
 function isCheaterMana(player: Readonly<AbmPlayerState>, move: AbmMove): boolean { return player.classId === 'cheater' && move === 'mana'; }
+function applyGamblerRoll(player: AbmPlayerState, random: number): AbmGamblerOutcome {
+  const roll = Math.min(100, Math.max(1, Math.floor(random * 100) + 1));
+  if (roll === 1) { player.mana = Math.min(MAX_MANA, player.mana + 2); return 'plus-2-mana'; }
+  if (roll <= 20) { player.mana = Math.min(MAX_MANA, player.mana + 1); return 'plus-1-mana'; }
+  if (roll <= 30) { player.mana = 0; return 'mana-drain'; }
+  if (roll <= 40) { player.mana = Math.min(MAX_MANA, player.mana * 2); return 'mana-double'; }
+  if (roll <= 55) { player.blocks++; return 'plus-1-block'; }
+  if (roll <= 60) { player.blocks += 2; return 'plus-2-block'; }
+  if (roll <= 70) { player.blocks = Math.max(0, player.blocks - 1); return 'minus-1-block'; }
+  return 'nothing';
+}
 function sumoRefundsFor(player: Readonly<AbmPlayerState>): number { return player.refundsRemaining ?? 3; }
 function isSumoRefund(player: Readonly<AbmPlayerState>, moves: Readonly<Record<PlayerId, AbmMove>>): boolean {
   return player.classId === 'sumo' && moves.p1 === 'attack' && moves.p2 === 'attack' && sumoRefundsFor(player) > 0;

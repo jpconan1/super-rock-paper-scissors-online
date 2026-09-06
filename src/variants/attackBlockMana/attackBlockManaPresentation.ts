@@ -11,7 +11,7 @@ import type { ResponsiveScaleBoxLayout } from '../../layout/scaleBox';
 import { createBoilingSprite, type BoilingSprite } from '../../renderer/boilingSprite';
 import { playStarburstWipe } from '../../renderer/starburstWipe';
 import { createTextbox } from '../../ui/textbox';
-import { ABM_CLASSES } from './attackBlockManaCatalog';
+import { ABM_CLASSES, startingResourcesForClass, type AbmStartingResources } from './attackBlockManaCatalog';
 import { ABM_SCENE_URLS, resolveAbmProcBackgrounds, resolveAbmProcTags, resolveAbmScene, resolveAbmSplitScene, type AbmProcBackgroundKind, type AbmProcTagKind } from './attackBlockManaScenes';
 import type { AbmClassId, AbmCommand, AbmMove, AbmPlayerState, AbmProjection } from './attackBlockManaTypes';
 import { playCatalogSound, type SoundId } from '../../audio/soundCatalog';
@@ -254,10 +254,11 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     const slot = element('div', `abm-proc-tags abm-proc-tags--${player}`);
     const labels: Record<AbmProcTagKind, string> = {
       lucky: 'Lucky', advantaged: 'Advantaged plus one Mana', juggernaut: 'Block broken', thief: 'Yoink', stunned: 'Stunned',
-      bull: 'Bull Market', bear: 'Bear Market', cheater: 'Cheater bonus Mana', duplicator: 'Mana duplicated', sumo: 'Free Attack',
+      bull: 'Bull Market', bear: 'Bear Market', cheater: 'Cheater bonus Mana', duplicator: 'Mana duplicated', gambler: 'Gambler result', sumo: 'Free Attack',
     };
-    for (const kind of ['lucky', 'advantaged', 'juggernaut', 'thief', 'stunned', 'bull', 'bear', 'cheater', 'duplicator', 'sumo'] as const satisfies readonly AbmProcTagKind[]) {
-      const src = kind === 'sumo' ? `${ABM_ROOT}/scenes/tags/sumo-2-left-sheet.webp` : `${ABM_ROOT}/scenes/tags/${kind}-sheet.webp`;
+    for (const kind of ['lucky', 'advantaged', 'juggernaut', 'thief', 'stunned', 'bull', 'bear', 'cheater', 'duplicator', 'gambler', 'sumo'] as const satisfies readonly AbmProcTagKind[]) {
+      const src = kind === 'sumo' ? `${ABM_ROOT}/scenes/tags/sumo-2-left-sheet.webp`
+        : kind === 'gambler' ? `${ABM_ROOT}/scenes/tags/gambler-plus-1-mana-sheet.webp` : `${ABM_ROOT}/scenes/tags/${kind}-sheet.webp`;
       const tag = createBoilingSprite({ src, clock, className: `abm-proc-tag abm-proc-tag--${kind}`, alt: labels[kind] });
       const key = `${player}:${kind}`;
       tag.element.hidden = true; sprites.push(tag); slot.append(tag.element); procTagSprites.set(key, tag); procTagAssets.set(key, src);
@@ -331,8 +332,8 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     className.textContent = definition.name; description.textContent = definition.description;
     if (projection && (projection.phase === 'selecting-classes' || projection.phase === 'waiting-for-class' || projection.phase === 'counter-picking')) {
       const previewPlayer = projection.phase === 'counter-picking' ? projection.counterPicker : projection.self;
-      if (previewPlayer === 'p1') setManaDisplay(p1Resources, initialManaForClass(definition.id));
-      if (previewPlayer === 'p2') setManaDisplay(p2Resources, initialManaForClass(definition.id));
+      if (previewPlayer === 'p1') setResourceDisplay(p1Resources, startingResourcesForClass(definition.id));
+      if (previewPlayer === 'p2') setResourceDisplay(p2Resources, startingResourcesForClass(definition.id));
     }
     const canPick = Boolean(projection?.legalActions.includes('lock-class'));
     status.textContent = projection?.ownPendingClass ? 'LOCKED · WAITING' : projection?.phase === 'counter-picking' && projection.counterPicker !== projection.self ? 'WINNER STAYS' : definition.implemented ? 'PLAYABLE' : 'UNFINISHED';
@@ -422,6 +423,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     const duplicatorProcPlayers = continuingRoundProc ? nextProjection.duplicatorProcPlayers : undefined;
     const sumoProcRemaining = continuingRoundProc ? nextProjection.sumoProcRemaining : undefined;
     const cheaterProcPlayers = continuingRoundProc ? nextProjection.cheaterProcPlayers : undefined;
+    const gamblerOutcomes = continuingRoundProc ? nextProjection.gamblerOutcomes : undefined;
     const splitPlayer = nextProjection.phase === 'waiting' && nextProjection.waitingStartsAt !== undefined && serverTime >= nextProjection.waitingStartsAt
       ? nextProjection.earlyPlayer : nextProjection.heldSplitFor;
     const scene = splitPlayer
@@ -429,9 +431,11 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
       : resolveAbmScene(nextProjection.lastCompleteMoves, nextProjection.luckyProcPlayer);
     layout.setArtwork('scene', { src: scene.src, alt: 'Attack Block Mana scene.' });
     sceneArtwork.classList.toggle('is-flipped', scene.flip);
+    const sceneCanvas = sceneArtwork.querySelector<HTMLElement>('.boiling-sprite__canvas');
+    if (sceneCanvas) sceneCanvas.style.transform = scene.flip ? 'scaleX(-1)' : '';
     const visibleTags = !picking && !showingResult ? resolveAbmProcTags({
       ...nextProjection, advantagedProcPlayers, juggernautProcPlayers, stunnedPlayers, investorBullPlayers, investorBearPlayers, duplicatorProcPlayers,
-      sumoProcRemaining, cheaterProcPlayers,
+      sumoProcRemaining, cheaterProcPlayers, gamblerOutcomes,
     }, splitPlayer) : [];
     const visibleTagKeys = new Set(visibleTags.map(({ player, kind }) => `${player}:${kind}`));
     for (const [key, tag] of procTagSprites) tag.element.hidden = !visibleTagKeys.has(key);
@@ -455,9 +459,9 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     thiefTransfer.element.classList.toggle('is-flipped', nextProjection.thiefTransferPlayer === 'p2');
     renderStatus(p1Status, nextProjection, 'p1', picking); renderStatus(p2Status, nextProjection, 'p2', picking);
     const previewPlayer = picking ? (nextProjection.phase === 'counter-picking' ? nextProjection.counterPicker : nextProjection.self) : undefined;
-    const previewMana = initialManaForClass(ABM_CLASSES[selected]!.id);
-    renderResources(p1Resources, nextProjection, 'p1', previewPlayer === 'p1' ? previewMana : undefined);
-    renderResources(p2Resources, nextProjection, 'p2', previewPlayer === 'p2' ? previewMana : undefined);
+    const previewResources = startingResourcesForClass(ABM_CLASSES[selected]!.id);
+    renderResources(p1Resources, nextProjection, 'p1', previewPlayer === 'p1' ? previewResources : undefined);
+    renderResources(p2Resources, nextProjection, 'p2', previewPlayer === 'p2' ? previewResources : undefined);
     const showWaiting = nextProjection.phase === 'waiting';
     const showClassReady = picking && nextProjection.classReadyPlayer !== undefined && nextProjection.classReadyAt !== undefined;
     waiting.hidden = !showWaiting;
@@ -585,11 +589,14 @@ function resourceDisplay(label: string, player: 'p1' | 'p2', clock: BoilClock, s
     ...blocks.map(({ item }, index) => [`${player}-block-${index + 1}`, item] as [string, HTMLElement]),
   ] };
 }
-function renderResources(target: ResourceDisplay, projection: AbmProjection, player: 'p1' | 'p2', manaOverride?: number) {
-  const state = projection.players[player]; const mana = Math.max(0, Math.min(9, manaOverride ?? state.mana));
-  setManaDisplay(target, mana);
+function renderResources(target: ResourceDisplay, projection: AbmProjection, player: 'p1' | 'p2', override?: AbmStartingResources) {
+  const state = projection.players[player];
+  setResourceDisplay(target, override ?? { mana: state.mana, blocks: state.blocks });
+}
+function setResourceDisplay(target: ResourceDisplay, resources: AbmStartingResources) {
+  setManaDisplay(target, resources.mana);
   target.blocks.forEach((sprite, index) => {
-    const filled = blockSegments(player, state.blocks)[index];
+    const filled = index < resources.blocks;
     sprite.element.classList.toggle('is-filled', Boolean(filled));
     sprite.setSource(filled ? `${ABM_ROOT}/block-icon-sheet.webp` : `${ABM_ROOT}/block-icon-empty-sheet.webp`);
   });
@@ -599,7 +606,7 @@ function setManaDisplay(target: ResourceDisplay, mana: number) {
   target.manaMultiplier.setSource(`/visual-elements/resource-counters/times${Math.max(0, Math.min(9, mana))}-sheet.webp`);
 }
 export function initialManaForClass(classId: AbmClassId): number {
-  return classId === 'investor' ? 5 : 1;
+  return startingResourcesForClass(classId).mana;
 }
 export function shouldShowClassBadge(projection: Pick<AbmProjection, 'phase' | 'counterPicker'>, player: 'p1' | 'p2'): boolean {
   if (projection.phase === 'counter-picking') return projection.counterPicker !== player;
