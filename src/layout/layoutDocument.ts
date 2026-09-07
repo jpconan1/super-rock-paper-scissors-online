@@ -115,7 +115,7 @@ export function validateLayoutDocument(input: unknown): LayoutDocument {
       seen.add(parentId);
       parentId = elements.get(parentId)?.parent;
     }
-    if (!element.parent) continue;
+    if (!element.parent || element.properties?.allowParentOverflow === true) continue;
     const parent = elements.get(element.parent)!;
     for (const orientation of ['landscape', 'portrait'] as const) {
       const childBox = element.layouts[orientation];

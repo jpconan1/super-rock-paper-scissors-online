@@ -87,6 +87,21 @@ export interface GameLayout {
   destroy(): void;
 }
 
+export function pickedLabelFor(
+  viewer: PlayerId,
+  player: PlayerId,
+  layoutDocument: LayoutDocument,
+): GameLayoutArtwork {
+  const isViewer = viewer === player;
+  const artworkId = isViewer ? 'p1-picked' : 'p2-picked';
+  const artwork = layoutDocument.elements.find((element) => element.id === artworkId);
+  if (!artwork?.assets?.src) throw new Error(`Missing ${artworkId} artwork in ${layoutDocument.id}.`);
+  return {
+    src: artwork.assets.src,
+    alt: isViewer ? layoutDocument.copy!.youPicked! : layoutDocument.copy!.theyPicked!,
+  };
+}
+
 export function getYouTagGeometry(
   viewer: PlayerId,
   orientation: 'landscape' | 'portrait',
@@ -166,10 +181,10 @@ export function createGameLayout<TLayoutName extends string>(
   const config = (id: string) => layoutDocument.elements.find((element) => element.id === id)!;
   addSprite('p1-wins-label', { src: config('p1-wins-label').assets!.src!, alt: layoutDocument.copy!.wins! }, 'game-layout__wins-label');
   addSprite('p2-wins-label', { src: config('p2-wins-label').assets!.src!, alt: layoutDocument.copy!.wins! }, 'game-layout__wins-label');
-  addSprite('p1-picked', { src: config('p1-picked').assets!.src!, alt: layoutDocument.copy!.youPicked! }, 'game-layout__picked-label');
-  addSprite('p2-picked', { src: config('p2-picked').assets!.src!, alt: layoutDocument.copy!.theyPicked! }, 'game-layout__picked-label');
-
   const viewer = options.viewer ?? 'p1';
+  addSprite('p1-picked', pickedLabelFor(viewer, 'p1', layoutDocument), 'game-layout__picked-label');
+  addSprite('p2-picked', pickedLabelFor(viewer, 'p2', layoutDocument), 'game-layout__picked-label');
+
   const youTag = createBoilingSprite({
     src: YOU_TAG_ART[viewer], clock: options.clock, className: `game-layout__you-tag game-layout__you-tag--${viewer}`,
     alt: viewer === 'p1' ? 'You are Player 1' : 'You are Player 2',

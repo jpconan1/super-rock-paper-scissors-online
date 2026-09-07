@@ -1,5 +1,6 @@
 import { readdirSync, writeFileSync, renameSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { defineConfig } from 'vite';
 
 const virtualAssetBundles = 'virtual:asset-bundles';
@@ -87,6 +88,10 @@ export default defineConfig({
             const temporary = `${target}.tmp`;
             writeFileSync(temporary, `${JSON.stringify(document, null, 2)}\n`, 'utf8');
             renameSync(temporary, target);
+            execFileSync(process.execPath, [resolve(import.meta.dirname, 'node_modules/vite/bin/vite.js'), 'build'], {
+              cwd: import.meta.dirname,
+              stdio: 'pipe',
+            });
             response.setHeader('content-type', 'application/json'); response.end('{"ok":true}');
           } catch (error) { response.statusCode = 400; response.end(error instanceof Error ? error.message : String(error)); }
         });

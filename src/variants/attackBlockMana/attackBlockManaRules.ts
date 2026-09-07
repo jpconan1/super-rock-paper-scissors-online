@@ -1,7 +1,7 @@
 import type { DeterministicContext, PlayerId, VariantRules, VariantResolution } from '../../core/variant';
 import { beats, STARBURST_WIPE_MS } from '../../core/time';
 import { ABM_CLASS_BY_ID, startingResourcesForClass } from './attackBlockManaCatalog';
-import type { AbmClassId, AbmCommand, AbmGamblerOutcome, AbmMove, AbmPlayerState, AbmProjection, AbmResult, AbmState } from './attackBlockManaTypes';
+import type { AbmAbilityId, AbmClassId, AbmCommand, AbmGamblerOutcome, AbmMove, AbmPlayerState, AbmProjection, AbmResult, AbmState } from './attackBlockManaTypes';
 
 const OTHER: Record<PlayerId, PlayerId> = { p1: 'p2', p2: 'p1' };
 const MAX_MANA = 9;
@@ -15,14 +15,14 @@ export const attackBlockManaRules: VariantRules<AbmState, AbmCommand, AbmProject
   variantId: 'attack-block-mana', rulesVersion: 1,
   initialize: () => ({
     phase: 'selecting-classes', turn: 0, round: 1, score: { p1: 0, p2: 0 },
-    players: { p1: freshPlayer(), p2: freshPlayer() }, pendingClasses: {}, pendingMoves: {}, pendingSteals: {},
+    players: { p1: freshPlayer(), p2: freshPlayer() }, pendingClasses: {}, pendingMoves: {}, pendingAbilities: {},
   }),
   resolve(state, player, command, context) {
     if (state.winner) throw new Error('Game is complete.');
     if (!command || typeof command !== 'object') throw new Error('Invalid ABM command.');
     if (command.type === 'lock-class') return lockClass(state, player, command.classId, context.now);
     if (command.type === 'preview-class') return previewClass(state, player, command.classId, context.now);
-    if (command.type === 'choose-move') return chooseMove(state, player, command.move, command.useSteal, context);
+    if (command.type === 'choose-move') return chooseMove(state, player, command.move, command.ability, context);
     throw new Error('Unknown ABM command.');
   },
   nextDeadline: (state) => state.phase === 'waiting' ? state.waitingDeadlineAt : undefined,
@@ -34,12 +34,12 @@ export const attackBlockManaRules: VariantRules<AbmState, AbmCommand, AbmProject
     const opponent = OTHER[viewer];
     const ownPendingClass = state.pendingClasses[viewer];
     const ownPendingMove = state.pendingMoves[viewer];
-    const ownPendingSteal = state.pendingSteals?.[viewer];
+    const ownPendingAbility = state.pendingAbilities?.[viewer];
     return {
       self: viewer, phase: projectedPhase(state, viewer), turn: state.turn, round: state.round,
       score: { ...state.score }, players: clonePlayers(state.players),
       ...(ownPendingClass ? { ownPendingClass } : {}), ...(ownPendingMove ? { ownPendingMove } : {}),
-      ...(ownPendingSteal ? { ownPendingSteal } : {}),
+      ...(ownPendingAbility ? { ownPendingAbility } : {}),
       ...(state.classReadyPlayer ? { classReadyPlayer: state.classReadyPlayer } : {}),
       ...(state.classReadyAt !== undefined ? { classReadyAt: state.classReadyAt } : {}),
       opponentReady: Boolean(state.pendingClasses[opponent] || state.pendingMoves[opponent]),
@@ -49,6 +49,7 @@ export const attackBlockManaRules: VariantRules<AbmState, AbmCommand, AbmProject
       ...(state.advantagedProcPlayers?.length ? { advantagedProcPlayers: [...state.advantagedProcPlayers] } : {}),
       ...(state.thiefAttemptPlayers?.length ? { thiefAttemptPlayers: [...state.thiefAttemptPlayers] } : {}),
       ...(state.thiefTransferPlayer ? { thiefTransferPlayer: state.thiefTransferPlayer } : {}),
+      ...(state.taxmanCollectPlayers?.length ? { taxmanCollectPlayers: [...state.taxmanCollectPlayers] } : {}),
       ...(state.juggernautProcPlayers?.length ? { juggernautProcPlayers: [...state.juggernautProcPlayers] } : {}),
       ...(state.stunnedPlayers?.length ? { stunnedPlayers: [...state.stunnedPlayers] } : {}),
       ...(state.investorBullPlayers?.length ? { investorBullPlayers: [...state.investorBullPlayers] } : {}),
@@ -96,9 +97,9 @@ function lockClass(state: AbmState, player: PlayerId, classId: AbmClassId, now: 
     players[player] = resetPlayer(players[player], classId);
     players[OTHER[player]] = resetPlayer(players[OTHER[player]], players[OTHER[player]].classId);
     return {
-      state: { ...state, phase: 'idle', turn: 1, players, pendingClasses: {}, pendingMoves: {}, pendingSteals: {}, counterPicker: undefined,
+      state: { ...state, phase: 'idle', turn: 1, players, pendingClasses: {}, pendingMoves: {}, pendingAbilities: {}, counterPicker: undefined,
         counterPickAvailableAt: undefined, resultRevealAt: undefined, lastCompleteMoves: undefined, heldSplitFor: undefined,
-        luckyProcPlayer: undefined, advantagedProcPlayers: undefined, thiefAttemptPlayers: undefined, thiefTransferPlayer: undefined,
+        luckyProcPlayer: undefined, advantagedProcPlayers: undefined, thiefAttemptPlayers: undefined, thiefTransferPlayer: undefined, taxmanCollectPlayers: undefined,
         juggernautProcPlayers: undefined, stunnedPlayers: undefined, investorBullPlayers: undefined, investorBearPlayers: undefined,
         duplicatorProcPlayers: undefined, sumoProcRemaining: undefined, cheaterProcPlayers: undefined, gamblerOutcomes: undefined },
       events: [cue('class-reveal', now, 800, { classes: classMap(players), round: state.round })],
@@ -111,29 +112,31 @@ function lockClass(state: AbmState, player: PlayerId, classId: AbmClassId, now: 
     events: [cue('class-ready', now, 7 * 58, { player })],
   };
   const players = { p1: freshPlayer(pendingClasses.p1), p2: freshPlayer(pendingClasses.p2) };
-  return { state: { ...state, phase: 'idle', turn: 1, players, pendingClasses: {}, pendingMoves: {}, pendingSteals: {}, classReadyPlayer: undefined, classReadyAt: undefined },
+  return { state: { ...state, phase: 'idle', turn: 1, players, pendingClasses: {}, pendingMoves: {}, pendingAbilities: {}, classReadyPlayer: undefined, classReadyAt: undefined },
     events: [cue('class-reveal', now, 800, { classes: classMap(players), round: state.round })] };
 }
 
-function chooseMove(state: AbmState, player: PlayerId, move: AbmMove, useSteal: true | undefined, context: DeterministicContext): VariantResolution<AbmState> {
+function chooseMove(state: AbmState, player: PlayerId, move: AbmMove, ability: AbmAbilityId | undefined, context: DeterministicContext): VariantResolution<AbmState> {
   const { now } = context;
   if (!isActionPhase(state.phase)) throw new Error('Move cannot be chosen now.');
   if (!isMove(move)) throw new Error('Unknown ABM move.');
   if (state.pendingMoves[player]) throw new Error('Move is already locked.');
   const forcedMana = bothPlayersHaveNoMana(state);
   if (forcedMana && move !== 'mana') throw new Error('Mana is the only move available at 0–0 Mana.');
-  validateMove(state, player, move);
-  if (useSteal) validateSteal(state, player);
+  if (ability) validateAbility(state, player, ability);
+  const players = clonePlayers(state.players);
+  if (ability) spendAbility(players[player], ability);
+  validateMove({ ...state, players }, player, move);
   const pendingMoves = { ...state.pendingMoves, [player]: move };
-  const pendingSteals = { ...(state.pendingSteals ?? {}), ...(useSteal ? { [player]: true as const } : {}) };
+  const pendingAbilities = { ...(state.pendingAbilities ?? {}), ...(ability ? { [player]: ability } : {}) };
   if (!pendingMoves.p1 || !pendingMoves.p2) {
     const earlyPlayer = player;
     const waitingStartsAt = now + ABM_READY_SPLIT_MS;
     const waitingDeadlineAt = waitingStartsAt + ABM_WAITING_MS;
-    return { state: { ...state, phase: 'waiting', pendingMoves, pendingSteals, earlyPlayer, latePlayer: OTHER[player], waitingStartsAt, waitingDeadlineAt },
+    return { state: { ...state, phase: 'waiting', players, pendingMoves, pendingAbilities, earlyPlayer, latePlayer: OTHER[player], waitingStartsAt, waitingDeadlineAt },
       events: [cue('move-ready', now, ABM_READY_SPLIT_MS + ABM_WAITING_MS, { earlyPlayer, waitingStartsAt, waitingDeadlineAt })] };
   }
-  return resolveTurn(clearWaiting({ ...state, pendingSteals }), pendingMoves as Record<PlayerId, AbmMove>, context, forcedMana);
+  return resolveTurn(clearWaiting({ ...state, players, pendingAbilities }), pendingMoves as Record<PlayerId, AbmMove>, context, forcedMana);
 }
 
 function resolveTurn(state: AbmState, moves: Record<PlayerId, AbmMove>, context: DeterministicContext, forced: boolean): VariantResolution<AbmState> {
@@ -160,17 +163,19 @@ function resolveTurn(state: AbmState, moves: Record<PlayerId, AbmMove>, context:
   }
   const juggernautProcPlayers = (['p1', 'p2'] as const).filter((id) => didJuggernautProc(players[id], moves[id]));
   const stunnedPlayers = resolveStunnerMoves(players, moves);
-  const { attemptPlayers: thiefAttemptPlayers, transferPlayer: thiefTransferPlayer } = resolveSteals(players, state.pendingSteals ?? {});
   const investorBearPlayers = resolveInvestorTax(players, state.turn);
   const loser: PlayerId | undefined = moves.p1 === 'mana' && moves.p2 === 'attack' ? 'p1' : moves.p2 === 'mana' && moves.p1 === 'attack' ? 'p2' : undefined;
   const luckyProcPlayer = loser && players[loser].classId === 'lucky' && context.random() < 0.25 ? loser : undefined;
   const defeatedPlayer = luckyProcPlayer ? undefined : loser;
+  const abilityResult = defeatedPlayer ? emptyAbilityResult() : resolveActivatedAbilities(players, state.pendingAbilities ?? {});
   const revealDuration = defeatedPlayer ? ABM_LETHAL_TO_RESULT_MS : 800;
   const events = [cue('move-reveal', now, revealDuration, { moves, turn: state.turn, forced, luckyProcPlayer, advantagedProcPlayers,
     juggernautProcPlayers, stunnedPlayers, investorBullPlayers, investorBearPlayers, duplicatorProcPlayers, sumoProcRemaining, cheaterProcPlayers, gamblerOutcomes })];
-  const revealed = { ...state, players, pendingMoves: {}, pendingSteals: {}, lastCompleteMoves: moves, heldSplitFor: undefined,
+  const revealed = { ...state, players, pendingMoves: {}, pendingAbilities: {}, lastCompleteMoves: moves, heldSplitFor: undefined,
     luckyProcPlayer, advantagedProcPlayers: advantagedProcPlayers.length ? advantagedProcPlayers : undefined,
-    thiefAttemptPlayers: thiefAttemptPlayers.length ? thiefAttemptPlayers : undefined, thiefTransferPlayer,
+    thiefAttemptPlayers: abilityResult.thiefAttemptPlayers.length ? abilityResult.thiefAttemptPlayers : undefined,
+    thiefTransferPlayer: abilityResult.thiefTransferPlayer,
+    taxmanCollectPlayers: abilityResult.taxmanCollectPlayers.length ? abilityResult.taxmanCollectPlayers : undefined,
     stunnedPlayers: stunnedPlayers.length ? stunnedPlayers : undefined,
     investorBullPlayers: investorBullPlayers.length ? investorBullPlayers : undefined,
     investorBearPlayers: investorBearPlayers.length ? investorBearPlayers : undefined,
@@ -199,13 +204,15 @@ function resolveTimeout(state: AbmState, context: DeterministicContext): Variant
   if (players[late].classId === 'juggernaut') players[late].attackStreak = 0;
   if (players[late].classId === 'duplicator') players[late].nextManaGain = 1;
   const stunnedPlayers = resolveStunnerTimeout(players, early, late, move);
-  const { attemptPlayers: thiefAttemptPlayers, transferPlayer: thiefTransferPlayer } = resolveSteals(players, state.pendingSteals ?? {});
   const investorBearPlayers = resolveInvestorTax(players, state.turn);
   const revealDuration = move === 'attack' || players[late].strikes >= 2 ? ABM_LETHAL_TO_RESULT_MS : 800;
+  const lethal = move === 'attack' || players[late].strikes >= 2;
+  const abilityResult = lethal ? emptyAbilityResult() : resolveActivatedAbilities(players, state.pendingAbilities ?? {});
   const events = [cue('move-timeout', now, revealDuration, { earlyPlayer: early, latePlayer: late, move, strikes: players[late].strikes,
-    turn: state.turn, advantagedProcPlayers, thiefAttemptPlayers, thiefTransferPlayer, stunnedPlayers, investorBearPlayers, duplicatorProcPlayers, cheaterProcPlayers, gamblerOutcomes })];
-  const timedOut = { ...clearWaiting(state), players, pendingMoves: {}, pendingSteals: {}, heldSplitFor: early, luckyProcPlayer: undefined,
-    advantagedProcPlayers, thiefAttemptPlayers: undefined, thiefTransferPlayer: undefined, juggernautProcPlayers: undefined,
+    turn: state.turn, advantagedProcPlayers, thiefAttemptPlayers: abilityResult.thiefAttemptPlayers, thiefTransferPlayer: abilityResult.thiefTransferPlayer,
+    taxmanCollectPlayers: abilityResult.taxmanCollectPlayers, stunnedPlayers, investorBearPlayers, duplicatorProcPlayers, cheaterProcPlayers, gamblerOutcomes })];
+  const timedOut = { ...clearWaiting(state), players, pendingMoves: {}, pendingAbilities: {}, heldSplitFor: early, luckyProcPlayer: undefined,
+    advantagedProcPlayers, thiefAttemptPlayers: undefined, thiefTransferPlayer: undefined, taxmanCollectPlayers: undefined, juggernautProcPlayers: undefined,
     stunnedPlayers: stunnedPlayers.length ? stunnedPlayers : undefined, investorBullPlayers: undefined,
     investorBearPlayers: investorBearPlayers.length ? investorBearPlayers : undefined, duplicatorProcPlayers, sumoProcRemaining: undefined, cheaterProcPlayers,
     gamblerOutcomes: Object.keys(gamblerOutcomes).length ? gamblerOutcomes : undefined };
@@ -224,13 +231,14 @@ function finishRound(state: AbmState, winner: PlayerId, events: ReturnType<typeo
     const resources = startingResourcesForClass(players[id].classId);
     players[id].mana = resources.mana;
     players[id].blocks = resources.blocks;
+    Object.assign(players[id], initialAbilityUses(players[id].classId));
   }
   if (players.p1.classId === 'duplicator') players.p1.nextManaGain = 1;
   if (players.p2.classId === 'duplicator') players.p2.nextManaGain = 1;
   if (players.p1.classId === 'sumo') players.p1.refundsRemaining = 3;
   if (players.p2.classId === 'sumo') players.p2.refundsRemaining = 3;
   events.push(cue('counter-pick', startsAt + ABM_RESULT_TO_COUNTER_PICK_MS, 600, { winner, loser, classId: state.players[winner].classId }));
-  return { state: { ...state, phase: 'counter-picking', turn: 0, round: state.round + 1, score, players, pendingClasses: {}, pendingMoves: {}, pendingSteals: {},
+  return { state: { ...state, phase: 'counter-picking', turn: 0, round: state.round + 1, score, players, pendingClasses: {}, pendingMoves: {}, pendingAbilities: {},
     counterPicker: loser, counterPickAvailableAt: startsAt + ABM_RESULT_TO_COUNTER_PICK_MS, resultRevealAt: startsAt, lastRoundWinner: winner }, events };
 }
 
@@ -260,21 +268,44 @@ function validateMove(state: AbmState, playerId: PlayerId, move: AbmMove): void 
   if (move === 'block' && player.blocks < 1) throw new Error('No Blocks remain.');
   if (move === 'block' && isBlockDisabled(state, playerId)) throw new Error('Juggernaut prevents Blocking this turn.');
 }
-function validateSteal(state: AbmState, player: PlayerId): void {
+function validateAbility(state: AbmState, player: PlayerId, abilityId: AbmAbilityId): void {
   const target = state.players[player];
-  if (target.classId !== 'thief') throw new Error('Only Thief can use Steal.');
-  if (state.turn < 5) throw new Error('Steal is unavailable before Turn 5.');
-  if (target.stealUsed) throw new Error('Steal has already been used.');
+  const ability = target.classId ? ABM_CLASS_BY_ID.get(target.classId)?.ability : undefined;
+  if (!ability || ability.id !== abilityId) throw new Error(`${abilityId} is not this class's ability.`);
+  if (abilityUsesFor(target, ability.id) < 1) throw new Error(`${ability.label} has already been used.`);
+  if (target.mana < ability.manaCost) throw new Error(`${ability.label} requires ${ability.manaCost} Mana.`);
+  if (ability.available && !ability.available(target, state.turn)) throw new Error(`${ability.label} is unavailable this turn.`);
 }
-function resolveSteals(players: Record<PlayerId, AbmPlayerState>, pending: Partial<Record<PlayerId, true>>) {
-  const attemptPlayers = (['p1', 'p2'] as const).filter((id) => pending[id]);
-  for (const id of attemptPlayers) players[id].stealUsed = true;
+function spendAbility(player: AbmPlayerState, abilityId: AbmAbilityId): void {
+  const ability = player.classId ? ABM_CLASS_BY_ID.get(player.classId)?.ability : undefined;
+  if (!ability || ability.id !== abilityId) return;
+  player.abilityUses = { ...player.abilityUses, [abilityId]: abilityUsesFor(player, abilityId) - 1 };
+  player.mana = Math.max(0, player.mana - ability.manaCost);
+}
+function resolveSteals(players: Record<PlayerId, AbmPlayerState>, pending: Partial<Record<PlayerId, AbmAbilityId>>) {
+  const attemptPlayers = (['p1', 'p2'] as const).filter((id) => pending[id] === 'steal');
   if (attemptPlayers.length !== 1) return { attemptPlayers, transferPlayer: undefined };
   const thief = attemptPlayers[0]!; const victim = OTHER[thief];
   if (players[victim].mana <= 0) return { attemptPlayers, transferPlayer: undefined };
   players[victim].mana--; players[thief].mana = Math.min(MAX_MANA, players[thief].mana + 1);
   return { attemptPlayers, transferPlayer: thief };
 }
+function resolveActivatedAbilities(players: Record<PlayerId, AbmPlayerState>, pending: Partial<Record<PlayerId, AbmAbilityId>>) {
+  // Ordered extension point: future Parry resolver belongs before Collect.
+  const taxmanCollectPlayers: PlayerId[] = [];
+  for (const collector of ['p1', 'p2'] as const) {
+    if (pending[collector] !== 'collect') continue;
+    taxmanCollectPlayers.push(collector);
+    for (const victim of ['p1', 'p2'] as const) {
+      if (players[victim].mana <= 0) continue;
+      players[victim].mana--;
+    }
+  }
+  const { attemptPlayers: thiefAttemptPlayers, transferPlayer: thiefTransferPlayer } = resolveSteals(players, pending);
+  return { thiefAttemptPlayers, thiefTransferPlayer, taxmanCollectPlayers };
+}
+function emptyAbilityResult() { return { thiefAttemptPlayers: [] as PlayerId[], thiefTransferPlayer: undefined as PlayerId | undefined,
+  taxmanCollectPlayers: [] as PlayerId[] }; }
 function legalActions(state: AbmState, viewer: PlayerId) {
   if ((state.phase === 'selecting-classes' || state.phase === 'waiting-for-class') && !state.pendingClasses[viewer]) return ['lock-class'] as const;
   if (state.phase === 'counter-picking' && state.counterPicker === viewer) return ['lock-class'] as const;
@@ -285,7 +316,9 @@ function legalActions(state: AbmState, viewer: PlayerId) {
     const moves = (['attack', 'block', 'mana'] as const)
       .filter((move) => move !== 'attack' || target.mana >= attackCost)
       .filter((move) => move !== 'block' || (target.blocks > 0 && !isBlockDisabled(state, viewer)));
-    return target.classId === 'thief' && state.turn >= 5 && !target.stealUsed ? [...moves, 'steal' as const] : moves;
+    const ability = target.classId ? ABM_CLASS_BY_ID.get(target.classId)?.ability : undefined;
+    return ability && abilityUsesFor(target, ability.id) > 0 && target.mana >= ability.manaCost && (!ability.available || ability.available(target, state.turn))
+      ? [...moves, ability.id] : moves;
   }
   return [];
 }
@@ -294,15 +327,26 @@ function projectedPhase(state: AbmState, viewer: PlayerId): AbmState['phase'] {
   return state.phase;
 }
 function freshPlayer(classId?: AbmClassId): AbmPlayerState { const resources = startingResourcesForClass(classId); return { ...(classId ? { classId } : {}), mana: resources.mana, blocks: resources.blocks, strikes: 0,
-  attackCost: 1, ...(classId === 'duplicator' ? { nextManaGain: 1 } : {}), ...(classId === 'sumo' ? { refundsRemaining: 3 } : {}) }; }
+  attackCost: 1, ...initialAbilityUses(classId), ...(classId === 'duplicator' ? { nextManaGain: 1 } : {}), ...(classId === 'sumo' ? { refundsRemaining: 3 } : {}) }; }
 function resetPlayer(player: AbmPlayerState, classId?: AbmClassId): AbmPlayerState { const resources = startingResourcesForClass(classId); return { ...(classId ? { classId } : {}), mana: resources.mana, blocks: resources.blocks,
-  strikes: player.strikes ?? 0, attackCost: 1, ...(classId === 'duplicator' ? { nextManaGain: 1 } : {}), ...(classId === 'sumo' ? { refundsRemaining: 3 } : {}) }; }
+  strikes: player.strikes ?? 0, attackCost: 1, ...initialAbilityUses(classId), ...(classId === 'duplicator' ? { nextManaGain: 1 } : {}), ...(classId === 'sumo' ? { refundsRemaining: 3 } : {}) }; }
 function clearWaiting(state: AbmState): AbmState { return { ...state, earlyPlayer: undefined, latePlayer: undefined, waitingStartsAt: undefined, waitingDeadlineAt: undefined }; }
 function clonePlayers(players: Record<PlayerId, AbmPlayerState>): Record<PlayerId, AbmPlayerState> { return { p1: { ...players.p1 }, p2: { ...players.p2 } }; }
 function classMap(players: Record<PlayerId, AbmPlayerState>) { return { p1: players.p1.classId, p2: players.p2.classId }; }
 function isMove(value: unknown): value is AbmMove { return value === 'attack' || value === 'block' || value === 'mana'; }
 function bothPlayersHaveNoMana(state: AbmState): boolean { return state.players.p1.mana === 0 && state.players.p2.mana === 0; }
 function attackCostFor(player: Readonly<AbmPlayerState>): number { return player.attackCost ?? 1; }
+function initialAbilityUses(classId?: AbmClassId): Pick<AbmPlayerState, 'abilityUses'> | Record<string, never> {
+  const ability = classId ? ABM_CLASS_BY_ID.get(classId)?.ability : undefined;
+  return ability ? { abilityUses: { [ability.id]: ability.uses } } : {};
+}
+function abilityUsesFor(player: Readonly<AbmPlayerState>, abilityId: AbmAbilityId): number {
+  const stored = player.abilityUses?.[abilityId];
+  if (stored !== undefined) return stored;
+  if (abilityId === 'steal' && player.classId === 'thief') return player.stealUsed ? 0 : 1;
+  const ability = player.classId ? ABM_CLASS_BY_ID.get(player.classId)?.ability : undefined;
+  return ability?.id === abilityId ? ability.uses : 0;
+}
 function duplicatorGainFor(player: Readonly<AbmPlayerState>): number { return player.nextManaGain ?? 1; }
 function isDuplicatorProc(player: Readonly<AbmPlayerState>, move: AbmMove): boolean {
   return player.classId === 'duplicator' && move === 'mana' && duplicatorGainFor(player) >= 2;

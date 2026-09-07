@@ -2,12 +2,13 @@ import type { PlayerId, VariantGameResult } from '../../core/variant';
 
 export const ABM_CLASS_IDS = [
   'lucky', 'advantaged', 'thief', 'juggernaut', 'stunner', 'duplicator', 'sumo',
-  'cheater', 'investor', 'gambler',
+  'cheater', 'investor', 'gambler', 'taxman',
 ] as const;
 
 export type AbmClassId = typeof ABM_CLASS_IDS[number];
 export type AbmMove = 'attack' | 'block' | 'mana';
 export type AbmDisplayMove = AbmMove | 'skip';
+export type AbmAbilityId = 'steal' | 'collect';
 export type AbmGamblerOutcome =
   | 'plus-2-mana' | 'plus-1-mana' | 'mana-drain' | 'mana-double'
   | 'plus-1-block' | 'plus-2-block' | 'minus-1-block' | 'nothing';
@@ -18,7 +19,7 @@ export type AbmPhase =
 export type AbmCommand =
   | { type: 'lock-class'; classId: AbmClassId }
   | { type: 'preview-class'; classId: AbmClassId }
-  | { type: 'choose-move'; move: AbmMove; useSteal?: true };
+  | { type: 'choose-move'; move: AbmMove; ability?: AbmAbilityId };
 
 export interface AbmPlayerState {
   classId?: AbmClassId;
@@ -26,7 +27,6 @@ export interface AbmPlayerState {
   blocks: number;
   strikes: number;
   lastMove?: AbmDisplayMove;
-  stealUsed?: boolean;
   attackStreak?: number;
   /** Missing on matches persisted before Stunner; treat as the ordinary cost of 1. */
   attackCost?: number;
@@ -34,6 +34,9 @@ export interface AbmPlayerState {
   nextManaGain?: number;
   /** Missing on matches persisted before Sumo; treat as 3. */
   refundsRemaining?: number;
+  abilityUses?: Partial<Record<AbmAbilityId, number>>;
+  /** Legacy persisted Thief state. Read when abilityUses is absent. */
+  stealUsed?: boolean;
 }
 
 export interface AbmState {
@@ -46,12 +49,13 @@ export interface AbmState {
   classReadyPlayer?: PlayerId;
   classReadyAt?: number;
   pendingMoves: Partial<Record<PlayerId, AbmMove>>;
-  pendingSteals?: Partial<Record<PlayerId, true>>;
+  pendingAbilities?: Partial<Record<PlayerId, AbmAbilityId>>;
   lastCompleteMoves?: Record<PlayerId, AbmMove>;
   luckyProcPlayer?: PlayerId;
   advantagedProcPlayers?: PlayerId[];
   thiefAttemptPlayers?: PlayerId[];
   thiefTransferPlayer?: PlayerId;
+  taxmanCollectPlayers?: PlayerId[];
   juggernautProcPlayers?: PlayerId[];
   stunnedPlayers?: PlayerId[];
   investorBullPlayers?: PlayerId[];
@@ -73,7 +77,7 @@ export interface AbmState {
   resultReason?: 'forfeit';
 }
 
-export type AbmLegalAction = 'lock-class' | 'attack' | 'block' | 'mana' | 'steal';
+export type AbmLegalAction = 'lock-class' | 'attack' | 'block' | 'mana' | AbmAbilityId;
 
 export interface AbmProjection {
   self: PlayerId;
@@ -86,7 +90,7 @@ export interface AbmProjection {
   classReadyPlayer?: PlayerId;
   classReadyAt?: number;
   ownPendingMove?: AbmMove;
-  ownPendingSteal?: true;
+  ownPendingAbility?: AbmAbilityId;
   opponentReady: boolean;
   legalActions: readonly AbmLegalAction[];
   counterPicker?: PlayerId;
@@ -99,6 +103,7 @@ export interface AbmProjection {
   advantagedProcPlayers?: PlayerId[];
   thiefAttemptPlayers?: PlayerId[];
   thiefTransferPlayer?: PlayerId;
+  taxmanCollectPlayers?: PlayerId[];
   juggernautProcPlayers?: PlayerId[];
   stunnedPlayers?: PlayerId[];
   investorBullPlayers?: PlayerId[];

@@ -51,6 +51,7 @@ import {
   createGameLayoutSlots,
   getYouTagGeometry,
   mountGameLayoutVariantContent,
+  pickedLabelFor,
 } from '../src/layout/gameLayout';
 import { FIREBALL_WAR_LAYOUTS, FIREBALL_WAR_MOVE_ART } from '../src/variants/fireballWar/fireballWarScreen';
 import { getLayoutDocument } from '../src/layout/layoutDocuments';
@@ -187,6 +188,14 @@ describe('shared game layout contract', () => {
       p1: '/visual-elements/you-tag-p1-sheet.webp',
       p2: '/visual-elements/you-tag-p2-sheet.webp',
     });
+  });
+
+  test('maps picked labels from the local viewer seat instead of assuming p1', () => {
+    const document = getLayoutDocument('game-parent');
+    expect(pickedLabelFor('p1', 'p1', document)).toMatchObject({ alt: 'You picked', src: '/visual-elements/you_picked_sheet.webp' });
+    expect(pickedLabelFor('p1', 'p2', document)).toMatchObject({ alt: 'They picked', src: '/visual-elements/they_picked_sheet.webp' });
+    expect(pickedLabelFor('p2', 'p1', document)).toMatchObject({ alt: 'They picked', src: '/visual-elements/they_picked_sheet.webp' });
+    expect(pickedLabelFor('p2', 'p2', document)).toMatchObject({ alt: 'You picked', src: '/visual-elements/you_picked_sheet.webp' });
   });
 
   test('reports responsive layout changes to variant content', () => {

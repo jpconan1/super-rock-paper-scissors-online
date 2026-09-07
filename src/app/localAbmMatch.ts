@@ -132,6 +132,6 @@ export function chooseComputerCommand(projection: AbmProjection, random: () => n
     roll -= weights[index]!;
     if (roll < 0) { move = moves[index]!; break; }
   }
-  const useSteal = projection.legalActions.includes('steal') && random() < .55 ? true : undefined;
-  return { type: 'choose-move', move, ...(useSteal ? { useSteal } : {}) };
+  const ability = (['steal', 'collect'] as const).find((id) => projection.legalActions.includes(id) && random() < .55);
+  return { type: 'choose-move', move, ...(ability ? { ability } : {}) };
 }

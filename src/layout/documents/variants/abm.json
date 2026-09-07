@@ -206,21 +206,20 @@
       },
       "layouts": {
         "landscape": {
-          "x": 28,
-          "y": 204,
-          "width": 128,
-          "height": 64,
+          "x": 25,
+          "y": 130,
+          "width": 130,
+          "height": 65,
           "aspectLock": true
         },
         "portrait": {
-          "x": 24,
-          "y": 162,
+          "x": 15,
+          "y": 150,
           "width": 96,
           "height": 48,
           "aspectLock": true
         }
-      },
-      "visible": false
+      }
     },
     {
       "id": "p2-picked",
@@ -231,21 +230,20 @@
       },
       "layouts": {
         "landscape": {
-          "x": 793,
-          "y": 204,
+          "x": 790,
+          "y": 130,
           "width": 150,
           "height": 64,
           "aspectLock": true
         },
         "portrait": {
-          "x": 262,
-          "y": 162,
+          "x": 270,
+          "y": 155,
           "width": 112,
           "height": 47.78666666666667,
           "aspectLock": true
         }
-      },
-      "visible": false
+      }
     },
     {
       "id": "scene",
@@ -291,6 +289,438 @@
           "height": 176,
           "aspectLock": true
         }
+      }
+    },
+    {
+      "id": "p1-proc-tag-1",
+      "type": "collection",
+      "parent": "scene",
+      "protected": true,
+      "label": "P1 Proc 1",
+      "layouts": {
+        "landscape": {
+          "x": -95,
+          "y": 145,
+          "width": 120,
+          "height": 85
+        },
+        "portrait": {
+          "x": -15,
+          "y": 110,
+          "width": 120,
+          "height": 85
+        }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      }
+    },
+    {
+      "id": "p1-proc-tag-2",
+      "type": "collection",
+      "parent": "scene",
+      "protected": true,
+      "label": "P1 Proc 2",
+      "layouts": {
+        "landscape": {
+          "x": -95,
+          "y": 10,
+          "width": 120,
+          "height": 85
+        },
+        "portrait": {
+          "x": -25,
+          "y": 40,
+          "width": 120,
+          "height": 85
+        }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      }
+    },
+    {
+      "id": "p1-proc-tag-3",
+      "type": "collection",
+      "parent": "scene",
+      "protected": true,
+      "label": "P1 Proc 3",
+      "layouts": {
+        "landscape": {
+          "x": -95,
+          "y": 75,
+          "width": 120,
+          "height": 85
+        },
+        "portrait": {
+          "x": -25,
+          "y": -30,
+          "width": 120,
+          "height": 85
+        }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      }
+    },
+    {
+      "id": "p1-impact-tag-1",
+      "type": "collection",
+      "parent": "scene",
+      "protected": true,
+      "label": "P1 Impact 1",
+      "layouts": {
+        "landscape": {
+          "x": 135,
+          "y": 105,
+          "width": 120,
+          "height": 85
+        },
+        "portrait": {
+          "x": 130,
+          "y": 90,
+          "width": 120,
+          "height": 85
+        }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      }
+    },
+    {
+      "id": "p1-impact-tag-2",
+      "type": "collection",
+      "parent": "scene",
+      "protected": true,
+      "label": "P1 Impact 2",
+      "layouts": {
+        "landscape": {
+          "x": 135,
+          "y": 140,
+          "width": 120,
+          "height": 85
+        },
+        "portrait": {
+          "x": 130,
+          "y": 125,
+          "width": 120,
+          "height": 85
+        }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      }
+    },
+    {
+      "id": "p1-impact-tag-3",
+      "type": "collection",
+      "parent": "scene",
+      "protected": true,
+      "label": "P1 Impact 3",
+      "layouts": {
+        "landscape": {
+          "x": 140,
+          "y": 180,
+          "width": 120,
+          "height": 85
+        },
+        "portrait": {
+          "x": 130,
+          "y": 170,
+          "width": 120,
+          "height": 85
+        }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      }
+    },
+    {
+      "id": "p1-status-tag-1",
+      "type": "collection",
+      "parent": "scene",
+      "protected": true,
+      "label": "P1 Cloud 1",
+      "layouts": {
+        "landscape": {
+          "x": -130,
+          "y": -5,
+          "width": 120,
+          "height": 85
+        },
+        "portrait": {
+          "x": -20,
+          "y": -15,
+          "width": 120,
+          "height": 85
+        }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      }
+    },
+    {
+      "id": "p1-status-tag-2",
+      "type": "collection",
+      "parent": "scene",
+      "protected": true,
+      "label": "P1 Cloud 2",
+      "layouts": {
+        "landscape": {
+          "x": -195,
+          "y": 15,
+          "width": 120,
+          "height": 85
+        },
+        "portrait": {
+          "x": -20,
+          "y": 30,
+          "width": 120,
+          "height": 85
+        }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      }
+    },
+    {
+      "id": "p1-status-tag-3",
+      "type": "collection",
+      "parent": "scene",
+      "protected": true,
+      "label": "P1 Cloud 3",
+      "layouts": {
+        "landscape": {
+          "x": -130,
+          "y": 45,
+          "width": 120,
+          "height": 85
+        },
+        "portrait": {
+          "x": -20,
+          "y": 80,
+          "width": 120,
+          "height": 85
+        }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      }
+    },
+    {
+      "id": "p2-proc-tag-1",
+      "type": "collection",
+      "parent": "scene",
+      "protected": true,
+      "label": "P2 Proc 1",
+      "layouts": {
+        "landscape": {
+          "x": 340,
+          "y": 145,
+          "width": 120,
+          "height": 85
+        },
+        "portrait": {
+          "x": 250,
+          "y": 105,
+          "width": 120,
+          "height": 85
+        }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      }
+    },
+    {
+      "id": "p2-proc-tag-2",
+      "type": "collection",
+      "parent": "scene",
+      "protected": true,
+      "label": "P2 Proc 2",
+      "layouts": {
+        "landscape": {
+          "x": 340,
+          "y": 20,
+          "width": 120,
+          "height": 85
+        },
+        "portrait": {
+          "x": 255,
+          "y": 40,
+          "width": 120,
+          "height": 85
+        }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      }
+    },
+    {
+      "id": "p2-proc-tag-3",
+      "type": "collection",
+      "parent": "scene",
+      "protected": true,
+      "label": "P2 Proc 3",
+      "layouts": {
+        "landscape": {
+          "x": 340,
+          "y": 85,
+          "width": 120,
+          "height": 85
+        },
+        "portrait": {
+          "x": 245,
+          "y": -30,
+          "width": 120,
+          "height": 85
+        }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      }
+    },
+    {
+      "id": "p2-impact-tag-1",
+      "type": "collection",
+      "parent": "scene",
+      "protected": true,
+      "label": "P2 Impact 1",
+      "layouts": {
+        "landscape": {
+          "x": 135,
+          "y": 5,
+          "width": 120,
+          "height": 85
+        },
+        "portrait": {
+          "x": 130,
+          "y": 5,
+          "width": 120,
+          "height": 85
+        }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      }
+    },
+    {
+      "id": "p2-impact-tag-2",
+      "type": "collection",
+      "parent": "scene",
+      "protected": true,
+      "label": "P2 Impact 2",
+      "layouts": {
+        "landscape": {
+          "x": 130,
+          "y": -35,
+          "width": 120,
+          "height": 85
+        },
+        "portrait": {
+          "x": 125,
+          "y": -40,
+          "width": 120,
+          "height": 85
+        }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      }
+    },
+    {
+      "id": "p2-impact-tag-3",
+      "type": "collection",
+      "parent": "scene",
+      "protected": true,
+      "label": "P2 Impact 3",
+      "layouts": {
+        "landscape": {
+          "x": 130,
+          "y": -60,
+          "width": 120,
+          "height": 85
+        },
+        "portrait": {
+          "x": 125,
+          "y": -70,
+          "width": 120,
+          "height": 85
+        }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      }
+    },
+    {
+      "id": "p2-status-tag-1",
+      "type": "collection",
+      "parent": "scene",
+      "protected": true,
+      "label": "P2 Cloud 1",
+      "layouts": {
+        "landscape": {
+          "x": 390,
+          "y": 0,
+          "width": 120,
+          "height": 85
+        },
+        "portrait": {
+          "x": 255,
+          "y": -15,
+          "width": 120,
+          "height": 85
+        }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      }
+    },
+    {
+      "id": "p2-status-tag-2",
+      "type": "collection",
+      "parent": "scene",
+      "protected": true,
+      "label": "P2 Cloud 2",
+      "layouts": {
+        "landscape": {
+          "x": 445,
+          "y": 35,
+          "width": 120,
+          "height": 85
+        },
+        "portrait": {
+          "x": 255,
+          "y": 30,
+          "width": 120,
+          "height": 85
+        }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      }
+    },
+    {
+      "id": "p2-status-tag-3",
+      "type": "collection",
+      "parent": "scene",
+      "protected": true,
+      "label": "P2 Cloud 3",
+      "layouts": {
+        "landscape": {
+          "x": 385,
+          "y": 70,
+          "width": 120,
+          "height": 85
+        },
+        "portrait": {
+          "x": 255,
+          "y": 75,
+          "width": 120,
+          "height": 85
+        }
+      },
+      "properties": {
+        "allowParentOverflow": true
       }
     },
     {
@@ -352,10 +782,10 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 10,
-          "y": 142,
+          "x": 15,
+          "y": 130,
           "width": 120,
-          "height": 29.589041095890412,
+          "height": 35.06849315068493,
           "aspectLock": true
         }
       }
@@ -375,8 +805,8 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 260,
-          "y": 142,
+          "x": 265,
+          "y": 130,
           "width": 120,
           "height": 29.589041095890412,
           "aspectLock": true
@@ -1184,9 +1614,9 @@
       }
     },
     {
-      "id": "steal",
+      "id": "ability",
       "type": "button",
-      "label": "Steal",
+      "label": "Activated Ability",
       "assets": {
         "up": "/variants/abm/steal-button-up-sheet.webp",
         "between": "/variants/abm/steal-button-between-sheet.webp",

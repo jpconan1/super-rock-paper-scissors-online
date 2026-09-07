@@ -56,4 +56,14 @@ describe('layout documents', () => {
     const second = base(); second.elements[0]!.binding = 'made-up';
     expect(() => validateLayoutDocument(second)).toThrow(/unknown binding/i);
   });
+
+  it('allows explicitly overflow-enabled children outside their parent', () => {
+    const document = structuredClone(layoutDocuments.get('variant-abm')!);
+    const tag = document.elements.find(({ id }) => id === 'p1-proc-tag-1')!;
+    tag.layouts.landscape.x = -110;
+    delete tag.properties?.allowParentOverflow;
+    expect(() => validateLayoutDocument(document)).toThrow(/exceeds parent/i);
+    tag.properties = { ...(tag.properties ?? {}), allowParentOverflow: true };
+    expect(validateLayoutDocument(document)).toBe(document);
+  });
 });

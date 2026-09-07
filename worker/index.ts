@@ -19,6 +19,9 @@ import { LOBBY_SOCKET_PROTOCOL, MATCH_SOCKET_PROTOCOL, socketCredential, WHITEBO
 import { consumeSlidingWindow, messageFitsUtf8Limit, readJsonBody, RequestBodyError } from '../src/protocol/abuseProtection';
 import { corsHeadersForOrigin, isAllowedRequestOrigin } from '../src/protocol/originPolicy';
 import { refreshMatchmakingQueue, type MatchmakingQueueEntry } from '../src/core/matchmakingQueue';
+import {
+  createMatchTicketRecords, matchmakingTicketKey, recoverableMatchTicket, type MatchTicket,
+} from '../src/core/matchmakingTickets';
 
 interface Env {
   MATCHES: DurableObjectNamespace<MatchObject>;
@@ -226,7 +229,6 @@ export class MatchObject extends DurableObject<Env> {
   }
 }
 
-interface MatchTicket { matchId: string; seat: Seat; token: string; expiresAt: number }
 const MATCHMAKING_QUEUE_TTL_MS = 5_000;
 const MATCH_TICKET_TTL_MS = 30_000;
 
@@ -234,11 +236,12 @@ export class MatchmakerObject extends DurableObject<Env> {
   async enqueue(guestId: string, guestSecret: string, attemptId: string, name: string): Promise<{ status: 'waiting' | 'owned-elsewhere' } | ({ status: 'matched' } & MatchTicket)> {
     const player = await authenticateGuest(this.env.DB, guestId, guestSecret, name);
     const now = Date.now();
-    const ticketKey = `ticket:${guestId}:${attemptId}`;
+    const ticketKey = matchmakingTicketKey(guestId, attemptId);
     const ticket = await this.ctx.storage.get<MatchTicket>(ticketKey);
+    const recovered = recoverableMatchTicket(ticket, now);
+    if (recovered) return { status: 'matched', ...recovered };
     if (ticket) {
       await this.ctx.storage.delete(ticketKey);
-      if (ticket.expiresAt > now) return { status: 'matched', ...ticket };
     }
     const queue = (await this.ctx.storage.get<MatchmakingQueueEntry[]>('queue')) ?? [];
     const refreshed = refreshMatchmakingQueue(queue, guestId, attemptId, name, player.rating, now, MATCHMAKING_QUEUE_TTL_MS);
@@ -257,18 +260,20 @@ export class MatchmakerObject extends DurableObject<Env> {
       p2: { name, platform: 'Web', rating: player.rating },
     }, { p1: opponent.guestId, p2: guestId }, 'abm-only');
     const expiresAt = now + MATCH_TICKET_TTL_MS;
-    const first: MatchTicket = { matchId, seat: 'p1', token: initialized.seats.p1, expiresAt };
-    const second: MatchTicket = { matchId, seat: 'p2', token: initialized.seats.p2, expiresAt };
-    await this.ctx.storage.put(`ticket:${opponent.guestId}:${opponent.attemptId}`, first);
+    const ticketRecords = createMatchTicketRecords(matchId, initialized.seats, {
+      p1: { guestId: opponent.guestId, attemptId: opponent.attemptId },
+      p2: { guestId, attemptId },
+    }, expiresAt);
+    await this.ctx.storage.put(ticketRecords);
     await this.scheduleCleanup(expiresAt);
-    return { status: 'matched', ...second };
+    return { status: 'matched', ...ticketRecords[ticketKey]! };
   }
 
   async cancel(guestId: string, guestSecret: string, attemptId: string): Promise<void> {
     await authenticateExistingGuest(this.env.DB, guestId, guestSecret);
     const queue = (await this.ctx.storage.get<MatchmakingQueueEntry[]>('queue')) ?? [];
     await this.ctx.storage.put('queue', queue.filter((entry) => entry.guestId !== guestId || entry.attemptId !== attemptId));
-    await this.ctx.storage.delete(`ticket:${guestId}:${attemptId}`);
+    await this.ctx.storage.delete(matchmakingTicketKey(guestId, attemptId));
   }
 
   async alarm(): Promise<void> {

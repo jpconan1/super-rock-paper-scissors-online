@@ -11,11 +11,12 @@ import type { ResponsiveScaleBoxLayout } from '../../layout/scaleBox';
 import { createBoilingSprite, type BoilingSprite } from '../../renderer/boilingSprite';
 import { playStarburstWipe } from '../../renderer/starburstWipe';
 import { createTextbox } from '../../ui/textbox';
-import { ABM_CLASSES, startingResourcesForClass, type AbmStartingResources } from './attackBlockManaCatalog';
-import { ABM_SCENE_URLS, resolveAbmProcBackgrounds, resolveAbmProcTags, resolveAbmScene, resolveAbmSplitScene, type AbmProcBackgroundKind, type AbmProcTagKind } from './attackBlockManaScenes';
-import type { AbmClassId, AbmCommand, AbmMove, AbmPlayerState, AbmProjection } from './attackBlockManaTypes';
+import { ABM_CLASSES, ABM_CLASS_BY_ID, startingResourcesForClass, type AbmStartingResources } from './attackBlockManaCatalog';
+import { ABM_SCENE_URLS, resolveAbmProcBackgrounds, resolveAbmScene, resolveAbmSplitScene, resolveAbmTags, type AbmProcBackgroundKind, type AbmTagCategory, type AbmTagKind } from './attackBlockManaScenes';
+import type { AbmAbilityId, AbmClassId, AbmCommand, AbmMove, AbmPlayerState, AbmProjection } from './attackBlockManaTypes';
 import { playCatalogSound, type SoundId } from '../../audio/soundCatalog';
 import type { MusicDirector } from '../../audio/musicDirector';
+import { AbmTagEntranceSequence } from './abmTagEntrance';
 
 const ABM_ROOT = '/variants/abm';
 const STUNNED_BUTTON_TAG = `${ABM_ROOT}/stunned-button-tag-sheet.webp`;
@@ -42,12 +43,18 @@ const CONTROL_ART: Record<AbmMove, { up: string; between: string; depressed: str
   block: sheets(`${ABM_ROOT}/block-button`),
   mana: sheets(`${ABM_ROOT}/mana`),
 };
-const THIEF_MOVE_LAYOUT_IDS = new Set(['attack', 'block', 'mana', 'arrow-attack-block', 'arrow-block-mana', 'arrow-mana-attack']);
-export function getAbmThiefControlGeometry(id: string, orientation: LayoutOrientation, base: LayoutGeometry): LayoutGeometry {
-  if (id === 'steal') return orientation === 'portrait'
+const ABILITY_MOVE_LAYOUT_IDS = new Set(['attack', 'block', 'mana', 'arrow-attack-block', 'arrow-block-mana', 'arrow-mana-attack']);
+export const ABM_TAG_CATEGORIES = ['proc', 'impact', 'status'] as const satisfies readonly AbmTagCategory[];
+export const ABM_TAG_ORDERS = [1, 2, 3] as const;
+export function abmTagSlotId(player: 'p1' | 'p2', category: AbmTagCategory, order: typeof ABM_TAG_ORDERS[number]): string {
+  return `${player}-${category}-tag-${order}`;
+}
+
+export function getAbmAbilityControlGeometry(id: string, orientation: LayoutOrientation, base: LayoutGeometry): LayoutGeometry {
+  if (id === 'ability') return orientation === 'portrait'
     ? { x: 8, y: 550, width: 100, height: 50, aspectLock: true }
     : { x: 205, y: 412, width: 134, height: 67, aspectLock: true };
-  return THIEF_MOVE_LAYOUT_IDS.has(id) ? { ...base, x: base.x + (orientation === 'portrait' ? 45 : 90) } : base;
+  return ABILITY_MOVE_LAYOUT_IDS.has(id) ? { ...base, x: base.x + (orientation === 'portrait' ? 45 : 90) } : base;
 }
 
 export const ABM_LAYOUTS: readonly ResponsiveScaleBoxLayout<LayoutOrientation>[] = [
@@ -112,7 +119,7 @@ export function createAttackBlockManaPresentation(
   let screen: ReturnType<typeof mountAttackBlockManaScreen> | undefined;
   return {
     async preload(): Promise<AssetLease> {
-      const urls = [...ABM_CLASSES.flatMap(({ asset, badgeAsset }) => [asset, badgeAsset]),
+      const urls = [...ABM_CLASSES.flatMap(({ asset, badgeAsset, ability }) => [asset, badgeAsset, ...(ability ? Object.values(ability.buttonAssets) : [])]),
         ...['Prev', 'next'].flatMap((name) => ['up', 'between', 'depressed'].map((state) => `${ABM_ROOT}/${name}-button-${state}-sheet.webp`)),
         ...Object.values(ABM_SELECT_ART), ...Object.values(CONTROL_ART).flatMap(Object.values),
         `${ABM_ROOT}/mana-icon-sheet.webp`, `${ABM_ROOT}/block-icon-sheet.webp`, `${ABM_ROOT}/block-icon-empty-sheet.webp`,
@@ -161,8 +168,8 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   const playedTransitionIds = new Set<string>();
   const playedSoundIds = new Set<string>();
   let wipeRunning = false;
-  let stealArmed = false;
-  let usingThiefControlLayout = false;
+  let armedAbility: AbmAbilityId | undefined;
+  let usingAbilityControlLayout = false;
   const transitionAbort = new AbortController();
 
   const moveStatus = (player: 'p1' | 'p2') => {
@@ -186,16 +193,23 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     const choice = ABM_CLASSES[selected]!; if (choice.implemented) send({ type: 'lock-class', classId: choice.id });
   }, upSheet: ABM_SELECT_ART.up, betweenSheet: ABM_SELECT_ART.between, depressedSheet: ABM_SELECT_ART.depressed });
   lock.element.classList.add('abm-controls__lock', 'game-button--baked-label'); buttons.push(lock); controls.append(lock.element);
-  const steal = createGameButton({ label: 'Steal', clock, activateAtReleaseStart: true, onActivate: () => {
-    stealArmed = !stealArmed;
-    steal.setLockedDepressed(stealArmed);
-  }, upSheet: `${ABM_ROOT}/steal-button-up-sheet.webp`, betweenSheet: `${ABM_ROOT}/steal-button-between-sheet.webp`, depressedSheet: `${ABM_ROOT}/steal-button-depressed-sheet.webp` });
-  steal.element.classList.add('abm-controls__steal', 'game-button--baked-label'); steal.element.hidden = true; buttons.push(steal); controls.append(steal.element);
+  const abilityButtons = ABM_CLASSES.flatMap(({ ability }) => ability ? [ability] : []).map((ability) => {
+    let button!: GameButton;
+    button = createGameButton({ label: ability.label, clock, activateAtReleaseStart: true, onActivate: () => {
+      armedAbility = armedAbility === ability.id ? undefined : ability.id;
+      button.setLockedDepressed(armedAbility === ability.id);
+    }, upSheet: ability.buttonAssets.up, betweenSheet: ability.buttonAssets.between, depressedSheet: ability.buttonAssets.depressed });
+    button.element.classList.add('abm-controls__ability', `abm-controls__ability--${ability.id}`, 'game-button--baked-label');
+    button.element.hidden = true; buttons.push(button); controls.append(button.element); return [ability.id, button] as const;
+  });
   const moves = (['attack', 'block', 'mana'] as const).map((move) => {
     let button!: GameButton;
     button = createGameButton({ label: move, clock, activateAtReleaseStart: true, onActivate: () => {
       button.setLockedDepressed(true);
-      send({ type: 'choose-move', move, ...(stealArmed ? { useSteal: true as const } : {}) });
+      const committedAbility = armedAbility && projection?.legalActions.includes(armedAbility) ? armedAbility : undefined;
+      armedAbility = undefined;
+      for (const [, abilityButton] of abilityButtons) abilityButton.setLockedDepressed(false);
+      send({ type: 'choose-move', move, ...(committedAbility ? { ability: committedAbility } : {}) });
     },
       upSheet: CONTROL_ART[move].up, betweenSheet: CONTROL_ART[move].between, depressedSheet: CONTROL_ART[move].depressed });
     button.element.classList.add('abm-controls__move', `abm-controls__move--${move}`, 'game-button--baked-label');
@@ -232,8 +246,10 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   let sceneArtwork: HTMLElement;
   let classBadges: { player: 'p1' | 'p2'; badge: BoilingSprite; asset: string }[] = [];
   let counterpickTag: BoilingSprite | undefined;
-  const procTagSprites = new Map<string, BoilingSprite>();
-  const procTagAssets = new Map<string, string>();
+  const tagSprites = new Map<string, BoilingSprite>();
+  const tagItems = new Map<string, HTMLElement>();
+  const tagAssets = new Map<string, string>();
+  const tagSlots = new Map<string, HTMLElement>();
   const procBackgroundSprites = new Map<string, BoilingSprite>();
 
   const layout: GameLayout = createGameLayout({
@@ -250,20 +266,39 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     onMenu,
   });
   layout.slots.scene.append(picker, waiting, result.element);
-  const procTagSlots = (['p1', 'p2'] as const).map((player) => {
-    const slot = element('div', `abm-proc-tags abm-proc-tags--${player}`);
-    const labels: Record<AbmProcTagKind, string> = {
+  for (const player of ['p1', 'p2'] as const) for (const category of ABM_TAG_CATEGORIES) for (const order of ABM_TAG_ORDERS) {
+    const slot = element('div', `abm-tag-slot abm-tag-slot--${category}`);
+    const slotId = abmTagSlotId(player, category, order);
+    slot.dataset.tagCategory = category; slot.dataset.tagOrder = String(order);
+    tagSlots.set(slotId, slot); layout.slots.scene.append(slot);
+  }
+  const labels: Record<AbmTagKind, string> = {
       lucky: 'Lucky', advantaged: 'Advantaged plus one Mana', juggernaut: 'Block broken', thief: 'Yoink', stunned: 'Stunned',
-      bull: 'Bull Market', bear: 'Bear Market', cheater: 'Cheater bonus Mana', duplicator: 'Mana duplicated', gambler: 'Gambler result', sumo: 'Free Attack',
-    };
-    for (const kind of ['lucky', 'advantaged', 'juggernaut', 'thief', 'stunned', 'bull', 'bear', 'cheater', 'duplicator', 'gambler', 'sumo'] as const satisfies readonly AbmProcTagKind[]) {
+      bull: 'Bull Market', bear: 'Bear Market', cheater: 'Cheater bonus Mana', duplicator: 'Mana duplicated', gambler: 'Gambler result', sumo: 'Free Attack', taxed: 'Taxed',
+  };
+  for (const player of ['p1', 'p2'] as const) {
+    for (const kind of ['lucky', 'advantaged', 'juggernaut', 'thief', 'stunned', 'taxed', 'bull', 'bear', 'cheater', 'duplicator', 'gambler', 'sumo'] as const satisfies readonly AbmTagKind[]) {
       const src = kind === 'sumo' ? `${ABM_ROOT}/scenes/tags/sumo-2-left-sheet.webp`
         : kind === 'gambler' ? `${ABM_ROOT}/scenes/tags/gambler-plus-1-mana-sheet.webp` : `${ABM_ROOT}/scenes/tags/${kind}-sheet.webp`;
-      const tag = createBoilingSprite({ src, clock, className: `abm-proc-tag abm-proc-tag--${kind}`, alt: labels[kind] });
-      const key = `${player}:${kind}`;
-      tag.element.hidden = true; sprites.push(tag); slot.append(tag.element); procTagSprites.set(key, tag); procTagAssets.set(key, src);
+      const copies = 1;
+      for (let occurrence = 1; occurrence <= copies; occurrence++) {
+        const tag = createBoilingSprite({ src, clock, className: `abm-tag abm-tag--${kind}`, alt: labels[kind] });
+        const item = element('div', `abm-tag-item abm-tag-item--${kind}`);
+        const key = `${player}:${kind}:${occurrence}`;
+        item.hidden = true; item.append(tag.element); sprites.push(tag); tagItems.set(key, item); tagSprites.set(key, tag); tagAssets.set(key, src);
+      }
     }
-    layout.slots.scene.append(slot); return slot;
+  }
+  const tagEntrance = new AbmTagEntranceSequence({
+    commit(key, state) {
+      const item = tagItems.get(key);
+      const tag = tagSprites.get(key);
+      if (!item || !tag) return;
+      item.hidden = !state.visible;
+      if (!state.visible) return;
+      const source = state.source === 'final' ? tagAssets.get(key) : state.source;
+      if (source) tag.setSource(source);
+    },
   });
   for (const player of ['p1', 'p2'] as const) {
     for (const kind of ['bull', 'bear'] as const satisfies readonly AbmProcBackgroundKind[]) {
@@ -277,7 +312,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   const thiefTransferMirror = createBoilingSprite({ src: `${ABM_ROOT}/scenes/effects/thief-transfer-mirror-sheet.webp`, clock, className: 'abm-thief-transfer abm-thief-transfer--mirror', alt: 'Simultaneous steals' });
   thiefTransfer.element.hidden = true; thiefTransferMirror.element.hidden = true; sprites.push(thiefTransfer, thiefTransferMirror);
   layout.slots.scene.append(thiefTransfer.element, thiefTransferMirror.element);
-  layout.composition.append(steal.element);
+  for (const [, button] of abilityButtons) layout.composition.append(button.element);
   layout.composition.append(classReadyArt.element, classReadyOpponentTag.element);
   counterpickTag = createBoilingSprite({ src: COUNTERPICK_TAG, clock, className: 'abm-counterpick-tag', alt: 'Counterpick' });
   counterpickTag.element.hidden = true; sprites.push(counterpickTag); layout.composition.append(counterpickTag.element);
@@ -307,7 +342,8 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   }
 
   function applyVariantLayout() {
-    const bindings: readonly [string, HTMLElement][] = [['picker-prev', previous.element], ['picker-next', next.element], ['lock-class', lock.element], ['steal', steal.element],
+    const bindings: readonly [string, HTMLElement][] = [['picker-prev', previous.element], ['picker-next', next.element], ['lock-class', lock.element],
+      ...abilityButtons.map(([, button]) => ['ability', button.element] as [string, HTMLElement]),
       ['back-lobby', lobby.element],
       ['class-ready', classReadyArt.element], ['class-ready-opponent-tag', classReadyOpponentTag.element],
       ...(counterpickTag ? [['p2-counterpick-tag', counterpickTag.element] as [string, HTMLElement]] : []),
@@ -316,13 +352,14 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
       ['waiting-ready', countdownArt.element],
       ...classBadges.map(({ player, badge }) => [`${player}-class-badge`, badge.element] as [string, HTMLElement]),
       ...p1Resources.bindings, ...p2Resources.bindings,
+      ...tagSlots,
       ...arrows,
       ...moves.map(([move, button]) => [move, button.element] as [string, HTMLElement])];
     for (const [id, target] of bindings) {
       const definition = config(id);
       applyConfiguredElement(target, definition, orientation);
-      if (usingThiefControlLayout && (id === 'steal' || THIEF_MOVE_LAYOUT_IDS.has(id))) {
-        applyLayoutGeometry(target, getAbmThiefControlGeometry(id, orientation, definition.layouts[orientation]));
+      if (usingAbilityControlLayout && (id === 'ability' || ABILITY_MOVE_LAYOUT_IDS.has(id))) {
+        applyLayoutGeometry(target, getAbmAbilityControlGeometry(id, orientation, definition.layouts[orientation]));
       }
     }
   }
@@ -378,6 +415,8 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     const picking = ['selecting-classes', 'waiting-for-class'].includes(nextProjection.phase)
       || (nextProjection.phase === 'counter-picking' && !counterLocked);
     layout.composition.classList.toggle('is-class-picking', picking);
+    layout.slots['p1-picked'].hidden = picking;
+    layout.slots['p2-picked'].hidden = picking;
     layout.setYouTagVisible(shouldShowAbmYouTag(nextProjection.phase));
     const showingResult = (counterLocked || complete) && resultRevealed;
     const transitioning = counterLocked || complete;
@@ -386,15 +425,19 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     for (const [, arrow] of arrows) arrow.hidden = picking || transitioning;
     previous.element.hidden = !picking; next.element.hidden = !picking;
     const ownPlayer = nextProjection.players[nextProjection.self];
-    const nextThiefControlLayout = !picking && ownPlayer.classId === 'thief';
-    if (usingThiefControlLayout !== nextThiefControlLayout) {
-      usingThiefControlLayout = nextThiefControlLayout;
+    const ownAbility = ownPlayer.classId ? ABM_CLASS_BY_ID.get(ownPlayer.classId)?.ability : undefined;
+    const nextAbilityControlLayout = !picking && Boolean(ownAbility);
+    if (usingAbilityControlLayout !== nextAbilityControlLayout) {
+      usingAbilityControlLayout = nextAbilityControlLayout;
       applyVariantLayout();
     }
-    stealArmed = Boolean(nextProjection.ownPendingSteal) || (stealArmed && !nextProjection.ownPendingMove && !thiefFeedback);
-    steal.element.hidden = picking || transitioning || ownPlayer.classId !== 'thief' || thiefFeedback;
-    steal.setDisabled(!nextProjection.legalActions.includes('steal'));
-    steal.setLockedDepressed(stealArmed);
+    const abilityFeedback = thiefFeedback || Boolean(nextProjection.taxmanCollectPlayers?.length);
+    armedAbility = nextProjection.ownPendingAbility ?? (armedAbility && !nextProjection.ownPendingMove && !abilityFeedback ? armedAbility : undefined);
+    for (const [abilityId, button] of abilityButtons) {
+      button.element.hidden = picking || transitioning || ownAbility?.id !== abilityId || abilityFeedback;
+      button.setDisabled(!nextProjection.legalActions.includes(abilityId));
+      button.setLockedDepressed(armedAbility === abilityId);
+    }
     lobby.element.hidden = !complete || !showingResult;
     result.element.hidden = !showingResult;
     if (showingResult) {
@@ -433,26 +476,41 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     sceneArtwork.classList.toggle('is-flipped', scene.flip);
     const sceneCanvas = sceneArtwork.querySelector<HTMLElement>('.boiling-sprite__canvas');
     if (sceneCanvas) sceneCanvas.style.transform = scene.flip ? 'scaleX(-1)' : '';
-    const visibleTags = !picking && !showingResult ? resolveAbmProcTags({
+    const visibleTags = !picking && !showingResult ? resolveAbmTags({
       ...nextProjection, advantagedProcPlayers, juggernautProcPlayers, stunnedPlayers, investorBullPlayers, investorBearPlayers, duplicatorProcPlayers,
       sumoProcRemaining, cheaterProcPlayers, gamblerOutcomes,
     }, splitPlayer) : [];
-    const visibleTagKeys = new Set(visibleTags.map(({ player, kind }) => `${player}:${kind}`));
-    for (const [key, tag] of procTagSprites) tag.element.hidden = !visibleTagKeys.has(key);
-    for (const visibleTag of visibleTags) {
-      const key = `${visibleTag.player}:${visibleTag.kind}`;
-      const tag = procTagSprites.get(key);
-      if (tag && procTagAssets.get(key) !== visibleTag.src) {
-        tag.setSource(visibleTag.src); procTagAssets.set(key, visibleTag.src);
+    const tagOccurrences = new Map<string, number>();
+    const keyedTags = visibleTags.map((tag) => {
+      const base = `${tag.player}:${tag.kind}`;
+      const occurrence = (tagOccurrences.get(base) ?? 0) + 1; tagOccurrences.set(base, occurrence);
+      return { ...tag, key: `${base}:${occurrence}` };
+    });
+    for (const player of ['p1', 'p2'] as const) for (const category of ABM_TAG_CATEGORIES) {
+      const categoryTags = keyedTags.filter((tag) => tag.player === player && tag.category === category);
+      if (categoryTags.length > ABM_TAG_ORDERS.length) console.warn(`ABM has ${categoryTags.length} ${player} ${category} tags; only three slots exist.`);
+      for (const [index, visibleTag] of categoryTags.slice(0, ABM_TAG_ORDERS.length).entries()) {
+        const key = visibleTag.key;
+        const tag = tagSprites.get(key); const item = tagItems.get(key);
+        const slot = tagSlots.get(abmTagSlotId(player, category, ABM_TAG_ORDERS[index]!));
+        if (item && slot) slot.append(item);
+        if (tag && tagAssets.get(key) !== visibleTag.src) {
+          tagAssets.set(key, visibleTag.src);
+        }
       }
     }
+    tagEntrance.sync(
+      keyedTags.map(({ key }) => key),
+      !wipeRunning,
+      keyedTags.map(({ key, src }) => `${key}:${src}`).join('|'),
+    );
     const visibleBackgrounds = !picking && !showingResult ? resolveAbmProcBackgrounds({ investorBullPlayers, investorBearPlayers }, splitPlayer) : [];
     const visibleBackgroundKeys = new Set(visibleBackgrounds.map(({ player, kind }) => `${player}:${kind}`));
     for (const [key, background] of procBackgroundSprites) background.element.hidden = !visibleBackgroundKeys.has(key);
     const countdownActive = nextProjection.phase === 'waiting'
       && nextProjection.waitingStartsAt !== undefined && nextProjection.waitingDeadlineAt !== undefined
       && getAbmWaitingVisual(serverTime, nextProjection.waitingStartsAt, nextProjection.waitingDeadlineAt).countdown !== undefined;
-    for (const slot of procTagSlots) slot.hidden = picking || showingResult || countdownActive;
+    for (const slot of tagSlots.values()) slot.hidden = picking || showingResult || countdownActive;
     const simultaneousSteals = nextProjection.thiefAttemptPlayers?.length === 2;
     thiefTransfer.element.hidden = Boolean(splitPlayer) || showingResult || (!nextProjection.thiefTransferPlayer && !simultaneousSteals);
     thiefTransferMirror.element.hidden = Boolean(splitPlayer) || showingResult || !simultaneousSteals;
@@ -529,7 +587,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   }
 
   applyVariantLayout(); updatePicker();
-  return { render, destroy() { transitionAbort.abort(); if (revealTimer) clearTimeout(revealTimer); if (waitingTimer) clearTimeout(waitingTimer); layout.destroy(); copy.destroy(); for (const button of buttons) button.destroy(); for (const sprite of sprites) sprite.destroy(); } };
+  return { render, destroy() { transitionAbort.abort(); tagEntrance.destroy(); if (revealTimer) clearTimeout(revealTimer); if (waitingTimer) clearTimeout(waitingTimer); layout.destroy(); copy.destroy(); for (const button of buttons) button.destroy(); for (const sprite of sprites) sprite.destroy(); } };
 }
 
 export function soundForAbmMoves(moves: Readonly<Record<'p1' | 'p2', AbmMove>>): SoundId | undefined {

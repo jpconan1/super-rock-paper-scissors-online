@@ -613,7 +613,7 @@ describe('Attack Block Mana rules', () => {
 
     let thief = thiefTurnFive();
     thief.players.p1.mana = 9; thief.players.p2.mana = 2;
-    thief = send(thief, 'p1', { type: 'choose-move', move: 'block', useSteal: true });
+    thief = send(thief, 'p1', { type: 'choose-move', move: 'block', ability: 'steal' });
     thief = send(thief, 'p2', { type: 'choose-move', move: 'block' });
     expect(thief.players.p1.mana).toBe(9);
     expect(thief.players.p2.mana).toBe(1);
@@ -622,21 +622,21 @@ describe('Attack Block Mana rules', () => {
   test('keeps Steal unavailable through Turn 4 and private when armed on Turn 5', () => {
     let state = thiefTurnFive();
     expect(attackBlockManaRules.project(state, 'p1').legalActions).toContain('steal');
-    const waiting = attackBlockManaRules.resolve(state, 'p1', { type: 'choose-move', move: 'block', useSteal: true }, context).state;
-    expect(attackBlockManaRules.project(waiting, 'p1').ownPendingSteal).toBe(true);
-    expect(attackBlockManaRules.project(waiting, 'p2').ownPendingSteal).toBeUndefined();
-    expect(waiting.players.p1.stealUsed).toBeUndefined();
+    const waiting = attackBlockManaRules.resolve(state, 'p1', { type: 'choose-move', move: 'block', ability: 'steal' }, context).state;
+    expect(attackBlockManaRules.project(waiting, 'p1').ownPendingAbility).toBe('steal');
+    expect(attackBlockManaRules.project(waiting, 'p2').ownPendingAbility).toBeUndefined();
+    expect(waiting.players.p1.abilityUses?.steal).toBe(0);
 
     state = startedWith('thief', 'lucky');
     expect(attackBlockManaRules.project(state, 'p1').legalActions).not.toContain('steal');
-    expect(() => send(state, 'p1', { type: 'choose-move', move: 'block', useSteal: true })).toThrow('Turn 5');
+    expect(() => send(state, 'p1', { type: 'choose-move', move: 'block', ability: 'steal' })).toThrow('unavailable');
   });
 
   test('transfers Mana after moves and spends Thief Steal', () => {
     let state = thiefTurnFive();
-    state = send(state, 'p1', { type: 'choose-move', move: 'block', useSteal: true });
+    state = send(state, 'p1', { type: 'choose-move', move: 'block', ability: 'steal' });
     state = send(state, 'p2', { type: 'choose-move', move: 'mana' });
-    expect(state.players.p1).toMatchObject({ mana: 2, stealUsed: true });
+    expect(state.players.p1).toMatchObject({ mana: 2, abilityUses: { steal: 0 } });
     expect(state.players.p2.mana).toBe(1);
     expect(state).toMatchObject({ thiefAttemptPlayers: ['p1'], thiefTransferPlayer: 'p1' });
     expect(attackBlockManaRules.project(state, 'p1').legalActions).not.toContain('steal');
@@ -644,9 +644,9 @@ describe('Attack Block Mana rules', () => {
 
   test('spends Steal without transfer when target reaches zero', () => {
     let state = thiefTurnFive();
-    state = send(state, 'p1', { type: 'choose-move', move: 'block', useSteal: true });
+    state = send(state, 'p1', { type: 'choose-move', move: 'block', ability: 'steal' });
     state = send(state, 'p2', { type: 'choose-move', move: 'attack' });
-    expect(state.players.p1.stealUsed).toBe(true);
+    expect(state.players.p1.abilityUses?.steal).toBe(0);
     expect(state.players.p2.mana).toBe(0);
     expect(state.thiefAttemptPlayers).toEqual(['p1']);
     expect(state.thiefTransferPlayer).toBeUndefined();
@@ -654,20 +654,21 @@ describe('Attack Block Mana rules', () => {
 
   test('cancels simultaneous Steals and spends both charges', () => {
     let state = thiefTurnFive('thief');
-    state = send(state, 'p1', { type: 'choose-move', move: 'block', useSteal: true });
-    state = send(state, 'p2', { type: 'choose-move', move: 'block', useSteal: true });
-    expect(state.players.p1).toMatchObject({ mana: 1, stealUsed: true });
-    expect(state.players.p2).toMatchObject({ mana: 1, stealUsed: true });
+    state = send(state, 'p1', { type: 'choose-move', move: 'block', ability: 'steal' });
+    state = send(state, 'p2', { type: 'choose-move', move: 'block', ability: 'steal' });
+    expect(state.players.p1).toMatchObject({ mana: 1, abilityUses: { steal: 0 } });
+    expect(state.players.p2).toMatchObject({ mana: 1, abilityUses: { steal: 0 } });
     expect(state.thiefAttemptPlayers).toEqual(['p1', 'p2']);
     expect(state.thiefTransferPlayer).toBeUndefined();
   });
 
-  test('resolves Steal before an Attack-Mana round loss', () => {
+  test('spends but skips Steal after an Attack-Mana round loss', () => {
     let state = thiefTurnFive();
     state.players.p2.mana = 2;
-    state = send(state, 'p1', { type: 'choose-move', move: 'mana', useSteal: true });
+    state = send(state, 'p1', { type: 'choose-move', move: 'mana', ability: 'steal' });
     state = send(state, 'p2', { type: 'choose-move', move: 'attack' });
-    expect(state).toMatchObject({ phase: 'counter-picking', score: { p1: 0, p2: 1 }, thiefTransferPlayer: 'p1' });
+    expect(state).toMatchObject({ phase: 'counter-picking', score: { p1: 0, p2: 1 } });
+    expect(state.thiefTransferPlayer).toBeUndefined();
     expect(state.players.p1.mana).toBe(1);
     expect(state.players.p2.mana).toBe(1);
   });
@@ -675,7 +676,7 @@ describe('Attack Block Mana rules', () => {
   test('allows Steal on a forced Mana turn and restores its charge next round', () => {
     let state = thiefTurnFive();
     state.players.p1.mana = 0; state.players.p2.mana = 0;
-    state = send(state, 'p1', { type: 'choose-move', move: 'mana', useSteal: true });
+    state = send(state, 'p1', { type: 'choose-move', move: 'mana', ability: 'steal' });
     state = send(state, 'p2', { type: 'choose-move', move: 'mana' });
     expect(state.players.p1.mana).toBe(2);
     expect(state.players.p2.mana).toBe(0);
@@ -684,16 +685,16 @@ describe('Attack Block Mana rules', () => {
     state = send(state, 'p1', { type: 'choose-move', move: 'attack' });
     state = send(state, 'p2', { type: 'choose-move', move: 'mana' });
     state = send(state, 'p2', { type: 'lock-class', classId: 'thief' }, state.counterPickAvailableAt);
-    expect(state.players.p1.stealUsed).toBeUndefined();
-    expect(state.players.p2.stealUsed).toBeUndefined();
+    expect(state.players.p1.abilityUses?.steal).toBe(1);
+    expect(state.players.p2.abilityUses?.steal).toBe(1);
   });
 
   test('resolves an armed Steal after timeout resources without showing turn feedback', () => {
     let state = thiefTurnFive();
     state.players.p2.mana = 2;
-    state = send(state, 'p1', { type: 'choose-move', move: 'mana', useSteal: true }, 2_000);
+    state = send(state, 'p1', { type: 'choose-move', move: 'mana', ability: 'steal' }, 2_000);
     const resolution = attackBlockManaRules.advanceDeadline!(state, { ...context, now: state.waitingDeadlineAt! })!;
-    expect(resolution.state.players.p1).toMatchObject({ mana: 3, stealUsed: true });
+    expect(resolution.state.players.p1).toMatchObject({ mana: 3, abilityUses: { steal: 0 } });
     expect(resolution.state.players.p2.mana).toBe(0);
     expect(resolution.state.thiefAttemptPlayers).toBeUndefined();
     expect(resolution.state.thiefTransferPlayer).toBeUndefined();
@@ -702,13 +703,79 @@ describe('Attack Block Mana rules', () => {
 
   test('holds Thief feedback through selection and clears it on the next reveal', () => {
     let state = thiefTurnFive();
-    state = send(state, 'p1', { type: 'choose-move', move: 'block', useSteal: true });
+    state = send(state, 'p1', { type: 'choose-move', move: 'block', ability: 'steal' });
     state = send(state, 'p2', { type: 'choose-move', move: 'mana' });
     state = send(state, 'p1', { type: 'choose-move', move: 'mana' }, 2_000);
     expect(state.thiefAttemptPlayers).toEqual(['p1']);
     state = send(state, 'p2', { type: 'choose-move', move: 'block' }, 2_100);
     expect(state.thiefAttemptPlayers).toBeUndefined();
     expect(state.thiefTransferPlayer).toBeUndefined();
+  });
+
+  test('offers Collect only to a funded Taxman and spends its generic charge on commitment', () => {
+    let state = startedWith('taxman', 'lucky');
+    expect(attackBlockManaRules.project(state, 'p1').legalActions).toContain('collect');
+    state = send(state, 'p1', { type: 'choose-move', move: 'block', ability: 'collect' });
+    expect(state.players.p1.abilityUses?.collect).toBe(2);
+    expect(attackBlockManaRules.project(state, 'p1').ownPendingAbility).toBe('collect');
+    expect(attackBlockManaRules.project(state, 'p2').ownPendingAbility).toBeUndefined();
+
+    let empty = startedWith('taxman', 'lucky');
+    empty.players.p1.mana = 0;
+    expect(attackBlockManaRules.project(empty, 'p1').legalActions).not.toContain('collect');
+    expect(() => send(empty, 'p1', { type: 'choose-move', move: 'block', ability: 'collect' })).toThrow('unavailable');
+  });
+
+  test('resolves single and dual Collect in player order and records actual Mana losses', () => {
+    let single = startedWith('taxman', 'lucky');
+    single.players.p1.mana = 2; single.players.p2.mana = 1;
+    single = send(single, 'p1', { type: 'choose-move', move: 'block', ability: 'collect' });
+    single = send(single, 'p2', { type: 'choose-move', move: 'block' });
+    expect(single.players.p1).toMatchObject({ mana: 1, abilityUses: { collect: 2 } });
+    expect(single.players.p2.mana).toBe(0);
+    expect(single.taxmanCollectPlayers).toEqual(['p1']);
+
+    let dual = startedWith('taxman', 'taxman');
+    dual.players.p1.mana = 3; dual.players.p2.mana = 3;
+    dual = send(dual, 'p1', { type: 'choose-move', move: 'block', ability: 'collect' });
+    dual = send(dual, 'p2', { type: 'choose-move', move: 'block', ability: 'collect' });
+    expect(dual.players.p1.mana).toBe(1);
+    expect(dual.players.p2.mana).toBe(1);
+    expect(dual.taxmanCollectPlayers).toEqual(['p1', 'p2']);
+  });
+
+  test('runs Collect before Steal and can create the forced 0-0 state', () => {
+    let ordered = thiefTurnFive('taxman');
+    ordered.players.p1.mana = 1; ordered.players.p2.mana = 1;
+    ordered = send(ordered, 'p1', { type: 'choose-move', move: 'block', ability: 'steal' });
+    ordered = send(ordered, 'p2', { type: 'choose-move', move: 'block', ability: 'collect' });
+    expect(ordered.players).toMatchObject({ p1: { mana: 0 }, p2: { mana: 0 } });
+    expect(ordered.thiefTransferPlayer).toBeUndefined();
+    expect(attackBlockManaRules.project(ordered, 'p1').legalActions).toEqual(['mana']);
+    ordered = send(ordered, 'p1', { type: 'choose-move', move: 'mana' });
+    ordered = send(ordered, 'p2', { type: 'choose-move', move: 'mana' });
+    expect(ordered.players).toMatchObject({ p1: { mana: 1 }, p2: { mana: 1 } });
+  });
+
+  test('skips Collect effects on lethal and timeout losses', () => {
+    let lethal = startedWith('taxman', 'lucky');
+    lethal.players.p1.mana = 2; lethal.players.p2.mana = 2;
+    lethal = send(lethal, 'p1', { type: 'choose-move', move: 'mana', ability: 'collect' });
+    lethal = send(lethal, 'p2', { type: 'choose-move', move: 'attack' });
+    expect(lethal.taxmanCollectPlayers).toBeUndefined();
+
+    let timeout = startedWith('taxman', 'lucky');
+    timeout.players.p1.mana = 2; timeout.players.p2.mana = 2;
+    timeout = send(timeout, 'p1', { type: 'choose-move', move: 'attack', ability: 'collect' }, 2_000);
+    const resolved = attackBlockManaRules.advanceDeadline!(timeout, { ...context, now: timeout.waitingDeadlineAt! })!.state;
+    expect(resolved.taxmanCollectPlayers).toBeUndefined();
+  });
+
+  test('reads legacy stealUsed state through the generic ability counter', () => {
+    const state = thiefTurnFive();
+    state.players.p1.abilityUses = undefined;
+    state.players.p1.stealUsed = true;
+    expect(attackBlockManaRules.project(state, 'p1').legalActions).not.toContain('steal');
   });
 
   test('exhausts Blocks and restores them after a non-Block move', () => {

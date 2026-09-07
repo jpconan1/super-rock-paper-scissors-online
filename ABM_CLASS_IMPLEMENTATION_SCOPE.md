@@ -2,25 +2,21 @@
 
 ## Tag categories
 
-- **Activation:** player deliberately chose and spent an active ability.
 - **Status:** persistent state, duration, charges, or altered rule.
 - **Proc:** the player's class ability successfully triggered this turn.
 - **Impact:** an opponent's ability affected this player.
 
-Activation and Status tags attach to the ability owner. Proc tags attach to the player receiving the benefit. Impact tags attach to the player suffering the effect.
+Status tags attach to the ability owner. Proc tags attach to the player receiving the benefit. Impact tags attach to the player suffering the effect. Ability buttons, spent-use state, and special scenes communicate activation without duplicating it as a tag.
 
-## Tax Collector
+## Taxman
 
 **Drawing:** Class drawing and badge.
 
 **Button:** Collect.
 
-**Scene:** None. Collection happens after the normal confrontation, so the battle scene remains accurate.
-
 **Tags:**
 
-- **Activation — Collect:** Tax Collector chose and spent the ability.
-- **Impact — Taxed:** this player lost Mana to a Tax Collector. The same tag can stack when both Tax Collectors execute.
+- **Impact — Taxed:** this player lost Mana to a Taxman. The same tag can stack when both Taxmen execute.
 
 ## Copywriter
 
@@ -42,10 +38,7 @@ Activation and Status tags attach to the ability owner. Proc tags attach to the 
 
 **Scene:** Private reveal and choice state. The opponent commits first; Conjurer sees their move and snapshot stats, then chooses a move.
 
-**Tags:**
-
-- **Activation — Conjure:** Conjurer chose and spent the ability.
-- **Activation — Dual Conjure cancelled:** both players activated, so both uses were spent and neither player received the reveal advantage. This may be a variant of the Conjure tag rather than a separate silhouette.
+**Tags:** None. The special interface communicates activation. Dual Conjure cancellation should be explained inside that interface because both uses are spent and neither player receives the reveal advantage.
 
 ## Fireborne
 
@@ -57,7 +50,7 @@ Activation and Status tags attach to the ability owner. Proc tags attach to the 
 
 **Tags:**
 
-- **Activation — Flame:** Fireborne chose and spent the ability. Protection does not begin until the next selectable turn.
+- **Status — Flame pending:** Flame was spent, but protection does not begin until the next selectable turn.
 - **Status — Shield remaining:** five numbered variants, from 5 through 1 resolved turns remaining.
 - **Proc — Shield consumed / Saved:** the shield prevented death and was consumed.
 
@@ -84,9 +77,9 @@ Activation and Status tags attach to the ability owner. Proc tags attach to the 
 
 **Tags:**
 
-- **Activation — Parry:** Parrymaster chose and spent the ability.
 - **Impact — Parried:** the opposing attacker lost 2 additional Mana.
-- **Proc — Parry failed:** the paid Parry found no eligible opposing Attack. This can be omitted if silence after the Activation tag is clear enough.
+
+A failed Parry needs no tag. The spent button or use counter tells its owner that the ability was consumed.
 
 ## Cupid
 
@@ -98,7 +91,7 @@ Activation and Status tags attach to the ability owner. Proc tags attach to the 
 
 **Tags:**
 
-- **Activation — Golden Arrow:** Cupid chose and spent the ability. Its effect begins on the next selectable turn.
+- **Status — Golden Arrow pending:** Golden Arrow was spent, but its effect does not begin until the next selectable turn.
 - **Status — Arrow remaining:** five numbered variants, from 5 through 1 resolved turns remaining.
 - **Proc — Attack match:** active Arrow added 1 Mana to its Cupid before Attack cost.
 - **Proc — Mana match:** active Arrow granted its Cupid 1 additional Mana.
@@ -138,9 +131,7 @@ The three match tags should share one Golden Arrow family but use different Atta
 
 **Scene:** Reset and restart. Null aborts submitted moves, restores class state, clears history, and restarts the same numbered turn.
 
-**Tags:**
-
-- **Activation — Nullified / Reset:** Null chose and spent Reset. The reset scene handles the resulting state change, so a second Proc tag is unnecessary.
+**Tags:** None. The reset scene and spent button communicate the activation and resulting state change.
 
 ## Joe
 
@@ -159,13 +150,12 @@ The three match tags should share one Golden Arrow family but use different Atta
 - **11 class drawings**, plus badges.
 - **6 active-ability buttons:** Collect, Conjure, Flame, Parry, Golden Arrow, Reset.
 - **5 definite special scene families:** Conjurer decision state, Fireborne survival, Retired mirror retirement, Null reset, JOE TIME.
-- **Activation tags:** 6 required base designs, plus the Dual Conjure cancellation variant.
-- **Status tags:** 2 required base designs, each with five numbered duration variants.
-- **Proc tags:** 10 required designs if optional Retired and failed-Parry feedback are included.
+- **Status tags:** 4 required base designs: Flame pending, Shield remaining, Golden Arrow pending, and Arrow remaining. Shield and Arrow each need five numbered duration variants.
+- **Proc tags:** 9 required designs if the optional Retired transition tag is included.
 - **Impact tags:** 3 required designs: Taxed, Parried, and Golden Arrow Block.
 
 ## Implementation note
 
 Active abilities are chosen before Attack/Block/Mana. Thief currently folds Steal into move submission, but the remaining active classes need a reusable activate-or-decline phase followed by ordinary move selection.
 
-The tag layout should reserve four possible slots per player—Activation, Status, Proc, and Impact—even though most turns will show only one or two.
+The tag layout should reserve three possible slots per player—Status, Proc, and Impact—even though most turns will show only one or two.

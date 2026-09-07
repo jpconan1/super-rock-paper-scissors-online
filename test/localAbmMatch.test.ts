@@ -86,7 +86,7 @@ describe('chooseComputerCommand', () => {
       },
       opponentReady: false, legalActions: ['mana', 'steal'],
     } satisfies AbmProjection;
-    expect(chooseComputerCommand(projection, () => 0)).toEqual({ type: 'choose-move', move: 'mana', useSteal: true });
+    expect(chooseComputerCommand(projection, () => 0)).toEqual({ type: 'choose-move', move: 'mana', ability: 'steal' });
   });
 });
 
