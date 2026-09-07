@@ -22,12 +22,13 @@ export const attackBlockManaRules: VariantRules<AbmState, AbmCommand, AbmProject
     if (!command || typeof command !== 'object') throw new Error('Invalid ABM command.');
     if (command.type === 'lock-class') return lockClass(state, player, command.classId, context.now);
     if (command.type === 'preview-class') return previewClass(state, player, command.classId, context.now);
+    if (command.type === 'activate-ability' && command.ability === 'conjure') return activateConjure(state, player, context.now);
     if (command.type === 'choose-move') return chooseMove(state, player, command.move, command.ability, context);
     throw new Error('Unknown ABM command.');
   },
-  nextDeadline: (state) => state.phase === 'waiting' ? state.waitingDeadlineAt : undefined,
+  nextDeadline: (state) => state.phase === 'waiting' || state.phase === 'conjurer-choosing' ? state.waitingDeadlineAt : undefined,
   advanceDeadline(state, context) {
-    if (state.phase !== 'waiting' || state.waitingDeadlineAt === undefined || context.now < state.waitingDeadlineAt) return undefined;
+    if ((state.phase !== 'waiting' && state.phase !== 'conjurer-choosing') || state.waitingDeadlineAt === undefined || context.now < state.waitingDeadlineAt) return undefined;
     return resolveTimeout(state, context);
   },
   project(state, viewer) {
@@ -40,9 +41,12 @@ export const attackBlockManaRules: VariantRules<AbmState, AbmCommand, AbmProject
       score: { ...state.score }, players: clonePlayers(state.players),
       ...(ownPendingClass ? { ownPendingClass } : {}), ...(ownPendingMove ? { ownPendingMove } : {}),
       ...(ownPendingAbility ? { ownPendingAbility } : {}),
+      ...(state.conjurer ? { conjurer: state.conjurer } : {}),
+      ...(state.conjuredMove ? { conjuredMove: state.conjuredMove } : {}),
+      ...(state.conjureStalemate ? { conjureStalemate: true } : {}),
       ...(state.classReadyPlayer ? { classReadyPlayer: state.classReadyPlayer } : {}),
       ...(state.classReadyAt !== undefined ? { classReadyAt: state.classReadyAt } : {}),
-      opponentReady: Boolean(state.pendingClasses[opponent] || state.pendingMoves[opponent]),
+      opponentReady: Boolean(state.pendingClasses[opponent] || state.pendingMoves[opponent] || state.pendingAbilities?.[opponent]),
       legalActions: legalActions(state, viewer),
       ...(state.lastCompleteMoves ? { lastCompleteMoves: { ...state.lastCompleteMoves } } : {}),
       ...(state.luckyProcPlayer ? { luckyProcPlayer: state.luckyProcPlayer } : {}),
@@ -122,14 +126,26 @@ function chooseMove(state: AbmState, player: PlayerId, move: AbmMove, ability: A
   if (!isActionPhase(state.phase)) throw new Error('Move cannot be chosen now.');
   if (!isMove(move)) throw new Error('Unknown ABM move.');
   if (state.pendingMoves[player]) throw new Error('Move is already locked.');
-  const forcedMana = bothPlayersHaveNoMana(state);
+  if (state.pendingAbilities?.[player] === 'conjure' && !(state.phase === 'conjurer-choosing' && state.conjurer === player)) throw new Error('Waiting for the opponent to move.');
+  const forcedMana = state.phase !== 'conjurer-choosing' && bothPlayersHaveNoMana(state);
   if (forcedMana && move !== 'mana') throw new Error('Mana is the only move available at 0–0 Mana.');
+  if (ability === 'conjure') throw new Error('Conjure must be activated before choosing a move.');
   if (ability) validateAbility(state, player, ability);
   const players = clonePlayers(state.players);
   if (ability) spendAbility(players[player], ability);
   validateMove({ ...state, players }, player, move);
   const pendingMoves = { ...state.pendingMoves, [player]: move };
   const pendingAbilities = { ...(state.pendingAbilities ?? {}), ...(ability ? { [player]: ability } : {}) };
+  if (state.phase === 'conjurer-choosing') {
+    if (state.conjurer !== player) throw new Error('Only the Conjurer can choose now.');
+    if (state.conjuredMove === 'skip') {
+      const staged = { ...state, players, pendingMoves: { [player]: move }, pendingAbilities, earlyPlayer: player, latePlayer: OTHER[player] };
+      return resolveTimeout(staged, context);
+    }
+    return resolveTurn(clearWaiting({ ...state, players, pendingAbilities }), pendingMoves as Record<PlayerId, AbmMove>, context, forcedMana);
+  }
+  const activeConjurer = (['p1', 'p2'] as const).find((id) => pendingAbilities[id] === 'conjure');
+  if (activeConjurer && player === OTHER[activeConjurer]) return beginConjurerChoice({ ...state, players, pendingMoves, pendingAbilities }, activeConjurer, move, now);
   if (!pendingMoves.p1 || !pendingMoves.p2) {
     const earlyPlayer = player;
     const waitingStartsAt = now + ABM_READY_SPLIT_MS;
@@ -138,6 +154,35 @@ function chooseMove(state: AbmState, player: PlayerId, move: AbmMove, ability: A
       events: [cue('move-ready', now, ABM_READY_SPLIT_MS + ABM_WAITING_MS, { earlyPlayer, waitingStartsAt, waitingDeadlineAt })] };
   }
   return resolveTurn(clearWaiting({ ...state, players, pendingAbilities }), pendingMoves as Record<PlayerId, AbmMove>, context, forcedMana);
+}
+
+function activateConjure(state: AbmState, player: PlayerId, now: number): VariantResolution<AbmState> {
+  if (!isActionPhase(state.phase) || state.phase === 'conjurer-choosing') throw new Error('Conjure cannot be used now.');
+  if (state.pendingMoves[player] || state.pendingAbilities?.[player]) throw new Error('Action is already locked.');
+  if (state.conjureStalemate) throw new Error('Conjure cannot be repeated this turn.');
+  validateAbility(state, player, 'conjure');
+  const players = clonePlayers(state.players); spendAbility(players[player], 'conjure');
+  const opponent = OTHER[player];
+  if (state.pendingAbilities?.[opponent] === 'conjure') {
+    return { state: { ...clearWaiting(state), phase: 'idle', players, pendingAbilities: {}, conjureStalemate: true },
+      events: [cue('conjure-stalemate', now, 800, { players: ['p1', 'p2'] })] };
+  }
+  const pendingAbilities = { ...(state.pendingAbilities ?? {}), [player]: 'conjure' as const };
+  const opponentMove = state.pendingMoves[opponent];
+  if (opponentMove) return beginConjurerChoice({ ...state, players, pendingAbilities }, player, opponentMove, now);
+  const waitingStartsAt = now + ABM_READY_SPLIT_MS;
+  return { state: { ...state, phase: 'waiting', players, pendingAbilities, earlyPlayer: player, latePlayer: opponent,
+    waitingStartsAt, waitingDeadlineAt: waitingStartsAt + ABM_WAITING_MS },
+    events: [cue('move-ready', now, ABM_READY_SPLIT_MS + ABM_WAITING_MS, { earlyPlayer: player, waitingStartsAt, waitingDeadlineAt: waitingStartsAt + ABM_WAITING_MS })] };
+}
+
+function beginConjurerChoice(state: AbmState, conjurer: PlayerId, move: AbmDisplayMove, now: number): VariantResolution<AbmState> {
+  const opponent = OTHER[conjurer];
+  const waitingStartsAt = now + STARBURST_WIPE_MS;
+  return { state: { ...clearWaiting(state), phase: 'conjurer-choosing', conjurer, conjuredMove: move,
+    conjuredOpponentTimedOut: move === 'skip' || undefined, earlyPlayer: opponent, latePlayer: conjurer,
+    waitingStartsAt, waitingDeadlineAt: waitingStartsAt + ABM_WAITING_MS },
+    events: [cue('conjure-reveal', now, 800, { conjurer, move })] };
 }
 
 function resolveTurn(state: AbmState, moves: Record<PlayerId, AbmMove>, context: DeterministicContext, forced: boolean): VariantResolution<AbmState> {
@@ -173,7 +218,8 @@ function resolveTurn(state: AbmState, moves: Record<PlayerId, AbmMove>, context:
   const revealDuration = defeatedPlayer ? ABM_LETHAL_TO_RESULT_MS : 800;
   const events = [cue('move-reveal', now, revealDuration, { moves, turn: state.turn, forced, luckyProcPlayer, advantagedProcPlayers,
     juggernautProcPlayers, stunnedPlayers, investorBullPlayers, investorBearPlayers, duplicatorProcPlayers, copywriterProcPlayers, sumoProcRemaining, cheaterProcPlayers, gamblerOutcomes })];
-  const revealed = { ...state, players, pendingMoves: {}, pendingAbilities: {}, lastCompleteMoves: moves, heldSplitFor: undefined,
+  const revealed = { ...state, players, pendingMoves: {}, pendingAbilities: {}, conjurer: undefined, conjuredMove: undefined,
+    conjuredOpponentTimedOut: undefined, conjureStalemate: undefined, lastCompleteMoves: moves, heldSplitFor: undefined,
     luckyProcPlayer, advantagedProcPlayers: advantagedProcPlayers.length ? advantagedProcPlayers : undefined,
     thiefAttemptPlayers: abilityResult.thiefAttemptPlayers.length ? abilityResult.thiefAttemptPlayers : undefined,
     thiefTransferPlayer: abilityResult.thiefTransferPlayer,
@@ -193,6 +239,23 @@ function resolveTurn(state: AbmState, moves: Record<PlayerId, AbmMove>, context:
 
 function resolveTimeout(state: AbmState, context: DeterministicContext): VariantResolution<AbmState> {
   const { now } = context;
+  if (state.phase === 'conjurer-choosing' && state.conjuredMove === 'skip' && !state.pendingMoves[state.conjurer!]) {
+    return resolveDoubleConjureTimeout(state, context);
+  }
+  if (state.phase === 'waiting') {
+    const conjurer = (['p1', 'p2'] as const).find((id) => state.pendingAbilities?.[id] === 'conjure');
+    if (conjurer && !state.pendingMoves[OTHER[conjurer]]) {
+      const opponent = OTHER[conjurer]; const players = clonePlayers(state.players);
+      applySkip(players[opponent], false);
+      if (players[opponent].strikes >= 2) {
+        const duration = ABM_LETHAL_TO_RESULT_MS;
+        return { state: { ...clearWaiting(state), phase: 'match-complete', players, pendingMoves: {}, pendingAbilities: {}, winner: conjurer,
+          resultReason: 'forfeit', resultRevealAt: now + duration },
+          events: [cue('move-timeout', now, duration, { earlyPlayer: conjurer, latePlayer: opponent, strikes: players[opponent].strikes })] };
+      }
+      return beginConjurerChoice({ ...state, players }, conjurer, 'skip', context.now);
+    }
+  }
   const early = state.earlyPlayer!; const late = state.latePlayer!; const move = state.pendingMoves[early]!;
   const players = clonePlayers(state.players);
   const advantagedProcPlayers = isAdvantagedManaProc(players[early], move, state.turn) ? [early] : undefined;
@@ -203,12 +266,10 @@ function resolveTimeout(state: AbmState, context: DeterministicContext): Variant
   applyMove(players[early], move, cheaterProcPlayers ? 2 : manaGainFor(players[early], undefined, early, state.turn));
   const gamblerOutcomes: Partial<Record<PlayerId, AbmGamblerOutcome>> = {};
   if (players[early].classId === 'gambler' && move === 'block') gamblerOutcomes[early] = applyGamblerRoll(players[early], context.random());
-  players[late].mana = Math.max(0, players[late].mana - 1);
-  players[late].strikes = (players[late].strikes ?? 0) + 1;
-  players[late].lastMove = 'skip';
-  recordRecentMove(players[late], 'skip');
-  if (players[late].classId === 'juggernaut') players[late].attackStreak = 0;
-  if (players[late].classId === 'duplicator') players[late].nextManaGain = 1;
+  const timeoutAlreadyApplied = Boolean(state.conjuredOpponentTimedOut && state.conjuredMove === 'skip');
+  if (timeoutAlreadyApplied) {
+    players[late].lastMove = 'skip'; recordRecentMove(players[late], 'skip');
+  } else applySkip(players[late]);
   const stunnedPlayers = resolveStunnerTimeout(players, early, late, move);
   const investorBearPlayers = resolveInvestorTax(players, state.turn);
   const revealDuration = move === 'attack' || players[late].strikes >= 2 ? ABM_LETHAL_TO_RESULT_MS : 800;
@@ -217,7 +278,8 @@ function resolveTimeout(state: AbmState, context: DeterministicContext): Variant
   const events = [cue('move-timeout', now, revealDuration, { earlyPlayer: early, latePlayer: late, move, strikes: players[late].strikes,
     turn: state.turn, advantagedProcPlayers, thiefAttemptPlayers: abilityResult.thiefAttemptPlayers, thiefTransferPlayer: abilityResult.thiefTransferPlayer,
     taxmanCollectPlayers: abilityResult.taxmanCollectPlayers, stunnedPlayers, investorBearPlayers, duplicatorProcPlayers, copywriterProcPlayers, cheaterProcPlayers, gamblerOutcomes })];
-  const timedOut = { ...clearWaiting(state), players, pendingMoves: {}, pendingAbilities: {}, heldSplitFor: early, luckyProcPlayer: undefined,
+  const timedOut = { ...clearWaiting(state), players, pendingMoves: {}, pendingAbilities: {}, conjurer: undefined, conjuredMove: undefined,
+    conjuredOpponentTimedOut: undefined, conjureStalemate: undefined, heldSplitFor: early, luckyProcPlayer: undefined,
     advantagedProcPlayers, thiefAttemptPlayers: undefined, thiefTransferPlayer: undefined, taxmanCollectPlayers: undefined, juggernautProcPlayers: undefined,
     stunnedPlayers: stunnedPlayers.length ? stunnedPlayers : undefined, investorBullPlayers: undefined,
     investorBearPlayers: investorBearPlayers.length ? investorBearPlayers : undefined, duplicatorProcPlayers,
@@ -226,6 +288,22 @@ function resolveTimeout(state: AbmState, context: DeterministicContext): Variant
   if (players[late].strikes >= 2) return { state: { ...timedOut, phase: 'match-complete', winner: early, resultReason: 'forfeit', resultRevealAt: now + revealDuration }, events };
   if (move === 'attack') return finishRound(timedOut, early, events, now + revealDuration);
   return { state: { ...timedOut, phase: 'idle', turn: state.turn + 1 }, events };
+}
+
+function resolveDoubleConjureTimeout(state: AbmState, context: DeterministicContext): VariantResolution<AbmState> {
+  const { now } = context; const conjurer = state.conjurer!; const opponent = OTHER[conjurer];
+  const players = clonePlayers(state.players);
+  const copywriterProcPlayers = resolveCopywriters(players, { p1: 'skip', p2: 'skip' });
+  applySkip(players[conjurer]);
+  players[opponent].lastMove = 'skip'; recordRecentMove(players[opponent], 'skip');
+  const duration = players[conjurer].strikes >= 2 ? ABM_LETHAL_TO_RESULT_MS : 800;
+  const timedOut = { ...clearWaiting(state), players, phase: players[conjurer].strikes >= 2 ? 'match-complete' as const : 'idle' as const,
+    turn: players[conjurer].strikes >= 2 ? state.turn : state.turn + 1, pendingMoves: {}, pendingAbilities: {}, conjurer: undefined,
+    conjuredMove: undefined, conjuredOpponentTimedOut: undefined, conjureStalemate: undefined,
+    copywriterProcPlayers: copywriterProcPlayers.length ? copywriterProcPlayers : undefined,
+    ...(players[conjurer].strikes >= 2 ? { winner: opponent, resultReason: 'forfeit' as const, resultRevealAt: now + duration } : {}) };
+  return { state: timedOut, events: [cue('move-timeout', now, duration, { earlyPlayer: opponent, latePlayer: conjurer, move: 'skip', strikes: players[conjurer].strikes,
+    turn: state.turn, copywriterProcPlayers })] };
 }
 
 function finishRound(state: AbmState, winner: PlayerId, events: ReturnType<typeof cue>[], startsAt: number): VariantResolution<AbmState> {
@@ -247,6 +325,7 @@ function finishRound(state: AbmState, winner: PlayerId, events: ReturnType<typeo
   if (players.p2.classId === 'sumo') players.p2.refundsRemaining = 3;
   events.push(cue('counter-pick', startsAt + ABM_RESULT_TO_COUNTER_PICK_MS, 600, { winner, loser, classId: state.players[winner].classId }));
   return { state: { ...state, phase: 'counter-picking', turn: 0, round: state.round + 1, score, players, pendingClasses: {}, pendingMoves: {}, pendingAbilities: {},
+    conjurer: undefined, conjuredMove: undefined, conjuredOpponentTimedOut: undefined, conjureStalemate: undefined,
     counterPicker: loser, counterPickAvailableAt: startsAt + ABM_RESULT_TO_COUNTER_PICK_MS, resultRevealAt: startsAt, lastRoundWinner: winner }, events };
 }
 
@@ -278,6 +357,14 @@ function resolveCopywriters(
 
 function recordRecentMove(player: AbmPlayerState, move: AbmDisplayMove): void {
   player.recentMoves = [...(player.recentMoves ?? []), move].slice(-3);
+}
+function applySkip(player: AbmPlayerState, record = true): void {
+  player.mana = Math.max(0, player.mana - 1);
+  player.strikes = (player.strikes ?? 0) + 1;
+  player.blocks = startingResourcesForClass(player.classId).blocks;
+  if (player.classId === 'juggernaut') player.attackStreak = 0;
+  if (player.classId === 'duplicator') player.nextManaGain = 1;
+  if (record) { player.lastMove = 'skip'; recordRecentMove(player, 'skip'); }
 }
 function manaGainFor(player: Readonly<AbmPlayerState>, moves: Readonly<Record<PlayerId, AbmMove>> | undefined, playerId: PlayerId, turn: number): number {
   if (moves && isInvestorBullProc(player, moves, playerId)) return 2;
@@ -336,14 +423,16 @@ function legalActions(state: AbmState, viewer: PlayerId) {
   if ((state.phase === 'selecting-classes' || state.phase === 'waiting-for-class') && !state.pendingClasses[viewer]) return ['lock-class'] as const;
   if (state.phase === 'counter-picking' && state.counterPicker === viewer) return ['lock-class'] as const;
   if (isActionPhase(state.phase) && !state.pendingMoves[viewer]) {
-    if (bothPlayersHaveNoMana(state)) return ['mana'] as const;
+    if (state.phase === 'conjurer-choosing' && state.conjurer !== viewer) return [];
+    if (state.pendingAbilities?.[viewer] === 'conjure' && !(state.phase === 'conjurer-choosing' && state.conjurer === viewer)) return [];
+    if (state.phase !== 'conjurer-choosing' && bothPlayersHaveNoMana(state)) return ['mana'] as const;
     const target = state.players[viewer];
     const attackCost = attackCostFor(target);
     const moves = (['attack', 'block', 'mana'] as const)
       .filter((move) => move !== 'attack' || target.mana >= attackCost)
       .filter((move) => move !== 'block' || (target.blocks > 0 && !isBlockDisabled(state, viewer)));
     const ability = target.classId ? ABM_CLASS_BY_ID.get(target.classId)?.ability : undefined;
-    return ability && abilityUsesFor(target, ability.id) > 0 && target.mana >= ability.manaCost && (!ability.available || ability.available(target, state.turn))
+    return ability && !state.conjureStalemate && abilityUsesFor(target, ability.id) > 0 && target.mana >= ability.manaCost && (!ability.available || ability.available(target, state.turn))
       ? [...moves, ability.id] : moves;
   }
   return [];
@@ -441,7 +530,7 @@ function isBlockDisabled(state: Readonly<AbmState>, player: PlayerId): boolean {
   const opponent = state.players[OTHER[player]];
   return opponent.classId === 'juggernaut' && (opponent.attackStreak ?? 0) > 0 && (opponent.attackStreak ?? 0) % 2 === 0;
 }
-function isActionPhase(phase: AbmState['phase']): boolean { return ['idle', 'waiting', 'selecting-actions', 'waiting-for-action'].includes(phase as string); }
-function cue(type: 'class-ready' | 'class-reveal' | 'class-preview' | 'move-ready' | 'move-reveal' | 'move-timeout' | 'forced-mana' | 'round-result' | 'counter-pick', startsAt: number, duration: number, payload: unknown) {
+function isActionPhase(phase: AbmState['phase']): boolean { return ['idle', 'waiting', 'conjurer-choosing', 'selecting-actions', 'waiting-for-action'].includes(phase as string); }
+function cue(type: 'class-ready' | 'class-reveal' | 'class-preview' | 'move-ready' | 'move-reveal' | 'move-timeout' | 'forced-mana' | 'round-result' | 'counter-pick' | 'conjure-reveal' | 'conjure-stalemate', startsAt: number, duration: number, payload: unknown) {
   return { type, startsAt, endsAt: startsAt + duration, payload } as const;
 }

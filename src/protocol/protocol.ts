@@ -16,7 +16,7 @@ export type SemanticEventType =
   | 'match-found' | 'pick-confirmed' | 'game-start' | 'ready'
   | 'reveal' | 'score' | 'scoreboard' | 'bans-locked' | 'match-complete' | 'wipe'
   | 'class-ready' | 'class-reveal' | 'class-preview' | 'move-reveal' | 'forced-mana' | 'round-result' | 'counter-pick'
-  | 'move-ready' | 'move-timeout';
+  | 'move-ready' | 'move-timeout' | 'conjure-reveal' | 'conjure-stalemate';
 
 export interface TimedSemanticEvent<TPayload = unknown> {
   id: string;

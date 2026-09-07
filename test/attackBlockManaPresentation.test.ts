@@ -3,7 +3,7 @@ import { ABM_CLASSES, startingResourcesForClass } from '../src/variants/attackBl
 import { ABM_BACK_LOBBY_ART, ABM_LAYOUTS, ABM_RESULT_SCENES, ABM_SELECT_ART, ABM_TAG_CATEGORIES, ABM_TAG_ORDERS, abmTagSlotId, blockSegments, getAbmAttackCostDisplay, getAbmClassReadyFrame, getAbmResultScene, getAbmAbilityControlGeometry, getAbmWaitingVisual, initialManaForClass, latestClassPreview, sceneForMoves, shouldShowAbmContinuingRoundProcTags, shouldShowAbmYouTag, shouldShowClassBadge, shouldShowClassReadyOpponentTag } from '../src/variants/attackBlockMana/attackBlockManaPresentation';
 import type { AbmProjection } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 import { ABM_CLASS_IDS } from '../src/variants/attackBlockMana/attackBlockManaTypes';
-import { ABM_SCENE_URLS, resolveAbmProcBackgrounds, resolveAbmScene, resolveAbmSplitScene, resolveAbmTags } from '../src/variants/attackBlockMana/attackBlockManaScenes';
+import { ABM_SCENE_URLS, resolveAbmProcBackgrounds, resolveAbmScene, resolveAbmSplitScene, resolveAbmTags, resolveConjureScene } from '../src/variants/attackBlockMana/attackBlockManaScenes';
 import { getLayoutDocument } from '../src/layout/layoutDocuments';
 import { validateLayoutDocument } from '../src/layout/layoutDocument';
 import { ABM_TAG_ENTRANCE_SOURCES } from '../src/variants/attackBlockMana/abmTagEntrance';
@@ -11,17 +11,21 @@ import { ABM_TAG_ENTRANCE_SOURCES } from '../src/variants/attackBlockMana/abmTag
 describe('Attack Block Mana presentation data', () => {
   test('includes Copywriter and marks every finished class playable', () => {
     expect(ABM_CLASSES.map(({ id }) => id)).toEqual([
-      'lucky', 'advantaged', 'thief', 'juggernaut', 'stunner', 'duplicator', 'sumo', 'cheater', 'investor', 'gambler', 'taxman', 'copywriter',
+      'lucky', 'advantaged', 'thief', 'juggernaut', 'stunner', 'duplicator', 'sumo', 'cheater', 'investor', 'gambler', 'taxman', 'copywriter', 'conjurer',
     ]);
     expect(ABM_CLASS_IDS).toEqual(ABM_CLASSES.map(({ id }) => id));
     expect(ABM_CLASSES.filter(({ implemented }) => implemented).map(({ id }) => id)).toEqual([
-      'lucky', 'advantaged', 'thief', 'juggernaut', 'stunner', 'duplicator', 'sumo', 'cheater', 'investor', 'gambler', 'taxman', 'copywriter',
+      'lucky', 'advantaged', 'thief', 'juggernaut', 'stunner', 'duplicator', 'sumo', 'cheater', 'investor', 'gambler', 'taxman', 'copywriter', 'conjurer',
     ]);
     expect(ABM_CLASSES.every(({ asset, badgeAsset }) => asset.endsWith('-sheet.webp') && badgeAsset.endsWith('-badge-sheet.webp') && !asset.includes('placeholder'))).toBe(true);
     expect(ABM_CLASSES.find(({ id }) => id === 'taxman')).toMatchObject({ name: 'Taxman', ability: { id: 'collect', label: 'Collect', uses: 3, manaCost: 0, inputStrategy: 'arm-with-move' } });
     expect(ABM_CLASSES.find(({ id }) => id === 'thief')).toMatchObject({ ability: { id: 'steal', uses: 1, inputStrategy: 'arm-with-move' } });
     expect(ABM_CLASSES.find(({ id }) => id === 'copywriter')).toMatchObject({
       name: 'Copywriter', implemented: true, asset: '/variants/abm/copywriter-sheet.webp', badgeAsset: '/variants/abm/copywriter-badge-sheet.webp',
+    });
+    expect(ABM_CLASSES.find(({ id }) => id === 'conjurer')).toMatchObject({
+      name: 'Conjurer', implemented: true, ability: { id: 'conjure', uses: 2, manaCost: 1, inputStrategy: 'opponent-first' },
+      asset: '/variants/abm/conjurer-sheet.webp', badgeAsset: '/variants/abm/conjurer-badge-sheet.webp',
     });
   });
 
@@ -65,6 +69,14 @@ describe('Attack Block Mana presentation data', () => {
     expect(sceneForMoves('attack', 'mana')).toContain('mana-attack');
     expect(sceneForMoves('block', 'attack')).toContain('block-attack');
     expect(sceneForMoves('mana', 'block')).toContain('block-mana');
+  });
+
+  test('maps and flips every Conjurer decision scene', () => {
+    for (const move of ['attack', 'block', 'mana', 'skip', 'conjure'] as const) {
+      expect(resolveConjureScene(move, 'p1')).toEqual({ src: `/variants/abm/scenes/conjure/conjure-${move}-sheet.webp`, flip: false });
+      expect(resolveConjureScene(move, 'p2')).toMatchObject({ flip: true });
+      expect(ABM_SCENE_URLS).toContain(`/variants/abm/scenes/conjure/conjure-${move}-sheet.webp`);
+    }
   });
 
   test('preloads all tag entrance frames with the ABM scene bundle', () => {
@@ -390,6 +402,7 @@ describe('Attack Block Mana presentation data', () => {
     expect(shouldShowAbmYouTag('counter-picking')).toBe(false);
     expect(shouldShowAbmYouTag('idle')).toBe(true);
     expect(shouldShowAbmYouTag('waiting')).toBe(true);
+    expect(shouldShowAbmYouTag('conjurer-choosing')).toBe(true);
     expect(shouldShowAbmYouTag('match-complete')).toBe(false);
   });
 

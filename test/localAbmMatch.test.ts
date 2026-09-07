@@ -88,6 +88,21 @@ describe('chooseComputerCommand', () => {
     } satisfies AbmProjection;
     expect(chooseComputerCommand(projection, () => 0)).toEqual({ type: 'choose-move', move: 'mana', ability: 'steal' });
   });
+
+  test('activates Conjure immediately and answers during its private response', () => {
+    const base = {
+      self: 'p2', phase: 'idle', turn: 1, round: 1, score: { p1: 0, p2: 0 },
+      players: {
+        p1: { classId: 'lucky', mana: 1, blocks: 5, strikes: 0 },
+        p2: { classId: 'conjurer', mana: 1, blocks: 5, strikes: 0, abilityUses: { conjure: 2 } },
+      },
+      opponentReady: false,
+    } satisfies Omit<AbmProjection, 'legalActions'>;
+    expect(chooseComputerCommand({ ...base, legalActions: ['attack', 'block', 'mana', 'conjure'] }, () => 0))
+      .toEqual({ type: 'activate-ability', ability: 'conjure' });
+    expect(chooseComputerCommand({ ...base, phase: 'conjurer-choosing', conjurer: 'p2', conjuredMove: 'attack', legalActions: ['block', 'mana'] }, () => 0))
+      .toEqual({ type: 'choose-move', move: 'block' });
+  });
 });
 
 function latestSnapshot(snapshots: ServerSnapshot[]): ServerSnapshot { return snapshots[snapshots.length - 1]!; }

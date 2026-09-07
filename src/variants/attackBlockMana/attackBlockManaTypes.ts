@@ -2,23 +2,24 @@ import type { PlayerId, VariantGameResult } from '../../core/variant';
 
 export const ABM_CLASS_IDS = [
   'lucky', 'advantaged', 'thief', 'juggernaut', 'stunner', 'duplicator', 'sumo',
-  'cheater', 'investor', 'gambler', 'taxman', 'copywriter',
+  'cheater', 'investor', 'gambler', 'taxman', 'copywriter', 'conjurer',
 ] as const;
 
 export type AbmClassId = typeof ABM_CLASS_IDS[number];
 export type AbmMove = 'attack' | 'block' | 'mana';
 export type AbmDisplayMove = AbmMove | 'skip';
-export type AbmAbilityId = 'steal' | 'collect';
+export type AbmAbilityId = 'steal' | 'collect' | 'conjure';
 export type AbmGamblerOutcome =
   | 'plus-2-mana' | 'plus-1-mana' | 'mana-drain' | 'mana-double'
   | 'plus-1-block' | 'plus-2-block' | 'minus-1-block' | 'nothing';
 export type AbmPhase =
   | 'selecting-classes' | 'waiting-for-class'
-  | 'idle' | 'waiting' | 'counter-picking' | 'match-complete';
+  | 'idle' | 'waiting' | 'conjurer-choosing' | 'counter-picking' | 'match-complete';
 
 export type AbmCommand =
   | { type: 'lock-class'; classId: AbmClassId }
   | { type: 'preview-class'; classId: AbmClassId }
+  | { type: 'activate-ability'; ability: 'conjure' }
   | { type: 'choose-move'; move: AbmMove; ability?: AbmAbilityId };
 
 export interface AbmPlayerState {
@@ -52,6 +53,10 @@ export interface AbmState {
   classReadyAt?: number;
   pendingMoves: Partial<Record<PlayerId, AbmMove>>;
   pendingAbilities?: Partial<Record<PlayerId, AbmAbilityId>>;
+  conjurer?: PlayerId;
+  conjuredMove?: AbmDisplayMove;
+  conjuredOpponentTimedOut?: boolean;
+  conjureStalemate?: boolean;
   lastCompleteMoves?: Record<PlayerId, AbmMove>;
   luckyProcPlayer?: PlayerId;
   advantagedProcPlayers?: PlayerId[];
@@ -94,6 +99,9 @@ export interface AbmProjection {
   classReadyAt?: number;
   ownPendingMove?: AbmMove;
   ownPendingAbility?: AbmAbilityId;
+  conjurer?: PlayerId;
+  conjuredMove?: AbmDisplayMove;
+  conjureStalemate?: boolean;
   opponentReady: boolean;
   legalActions: readonly AbmLegalAction[];
   counterPicker?: PlayerId;

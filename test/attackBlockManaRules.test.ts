@@ -457,6 +457,74 @@ describe('Attack Block Mana rules', () => {
     expect(state.players.p2.recentMoves).toBeUndefined();
   });
 
+  test('stages Conjurer behind the opponent move and gives only the Conjurer a fresh response window', () => {
+    let state = startedWith('conjurer', 'lucky');
+    expect(attackBlockManaRules.project(state, 'p1').legalActions).toContain('conjure');
+    expect(() => send(state, 'p1', { type: 'choose-move', move: 'block', ability: 'conjure' })).toThrow('activated before');
+    state = send(state, 'p1', { type: 'activate-ability', ability: 'conjure' }, 2_000);
+    expect(state).toMatchObject({ phase: 'waiting', earlyPlayer: 'p1', latePlayer: 'p2' });
+    expect(state.players.p1).toMatchObject({ mana: 0, abilityUses: { conjure: 1 } });
+    expect(attackBlockManaRules.project(state, 'p1').ownPendingAbility).toBe('conjure');
+    expect(attackBlockManaRules.project(state, 'p2').ownPendingAbility).toBeUndefined();
+    expect(attackBlockManaRules.project(state, 'p2').legalActions).toEqual(['attack', 'block', 'mana']);
+
+    const reveal = attackBlockManaRules.resolve(state, 'p2', { type: 'choose-move', move: 'block' }, { ...context, now: 3_000 });
+    state = reveal.state;
+    expect(reveal.events?.[0]).toMatchObject({ type: 'conjure-reveal', payload: { conjurer: 'p1', move: 'block' } });
+    expect(state).toMatchObject({ phase: 'conjurer-choosing', conjurer: 'p1', conjuredMove: 'block', waitingStartsAt: 3_580, waitingDeadlineAt: 33_580 });
+    expect(attackBlockManaRules.project(state, 'p1').legalActions).toEqual(['block', 'mana']);
+    expect(attackBlockManaRules.project(state, 'p2').legalActions).toEqual([]);
+    expect(() => send(state, 'p2', { type: 'choose-move', move: 'mana' })).toThrow('already locked');
+
+    state = send(state, 'p1', { type: 'choose-move', move: 'block' }, 4_000);
+    expect(state).toMatchObject({ phase: 'idle', turn: 2, lastCompleteMoves: { p1: 'block', p2: 'block' } });
+    expect(state.conjurer).toBeUndefined();
+  });
+
+  test('enters Conjurer choice when the opponent committed first', () => {
+    let state = startedWith('conjurer', 'lucky');
+    state = send(state, 'p2', { type: 'choose-move', move: 'mana' }, 2_000);
+    const resolution = attackBlockManaRules.resolve(state, 'p1', { type: 'activate-ability', ability: 'conjure' }, { ...context, now: 2_500 });
+    expect(resolution.state).toMatchObject({ phase: 'conjurer-choosing', conjurer: 'p1', conjuredMove: 'mana', waitingDeadlineAt: 33_080 });
+    expect(resolution.events?.[0]?.type).toBe('conjure-reveal');
+  });
+
+  test('cancels dual Conjure into ordinary simultaneous selection for the rest of the turn', () => {
+    let state = startedWith('conjurer', 'conjurer');
+    state = send(state, 'p1', { type: 'activate-ability', ability: 'conjure' }, 2_000);
+    const stalemate = attackBlockManaRules.resolve(state, 'p2', { type: 'activate-ability', ability: 'conjure' }, { ...context, now: 2_500 });
+    state = stalemate.state;
+    expect(stalemate.events?.[0]?.type).toBe('conjure-stalemate');
+    expect(state).toMatchObject({ phase: 'idle', conjureStalemate: true, players: {
+      p1: { mana: 0, abilityUses: { conjure: 1 } }, p2: { mana: 0, abilityUses: { conjure: 1 } },
+    } });
+    expect(attackBlockManaRules.project(state, 'p1').legalActions).toEqual(['mana']);
+    expect(() => send(state, 'p1', { type: 'activate-ability', ability: 'conjure' })).toThrow('cannot be repeated');
+    state = playTurn(state, 'mana', 'mana');
+    expect(state.conjureStalemate).toBeUndefined();
+    expect(state.lastCompleteMoves).toEqual({ p1: 'mana', p2: 'mana' });
+  });
+
+  test('reveals opponent timeout Skip once and resolves after the Conjurer responds', () => {
+    let state = startedWith('conjurer', 'lucky');
+    state = send(state, 'p1', { type: 'activate-ability', ability: 'conjure' }, 2_000);
+    const reveal = attackBlockManaRules.advanceDeadline!(state, { ...context, now: state.waitingDeadlineAt! })!;
+    state = reveal.state;
+    expect(reveal.events?.[0]).toMatchObject({ type: 'conjure-reveal', payload: { conjurer: 'p1', move: 'skip' } });
+    expect(state).toMatchObject({ phase: 'conjurer-choosing', conjuredMove: 'skip', players: { p2: { mana: 0, strikes: 1 } } });
+    state = send(state, 'p1', { type: 'choose-move', move: 'block' }, state.waitingStartsAt! + 1_000);
+    expect(state.players.p2).toMatchObject({ mana: 0, strikes: 1, lastMove: 'skip' });
+    expect(state.players.p2.recentMoves).toEqual(['skip']);
+  });
+
+  test('turns a Conjurer response timeout into Skip against the committed opponent move', () => {
+    let state = startedWith('conjurer', 'lucky');
+    state = send(state, 'p1', { type: 'activate-ability', ability: 'conjure' }, 2_000);
+    state = send(state, 'p2', { type: 'choose-move', move: 'block' }, 3_000);
+    state = attackBlockManaRules.advanceDeadline!(state, { ...context, now: state.waitingDeadlineAt! })!.state;
+    expect(state).toMatchObject({ phase: 'idle', turn: 2, players: { p1: { mana: 0, strikes: 1, lastMove: 'skip' }, p2: { lastMove: 'block' } } });
+  });
+
   test('resets Duplicator chain on Attack, Block, Skip, and round reset', () => {
     let attack = startedWith('duplicator', 'lucky');
     attack.players.p1.nextManaGain = 8;

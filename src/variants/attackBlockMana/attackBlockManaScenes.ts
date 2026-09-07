@@ -1,5 +1,5 @@
 import type { PlayerId } from '../../core/variant';
-import type { AbmGamblerOutcome, AbmMove } from './attackBlockManaTypes';
+import type { AbmDisplayMove, AbmGamblerOutcome, AbmMove } from './attackBlockManaTypes';
 import { ABM_TAG_ENTRANCE_SOURCES } from './abmTagEntrance';
 
 const ROOT = '/variants/abm/scenes';
@@ -10,6 +10,9 @@ const TAG_ROOT = `${ROOT}/tags`;
 const BACKGROUND_ROOT = `${ROOT}/backgrounds`;
 
 export interface AbmScene { src: string; flip: boolean }
+export function resolveConjureScene(move: AbmDisplayMove | 'conjure', conjurer: PlayerId): AbmScene {
+  return { src: `${ROOT}/conjure/conjure-${move}-sheet.webp`, flip: conjurer === 'p2' };
+}
 export type AbmTagCategory = 'proc' | 'impact' | 'status';
 export type AbmTagKind = 'advantaged' | 'bear' | 'bull' | 'cheater' | 'copywriter' | 'duplicator' | 'gambler' | 'juggernaut' | 'lucky' | 'stunned' | 'sumo' | 'taxed' | 'thief';
 export interface AbmTag { kind: AbmTagKind; category: AbmTagCategory; player: PlayerId; src: string }
@@ -115,6 +118,7 @@ const GAMBLER_TAG_NAMES: readonly Exclude<AbmGamblerOutcome, 'nothing'>[] = [
 export const ABM_SCENE_URLS = [
   ...BASE_SCENE_NAMES.map((name) => `${BASE_ROOT}/${name}-sheet.webp`),
   `${EXCEPTION_ROOT}/lucky-survival-sheet.webp`,
+  ...(['attack', 'block', 'mana', 'skip', 'conjure'] as const).map((move) => `${ROOT}/conjure/conjure-${move}-sheet.webp`),
   ...SPLIT_BASE_SCENE_NAMES.flatMap((name) => SPLIT_BASE_SCENE_VARIANTS[name].map((variant) => `${SPLIT_ROOT}/base/${name}-${variant}-ready-sheet.webp`)),
   ...(['attacker', 'charger'] as const).map((role) => `${SPLIT_ROOT}/exceptions/lucky-survival-${role}-ready-sheet.webp`),
   ...TAG_NAMES.map((name) => `${TAG_ROOT}/${name}-sheet.webp`),

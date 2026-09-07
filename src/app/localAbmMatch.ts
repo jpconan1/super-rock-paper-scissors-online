@@ -118,6 +118,7 @@ export function chooseComputerCommand(projection: AbmProjection, random: () => n
     const playable = ABM_CLASSES.filter(({ implemented }) => implemented);
     return { type: 'lock-class', classId: playable[Math.floor(random() * playable.length)]!.id };
   }
+  if (projection.legalActions.includes('conjure') && random() < .55) return { type: 'activate-ability', ability: 'conjure' };
   const moves = projection.legalActions.filter((action): action is AbmMove =>
     action === 'attack' || action === 'block' || action === 'mana');
   if (!moves.length) return undefined;

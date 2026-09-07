@@ -43,6 +43,7 @@ export const ABM_CLASSES: readonly AbmClassDefinition[] = [
   entry('gambler', 'Gambler', 'Every Block rolls for a random Mana or Block effect. Starts with 3 Blocks.', true, { maximumBlocks: 3 }),
   entry('taxman', 'Taxman', 'Collects 1 Mana from both players after moves resolve, up to three times.', true, {}, 'taxman', ability('collect', 'Collect', 3, 0, (player) => player.mana > 0)),
   entry('copywriter', 'Copywriter', 'Gains 1 Mana when the opponent makes the same move three times in a row.', true),
+  entry('conjurer', 'Conjurer', 'Twice per game, pays 1 Mana to see the opponent\'s move before choosing.', true, {}, 'conjurer', ability('conjure', 'Conjure', 2, 1, undefined, 'opponent-first')),
 ];
 
 export const ABM_CLASS_BY_ID = new Map(ABM_CLASSES.map((definition) => [definition.id, definition]));
@@ -67,9 +68,9 @@ function entry(
 }
 
 function ability(id: AbmAbilityId, label: string, uses: number, manaCost: number,
-  available?: AbmActivatedAbilityDefinition['available']): AbmActivatedAbilityDefinition {
+  available?: AbmActivatedAbilityDefinition['available'], inputStrategy: AbmActivatedAbilityDefinition['inputStrategy'] = 'arm-with-move'): AbmActivatedAbilityDefinition {
   const base = `${root}/${id}-button`;
-  return { id, label, uses, manaCost, inputStrategy: 'arm-with-move', buttonAssets: {
+  return { id, label, uses, manaCost, inputStrategy, buttonAssets: {
     up: `${base}-up-sheet.webp`, between: `${base}-between-sheet.webp`, depressed: `${base}-depressed-sheet.webp`,
   }, ...(available ? { available } : {}) };
 }

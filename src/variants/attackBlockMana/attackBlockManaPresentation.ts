@@ -12,7 +12,7 @@ import { createBoilingSprite, type BoilingSprite } from '../../renderer/boilingS
 import { playStarburstWipe } from '../../renderer/starburstWipe';
 import { createTextbox } from '../../ui/textbox';
 import { ABM_CLASSES, ABM_CLASS_BY_ID, startingResourcesForClass, type AbmStartingResources } from './attackBlockManaCatalog';
-import { ABM_SCENE_URLS, resolveAbmProcBackgrounds, resolveAbmScene, resolveAbmSplitScene, resolveAbmTags, type AbmProcBackgroundKind, type AbmTagCategory, type AbmTagKind } from './attackBlockManaScenes';
+import { ABM_SCENE_URLS, resolveAbmProcBackgrounds, resolveAbmScene, resolveAbmSplitScene, resolveAbmTags, resolveConjureScene, type AbmProcBackgroundKind, type AbmTagCategory, type AbmTagKind } from './attackBlockManaScenes';
 import type { AbmAbilityId, AbmClassId, AbmCommand, AbmMove, AbmPlayerState, AbmProjection } from './attackBlockManaTypes';
 import { playCatalogSound, type SoundId } from '../../audio/soundCatalog';
 import type { MusicDirector } from '../../audio/musicDirector';
@@ -83,7 +83,7 @@ export function shouldShowClassReadyOpponentTag(serverTime: number, classReadyAt
 }
 
 export function shouldShowAbmYouTag(phase: AbmProjection['phase']): boolean {
-  return phase === 'idle' || phase === 'waiting';
+  return phase === 'idle' || phase === 'waiting' || phase === 'conjurer-choosing';
 }
 
 export function shouldShowAbmContinuingRoundProcTags(phase: AbmProjection['phase']): boolean {
@@ -196,6 +196,10 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   const abilityButtons = ABM_CLASSES.flatMap(({ ability }) => ability ? [ability] : []).map((ability) => {
     let button!: GameButton;
     button = createGameButton({ label: ability.label, clock, activateAtReleaseStart: true, onActivate: () => {
+      if (ability.inputStrategy === 'opponent-first') {
+        send({ type: 'activate-ability', ability: 'conjure' });
+        return;
+      }
       armedAbility = armedAbility === ability.id ? undefined : ability.id;
       button.setLockedDepressed(armedAbility === ability.id);
     }, upSheet: ability.buttonAssets.up, betweenSheet: ability.buttonAssets.between, depressedSheet: ability.buttonAssets.depressed });
@@ -421,8 +425,9 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     const showingResult = (counterLocked || complete) && resultRevealed;
     const transitioning = counterLocked || complete;
     const thiefFeedback = Boolean(nextProjection.thiefAttemptPlayers?.length);
-    picker.hidden = !picking; sceneArtwork.hidden = picking; lock.element.hidden = !picking; for (const [, button] of moves) button.element.hidden = picking || transitioning;
-    for (const [, arrow] of arrows) arrow.hidden = picking || transitioning;
+    const waitingOnConjurer = nextProjection.phase === 'conjurer-choosing' && nextProjection.conjurer !== nextProjection.self;
+    picker.hidden = !picking; sceneArtwork.hidden = picking; lock.element.hidden = !picking; for (const [, button] of moves) button.element.hidden = picking || transitioning || waitingOnConjurer;
+    for (const [, arrow] of arrows) arrow.hidden = picking || transitioning || waitingOnConjurer;
     previous.element.hidden = !picking; next.element.hidden = !picking;
     const ownPlayer = nextProjection.players[nextProjection.self];
     const ownAbility = ownPlayer.classId ? ABM_CLASS_BY_ID.get(ownPlayer.classId)?.ability : undefined;
@@ -434,7 +439,8 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     const abilityFeedback = thiefFeedback || Boolean(nextProjection.taxmanCollectPlayers?.length);
     armedAbility = nextProjection.ownPendingAbility ?? (armedAbility && !nextProjection.ownPendingMove && !abilityFeedback ? armedAbility : undefined);
     for (const [abilityId, button] of abilityButtons) {
-      button.element.hidden = picking || transitioning || ownAbility?.id !== abilityId || abilityFeedback;
+      button.element.hidden = picking || transitioning || ownAbility?.id !== abilityId || abilityFeedback
+        || nextProjection.phase === 'conjurer-choosing' || Boolean(nextProjection.conjureStalemate);
       button.setDisabled(!nextProjection.legalActions.includes(abilityId));
       button.setLockedDepressed(armedAbility === abilityId);
     }
@@ -470,9 +476,13 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     const gamblerOutcomes = continuingRoundProc ? nextProjection.gamblerOutcomes : undefined;
     const splitPlayer = nextProjection.phase === 'waiting' && nextProjection.waitingStartsAt !== undefined && serverTime >= nextProjection.waitingStartsAt
       ? nextProjection.earlyPlayer : nextProjection.heldSplitFor;
-    const scene = splitPlayer
-      ? resolveAbmSplitScene(nextProjection.lastCompleteMoves, splitPlayer, nextProjection.luckyProcPlayer)
-      : resolveAbmScene(nextProjection.lastCompleteMoves, nextProjection.luckyProcPlayer);
+    const scene = nextProjection.conjureStalemate
+      ? resolveConjureScene('conjure', 'p1')
+      : nextProjection.conjurer && nextProjection.conjuredMove
+        ? resolveConjureScene(nextProjection.conjuredMove, nextProjection.conjurer)
+        : splitPlayer
+          ? resolveAbmSplitScene(nextProjection.lastCompleteMoves, splitPlayer, nextProjection.luckyProcPlayer)
+          : resolveAbmScene(nextProjection.lastCompleteMoves, nextProjection.luckyProcPlayer);
     layout.setArtwork('scene', { src: scene.src, alt: 'Attack Block Mana scene.' });
     sceneArtwork.classList.toggle('is-flipped', scene.flip);
     const sceneCanvas = sceneArtwork.querySelector<HTMLElement>('.boiling-sprite__canvas');
@@ -683,7 +693,7 @@ export function latestClassPreview(events: readonly TimedSemanticEvent[], player
 }
 function element<K extends keyof HTMLElementTagNameMap>(tag: K, className: string) { const target = document.createElement(tag); target.className = className; return target; }
 function isWipeCue(type: TimedSemanticEvent['type']) {
-  return ['class-reveal', 'move-reveal', 'move-timeout', 'forced-mana', 'round-result'].includes(type);
+  return ['class-reveal', 'move-reveal', 'move-timeout', 'forced-mana', 'round-result', 'conjure-reveal', 'conjure-stalemate'].includes(type);
 }
 function turnArtwork(turn: number) { const value = Math.min(21, Math.max(0, turn)); return { src: `/visual-elements/time-counters/turn${value}-sheet.webp`, alt: `Turn ${turn}` }; }
 function winArtwork(player: string, wins: number) { const value = Math.min(3, Math.max(0, wins)); return { src: `/visual-elements/win-couters/ft3-win-counter-${value}-sheet.webp`, alt: `${player} wins: ${wins}` }; }
