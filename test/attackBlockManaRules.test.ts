@@ -380,6 +380,83 @@ describe('Attack Block Mana rules', () => {
     expect(state.duplicatorProcPlayers).toEqual(['p1']);
   });
 
+  test('awards Copywriter on the third and every later matching opponent move', () => {
+    let state = startedWith('copywriter', 'lucky');
+    state = playTurn(state, 'block', 'block');
+    state = playTurn(state, 'block', 'block');
+    expect(state.copywriterProcPlayers).toBeUndefined();
+    state = playTurn(state, 'block', 'block');
+    expect(state.players.p1.mana).toBe(2);
+    expect(state.copywriterProcPlayers).toEqual(['p1']);
+    expect(attackBlockManaRules.project(state, 'p1').copywriterProcPlayers).toEqual(['p1']);
+    state = playTurn(state, 'block', 'block');
+    expect(state.players.p1.mana).toBe(3);
+    expect(state.copywriterProcPlayers).toEqual(['p1']);
+
+    state = send(state, 'p1', { type: 'choose-move', move: 'block' });
+    expect(state.copywriterProcPlayers).toEqual(['p1']);
+    const resolution = attackBlockManaRules.resolve(state, 'p2', { type: 'choose-move', move: 'mana' }, context);
+    expect(resolution.state.copywriterProcPlayers).toBeUndefined();
+    expect(resolution.events?.[0]?.payload).toMatchObject({ copywriterProcPlayers: [] });
+  });
+
+  test('breaks Copywriter streaks and supports mirror procs', () => {
+    let mixed = startedWith('copywriter', 'lucky');
+    mixed = playTurn(mixed, 'block', 'block');
+    mixed = playTurn(mixed, 'block', 'mana');
+    mixed = playTurn(mixed, 'block', 'block');
+    expect(mixed.copywriterProcPlayers).toBeUndefined();
+
+    let mirror = startedWith('copywriter', 'copywriter');
+    mirror = playTurn(mirror, 'block', 'block');
+    mirror = playTurn(mirror, 'block', 'block');
+    mirror = playTurn(mirror, 'block', 'block');
+    expect(mirror.copywriterProcPlayers).toEqual(['p1', 'p2']);
+    expect(mirror.players.p1.mana).toBe(2);
+    expect(mirror.players.p2.mana).toBe(2);
+  });
+
+  test('applies Copywriter before move costs and caps the reward at 9 Mana', () => {
+    let state = startedWith('copywriter', 'lucky');
+    state.players.p1.mana = 1;
+    state.players.p2.recentMoves = ['block', 'block'];
+    state = playTurn(state, 'attack', 'block');
+    expect(state.players.p1.mana).toBe(1);
+    expect(state.copywriterProcPlayers).toEqual(['p1']);
+
+    state.players.p1.mana = 9;
+    state.players.p2.recentMoves = ['block', 'block'];
+    state = playTurn(state, 'block', 'block');
+    expect(state.players.p1.mana).toBe(9);
+  });
+
+  test('records timeout Skip and forced Mana for Copywriter streaks', () => {
+    let timeout = startedWith('copywriter', 'lucky');
+    timeout.players.p2.recentMoves = ['skip', 'skip'];
+    timeout = send(timeout, 'p1', { type: 'choose-move', move: 'block' }, 2_000);
+    timeout = attackBlockManaRules.advanceDeadline!(timeout, { ...context, now: timeout.waitingDeadlineAt! })!.state;
+    expect(timeout.copywriterProcPlayers).toEqual(['p1']);
+    expect(timeout.players.p2.recentMoves).toEqual(['skip', 'skip', 'skip']);
+
+    let forced = startedWith('copywriter', 'lucky');
+    forced.players.p1.mana = 0;
+    forced.players.p2.mana = 0;
+    forced.players.p2.recentMoves = ['mana', 'mana'];
+    forced = playTurn(forced, 'mana', 'mana');
+    expect(forced.copywriterProcPlayers).toEqual(['p1']);
+    expect(forced.players.p2.recentMoves).toEqual(['mana', 'mana', 'mana']);
+  });
+
+  test('clears recent move history when a round resets', () => {
+    let state = startedWith('copywriter', 'lucky');
+    state.players.p1.recentMoves = ['block', 'block'];
+    state.players.p2.recentMoves = ['mana', 'mana'];
+    state = playTurn(state, 'attack', 'mana');
+    expect(state.phase).toBe('counter-picking');
+    expect(state.players.p1.recentMoves).toBeUndefined();
+    expect(state.players.p2.recentMoves).toBeUndefined();
+  });
+
   test('resets Duplicator chain on Attack, Block, Skip, and round reset', () => {
     let attack = startedWith('duplicator', 'lucky');
     attack.players.p1.nextManaGain = 8;

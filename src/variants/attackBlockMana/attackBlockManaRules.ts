@@ -1,7 +1,7 @@
 import type { DeterministicContext, PlayerId, VariantRules, VariantResolution } from '../../core/variant';
 import { beats, STARBURST_WIPE_MS } from '../../core/time';
 import { ABM_CLASS_BY_ID, startingResourcesForClass } from './attackBlockManaCatalog';
-import type { AbmAbilityId, AbmClassId, AbmCommand, AbmGamblerOutcome, AbmMove, AbmPlayerState, AbmProjection, AbmResult, AbmState } from './attackBlockManaTypes';
+import type { AbmAbilityId, AbmClassId, AbmCommand, AbmDisplayMove, AbmGamblerOutcome, AbmMove, AbmPlayerState, AbmProjection, AbmResult, AbmState } from './attackBlockManaTypes';
 
 const OTHER: Record<PlayerId, PlayerId> = { p1: 'p2', p2: 'p1' };
 const MAX_MANA = 9;
@@ -55,6 +55,7 @@ export const attackBlockManaRules: VariantRules<AbmState, AbmCommand, AbmProject
       ...(state.investorBullPlayers?.length ? { investorBullPlayers: [...state.investorBullPlayers] } : {}),
       ...(state.investorBearPlayers?.length ? { investorBearPlayers: [...state.investorBearPlayers] } : {}),
       ...(state.duplicatorProcPlayers?.length ? { duplicatorProcPlayers: [...state.duplicatorProcPlayers] } : {}),
+      ...(state.copywriterProcPlayers?.length ? { copywriterProcPlayers: [...state.copywriterProcPlayers] } : {}),
       ...(state.sumoProcRemaining && Object.keys(state.sumoProcRemaining).length ? { sumoProcRemaining: { ...state.sumoProcRemaining } } : {}),
       ...(state.cheaterProcPlayers?.length ? { cheaterProcPlayers: [...state.cheaterProcPlayers] } : {}),
       ...(state.gamblerOutcomes && Object.keys(state.gamblerOutcomes).length ? { gamblerOutcomes: { ...state.gamblerOutcomes } } : {}),
@@ -101,7 +102,7 @@ function lockClass(state: AbmState, player: PlayerId, classId: AbmClassId, now: 
         counterPickAvailableAt: undefined, resultRevealAt: undefined, lastCompleteMoves: undefined, heldSplitFor: undefined,
         luckyProcPlayer: undefined, advantagedProcPlayers: undefined, thiefAttemptPlayers: undefined, thiefTransferPlayer: undefined, taxmanCollectPlayers: undefined,
         juggernautProcPlayers: undefined, stunnedPlayers: undefined, investorBullPlayers: undefined, investorBearPlayers: undefined,
-        duplicatorProcPlayers: undefined, sumoProcRemaining: undefined, cheaterProcPlayers: undefined, gamblerOutcomes: undefined },
+        duplicatorProcPlayers: undefined, copywriterProcPlayers: undefined, sumoProcRemaining: undefined, cheaterProcPlayers: undefined, gamblerOutcomes: undefined },
       events: [cue('class-reveal', now, 800, { classes: classMap(players), round: state.round })],
     };
   }
@@ -145,6 +146,7 @@ function resolveTurn(state: AbmState, moves: Record<PlayerId, AbmMove>, context:
   const advantagedProcPlayers = (['p1', 'p2'] as const).filter((id) => isAdvantagedManaProc(players[id], moves[id], state.turn));
   const investorBullPlayers = (['p1', 'p2'] as const).filter((id) => isInvestorBullProc(players[id], moves, id));
   const duplicatorProcPlayers = (['p1', 'p2'] as const).filter((id) => isDuplicatorProc(players[id], moves[id]));
+  const copywriterProcPlayers = resolveCopywriters(players, moves);
   const cheaterProcPlayers = (['p1', 'p2'] as const).filter((id) => isCheaterMana(players[id], moves[id]) && context.random() < 1 / 3);
   const sumoProcRemaining: Partial<Record<PlayerId, 0 | 1 | 2>> = {};
   const gamblerOutcomes: Partial<Record<PlayerId, AbmGamblerOutcome>> = {};
@@ -170,7 +172,7 @@ function resolveTurn(state: AbmState, moves: Record<PlayerId, AbmMove>, context:
   const abilityResult = defeatedPlayer ? emptyAbilityResult() : resolveActivatedAbilities(players, state.pendingAbilities ?? {});
   const revealDuration = defeatedPlayer ? ABM_LETHAL_TO_RESULT_MS : 800;
   const events = [cue('move-reveal', now, revealDuration, { moves, turn: state.turn, forced, luckyProcPlayer, advantagedProcPlayers,
-    juggernautProcPlayers, stunnedPlayers, investorBullPlayers, investorBearPlayers, duplicatorProcPlayers, sumoProcRemaining, cheaterProcPlayers, gamblerOutcomes })];
+    juggernautProcPlayers, stunnedPlayers, investorBullPlayers, investorBearPlayers, duplicatorProcPlayers, copywriterProcPlayers, sumoProcRemaining, cheaterProcPlayers, gamblerOutcomes })];
   const revealed = { ...state, players, pendingMoves: {}, pendingAbilities: {}, lastCompleteMoves: moves, heldSplitFor: undefined,
     luckyProcPlayer, advantagedProcPlayers: advantagedProcPlayers.length ? advantagedProcPlayers : undefined,
     thiefAttemptPlayers: abilityResult.thiefAttemptPlayers.length ? abilityResult.thiefAttemptPlayers : undefined,
@@ -180,6 +182,7 @@ function resolveTurn(state: AbmState, moves: Record<PlayerId, AbmMove>, context:
     investorBullPlayers: investorBullPlayers.length ? investorBullPlayers : undefined,
     investorBearPlayers: investorBearPlayers.length ? investorBearPlayers : undefined,
     duplicatorProcPlayers: duplicatorProcPlayers.length ? duplicatorProcPlayers : undefined,
+    copywriterProcPlayers: copywriterProcPlayers.length ? copywriterProcPlayers : undefined,
     sumoProcRemaining: Object.keys(sumoProcRemaining).length ? sumoProcRemaining : undefined,
     cheaterProcPlayers: cheaterProcPlayers.length ? cheaterProcPlayers : undefined,
     gamblerOutcomes: Object.keys(gamblerOutcomes).length ? gamblerOutcomes : undefined };
@@ -194,6 +197,8 @@ function resolveTimeout(state: AbmState, context: DeterministicContext): Variant
   const players = clonePlayers(state.players);
   const advantagedProcPlayers = isAdvantagedManaProc(players[early], move, state.turn) ? [early] : undefined;
   const duplicatorProcPlayers = isDuplicatorProc(players[early], move) ? [early] : undefined;
+  const timeoutMoves = { [early]: move, [late]: 'skip' } as Record<PlayerId, AbmDisplayMove>;
+  const copywriterProcPlayers = resolveCopywriters(players, timeoutMoves);
   const cheaterProcPlayers = isCheaterMana(players[early], move) && context.random() < 1 / 3 ? [early] : undefined;
   applyMove(players[early], move, cheaterProcPlayers ? 2 : manaGainFor(players[early], undefined, early, state.turn));
   const gamblerOutcomes: Partial<Record<PlayerId, AbmGamblerOutcome>> = {};
@@ -201,6 +206,7 @@ function resolveTimeout(state: AbmState, context: DeterministicContext): Variant
   players[late].mana = Math.max(0, players[late].mana - 1);
   players[late].strikes = (players[late].strikes ?? 0) + 1;
   players[late].lastMove = 'skip';
+  recordRecentMove(players[late], 'skip');
   if (players[late].classId === 'juggernaut') players[late].attackStreak = 0;
   if (players[late].classId === 'duplicator') players[late].nextManaGain = 1;
   const stunnedPlayers = resolveStunnerTimeout(players, early, late, move);
@@ -210,11 +216,12 @@ function resolveTimeout(state: AbmState, context: DeterministicContext): Variant
   const abilityResult = lethal ? emptyAbilityResult() : resolveActivatedAbilities(players, state.pendingAbilities ?? {});
   const events = [cue('move-timeout', now, revealDuration, { earlyPlayer: early, latePlayer: late, move, strikes: players[late].strikes,
     turn: state.turn, advantagedProcPlayers, thiefAttemptPlayers: abilityResult.thiefAttemptPlayers, thiefTransferPlayer: abilityResult.thiefTransferPlayer,
-    taxmanCollectPlayers: abilityResult.taxmanCollectPlayers, stunnedPlayers, investorBearPlayers, duplicatorProcPlayers, cheaterProcPlayers, gamblerOutcomes })];
+    taxmanCollectPlayers: abilityResult.taxmanCollectPlayers, stunnedPlayers, investorBearPlayers, duplicatorProcPlayers, copywriterProcPlayers, cheaterProcPlayers, gamblerOutcomes })];
   const timedOut = { ...clearWaiting(state), players, pendingMoves: {}, pendingAbilities: {}, heldSplitFor: early, luckyProcPlayer: undefined,
     advantagedProcPlayers, thiefAttemptPlayers: undefined, thiefTransferPlayer: undefined, taxmanCollectPlayers: undefined, juggernautProcPlayers: undefined,
     stunnedPlayers: stunnedPlayers.length ? stunnedPlayers : undefined, investorBullPlayers: undefined,
-    investorBearPlayers: investorBearPlayers.length ? investorBearPlayers : undefined, duplicatorProcPlayers, sumoProcRemaining: undefined, cheaterProcPlayers,
+    investorBearPlayers: investorBearPlayers.length ? investorBearPlayers : undefined, duplicatorProcPlayers,
+    copywriterProcPlayers: copywriterProcPlayers.length ? copywriterProcPlayers : undefined, sumoProcRemaining: undefined, cheaterProcPlayers,
     gamblerOutcomes: Object.keys(gamblerOutcomes).length ? gamblerOutcomes : undefined };
   if (players[late].strikes >= 2) return { state: { ...timedOut, phase: 'match-complete', winner: early, resultReason: 'forfeit', resultRevealAt: now + revealDuration }, events };
   if (move === 'attack') return finishRound(timedOut, early, events, now + revealDuration);
@@ -231,6 +238,7 @@ function finishRound(state: AbmState, winner: PlayerId, events: ReturnType<typeo
     const resources = startingResourcesForClass(players[id].classId);
     players[id].mana = resources.mana;
     players[id].blocks = resources.blocks;
+    players[id].recentMoves = undefined;
     Object.assign(players[id], initialAbilityUses(players[id].classId));
   }
   if (players.p1.classId === 'duplicator') players.p1.nextManaGain = 1;
@@ -251,7 +259,25 @@ function applyMove(player: AbmPlayerState, move: AbmMove, manaGain = 1, record =
   if (move !== 'block') player.blocks = startingResourcesForClass(player.classId).blocks;
   if (player.classId === 'juggernaut') player.attackStreak = move === 'attack' ? (player.attackStreak ?? 0) + 1 : 0;
   if (player.classId === 'duplicator') player.nextManaGain = move === 'mana' ? duplicatorGainFor(player) * 2 : 1;
-  if (record) player.lastMove = move;
+  if (record) { player.lastMove = move; recordRecentMove(player, move); }
+}
+
+function resolveCopywriters(
+  players: Record<PlayerId, AbmPlayerState>,
+  moves: Readonly<Record<PlayerId, AbmDisplayMove>>,
+): PlayerId[] {
+  const procPlayers = (['p1', 'p2'] as const).filter((id) => {
+    if (players[id].classId !== 'copywriter') return false;
+    const opponent = OTHER[id];
+    const history = players[opponent].recentMoves ?? [];
+    return history.length >= 2 && history.at(-1) === moves[opponent] && history.at(-2) === moves[opponent];
+  });
+  for (const id of procPlayers) players[id].mana = Math.min(MAX_MANA, players[id].mana + 1);
+  return procPlayers;
+}
+
+function recordRecentMove(player: AbmPlayerState, move: AbmDisplayMove): void {
+  player.recentMoves = [...(player.recentMoves ?? []), move].slice(-3);
 }
 function manaGainFor(player: Readonly<AbmPlayerState>, moves: Readonly<Record<PlayerId, AbmMove>> | undefined, playerId: PlayerId, turn: number): number {
   if (moves && isInvestorBullProc(player, moves, playerId)) return 2;
@@ -331,7 +357,12 @@ function freshPlayer(classId?: AbmClassId): AbmPlayerState { const resources = s
 function resetPlayer(player: AbmPlayerState, classId?: AbmClassId): AbmPlayerState { const resources = startingResourcesForClass(classId); return { ...(classId ? { classId } : {}), mana: resources.mana, blocks: resources.blocks,
   strikes: player.strikes ?? 0, attackCost: 1, ...initialAbilityUses(classId), ...(classId === 'duplicator' ? { nextManaGain: 1 } : {}), ...(classId === 'sumo' ? { refundsRemaining: 3 } : {}) }; }
 function clearWaiting(state: AbmState): AbmState { return { ...state, earlyPlayer: undefined, latePlayer: undefined, waitingStartsAt: undefined, waitingDeadlineAt: undefined }; }
-function clonePlayers(players: Record<PlayerId, AbmPlayerState>): Record<PlayerId, AbmPlayerState> { return { p1: { ...players.p1 }, p2: { ...players.p2 } }; }
+function clonePlayers(players: Record<PlayerId, AbmPlayerState>): Record<PlayerId, AbmPlayerState> {
+  return {
+    p1: { ...players.p1, ...(players.p1.recentMoves ? { recentMoves: [...players.p1.recentMoves] } : {}) },
+    p2: { ...players.p2, ...(players.p2.recentMoves ? { recentMoves: [...players.p2.recentMoves] } : {}) },
+  };
+}
 function classMap(players: Record<PlayerId, AbmPlayerState>) { return { p1: players.p1.classId, p2: players.p2.classId }; }
 function isMove(value: unknown): value is AbmMove { return value === 'attack' || value === 'block' || value === 'mana'; }
 function bothPlayersHaveNoMana(state: AbmState): boolean { return state.players.p1.mana === 0 && state.players.p2.mana === 0; }

@@ -11,7 +11,7 @@ const BACKGROUND_ROOT = `${ROOT}/backgrounds`;
 
 export interface AbmScene { src: string; flip: boolean }
 export type AbmTagCategory = 'proc' | 'impact' | 'status';
-export type AbmTagKind = 'advantaged' | 'bear' | 'bull' | 'cheater' | 'duplicator' | 'gambler' | 'juggernaut' | 'lucky' | 'stunned' | 'sumo' | 'taxed' | 'thief';
+export type AbmTagKind = 'advantaged' | 'bear' | 'bull' | 'cheater' | 'copywriter' | 'duplicator' | 'gambler' | 'juggernaut' | 'lucky' | 'stunned' | 'sumo' | 'taxed' | 'thief';
 export interface AbmTag { kind: AbmTagKind; category: AbmTagCategory; player: PlayerId; src: string }
 export type AbmProcBackgroundKind = 'bear' | 'bull';
 export interface AbmProcBackground { kind: AbmProcBackgroundKind; player: PlayerId; src: string }
@@ -25,6 +25,7 @@ interface TagState {
   investorBullPlayers?: readonly PlayerId[];
   investorBearPlayers?: readonly PlayerId[];
   duplicatorProcPlayers?: readonly PlayerId[];
+  copywriterProcPlayers?: readonly PlayerId[];
   sumoProcRemaining?: Partial<Record<PlayerId, 0 | 1 | 2>>;
   cheaterProcPlayers?: readonly PlayerId[];
   gamblerOutcomes?: Partial<Record<PlayerId, AbmGamblerOutcome>>;
@@ -68,6 +69,7 @@ export function resolveAbmTags(state: TagState, hiddenPlayer?: PlayerId): AbmTag
   add('proc', 'bull', state.investorBullPlayers);
   add('proc', 'bear', state.investorBearPlayers);
   add('proc', 'duplicator', state.duplicatorProcPlayers);
+  add('proc', 'copywriter', state.copywriterProcPlayers);
   add('proc', 'cheater', state.cheaterProcPlayers);
   for (const player of ['p1', 'p2'] as const) {
     const outcome = state.gamblerOutcomes?.[player];
@@ -104,7 +106,7 @@ const SPLIT_BASE_SCENE_VARIANTS = {
 } as const;
 const SPLIT_BASE_SCENE_NAMES = Object.keys(SPLIT_BASE_SCENE_VARIANTS) as (keyof typeof SPLIT_BASE_SCENE_VARIANTS)[];
 const BASE_SCENE_NAMES = [...SPLIT_BASE_SCENE_NAMES, 'mana-attack'] as const;
-const TAG_NAMES: readonly Exclude<AbmTagKind, 'sumo' | 'gambler'>[] = ['advantaged', 'bear', 'bull', 'cheater', 'duplicator', 'juggernaut', 'lucky', 'stunned', 'taxed', 'thief'];
+const TAG_NAMES: readonly Exclude<AbmTagKind, 'sumo' | 'gambler'>[] = ['advantaged', 'bear', 'bull', 'cheater', 'copywriter', 'duplicator', 'juggernaut', 'lucky', 'stunned', 'taxed', 'thief'];
 const DIRECTIONAL_IMPACT_TAGS = ['juggernaut', 'stunned', 'thief'] as const;
 const GAMBLER_TAG_NAMES: readonly Exclude<AbmGamblerOutcome, 'nothing'>[] = [
   'plus-2-mana', 'plus-1-mana', 'mana-drain', 'mana-double', 'plus-1-block', 'plus-2-block', 'minus-1-block',

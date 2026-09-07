@@ -42,6 +42,7 @@ export const ABM_CLASSES: readonly AbmClassDefinition[] = [
   entry('investor', 'Investor', 'Starts with 5 Mana, loses 1 every third turn, and gains extra Mana when both players Mana.', true, { initialMana: 5 }),
   entry('gambler', 'Gambler', 'Every Block rolls for a random Mana or Block effect. Starts with 3 Blocks.', true, { maximumBlocks: 3 }),
   entry('taxman', 'Taxman', 'Collects 1 Mana from both players after moves resolve, up to three times.', true, {}, 'taxman', ability('collect', 'Collect', 3, 0, (player) => player.mana > 0)),
+  entry('copywriter', 'Copywriter', 'Gains 1 Mana when the opponent makes the same move three times in a row.', true),
 ];
 
 export const ABM_CLASS_BY_ID = new Map(ABM_CLASSES.map((definition) => [definition.id, definition]));

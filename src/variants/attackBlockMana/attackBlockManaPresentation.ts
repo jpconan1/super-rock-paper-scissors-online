@@ -274,10 +274,10 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   }
   const labels: Record<AbmTagKind, string> = {
       lucky: 'Lucky', advantaged: 'Advantaged plus one Mana', juggernaut: 'Block broken', thief: 'Yoink', stunned: 'Stunned',
-      bull: 'Bull Market', bear: 'Bear Market', cheater: 'Cheater bonus Mana', duplicator: 'Mana duplicated', gambler: 'Gambler result', sumo: 'Free Attack', taxed: 'Taxed',
+      bull: 'Bull Market', bear: 'Bear Market', cheater: 'Cheater bonus Mana', copywriter: 'Copied move bonus', duplicator: 'Mana duplicated', gambler: 'Gambler result', sumo: 'Free Attack', taxed: 'Taxed',
   };
   for (const player of ['p1', 'p2'] as const) {
-    for (const kind of ['lucky', 'advantaged', 'juggernaut', 'thief', 'stunned', 'taxed', 'bull', 'bear', 'cheater', 'duplicator', 'gambler', 'sumo'] as const satisfies readonly AbmTagKind[]) {
+    for (const kind of ['lucky', 'advantaged', 'juggernaut', 'thief', 'stunned', 'taxed', 'bull', 'bear', 'cheater', 'copywriter', 'duplicator', 'gambler', 'sumo'] as const satisfies readonly AbmTagKind[]) {
       const src = kind === 'sumo' ? `${ABM_ROOT}/scenes/tags/sumo-2-left-sheet.webp`
         : kind === 'gambler' ? `${ABM_ROOT}/scenes/tags/gambler-plus-1-mana-sheet.webp` : `${ABM_ROOT}/scenes/tags/${kind}-sheet.webp`;
       const copies = 1;
@@ -464,6 +464,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     const investorBullPlayers = continuingRoundProc ? nextProjection.investorBullPlayers : undefined;
     const investorBearPlayers = continuingRoundProc ? nextProjection.investorBearPlayers : undefined;
     const duplicatorProcPlayers = continuingRoundProc ? nextProjection.duplicatorProcPlayers : undefined;
+    const copywriterProcPlayers = continuingRoundProc ? nextProjection.copywriterProcPlayers : undefined;
     const sumoProcRemaining = continuingRoundProc ? nextProjection.sumoProcRemaining : undefined;
     const cheaterProcPlayers = continuingRoundProc ? nextProjection.cheaterProcPlayers : undefined;
     const gamblerOutcomes = continuingRoundProc ? nextProjection.gamblerOutcomes : undefined;
@@ -477,7 +478,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     const sceneCanvas = sceneArtwork.querySelector<HTMLElement>('.boiling-sprite__canvas');
     if (sceneCanvas) sceneCanvas.style.transform = scene.flip ? 'scaleX(-1)' : '';
     const visibleTags = !picking && !showingResult ? resolveAbmTags({
-      ...nextProjection, advantagedProcPlayers, juggernautProcPlayers, stunnedPlayers, investorBullPlayers, investorBearPlayers, duplicatorProcPlayers,
+      ...nextProjection, advantagedProcPlayers, juggernautProcPlayers, stunnedPlayers, investorBullPlayers, investorBearPlayers, duplicatorProcPlayers, copywriterProcPlayers,
       sumoProcRemaining, cheaterProcPlayers, gamblerOutcomes,
     }, splitPlayer) : [];
     const tagOccurrences = new Map<string, number>();

@@ -9,17 +9,20 @@ import { validateLayoutDocument } from '../src/layout/layoutDocument';
 import { ABM_TAG_ENTRANCE_SOURCES } from '../src/variants/attackBlockMana/abmTagEntrance';
 
 describe('Attack Block Mana presentation data', () => {
-  test('includes Taxman and marks every finished class playable', () => {
+  test('includes Copywriter and marks every finished class playable', () => {
     expect(ABM_CLASSES.map(({ id }) => id)).toEqual([
-      'lucky', 'advantaged', 'thief', 'juggernaut', 'stunner', 'duplicator', 'sumo', 'cheater', 'investor', 'gambler', 'taxman',
+      'lucky', 'advantaged', 'thief', 'juggernaut', 'stunner', 'duplicator', 'sumo', 'cheater', 'investor', 'gambler', 'taxman', 'copywriter',
     ]);
     expect(ABM_CLASS_IDS).toEqual(ABM_CLASSES.map(({ id }) => id));
     expect(ABM_CLASSES.filter(({ implemented }) => implemented).map(({ id }) => id)).toEqual([
-      'lucky', 'advantaged', 'thief', 'juggernaut', 'stunner', 'duplicator', 'sumo', 'cheater', 'investor', 'gambler', 'taxman',
+      'lucky', 'advantaged', 'thief', 'juggernaut', 'stunner', 'duplicator', 'sumo', 'cheater', 'investor', 'gambler', 'taxman', 'copywriter',
     ]);
     expect(ABM_CLASSES.every(({ asset, badgeAsset }) => asset.endsWith('-sheet.webp') && badgeAsset.endsWith('-badge-sheet.webp') && !asset.includes('placeholder'))).toBe(true);
     expect(ABM_CLASSES.find(({ id }) => id === 'taxman')).toMatchObject({ name: 'Taxman', ability: { id: 'collect', label: 'Collect', uses: 3, manaCost: 0, inputStrategy: 'arm-with-move' } });
     expect(ABM_CLASSES.find(({ id }) => id === 'thief')).toMatchObject({ ability: { id: 'steal', uses: 1, inputStrategy: 'arm-with-move' } });
+    expect(ABM_CLASSES.find(({ id }) => id === 'copywriter')).toMatchObject({
+      name: 'Copywriter', implemented: true, asset: '/variants/abm/copywriter-sheet.webp', badgeAsset: '/variants/abm/copywriter-badge-sheet.webp',
+    });
   });
 
   test('starts the class-select order with Lucky', () => {
@@ -100,17 +103,21 @@ describe('Attack Block Mana presentation data', () => {
       { category: 'impact', kind: 'taxed', player: 'p1', src: '/variants/abm/scenes/tags/taxed-sheet.webp' },
     ]);
     expect(resolveAbmTags({ taxmanCollectPlayers: ['p1', 'p2'] })).toHaveLength(2);
+    expect(resolveAbmTags({ copywriterProcPlayers: ['p1', 'p2'] }, 'p1')).toEqual([
+      { category: 'proc', kind: 'copywriter', player: 'p2', src: '/variants/abm/scenes/tags/copywriter-sheet.webp' },
+    ]);
+    expect(ABM_SCENE_URLS).toContain('/variants/abm/scenes/tags/copywriter-sheet.webp');
   });
 
   test('categorizes every implemented tag family', () => {
     const tags = resolveAbmTags({
       luckyProcPlayer: 'p1', advantagedProcPlayers: ['p1'], thiefTransferPlayer: 'p1', juggernautProcPlayers: ['p1'],
       stunnedPlayers: ['p2'], investorBullPlayers: ['p1'], investorBearPlayers: ['p1'], duplicatorProcPlayers: ['p1'],
-      sumoProcRemaining: { p1: 2 }, cheaterProcPlayers: ['p1'], gamblerOutcomes: { p1: 'plus-1-mana' }, taxmanCollectPlayers: ['p2'],
+      copywriterProcPlayers: ['p1'], sumoProcRemaining: { p1: 2 }, cheaterProcPlayers: ['p1'], gamblerOutcomes: { p1: 'plus-1-mana' }, taxmanCollectPlayers: ['p2'],
     });
     expect(Object.fromEntries(tags.map(({ kind, category }) => [kind, category]))).toEqual({
       lucky: 'proc', advantaged: 'proc', juggernaut: 'impact', thief: 'impact', stunned: 'impact', bull: 'proc', bear: 'proc',
-      duplicator: 'proc', cheater: 'proc', gambler: 'proc', sumo: 'proc', taxed: 'impact',
+      duplicator: 'proc', copywriter: 'proc', cheater: 'proc', gambler: 'proc', sumo: 'proc', taxed: 'impact',
     });
   });
 

@@ -2,7 +2,7 @@ import type { PlayerId, VariantGameResult } from '../../core/variant';
 
 export const ABM_CLASS_IDS = [
   'lucky', 'advantaged', 'thief', 'juggernaut', 'stunner', 'duplicator', 'sumo',
-  'cheater', 'investor', 'gambler', 'taxman',
+  'cheater', 'investor', 'gambler', 'taxman', 'copywriter',
 ] as const;
 
 export type AbmClassId = typeof ABM_CLASS_IDS[number];
@@ -27,6 +27,8 @@ export interface AbmPlayerState {
   blocks: number;
   strikes: number;
   lastMove?: AbmDisplayMove;
+  /** Latest resolved moves, oldest first. Kept to three for streak-based classes. */
+  recentMoves?: AbmDisplayMove[];
   attackStreak?: number;
   /** Missing on matches persisted before Stunner; treat as the ordinary cost of 1. */
   attackCost?: number;
@@ -61,6 +63,7 @@ export interface AbmState {
   investorBullPlayers?: PlayerId[];
   investorBearPlayers?: PlayerId[];
   duplicatorProcPlayers?: PlayerId[];
+  copywriterProcPlayers?: PlayerId[];
   sumoProcRemaining?: Partial<Record<PlayerId, 0 | 1 | 2>>;
   cheaterProcPlayers?: PlayerId[];
   gamblerOutcomes?: Partial<Record<PlayerId, AbmGamblerOutcome>>;
@@ -109,6 +112,7 @@ export interface AbmProjection {
   investorBullPlayers?: PlayerId[];
   investorBearPlayers?: PlayerId[];
   duplicatorProcPlayers?: PlayerId[];
+  copywriterProcPlayers?: PlayerId[];
   sumoProcRemaining?: Partial<Record<PlayerId, 0 | 1 | 2>>;
   cheaterProcPlayers?: PlayerId[];
   gamblerOutcomes?: Partial<Record<PlayerId, AbmGamblerOutcome>>;
