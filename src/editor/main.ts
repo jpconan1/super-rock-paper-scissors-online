@@ -21,7 +21,7 @@ const LABELS: Record<EditableSlotId, string> = {
 const PICKED_RATIOS: Record<typeof PICKED_IDS[number], number> = { 'p1-picked': 2, 'p2-picked': 150 / 64 };
 const BADGE_FRAME_WIDTHS: Record<AbmClassId, number> = {
   lucky: 146, advantaged: 219, thief: 178, juggernaut: 218, stunner: 210,
-  duplicator: 199, sumo: 197, cheater: 160, investor: 217, gambler: 210, taxman: 210, copywriter: 192, conjurer: 196,
+  duplicator: 199, sumo: 197, cheater: 160, investor: 217, gambler: 210, taxman: 210, copywriter: 192, conjurer: 196, fireborne: 202, retired: 145, parrymaster: 242,
 };
 const MOVES: PreviousMoveChoice[] = ['none', 'attack', 'block', 'mana', 'skip'];
 const host = document.querySelector<HTMLElement>('#editor');

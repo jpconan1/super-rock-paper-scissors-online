@@ -51,7 +51,7 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
     if (!countStopped) onlineCount.textContent = formatOnlinePlayerCount(count);
   };
   void updateCount();
-  const countTimer = window.setInterval(() => void updateCount(), 5_000);
+  const countTimer = window.setInterval(() => void updateCount(), 7_000);
 
   const logo = createGameButton({
     label: 'Open letter to the ABM community',

@@ -8,7 +8,7 @@ export interface VolumeSlider {
   destroy(): void;
 }
 
-const VOLUME_CURVE_EXPONENT = 2;
+const VOLUME_CURVE_EXPONENT = 3;
 
 export function sliderPositionToGain(position: number): number {
   const clamped = Math.max(0, Math.min(1, position));

@@ -3,12 +3,13 @@ import type { PlayerId, VariantGameResult } from '../../core/variant';
 export const ABM_CLASS_IDS = [
   'lucky', 'advantaged', 'thief', 'juggernaut', 'stunner', 'duplicator', 'sumo',
   'cheater', 'investor', 'gambler', 'taxman', 'copywriter', 'conjurer',
+  'fireborne', 'retired', 'parrymaster',
 ] as const;
 
 export type AbmClassId = typeof ABM_CLASS_IDS[number];
 export type AbmMove = 'attack' | 'block' | 'mana';
 export type AbmDisplayMove = AbmMove | 'skip';
-export type AbmAbilityId = 'steal' | 'collect' | 'conjure';
+export type AbmAbilityId = 'steal' | 'collect' | 'conjure' | 'flame' | 'parry';
 export type AbmGamblerOutcome =
   | 'plus-2-mana' | 'plus-1-mana' | 'mana-drain' | 'mana-double'
   | 'plus-1-block' | 'plus-2-block' | 'minus-1-block' | 'nothing';
@@ -38,6 +39,8 @@ export interface AbmPlayerState {
   /** Missing on matches persisted before Sumo; treat as 3. */
   refundsRemaining?: number;
   abilityUses?: Partial<Record<AbmAbilityId, number>>;
+  /** Resolved turns for which Fireborne's extra life remains active. */
+  fireShieldTurns?: 0 | 1 | 2 | 3 | 4 | 5;
   /** Legacy persisted Thief state. Read when abilityUses is absent. */
   stealUsed?: boolean;
 }
@@ -59,10 +62,13 @@ export interface AbmState {
   conjureStalemate?: boolean;
   lastCompleteMoves?: Record<PlayerId, AbmMove>;
   luckyProcPlayer?: PlayerId;
+  fireborneProcPlayer?: PlayerId;
+  retiredProcPlayers?: PlayerId[];
   advantagedProcPlayers?: PlayerId[];
   thiefAttemptPlayers?: PlayerId[];
   thiefTransferPlayer?: PlayerId;
   taxmanCollectPlayers?: PlayerId[];
+  parriedPlayers?: PlayerId[];
   juggernautProcPlayers?: PlayerId[];
   stunnedPlayers?: PlayerId[];
   investorBullPlayers?: PlayerId[];
@@ -111,10 +117,13 @@ export interface AbmProjection {
   winner?: PlayerId;
   lastCompleteMoves?: Record<PlayerId, AbmMove>;
   luckyProcPlayer?: PlayerId;
+  fireborneProcPlayer?: PlayerId;
+  retiredProcPlayers?: PlayerId[];
   advantagedProcPlayers?: PlayerId[];
   thiefAttemptPlayers?: PlayerId[];
   thiefTransferPlayer?: PlayerId;
   taxmanCollectPlayers?: PlayerId[];
+  parriedPlayers?: PlayerId[];
   juggernautProcPlayers?: PlayerId[];
   stunnedPlayers?: PlayerId[];
   investorBullPlayers?: PlayerId[];

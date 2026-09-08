@@ -90,6 +90,13 @@ export function shouldShowAbmContinuingRoundProcTags(phase: AbmProjection['phase
   return phase === 'idle' || phase === 'waiting';
 }
 
+export function displayedAbmMove(projection: AbmProjection, player: 'p1' | 'p2') {
+  if (projection.phase === 'conjurer-choosing' && projection.conjurer && projection.conjuredMove && player !== projection.conjurer) {
+    return projection.conjuredMove;
+  }
+  return projection.players[player].lastMove;
+}
+
 export function getAbmAttackCostDisplay(player: Readonly<AbmPlayerState>): { visible: boolean; cost: number; label: string } {
   const cost = player.attackCost ?? 1;
   return { visible: cost > 1, cost, label: `Attack, costs ${cost} Mana` };
@@ -278,12 +285,14 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   }
   const labels: Record<AbmTagKind, string> = {
       lucky: 'Lucky', advantaged: 'Advantaged plus one Mana', juggernaut: 'Block broken', thief: 'Yoink', stunned: 'Stunned',
-      bull: 'Bull Market', bear: 'Bear Market', cheater: 'Cheater bonus Mana', copywriter: 'Copied move bonus', duplicator: 'Mana duplicated', gambler: 'Gambler result', sumo: 'Free Attack', taxed: 'Taxed',
+      bull: 'Bull Market', bear: 'Bear Market', cheater: 'Cheater bonus Mana', copywriter: 'Copied move bonus', duplicator: 'Mana duplicated',
+      'fireborne-shield': 'Extra life turns remaining', gambler: 'Gambler result', parried: 'Parried', retired: 'Un-Retired', sumo: 'Free Attack', taxed: 'Taxed',
   };
   for (const player of ['p1', 'p2'] as const) {
-    for (const kind of ['lucky', 'advantaged', 'juggernaut', 'thief', 'stunned', 'taxed', 'bull', 'bear', 'cheater', 'copywriter', 'duplicator', 'gambler', 'sumo'] as const satisfies readonly AbmTagKind[]) {
+    for (const kind of ['lucky', 'advantaged', 'juggernaut', 'thief', 'stunned', 'taxed', 'parried', 'bull', 'bear', 'cheater', 'copywriter', 'duplicator', 'fireborne-shield', 'gambler', 'retired', 'sumo'] as const satisfies readonly AbmTagKind[]) {
       const src = kind === 'sumo' ? `${ABM_ROOT}/scenes/tags/sumo-2-left-sheet.webp`
-        : kind === 'gambler' ? `${ABM_ROOT}/scenes/tags/gambler-plus-1-mana-sheet.webp` : `${ABM_ROOT}/scenes/tags/${kind}-sheet.webp`;
+        : kind === 'gambler' ? `${ABM_ROOT}/scenes/tags/gambler-plus-1-mana-sheet.webp`
+          : kind === 'fireborne-shield' ? `${ABM_ROOT}/scenes/tags/fireborne-cloud-5-sheet.webp` : `${ABM_ROOT}/scenes/tags/${kind}-sheet.webp`;
       const copies = 1;
       for (let occurrence = 1; occurrence <= copies; occurrence++) {
         const tag = createBoilingSprite({ src, clock, className: `abm-tag abm-tag--${kind}`, alt: labels[kind] });
@@ -372,9 +381,9 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     const definition = ABM_CLASSES[selected]!; portrait.setSource(definition.asset); portrait.element.setAttribute('aria-label', definition.name);
     className.textContent = definition.name; description.textContent = definition.description;
     if (projection && (projection.phase === 'selecting-classes' || projection.phase === 'waiting-for-class' || projection.phase === 'counter-picking')) {
-      const previewPlayer = projection.phase === 'counter-picking' ? projection.counterPicker : projection.self;
-      if (previewPlayer === 'p1') setResourceDisplay(p1Resources, startingResourcesForClass(definition.id));
-      if (previewPlayer === 'p2') setResourceDisplay(p2Resources, startingResourcesForClass(definition.id));
+      const previewResources = startingResourcesForClass(definition.id);
+      setResourceDisplay(p1Resources, previewResources);
+      setResourceDisplay(p2Resources, previewResources);
     }
     const canPick = Boolean(projection?.legalActions.includes('lock-class'));
     status.textContent = projection?.ownPendingClass ? 'LOCKED · WAITING' : projection?.phase === 'counter-picking' && projection.counterPicker !== projection.self ? 'WINNER STAYS' : definition.implemented ? 'PLAYABLE' : 'UNFINISHED';
@@ -473,6 +482,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     const copywriterProcPlayers = continuingRoundProc ? nextProjection.copywriterProcPlayers : undefined;
     const sumoProcRemaining = continuingRoundProc ? nextProjection.sumoProcRemaining : undefined;
     const cheaterProcPlayers = continuingRoundProc ? nextProjection.cheaterProcPlayers : undefined;
+    const retiredProcPlayers = continuingRoundProc ? nextProjection.retiredProcPlayers : undefined;
     const gamblerOutcomes = continuingRoundProc ? nextProjection.gamblerOutcomes : undefined;
     const splitPlayer = nextProjection.phase === 'waiting' && nextProjection.waitingStartsAt !== undefined && serverTime >= nextProjection.waitingStartsAt
       ? nextProjection.earlyPlayer : nextProjection.heldSplitFor;
@@ -481,15 +491,15 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
       : nextProjection.conjurer && nextProjection.conjuredMove
         ? resolveConjureScene(nextProjection.conjuredMove, nextProjection.conjurer)
         : splitPlayer
-          ? resolveAbmSplitScene(nextProjection.lastCompleteMoves, splitPlayer, nextProjection.luckyProcPlayer)
-          : resolveAbmScene(nextProjection.lastCompleteMoves, nextProjection.luckyProcPlayer);
+          ? resolveAbmSplitScene(nextProjection.lastCompleteMoves, splitPlayer, nextProjection.luckyProcPlayer, nextProjection.fireborneProcPlayer)
+          : resolveAbmScene(nextProjection.lastCompleteMoves, nextProjection.luckyProcPlayer, nextProjection.fireborneProcPlayer);
     layout.setArtwork('scene', { src: scene.src, alt: 'Attack Block Mana scene.' });
     sceneArtwork.classList.toggle('is-flipped', scene.flip);
     const sceneCanvas = sceneArtwork.querySelector<HTMLElement>('.boiling-sprite__canvas');
     if (sceneCanvas) sceneCanvas.style.transform = scene.flip ? 'scaleX(-1)' : '';
     const visibleTags = !picking && !showingResult ? resolveAbmTags({
       ...nextProjection, advantagedProcPlayers, juggernautProcPlayers, stunnedPlayers, investorBullPlayers, investorBearPlayers, duplicatorProcPlayers, copywriterProcPlayers,
-      sumoProcRemaining, cheaterProcPlayers, gamblerOutcomes,
+      sumoProcRemaining, cheaterProcPlayers, retiredProcPlayers, gamblerOutcomes,
     }, splitPlayer) : [];
     const tagOccurrences = new Map<string, number>();
     const keyedTags = visibleTags.map((tag) => {
@@ -527,10 +537,9 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     thiefTransferMirror.element.hidden = Boolean(splitPlayer) || showingResult || !simultaneousSteals;
     thiefTransfer.element.classList.toggle('is-flipped', nextProjection.thiefTransferPlayer === 'p2');
     renderStatus(p1Status, nextProjection, 'p1', picking); renderStatus(p2Status, nextProjection, 'p2', picking);
-    const previewPlayer = picking ? (nextProjection.phase === 'counter-picking' ? nextProjection.counterPicker : nextProjection.self) : undefined;
     const previewResources = startingResourcesForClass(ABM_CLASSES[selected]!.id);
-    renderResources(p1Resources, nextProjection, 'p1', previewPlayer === 'p1' ? previewResources : undefined);
-    renderResources(p2Resources, nextProjection, 'p2', previewPlayer === 'p2' ? previewResources : undefined);
+    renderResources(p1Resources, nextProjection, 'p1', picking ? previewResources : undefined);
+    renderResources(p2Resources, nextProjection, 'p2', picking ? previewResources : undefined);
     const showWaiting = nextProjection.phase === 'waiting';
     const showClassReady = picking && nextProjection.classReadyPlayer !== undefined && nextProjection.classReadyAt !== undefined;
     waiting.hidden = !showWaiting;
@@ -624,19 +633,20 @@ export function playAbmEventSounds(events: readonly TimedSemanticEvent[], server
 
 function renderStatus(status: { output: HTMLElement; sprite: BoilingSprite; label: HTMLElement }, projection: AbmProjection, player: 'p1' | 'p2', picking: boolean) {
   const state = projection.players[player];
+  const displayedMove = displayedAbmMove(projection, player);
   if (picking) {
     status.sprite.element.hidden = true;
     status.label.hidden = true;
     status.output.setAttribute('aria-label', state.classId ? ABM_CLASSES.find(({ id }) => id === state.classId)?.name ?? state.classId : 'Class hidden');
   }
   else {
-    status.sprite.element.hidden = !state.lastMove || state.lastMove === 'skip';
-    status.label.hidden = state.lastMove !== 'skip';
-    status.label.textContent = state.lastMove === 'skip' ? 'SKIP' : '';
-    status.output.setAttribute('aria-label', state.lastMove
-      ? state.lastMove.toUpperCase()
+    status.sprite.element.hidden = !displayedMove || displayedMove === 'skip';
+    status.label.hidden = displayedMove !== 'skip';
+    status.label.textContent = displayedMove === 'skip' ? 'SKIP' : '';
+    status.output.setAttribute('aria-label', displayedMove
+      ? displayedMove.toUpperCase()
       : state.classId ? ABM_CLASSES.find(({ id }) => id === state.classId)?.name ?? state.classId : 'Class hidden');
-    if (state.lastMove && state.lastMove !== 'skip') status.sprite.setSource(CONTROL_ART[state.lastMove].depressed);
+    if (displayedMove && displayedMove !== 'skip') status.sprite.setSource(CONTROL_ART[displayedMove].depressed);
   }
 }
 interface ResourceDisplay { element: HTMLOutputElement; manaMultiplier: BoilingSprite; manaCountElement: HTMLElement; blocks: BoilingSprite[]; bindings: [string, HTMLElement][] }

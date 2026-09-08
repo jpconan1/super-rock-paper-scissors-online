@@ -203,7 +203,7 @@ body::before {
 .universal-menu__controls .title-volume-slider { width: min(10rem, 100%); }
 .universal-menu__slider { grid-row: 1; }
 .universal-menu__toggle { grid-row: 2; }
-.universal-menu__continue, .universal-menu__quit { grid-row: 3; width: min(164px, 100%); }
+.game-button.universal-menu__continue, .game-button.universal-menu__quit { grid-row: 3; width: min(10rem, 100%); }
 .universal-menu__confirmation { display: grid; width: min(520px, 100%); padding: clamp(24px, 6vw, 48px); place-items: center; gap: 28px; }
 .universal-menu__confirmation[hidden] { display: none; }
 .universal-menu__question { margin: 0; color: #ac3235; font-size: clamp(32px, 8vw, 52px); font-weight: 900; text-align: center; }

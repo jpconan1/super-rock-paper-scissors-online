@@ -25,12 +25,23 @@ describe('createSoundEffect', () => {
     vi.resetModules();
   });
 
-  it('keeps fallback audio silent until sound is enabled', async () => {
+  it('defaults to sound enabled, music muted, and sound effects at 75% slider volume', async () => {
     vi.stubGlobal('Audio', AudioMock);
     vi.stubGlobal('AudioContext', undefined);
-    const { createSoundEffect } = await import('../src/audio/soundEffect');
+    const audio = await import('../src/audio/soundEffect');
+
+    expect(audio.isSoundEnabled()).toBe(true);
+    expect(audio.getMusicVolume()).toBe(0);
+    expect(audio.getSfxVolume()).toBe(0.75 ** 3);
+  });
+
+  it('keeps fallback audio silent after sound is disabled', async () => {
+    vi.stubGlobal('Audio', AudioMock);
+    vi.stubGlobal('AudioContext', undefined);
+    const { createSoundEffect, setSoundEnabled } = await import('../src/audio/soundEffect');
     const sound = createSoundEffect('/sound.mp3');
 
+    await setSoundEnabled(false);
     sound.play();
     sound.destroy();
     sound.play();

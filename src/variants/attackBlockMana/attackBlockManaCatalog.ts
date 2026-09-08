@@ -44,6 +44,9 @@ export const ABM_CLASSES: readonly AbmClassDefinition[] = [
   entry('taxman', 'Taxman', 'Collects 1 Mana from both players after moves resolve, up to three times.', true, {}, 'taxman', ability('collect', 'Collect', 3, 0, (player) => player.mana > 0)),
   entry('copywriter', 'Copywriter', 'Gains 1 Mana when the opponent makes the same move three times in a row.', true),
   entry('conjurer', 'Conjurer', 'Twice per game, pays 1 Mana to see the opponent\'s move before choosing.', true, {}, 'conjurer', ability('conjure', 'Conjure', 2, 1, undefined, 'opponent-first')),
+  entry('fireborne', 'Fireborne', 'Once per game, pays 1 Mana for an extra life lasting five turns, beginning next turn.', true, {}, 'fireborne', ability('flame', 'Flame', 1, 1)),
+  entry('retired', 'Retired', 'Starts with 7 Mana and 4 Blocks, but cannot gain Mana. Two depleted Retired players become classless.', true, { initialMana: 7, maximumBlocks: 4, manaGain: () => 0 }),
+  entry('parrymaster', 'Parrymaster', 'Once per game, Parry makes an attacking opponent lose 2 additional Mana.', true, {}, 'parrymaster', ability('parry', 'Parry', 1, 0)),
 ];
 
 export const ABM_CLASS_BY_ID = new Map(ABM_CLASSES.map((definition) => [definition.id, definition]));

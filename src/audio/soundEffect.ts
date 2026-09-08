@@ -29,9 +29,11 @@ let sfxGain: GainNode | undefined;
 let interruptGain: GainNode | undefined;
 let musicTransport: MusicTransport | undefined;
 let unlockListenersInstalled = false;
-let muted = true;
-let musicVolume = 1;
-let sfxVolume = 1;
+let muted = false;
+let musicVolume = 0;
+// The volume slider uses a cubic response curve, so 75% on the control is
+// 0.75³ gain.
+let sfxVolume = 0.75 ** 3;
 let requestedBase: MusicBase = 'drums-bass';
 let requestedTopper: MusicTopper = 'none';
 const stateListeners = new Set<(state: AudioState) => void>();

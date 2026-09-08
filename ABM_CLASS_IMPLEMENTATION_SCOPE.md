@@ -60,12 +60,9 @@ Status tags attach to the ability owner. Proc tags attach to the player receivin
 
 **Button:** None.
 
-**Scene:** Retired mirror retirement. At forced 0–0, both players lose the class and return to ordinary starting stats.
+**Scene:** None. At mutual 0–0, the normal resolved scene remains visible while both players receive the Retired transition tag, lose the class, and return to ordinary starting stats.
 
-**Tags:**
-
-- **Proc — No Mana gain:** Retired used Mana but ignored the positive gain.
-- **Proc — Retired:** optional transition tag for the mirror retirement scene. Omit if the scene communicates the change clearly by itself.
+**Tag:** **Proc — Retired**, shown on both sides when the mirror retirement occurs. Ignored Mana gain has no separate tag.
 
 ## Parrymaster
 
@@ -149,9 +146,9 @@ The three match tags should share one Golden Arrow family but use different Atta
 
 - **11 class drawings**, plus badges.
 - **6 active-ability buttons:** Collect, Conjure, Flame, Parry, Golden Arrow, Reset.
-- **5 definite special scene families:** Conjurer decision state, Fireborne survival, Retired mirror retirement, Null reset, JOE TIME.
+- **4 definite special scene families:** Conjurer decision state, Fireborne survival, Null reset, JOE TIME.
 - **Status tags:** 4 required base designs: Flame pending, Shield remaining, Golden Arrow pending, and Arrow remaining. Shield and Arrow each need five numbered duration variants.
-- **Proc tags:** 9 required designs if the optional Retired transition tag is included.
+- **Proc tags:** 9 required designs, including the Retired transition tag.
 - **Impact tags:** 3 required designs: Taxed, Parried, and Golden Arrow Block.
 
 ## Implementation note

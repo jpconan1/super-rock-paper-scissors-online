@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { ABM_CLASSES, startingResourcesForClass } from '../src/variants/attackBlockMana/attackBlockManaCatalog';
-import { ABM_BACK_LOBBY_ART, ABM_LAYOUTS, ABM_RESULT_SCENES, ABM_SELECT_ART, ABM_TAG_CATEGORIES, ABM_TAG_ORDERS, abmTagSlotId, blockSegments, getAbmAttackCostDisplay, getAbmClassReadyFrame, getAbmResultScene, getAbmAbilityControlGeometry, getAbmWaitingVisual, initialManaForClass, latestClassPreview, sceneForMoves, shouldShowAbmContinuingRoundProcTags, shouldShowAbmYouTag, shouldShowClassBadge, shouldShowClassReadyOpponentTag } from '../src/variants/attackBlockMana/attackBlockManaPresentation';
+import { ABM_BACK_LOBBY_ART, ABM_LAYOUTS, ABM_RESULT_SCENES, ABM_SELECT_ART, ABM_TAG_CATEGORIES, ABM_TAG_ORDERS, abmTagSlotId, blockSegments, displayedAbmMove, getAbmAttackCostDisplay, getAbmClassReadyFrame, getAbmResultScene, getAbmAbilityControlGeometry, getAbmWaitingVisual, initialManaForClass, latestClassPreview, sceneForMoves, shouldShowAbmContinuingRoundProcTags, shouldShowAbmYouTag, shouldShowClassBadge, shouldShowClassReadyOpponentTag } from '../src/variants/attackBlockMana/attackBlockManaPresentation';
 import type { AbmProjection } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 import { ABM_CLASS_IDS } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 import { ABM_SCENE_URLS, resolveAbmProcBackgrounds, resolveAbmScene, resolveAbmSplitScene, resolveAbmTags, resolveConjureScene } from '../src/variants/attackBlockMana/attackBlockManaScenes';
@@ -9,13 +9,13 @@ import { validateLayoutDocument } from '../src/layout/layoutDocument';
 import { ABM_TAG_ENTRANCE_SOURCES } from '../src/variants/attackBlockMana/abmTagEntrance';
 
 describe('Attack Block Mana presentation data', () => {
-  test('includes Copywriter and marks every finished class playable', () => {
+  test('includes Parrymaster and marks every finished class playable', () => {
     expect(ABM_CLASSES.map(({ id }) => id)).toEqual([
-      'lucky', 'advantaged', 'thief', 'juggernaut', 'stunner', 'duplicator', 'sumo', 'cheater', 'investor', 'gambler', 'taxman', 'copywriter', 'conjurer',
+      'lucky', 'advantaged', 'thief', 'juggernaut', 'stunner', 'duplicator', 'sumo', 'cheater', 'investor', 'gambler', 'taxman', 'copywriter', 'conjurer', 'fireborne', 'retired', 'parrymaster',
     ]);
     expect(ABM_CLASS_IDS).toEqual(ABM_CLASSES.map(({ id }) => id));
     expect(ABM_CLASSES.filter(({ implemented }) => implemented).map(({ id }) => id)).toEqual([
-      'lucky', 'advantaged', 'thief', 'juggernaut', 'stunner', 'duplicator', 'sumo', 'cheater', 'investor', 'gambler', 'taxman', 'copywriter', 'conjurer',
+      'lucky', 'advantaged', 'thief', 'juggernaut', 'stunner', 'duplicator', 'sumo', 'cheater', 'investor', 'gambler', 'taxman', 'copywriter', 'conjurer', 'fireborne', 'retired', 'parrymaster',
     ]);
     expect(ABM_CLASSES.every(({ asset, badgeAsset }) => asset.endsWith('-sheet.webp') && badgeAsset.endsWith('-badge-sheet.webp') && !asset.includes('placeholder'))).toBe(true);
     expect(ABM_CLASSES.find(({ id }) => id === 'taxman')).toMatchObject({ name: 'Taxman', ability: { id: 'collect', label: 'Collect', uses: 3, manaCost: 0, inputStrategy: 'arm-with-move' } });
@@ -27,6 +27,17 @@ describe('Attack Block Mana presentation data', () => {
       name: 'Conjurer', implemented: true, ability: { id: 'conjure', uses: 2, manaCost: 1, inputStrategy: 'opponent-first' },
       asset: '/variants/abm/conjurer-sheet.webp', badgeAsset: '/variants/abm/conjurer-badge-sheet.webp',
     });
+    expect(ABM_CLASSES.find(({ id }) => id === 'fireborne')).toMatchObject({
+      name: 'Fireborne', implemented: true, ability: { id: 'flame', uses: 1, manaCost: 1, inputStrategy: 'arm-with-move' },
+      asset: '/variants/abm/fireborne-sheet.webp', badgeAsset: '/variants/abm/fireborne-badge-sheet.webp',
+    });
+    expect(ABM_CLASSES.find(({ id }) => id === 'retired')).toMatchObject({
+      name: 'Retired', implemented: true, asset: '/variants/abm/retired-sheet.webp', badgeAsset: '/variants/abm/retired-badge-sheet.webp',
+    });
+    expect(ABM_CLASSES.find(({ id }) => id === 'parrymaster')).toMatchObject({
+      name: 'Parrymaster', implemented: true, ability: { id: 'parry', uses: 1, manaCost: 0, inputStrategy: 'arm-with-move' },
+      asset: '/variants/abm/parrymaster-sheet.webp', badgeAsset: '/variants/abm/parrymaster-badge-sheet.webp',
+    });
   });
 
   test('starts the class-select order with Lucky', () => {
@@ -37,7 +48,8 @@ describe('Attack Block Mana presentation data', () => {
     expect(startingResourcesForClass('lucky')).toEqual({ mana: 1, blocks: 5 });
     expect(startingResourcesForClass('investor')).toEqual({ mana: 5, blocks: 5 });
     expect(startingResourcesForClass('gambler')).toEqual({ mana: 1, blocks: 3 });
-    for (const definition of ABM_CLASSES) expect(initialManaForClass(definition.id)).toBe(definition.id === 'investor' ? 5 : 1);
+    expect(startingResourcesForClass('retired')).toEqual({ mana: 7, blocks: 4 });
+    for (const definition of ABM_CLASSES) expect(initialManaForClass(definition.id)).toBe(definition.id === 'investor' ? 5 : definition.id === 'retired' ? 7 : 1);
     const events = [
       { id: 'one', type: 'class-preview' as const, startsAt: 1, endsAt: 2, payload: { player: 'p2', classId: 'lucky' } },
       { id: 'two', type: 'class-preview' as const, startsAt: 2, endsAt: 3, payload: { player: 'p2', classId: 'investor' } },
@@ -79,6 +91,19 @@ describe('Attack Block Mana presentation data', () => {
     }
   });
 
+  test('shows the Conjured opponent move instead of their stale previous move', () => {
+    const projection = {
+      self: 'p1', phase: 'conjurer-choosing', turn: 4, round: 1, score: { p1: 0, p2: 0 },
+      players: {
+        p1: { classId: 'conjurer', mana: 1, blocks: 5, strikes: 0, lastMove: 'mana' },
+        p2: { classId: 'fireborne', mana: 1, blocks: 4, strikes: 0, lastMove: 'block', fireShieldTurns: 2 },
+      },
+      conjurer: 'p1', conjuredMove: 'mana', opponentReady: true, legalActions: ['attack', 'block', 'mana'],
+    } satisfies AbmProjection;
+    expect(displayedAbmMove(projection, 'p1')).toBe('mana');
+    expect(displayedAbmMove(projection, 'p2')).toBe('mana');
+  });
+
   test('preloads all tag entrance frames with the ABM scene bundle', () => {
     expect(ABM_SCENE_URLS).toEqual(expect.arrayContaining(ABM_TAG_ENTRANCE_SOURCES));
   });
@@ -102,6 +127,27 @@ describe('Attack Block Mana presentation data', () => {
     });
   });
 
+  test('shows authored Fireborne survival art and remaining-turn status clouds', () => {
+    expect(resolveAbmScene({ p1: 'mana', p2: 'attack' }, undefined, 'p1')).toEqual({
+      src: '/variants/abm/scenes/exceptions/fireborne-shield-sheet.webp', flip: false,
+    });
+    expect(resolveAbmScene({ p1: 'attack', p2: 'mana' }, undefined, 'p2')).toMatchObject({ flip: true });
+    expect(resolveAbmSplitScene({ p1: 'mana', p2: 'attack' }, 'p1', undefined, 'p1')).toEqual({
+      src: '/variants/abm/scenes/splits/exceptions/fireborne-shield-attacker-ready-sheet.webp', flip: true,
+    });
+    expect(resolveAbmSplitScene({ p1: 'mana', p2: 'attack' }, 'p2', undefined, 'p1')).toEqual({
+      src: '/variants/abm/scenes/splits/exceptions/fireborne-shield-fireborne-ready-sheet.webp', flip: false,
+    });
+    for (const remaining of [1, 2, 3, 4, 5] as const) {
+      expect(resolveAbmTags({ players: { p1: { fireShieldTurns: remaining }, p2: {} } })).toEqual([{
+        category: 'status', kind: 'fireborne-shield', player: 'p1',
+        src: `/variants/abm/scenes/tags/fireborne-cloud-${remaining}-sheet.webp`,
+      }]);
+      expect(ABM_SCENE_URLS).toContain(`/variants/abm/scenes/tags/fireborne-cloud-${remaining}-sheet.webp`);
+    }
+    expect(resolveAbmTags({ players: { p1: { fireShieldTurns: 5 }, p2: {} } }, 'p1')).toEqual([]);
+  });
+
   test('maps class feedback to player-side tags and supports stacking', () => {
     expect(resolveAbmTags({ advantagedProcPlayers: ['p1'], stunnedPlayers: ['p1'], juggernautProcPlayers: ['p2'] }))
       .toMatchObject([
@@ -115,6 +161,10 @@ describe('Attack Block Mana presentation data', () => {
       { category: 'impact', kind: 'taxed', player: 'p1', src: '/variants/abm/scenes/tags/taxed-sheet.webp' },
     ]);
     expect(resolveAbmTags({ taxmanCollectPlayers: ['p1', 'p2'] })).toHaveLength(2);
+    expect(resolveAbmTags({ parriedPlayers: ['p1', 'p2'] })).toEqual([
+      { category: 'impact', kind: 'parried', player: 'p1', src: '/variants/abm/scenes/tags/parried-p2-sheet.webp' },
+      { category: 'impact', kind: 'parried', player: 'p2', src: '/variants/abm/scenes/tags/parried-sheet.webp' },
+    ]);
     expect(resolveAbmTags({ copywriterProcPlayers: ['p1', 'p2'] }, 'p1')).toEqual([
       { category: 'proc', kind: 'copywriter', player: 'p2', src: '/variants/abm/scenes/tags/copywriter-sheet.webp' },
     ]);
@@ -125,11 +175,11 @@ describe('Attack Block Mana presentation data', () => {
     const tags = resolveAbmTags({
       luckyProcPlayer: 'p1', advantagedProcPlayers: ['p1'], thiefTransferPlayer: 'p1', juggernautProcPlayers: ['p1'],
       stunnedPlayers: ['p2'], investorBullPlayers: ['p1'], investorBearPlayers: ['p1'], duplicatorProcPlayers: ['p1'],
-      copywriterProcPlayers: ['p1'], sumoProcRemaining: { p1: 2 }, cheaterProcPlayers: ['p1'], gamblerOutcomes: { p1: 'plus-1-mana' }, taxmanCollectPlayers: ['p2'],
+      copywriterProcPlayers: ['p1'], sumoProcRemaining: { p1: 2 }, cheaterProcPlayers: ['p1'], gamblerOutcomes: { p1: 'plus-1-mana' }, taxmanCollectPlayers: ['p2'], parriedPlayers: ['p1'],
     });
     expect(Object.fromEntries(tags.map(({ kind, category }) => [kind, category]))).toEqual({
       lucky: 'proc', advantaged: 'proc', juggernaut: 'impact', thief: 'impact', stunned: 'impact', bull: 'proc', bear: 'proc',
-      duplicator: 'proc', copywriter: 'proc', cheater: 'proc', gambler: 'proc', sumo: 'proc', taxed: 'impact',
+      duplicator: 'proc', copywriter: 'proc', cheater: 'proc', gambler: 'proc', sumo: 'proc', taxed: 'impact', parried: 'impact',
     });
   });
 
@@ -181,6 +231,15 @@ describe('Attack Block Mana presentation data', () => {
       { category: 'proc', kind: 'duplicator', player: 'p2', src: '/variants/abm/scenes/tags/duplicator-sheet.webp' },
     ]);
     expect(ABM_SCENE_URLS).toContain('/variants/abm/scenes/tags/duplicator-sheet.webp');
+  });
+
+  test('maps mutual retirement feedback to both player proc slots', () => {
+    expect(resolveAbmTags({ retiredProcPlayers: ['p1', 'p2'] })).toEqual([
+      { category: 'proc', kind: 'retired', player: 'p1', src: '/variants/abm/scenes/tags/retired-sheet.webp' },
+      { category: 'proc', kind: 'retired', player: 'p2', src: '/variants/abm/scenes/tags/retired-sheet.webp' },
+    ]);
+    expect(resolveAbmTags({ retiredProcPlayers: ['p1', 'p2'] }, 'p1')).toHaveLength(2);
+    expect(ABM_SCENE_URLS).toContain('/variants/abm/scenes/tags/retired-sheet.webp');
   });
 
   test('maps Sumo remaining-charge feedback to authored tag variants', () => {
@@ -240,6 +299,7 @@ describe('Attack Block Mana presentation data', () => {
     ]);
     expect(ABM_SCENE_URLS).toEqual(expect.arrayContaining([
       '/variants/abm/scenes/tags/thief-p2-sheet.webp', '/variants/abm/scenes/tags/juggernaut-p2-sheet.webp', '/variants/abm/scenes/tags/stunned-p2-sheet.webp',
+      '/variants/abm/scenes/tags/parried-sheet.webp', '/variants/abm/scenes/tags/parried-p2-sheet.webp',
     ]));
   });
 

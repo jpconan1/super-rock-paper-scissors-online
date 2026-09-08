@@ -4,13 +4,13 @@ import { gainToSliderPosition, sliderPositionToGain } from '../src/title/volumeS
 describe('volume slider curve', () => {
   test('gives the quiet end more physical range', () => {
     expect(sliderPositionToGain(0)).toBe(0);
-    expect(sliderPositionToGain(0.25)).toBe(0.0625);
-    expect(sliderPositionToGain(0.5)).toBe(0.25);
+    expect(sliderPositionToGain(0.25)).toBe(0.015625);
+    expect(sliderPositionToGain(0.5)).toBe(0.125);
     expect(sliderPositionToGain(1)).toBe(1);
   });
 
   test('converts stored gain back to its matching slider position', () => {
-    for (const gain of [0, 0.0625, 0.25, 0.5, 1]) {
+    for (const gain of [0, 0.015625, 0.125, 0.5, 1]) {
       expect(sliderPositionToGain(gainToSliderPosition(gain))).toBeCloseTo(gain);
     }
   });

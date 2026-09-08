@@ -103,6 +103,18 @@ describe('chooseComputerCommand', () => {
     expect(chooseComputerCommand({ ...base, phase: 'conjurer-choosing', conjurer: 'p2', conjuredMove: 'attack', legalActions: ['block', 'mana'] }, () => 0))
       .toEqual({ type: 'choose-move', move: 'block' });
   });
+
+  test('arms Flame with the computer move when available', () => {
+    const projection = {
+      self: 'p2', phase: 'idle', turn: 1, round: 1, score: { p1: 0, p2: 0 },
+      players: {
+        p1: { classId: 'lucky', mana: 1, blocks: 5, strikes: 0 },
+        p2: { classId: 'fireborne', mana: 1, blocks: 5, strikes: 0, abilityUses: { flame: 1 } },
+      },
+      opponentReady: false, legalActions: ['block', 'mana', 'flame'],
+    } satisfies AbmProjection;
+    expect(chooseComputerCommand(projection, () => 0)).toEqual({ type: 'choose-move', move: 'block', ability: 'flame' });
+  });
 });
 
 function latestSnapshot(snapshots: ServerSnapshot[]): ServerSnapshot { return snapshots[snapshots.length - 1]!; }

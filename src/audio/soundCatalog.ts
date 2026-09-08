@@ -6,12 +6,12 @@ export type SoundId =
   | 'win' | 'lose' | 'starburst' | 'curtain-close' | 'curtain-open';
 
 export const SOUND_CATALOG: Readonly<Record<SoundId, string>> = {
-  'button-down': '/audio/button-depressed.mp3',
-  'button-up': '/audio/button-released.mp3',
+  'button-down': '/audio/button-released.mp3',
+  'button-up': '/audio/button-depressed.mp3',
   ready: '/audio/ready.mp3',
   'abm-charge': '/audio/charge.mp3',
   'abm-block': '/audio/block.m4a',
-  'abm-collision': '/audio/collision.mp3',
+  'abm-collision': '/audio/attack-collide.mp3',
   'abm-lucky': '/audio/lucky.mp3',
   win: '/audio/win_sound.mp3',
   lose: '/audio/lose_jingle.mp3',

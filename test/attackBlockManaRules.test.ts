@@ -178,6 +178,54 @@ describe('Attack Block Mana rules', () => {
     }
   });
 
+  test('gives Retired its special resources and prevents Mana gains', () => {
+    let state = startedWith('retired', 'lucky');
+    expect(state.players.p1).toMatchObject({ classId: 'retired', mana: 7, blocks: 4 });
+
+    state = playTurn(state, 'mana', 'block');
+    expect(state.players.p1).toMatchObject({ mana: 7, blocks: 4, lastMove: 'mana' });
+
+    state.players.p1.blocks = 1;
+    state = playTurn(state, 'attack', 'block');
+    expect(state.players.p1).toMatchObject({ mana: 6, blocks: 4 });
+  });
+
+  test('un-retires a depleted Retired mirror and holds both proc tags until the next reveal', () => {
+    let state = startedWith('retired', 'retired');
+    state.players.p1.mana = 1;
+    state.players.p2.mana = 1;
+
+    state = playTurn(state, 'attack', 'attack');
+    expect(state).toMatchObject({ phase: 'idle', retiredProcPlayers: ['p1', 'p2'] });
+    expect(state.players.p1).toMatchObject({ mana: 1, blocks: 5 });
+    expect(state.players.p2).toMatchObject({ mana: 1, blocks: 5 });
+    expect(state.players.p1.classId).toBeUndefined();
+    expect(state.players.p2.classId).toBeUndefined();
+    expect(attackBlockManaRules.project(state, 'p1').retiredProcPlayers).toEqual(['p1', 'p2']);
+
+    state = send(state, 'p1', { type: 'choose-move', move: 'block' });
+    expect(state.retiredProcPlayers).toEqual(['p1', 'p2']);
+    state = send(state, 'p2', { type: 'choose-move', move: 'block' });
+    expect(state.retiredProcPlayers).toBeUndefined();
+  });
+
+  test('does not un-retire a single Retired or a mirror above mutual zero', () => {
+    let mixed = startedWith('retired', 'lucky');
+    mixed.players.p1.mana = 1;
+    mixed.players.p2.mana = 1;
+    mixed = playTurn(mixed, 'attack', 'attack');
+    expect(mixed.players.p1.classId).toBe('retired');
+    expect(mixed.retiredProcPlayers).toBeUndefined();
+
+    let mirror = startedWith('retired', 'retired');
+    mirror.players.p1.mana = 2;
+    mirror.players.p2.mana = 1;
+    mirror = playTurn(mirror, 'attack', 'attack');
+    expect(mirror.players.p1.classId).toBe('retired');
+    expect(mirror.players.p2.classId).toBe('retired');
+    expect(mirror.retiredProcPlayers).toBeUndefined();
+  });
+
   test('gives Advantaged 2 Mana on turns 1-3 and ordinary Mana from turn 4', () => {
     let state = startedWith('advantaged', 'lucky');
     for (const expectedMana of [3, 5, 7, 8]) {
@@ -487,6 +535,23 @@ describe('Attack Block Mana rules', () => {
     const resolution = attackBlockManaRules.resolve(state, 'p1', { type: 'activate-ability', ability: 'conjure' }, { ...context, now: 2_500 });
     expect(resolution.state).toMatchObject({ phase: 'conjurer-choosing', conjurer: 'p1', conjuredMove: 'mana', waitingDeadlineAt: 33_080 });
     expect(resolution.events?.[0]?.type).toBe('conjure-reveal');
+  });
+
+  test('lets Conjurer Attack a revealed Mana and consumes Fireborne shield', () => {
+    let state = startedWith('conjurer', 'fireborne');
+    state.players.p1.mana = 2;
+    state.players.p2.fireShieldTurns = 2;
+    state = send(state, 'p1', { type: 'activate-ability', ability: 'conjure' }, 2_000);
+    state = send(state, 'p2', { type: 'choose-move', move: 'mana' }, 3_000);
+    expect(state).toMatchObject({ phase: 'conjurer-choosing', conjurer: 'p1', conjuredMove: 'mana' });
+    expect(attackBlockManaRules.project(state, 'p1').legalActions).toContain('attack');
+
+    state = send(state, 'p1', { type: 'choose-move', move: 'attack' }, 4_000);
+    expect(state).toMatchObject({
+      phase: 'idle', turn: 2, score: { p1: 0, p2: 0 },
+      lastCompleteMoves: { p1: 'attack', p2: 'mana' }, fireborneProcPlayer: 'p2',
+      players: { p1: { mana: 0 }, p2: { fireShieldTurns: 0 } },
+    });
   });
 
   test('cancels dual Conjure into ordinary simultaneous selection for the rest of the turn', () => {
@@ -921,6 +986,175 @@ describe('Attack Block Mana rules', () => {
     state.players.p1.abilityUses = undefined;
     state.players.p1.stealUsed = true;
     expect(attackBlockManaRules.project(state, 'p1').legalActions).not.toContain('steal');
+  });
+
+  test('offers one free Parry and spends it when armed with a normal move', () => {
+    let state = startedWith('parrymaster', 'lucky');
+    expect(attackBlockManaRules.project(state, 'p1').legalActions).toContain('parry');
+    state = send(state, 'p1', { type: 'choose-move', move: 'block', ability: 'parry' });
+    expect(state.players.p1.abilityUses?.parry).toBe(0);
+    expect(attackBlockManaRules.project(state, 'p1')).toMatchObject({ ownPendingMove: 'block', ownPendingAbility: 'parry' });
+  });
+
+  test('Parry removes 2 Mana after ordinary Attack cost and floors at zero', () => {
+    let state = startedWith('parrymaster', 'lucky');
+    state.players.p2.mana = 4;
+    state = send(state, 'p1', { type: 'choose-move', move: 'block', ability: 'parry' });
+    state = send(state, 'p2', { type: 'choose-move', move: 'attack' });
+    expect(state.players.p2.mana).toBe(1);
+    expect(state.parriedPlayers).toEqual(['p2']);
+    expect(attackBlockManaRules.project(state, 'p1').parriedPlayers).toEqual(['p2']);
+
+    let floor = startedWith('parrymaster', 'lucky');
+    floor = send(floor, 'p1', { type: 'choose-move', move: 'block', ability: 'parry' });
+    floor = send(floor, 'p2', { type: 'choose-move', move: 'attack' });
+    expect(floor.players.p2.mana).toBe(0);
+  });
+
+  test('supports failed and dual Parries and clears feedback on the next reveal', () => {
+    let failed = startedWith('parrymaster', 'lucky');
+    failed = send(failed, 'p1', { type: 'choose-move', move: 'block', ability: 'parry' });
+    failed = send(failed, 'p2', { type: 'choose-move', move: 'mana' });
+    expect(failed.parriedPlayers).toBeUndefined();
+    expect(failed.players.p1.abilityUses?.parry).toBe(0);
+
+    let dual = startedWith('parrymaster', 'parrymaster');
+    dual.players.p1.mana = 4; dual.players.p2.mana = 4;
+    dual = send(dual, 'p1', { type: 'choose-move', move: 'attack', ability: 'parry' });
+    dual = send(dual, 'p2', { type: 'choose-move', move: 'attack', ability: 'parry' });
+    expect(dual.players).toMatchObject({ p1: { mana: 1 }, p2: { mana: 1 } });
+    expect(dual.parriedPlayers).toEqual(['p2', 'p1']);
+    dual = send(dual, 'p1', { type: 'choose-move', move: 'mana' });
+    dual = send(dual, 'p2', { type: 'choose-move', move: 'mana' });
+    expect(dual.parriedPlayers).toBeUndefined();
+  });
+
+  test('skips Parry on lethal resolution and resolves it before Collect and Steal', () => {
+    let lethal = startedWith('parrymaster', 'lucky');
+    lethal.score.p2 = 2;
+    lethal.players.p2.mana = 4;
+    lethal = send(lethal, 'p1', { type: 'choose-move', move: 'mana', ability: 'parry' });
+    lethal = send(lethal, 'p2', { type: 'choose-move', move: 'attack' });
+    expect(lethal).toMatchObject({ phase: 'match-complete', players: { p2: { mana: 3 } } });
+    expect(lethal.parriedPlayers).toBeUndefined();
+
+    let timeout = startedWith('parrymaster', 'lucky');
+    timeout.score.p1 = 2;
+    timeout.players.p1.mana = 2;
+    timeout = send(timeout, 'p1', { type: 'choose-move', move: 'attack', ability: 'parry' }, 2_000);
+    timeout = attackBlockManaRules.advanceDeadline!(timeout, { ...context, now: timeout.waitingDeadlineAt! })!.state;
+    expect(timeout).toMatchObject({ phase: 'match-complete', players: { p1: { mana: 1, abilityUses: { parry: 0 } } } });
+    expect(timeout.parriedPlayers).toBeUndefined();
+
+    let steal = startedWith('thief', 'parrymaster');
+    steal.turn = 5; steal.players.p1.mana = 3;
+    steal = send(steal, 'p1', { type: 'choose-move', move: 'attack', ability: 'steal' });
+    steal = send(steal, 'p2', { type: 'choose-move', move: 'block', ability: 'parry' });
+    expect(steal.players.p1.mana).toBe(1);
+    expect(steal.thiefTransferPlayer).toBe('p1');
+    expect(steal.parriedPlayers).toEqual(['p1']);
+
+    let collect = startedWith('taxman', 'parrymaster');
+    collect.players.p1.mana = 4; collect.players.p2.mana = 2;
+    collect = send(collect, 'p1', { type: 'choose-move', move: 'attack', ability: 'collect' });
+    collect = send(collect, 'p2', { type: 'choose-move', move: 'block', ability: 'parry' });
+    expect(collect.players).toMatchObject({ p1: { mana: 0 }, p2: { mana: 1 } });
+    expect(collect.parriedPlayers).toEqual(['p1']);
+    expect(collect.taxmanCollectPlayers).toEqual(['p1']);
+  });
+
+  test('arms Flame with a move, spends its Mana and charge, then installs a five-turn shield', () => {
+    let state = startedWith('fireborne', 'lucky');
+    expect(state.players.p1).toMatchObject({ mana: 1, blocks: 5, abilityUses: { flame: 1 } });
+    expect(attackBlockManaRules.project(state, 'p1').legalActions).toContain('flame');
+    state = send(state, 'p1', { type: 'choose-move', move: 'block', ability: 'flame' });
+    expect(state.players.p1).toMatchObject({ mana: 0, abilityUses: { flame: 0 } });
+    expect(attackBlockManaRules.project(state, 'p1').ownPendingAbility).toBe('flame');
+    state = send(state, 'p2', { type: 'choose-move', move: 'block' });
+    expect(state.players.p1).toMatchObject({ fireShieldTurns: 5, abilityUses: { flame: 0 } });
+    expect(attackBlockManaRules.project(state, 'p1').legalActions).not.toContain('flame');
+
+    const empty = startedWith('fireborne', 'lucky');
+    empty.players.p1.mana = 0;
+    expect(attackBlockManaRules.project(empty, 'p1').legalActions).not.toContain('flame');
+    expect(() => send(empty, 'p1', { type: 'choose-move', move: 'block', ability: 'flame' })).toThrow('requires 1 Mana');
+  });
+
+  test('pops Flame back up and submits Attack when there is not enough Mana for both', () => {
+    let state = startedWith('fireborne', 'lucky');
+    state = send(state, 'p1', { type: 'choose-move', move: 'attack', ability: 'flame' });
+    expect(state).toMatchObject({
+      phase: 'waiting', pendingMoves: { p1: 'attack' },
+      players: { p1: { mana: 1, abilityUses: { flame: 1 } } },
+    });
+    expect(state.pendingAbilities?.p1).toBeUndefined();
+    expect(attackBlockManaRules.project(state, 'p1').ownPendingAbility).toBeUndefined();
+
+    state = send(state, 'p2', { type: 'choose-move', move: 'block' });
+    expect(state.players.p1).toMatchObject({ mana: 0, abilityUses: { flame: 1 } });
+    expect(state.players.p1.fireShieldTurns ?? 0).toBe(0);
+  });
+
+  test('does not protect Fireborne on the Flame activation turn', () => {
+    let state = startedWith('fireborne', 'lucky');
+    state = send(state, 'p1', { type: 'choose-move', move: 'mana', ability: 'flame' });
+    state = send(state, 'p2', { type: 'choose-move', move: 'attack' });
+    expect(state).toMatchObject({ phase: 'counter-picking', score: { p1: 0, p2: 1 } });
+    expect(state.fireborneProcPlayer).toBeUndefined();
+    expect(state.players.p1.fireShieldTurns ?? 0).toBe(0);
+  });
+
+  test.each([
+    ['p1', 'mana', 'attack'],
+    ['p2', 'attack', 'mana'],
+  ] as const)('lets %s Fireborne consume an existing shield against Attack versus Mana', (fireborne, p1Move, p2Move) => {
+    let state = startedWith(fireborne === 'p1' ? 'fireborne' : 'lucky', fireborne === 'p2' ? 'fireborne' : 'lucky');
+    state.players[fireborne].fireShieldTurns = 5;
+    state = playTurn(state, p1Move, p2Move);
+    expect(state).toMatchObject({ phase: 'idle', turn: 2, score: { p1: 0, p2: 0 }, fireborneProcPlayer: fireborne });
+    expect(state.players[fireborne].fireShieldTurns).toBe(0);
+    expect(attackBlockManaRules.project(state, fireborne).fireborneProcPlayer).toBe(fireborne);
+  });
+
+  test('decrements Fireborne shield through ordinary and forced Mana turns, then expires', () => {
+    let state = startedWith('fireborne', 'lucky');
+    state.players.p1.fireShieldTurns = 5;
+    state = playTurn(state, 'mana', 'mana');
+    expect(state.players.p1.fireShieldTurns).toBe(4);
+    state.players.p1.mana = 0; state.players.p2.mana = 0;
+    state = playTurn(state, 'mana', 'mana');
+    expect(state.players.p1.fireShieldTurns).toBe(3);
+    state = playTurn(state, 'mana', 'mana');
+    state = playTurn(state, 'mana', 'mana');
+    state = playTurn(state, 'mana', 'mana');
+    expect(state.players.p1.fireShieldTurns).toBe(0);
+  });
+
+  test('saves a first Attack timeout but never prevents a second-strike forfeit', () => {
+    let saved = startedWith('lucky', 'fireborne');
+    saved.players.p2.fireShieldTurns = 5;
+    saved = send(saved, 'p1', { type: 'choose-move', move: 'attack' }, 2_000);
+    saved = attackBlockManaRules.advanceDeadline!(saved, { ...context, now: saved.waitingDeadlineAt! })!.state;
+    expect(saved).toMatchObject({ phase: 'idle', fireborneProcPlayer: 'p2', players: { p2: { strikes: 1, fireShieldTurns: 0 } } });
+
+    let forfeited = startedWith('lucky', 'fireborne');
+    forfeited.players.p2.fireShieldTurns = 5;
+    forfeited.players.p2.strikes = 1;
+    forfeited = send(forfeited, 'p1', { type: 'choose-move', move: 'attack' }, 2_000);
+    forfeited = attackBlockManaRules.advanceDeadline!(forfeited, { ...context, now: forfeited.waitingDeadlineAt! })!.state;
+    expect(forfeited).toMatchObject({ phase: 'match-complete', winner: 'p1', resultReason: 'forfeit' });
+    expect(forfeited.fireborneProcPlayer).toBeUndefined();
+  });
+
+  test('clears Fireborne shield and restores Flame when a new round begins', () => {
+    let state = startedWith('fireborne', 'lucky');
+    state.players.p1.fireShieldTurns = 0;
+    state.players.p1.abilityUses = { flame: 0 };
+    state = playTurn(state, 'mana', 'attack');
+    expect(state).toMatchObject({ phase: 'counter-picking', players: { p1: { fireShieldTurns: 0, abilityUses: { flame: 1 } } } });
+    state = send(state, 'p1', { type: 'lock-class', classId: 'fireborne' }, state.counterPickAvailableAt);
+    expect(state.players.p1).toMatchObject({ classId: 'fireborne', abilityUses: { flame: 1 } });
+    expect(state.players.p1.fireShieldTurns ?? 0).toBe(0);
   });
 
   test('exhausts Blocks and restores them after a non-Block move', () => {

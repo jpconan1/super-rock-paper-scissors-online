@@ -133,6 +133,6 @@ export function chooseComputerCommand(projection: AbmProjection, random: () => n
     roll -= weights[index]!;
     if (roll < 0) { move = moves[index]!; break; }
   }
-  const ability = (['steal', 'collect'] as const).find((id) => projection.legalActions.includes(id) && random() < .55);
+  const ability = (['steal', 'collect', 'flame', 'parry'] as const).find((id) => projection.legalActions.includes(id) && random() < .55);
   return { type: 'choose-move', move, ...(ability ? { ability } : {}) };
 }

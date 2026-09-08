@@ -50,10 +50,13 @@ export const attackBlockManaRules: VariantRules<AbmState, AbmCommand, AbmProject
       legalActions: legalActions(state, viewer),
       ...(state.lastCompleteMoves ? { lastCompleteMoves: { ...state.lastCompleteMoves } } : {}),
       ...(state.luckyProcPlayer ? { luckyProcPlayer: state.luckyProcPlayer } : {}),
+      ...(state.fireborneProcPlayer ? { fireborneProcPlayer: state.fireborneProcPlayer } : {}),
+      ...(state.retiredProcPlayers?.length ? { retiredProcPlayers: [...state.retiredProcPlayers] } : {}),
       ...(state.advantagedProcPlayers?.length ? { advantagedProcPlayers: [...state.advantagedProcPlayers] } : {}),
       ...(state.thiefAttemptPlayers?.length ? { thiefAttemptPlayers: [...state.thiefAttemptPlayers] } : {}),
       ...(state.thiefTransferPlayer ? { thiefTransferPlayer: state.thiefTransferPlayer } : {}),
       ...(state.taxmanCollectPlayers?.length ? { taxmanCollectPlayers: [...state.taxmanCollectPlayers] } : {}),
+      ...(state.parriedPlayers?.length ? { parriedPlayers: [...state.parriedPlayers] } : {}),
       ...(state.juggernautProcPlayers?.length ? { juggernautProcPlayers: [...state.juggernautProcPlayers] } : {}),
       ...(state.stunnedPlayers?.length ? { stunnedPlayers: [...state.stunnedPlayers] } : {}),
       ...(state.investorBullPlayers?.length ? { investorBullPlayers: [...state.investorBullPlayers] } : {}),
@@ -104,7 +107,7 @@ function lockClass(state: AbmState, player: PlayerId, classId: AbmClassId, now: 
     return {
       state: { ...state, phase: 'idle', turn: 1, players, pendingClasses: {}, pendingMoves: {}, pendingAbilities: {}, counterPicker: undefined,
         counterPickAvailableAt: undefined, resultRevealAt: undefined, lastCompleteMoves: undefined, heldSplitFor: undefined,
-        luckyProcPlayer: undefined, advantagedProcPlayers: undefined, thiefAttemptPlayers: undefined, thiefTransferPlayer: undefined, taxmanCollectPlayers: undefined,
+        luckyProcPlayer: undefined, fireborneProcPlayer: undefined, retiredProcPlayers: undefined, advantagedProcPlayers: undefined, thiefAttemptPlayers: undefined, thiefTransferPlayer: undefined, taxmanCollectPlayers: undefined, parriedPlayers: undefined,
         juggernautProcPlayers: undefined, stunnedPlayers: undefined, investorBullPlayers: undefined, investorBearPlayers: undefined,
         duplicatorProcPlayers: undefined, copywriterProcPlayers: undefined, sumoProcRemaining: undefined, cheaterProcPlayers: undefined, gamblerOutcomes: undefined },
       events: [cue('class-reveal', now, 800, { classes: classMap(players), round: state.round })],
@@ -131,11 +134,13 @@ function chooseMove(state: AbmState, player: PlayerId, move: AbmMove, ability: A
   if (forcedMana && move !== 'mana') throw new Error('Mana is the only move available at 0–0 Mana.');
   if (ability === 'conjure') throw new Error('Conjure must be activated before choosing a move.');
   if (ability) validateAbility(state, player, ability);
+  const committedAbility = ability === 'flame' && move === 'attack'
+    && state.players[player].mana < attackCostFor(state.players[player]) + 1 ? undefined : ability;
   const players = clonePlayers(state.players);
-  if (ability) spendAbility(players[player], ability);
+  if (committedAbility) spendAbility(players[player], committedAbility);
   validateMove({ ...state, players }, player, move);
   const pendingMoves = { ...state.pendingMoves, [player]: move };
-  const pendingAbilities = { ...(state.pendingAbilities ?? {}), ...(ability ? { [player]: ability } : {}) };
+  const pendingAbilities = { ...(state.pendingAbilities ?? {}), ...(committedAbility ? { [player]: committedAbility } : {}) };
   if (state.phase === 'conjurer-choosing') {
     if (state.conjurer !== player) throw new Error('Only the Conjurer can choose now.');
     if (state.conjuredMove === 'skip') {
@@ -213,17 +218,21 @@ function resolveTurn(state: AbmState, moves: Record<PlayerId, AbmMove>, context:
   const investorBearPlayers = resolveInvestorTax(players, state.turn);
   const loser: PlayerId | undefined = moves.p1 === 'mana' && moves.p2 === 'attack' ? 'p1' : moves.p2 === 'mana' && moves.p1 === 'attack' ? 'p2' : undefined;
   const luckyProcPlayer = loser && players[loser].classId === 'lucky' && context.random() < 0.25 ? loser : undefined;
-  const defeatedPlayer = luckyProcPlayer ? undefined : loser;
-  const abilityResult = defeatedPlayer ? emptyAbilityResult() : resolveActivatedAbilities(players, state.pendingAbilities ?? {});
+  const fireborneProcPlayer = loser && !luckyProcPlayer && fireShieldTurnsFor(players[loser]) > 0 ? loser : undefined;
+  const defeatedPlayer = luckyProcPlayer || fireborneProcPlayer ? undefined : loser;
+  const abilityResult = defeatedPlayer ? emptyAbilityResult() : resolveActivatedAbilities(players, moves, state.pendingAbilities ?? {});
+  if (!defeatedPlayer) advanceFireborneShields(players, state.pendingAbilities ?? {}, fireborneProcPlayer);
+  const retiredProcPlayers = defeatedPlayer ? undefined : resolveRetiredMirror(players);
   const revealDuration = defeatedPlayer ? ABM_LETHAL_TO_RESULT_MS : 800;
-  const events = [cue('move-reveal', now, revealDuration, { moves, turn: state.turn, forced, luckyProcPlayer, advantagedProcPlayers,
+  const events = [cue('move-reveal', now, revealDuration, { moves, turn: state.turn, forced, luckyProcPlayer, fireborneProcPlayer, retiredProcPlayers, advantagedProcPlayers,
     juggernautProcPlayers, stunnedPlayers, investorBullPlayers, investorBearPlayers, duplicatorProcPlayers, copywriterProcPlayers, sumoProcRemaining, cheaterProcPlayers, gamblerOutcomes })];
   const revealed = { ...state, players, pendingMoves: {}, pendingAbilities: {}, conjurer: undefined, conjuredMove: undefined,
     conjuredOpponentTimedOut: undefined, conjureStalemate: undefined, lastCompleteMoves: moves, heldSplitFor: undefined,
-    luckyProcPlayer, advantagedProcPlayers: advantagedProcPlayers.length ? advantagedProcPlayers : undefined,
+    luckyProcPlayer, fireborneProcPlayer, retiredProcPlayers, advantagedProcPlayers: advantagedProcPlayers.length ? advantagedProcPlayers : undefined,
     thiefAttemptPlayers: abilityResult.thiefAttemptPlayers.length ? abilityResult.thiefAttemptPlayers : undefined,
     thiefTransferPlayer: abilityResult.thiefTransferPlayer,
     taxmanCollectPlayers: abilityResult.taxmanCollectPlayers.length ? abilityResult.taxmanCollectPlayers : undefined,
+    parriedPlayers: abilityResult.parriedPlayers.length ? abilityResult.parriedPlayers : undefined,
     stunnedPlayers: stunnedPlayers.length ? stunnedPlayers : undefined,
     investorBullPlayers: investorBullPlayers.length ? investorBullPlayers : undefined,
     investorBearPlayers: investorBearPlayers.length ? investorBearPlayers : undefined,
@@ -272,21 +281,24 @@ function resolveTimeout(state: AbmState, context: DeterministicContext): Variant
   } else applySkip(players[late]);
   const stunnedPlayers = resolveStunnerTimeout(players, early, late, move);
   const investorBearPlayers = resolveInvestorTax(players, state.turn);
-  const revealDuration = move === 'attack' || players[late].strikes >= 2 ? ABM_LETHAL_TO_RESULT_MS : 800;
-  const lethal = move === 'attack' || players[late].strikes >= 2;
-  const abilityResult = lethal ? emptyAbilityResult() : resolveActivatedAbilities(players, state.pendingAbilities ?? {});
+  const fireborneProcPlayer = move === 'attack' && players[late].strikes < 2 && fireShieldTurnsFor(players[late]) > 0 ? late : undefined;
+  const lethal = players[late].strikes >= 2 || (move === 'attack' && !fireborneProcPlayer);
+  const revealDuration = lethal ? ABM_LETHAL_TO_RESULT_MS : 800;
+  const abilityResult = lethal ? emptyAbilityResult() : resolveActivatedAbilities(players, timeoutMoves, state.pendingAbilities ?? {});
+  if (!lethal) advanceFireborneShields(players, state.pendingAbilities ?? {}, fireborneProcPlayer);
+  const retiredProcPlayers = lethal ? undefined : resolveRetiredMirror(players);
   const events = [cue('move-timeout', now, revealDuration, { earlyPlayer: early, latePlayer: late, move, strikes: players[late].strikes,
     turn: state.turn, advantagedProcPlayers, thiefAttemptPlayers: abilityResult.thiefAttemptPlayers, thiefTransferPlayer: abilityResult.thiefTransferPlayer,
-    taxmanCollectPlayers: abilityResult.taxmanCollectPlayers, stunnedPlayers, investorBearPlayers, duplicatorProcPlayers, copywriterProcPlayers, cheaterProcPlayers, gamblerOutcomes })];
+    taxmanCollectPlayers: abilityResult.taxmanCollectPlayers, parriedPlayers: abilityResult.parriedPlayers, fireborneProcPlayer, retiredProcPlayers, stunnedPlayers, investorBearPlayers, duplicatorProcPlayers, copywriterProcPlayers, cheaterProcPlayers, gamblerOutcomes })];
   const timedOut = { ...clearWaiting(state), players, pendingMoves: {}, pendingAbilities: {}, conjurer: undefined, conjuredMove: undefined,
-    conjuredOpponentTimedOut: undefined, conjureStalemate: undefined, heldSplitFor: early, luckyProcPlayer: undefined,
-    advantagedProcPlayers, thiefAttemptPlayers: undefined, thiefTransferPlayer: undefined, taxmanCollectPlayers: undefined, juggernautProcPlayers: undefined,
+    conjuredOpponentTimedOut: undefined, conjureStalemate: undefined, heldSplitFor: early, luckyProcPlayer: undefined, fireborneProcPlayer, retiredProcPlayers,
+    advantagedProcPlayers, thiefAttemptPlayers: undefined, thiefTransferPlayer: undefined, taxmanCollectPlayers: undefined, parriedPlayers: undefined, juggernautProcPlayers: undefined,
     stunnedPlayers: stunnedPlayers.length ? stunnedPlayers : undefined, investorBullPlayers: undefined,
     investorBearPlayers: investorBearPlayers.length ? investorBearPlayers : undefined, duplicatorProcPlayers,
     copywriterProcPlayers: copywriterProcPlayers.length ? copywriterProcPlayers : undefined, sumoProcRemaining: undefined, cheaterProcPlayers,
     gamblerOutcomes: Object.keys(gamblerOutcomes).length ? gamblerOutcomes : undefined };
   if (players[late].strikes >= 2) return { state: { ...timedOut, phase: 'match-complete', winner: early, resultReason: 'forfeit', resultRevealAt: now + revealDuration }, events };
-  if (move === 'attack') return finishRound(timedOut, early, events, now + revealDuration);
+  if (move === 'attack' && !fireborneProcPlayer) return finishRound(timedOut, early, events, now + revealDuration);
   return { state: { ...timedOut, phase: 'idle', turn: state.turn + 1 }, events };
 }
 
@@ -296,6 +308,7 @@ function resolveDoubleConjureTimeout(state: AbmState, context: DeterministicCont
   const copywriterProcPlayers = resolveCopywriters(players, { p1: 'skip', p2: 'skip' });
   applySkip(players[conjurer]);
   players[opponent].lastMove = 'skip'; recordRecentMove(players[opponent], 'skip');
+  if (players[conjurer].strikes < 2) advanceFireborneShields(players, state.pendingAbilities ?? {});
   const duration = players[conjurer].strikes >= 2 ? ABM_LETHAL_TO_RESULT_MS : 800;
   const timedOut = { ...clearWaiting(state), players, phase: players[conjurer].strikes >= 2 ? 'match-complete' as const : 'idle' as const,
     turn: players[conjurer].strikes >= 2 ? state.turn : state.turn + 1, pendingMoves: {}, pendingAbilities: {}, conjurer: undefined,
@@ -317,6 +330,7 @@ function finishRound(state: AbmState, winner: PlayerId, events: ReturnType<typeo
     players[id].mana = resources.mana;
     players[id].blocks = resources.blocks;
     players[id].recentMoves = undefined;
+    players[id].fireShieldTurns = 0;
     Object.assign(players[id], initialAbilityUses(players[id].classId));
   }
   if (players.p1.classId === 'duplicator') players.p1.nextManaGain = 1;
@@ -334,7 +348,7 @@ function applyMove(player: AbmPlayerState, move: AbmMove, manaGain = 1, record =
     if (!refundAttack) player.mana -= attackCostFor(player);
   }
   else if (move === 'block') player.blocks--;
-  else player.mana = Math.min(MAX_MANA, player.mana + manaGain);
+  else addMana(player, manaGain);
   if (move !== 'block') player.blocks = startingResourcesForClass(player.classId).blocks;
   if (player.classId === 'juggernaut') player.attackStreak = move === 'attack' ? (player.attackStreak ?? 0) + 1 : 0;
   if (player.classId === 'duplicator') player.nextManaGain = move === 'mana' ? duplicatorGainFor(player) * 2 : 1;
@@ -351,7 +365,7 @@ function resolveCopywriters(
     const history = players[opponent].recentMoves ?? [];
     return history.length >= 2 && history.at(-1) === moves[opponent] && history.at(-2) === moves[opponent];
   });
-  for (const id of procPlayers) players[id].mana = Math.min(MAX_MANA, players[id].mana + 1);
+  for (const id of procPlayers) addMana(players[id], 1);
   return procPlayers;
 }
 
@@ -366,7 +380,21 @@ function applySkip(player: AbmPlayerState, record = true): void {
   if (player.classId === 'duplicator') player.nextManaGain = 1;
   if (record) { player.lastMove = 'skip'; recordRecentMove(player, 'skip'); }
 }
+function fireShieldTurnsFor(player: Readonly<AbmPlayerState>): number { return player.fireShieldTurns ?? 0; }
+function advanceFireborneShields(
+  players: Record<PlayerId, AbmPlayerState>,
+  pending: Partial<Record<PlayerId, AbmAbilityId>>,
+  consumed?: PlayerId,
+): void {
+  for (const id of ['p1', 'p2'] as const) {
+    if (pending[id] === 'flame') players[id].fireShieldTurns = 5;
+    else if (id === consumed) players[id].fireShieldTurns = 0;
+    else if (fireShieldTurnsFor(players[id]) > 0) players[id].fireShieldTurns = Math.max(0, fireShieldTurnsFor(players[id]) - 1) as 0 | 1 | 2 | 3 | 4 | 5;
+  }
+}
 function manaGainFor(player: Readonly<AbmPlayerState>, moves: Readonly<Record<PlayerId, AbmMove>> | undefined, playerId: PlayerId, turn: number): number {
+  const classGain = player.classId ? ABM_CLASS_BY_ID.get(player.classId)?.hooks.manaGain : undefined;
+  if (classGain) return classGain(turn, false);
   if (moves && isInvestorBullProc(player, moves, playerId)) return 2;
   if (player.classId === 'duplicator') return duplicatorGainFor(player);
   return player.classId === 'advantaged' && turn <= 3 ? 2 : 1;
@@ -400,11 +428,18 @@ function resolveSteals(players: Record<PlayerId, AbmPlayerState>, pending: Parti
   if (attemptPlayers.length !== 1) return { attemptPlayers, transferPlayer: undefined };
   const thief = attemptPlayers[0]!; const victim = OTHER[thief];
   if (players[victim].mana <= 0) return { attemptPlayers, transferPlayer: undefined };
-  players[victim].mana--; players[thief].mana = Math.min(MAX_MANA, players[thief].mana + 1);
+  players[victim].mana--; addMana(players[thief], 1);
   return { attemptPlayers, transferPlayer: thief };
 }
-function resolveActivatedAbilities(players: Record<PlayerId, AbmPlayerState>, pending: Partial<Record<PlayerId, AbmAbilityId>>) {
-  // Ordered extension point: future Parry resolver belongs before Collect.
+function resolveActivatedAbilities(players: Record<PlayerId, AbmPlayerState>, moves: Readonly<Record<PlayerId, AbmDisplayMove>>, pending: Partial<Record<PlayerId, AbmAbilityId>>) {
+  const parriedPlayers: PlayerId[] = [];
+  for (const parrymaster of ['p1', 'p2'] as const) {
+    if (pending[parrymaster] !== 'parry') continue;
+    const attacker = OTHER[parrymaster];
+    if (moves[attacker] !== 'attack') continue;
+    players[attacker].mana = Math.max(0, players[attacker].mana - 2);
+    parriedPlayers.push(attacker);
+  }
   const taxmanCollectPlayers: PlayerId[] = [];
   for (const collector of ['p1', 'p2'] as const) {
     if (pending[collector] !== 'collect') continue;
@@ -415,10 +450,10 @@ function resolveActivatedAbilities(players: Record<PlayerId, AbmPlayerState>, pe
     }
   }
   const { attemptPlayers: thiefAttemptPlayers, transferPlayer: thiefTransferPlayer } = resolveSteals(players, pending);
-  return { thiefAttemptPlayers, thiefTransferPlayer, taxmanCollectPlayers };
+  return { thiefAttemptPlayers, thiefTransferPlayer, taxmanCollectPlayers, parriedPlayers };
 }
 function emptyAbilityResult() { return { thiefAttemptPlayers: [] as PlayerId[], thiefTransferPlayer: undefined as PlayerId | undefined,
-  taxmanCollectPlayers: [] as PlayerId[] }; }
+  taxmanCollectPlayers: [] as PlayerId[], parriedPlayers: [] as PlayerId[] }; }
 function legalActions(state: AbmState, viewer: PlayerId) {
   if ((state.phase === 'selecting-classes' || state.phase === 'waiting-for-class') && !state.pendingClasses[viewer]) return ['lock-class'] as const;
   if (state.phase === 'counter-picking' && state.counterPicker === viewer) return ['lock-class'] as const;
@@ -474,8 +509,8 @@ function isDuplicatorProc(player: Readonly<AbmPlayerState>, move: AbmMove): bool
 function isCheaterMana(player: Readonly<AbmPlayerState>, move: AbmMove): boolean { return player.classId === 'cheater' && move === 'mana'; }
 function applyGamblerRoll(player: AbmPlayerState, random: number): AbmGamblerOutcome {
   const roll = Math.min(100, Math.max(1, Math.floor(random * 100) + 1));
-  if (roll === 1) { player.mana = Math.min(MAX_MANA, player.mana + 2); return 'plus-2-mana'; }
-  if (roll <= 20) { player.mana = Math.min(MAX_MANA, player.mana + 1); return 'plus-1-mana'; }
+  if (roll === 1) { addMana(player, 2); return 'plus-2-mana'; }
+  if (roll <= 20) { addMana(player, 1); return 'plus-1-mana'; }
   if (roll <= 30) { player.mana = 0; return 'mana-drain'; }
   if (roll <= 40) { player.mana = Math.min(MAX_MANA, player.mana * 2); return 'mana-double'; }
   if (roll <= 55) { player.blocks++; return 'plus-1-block'; }
@@ -529,6 +564,19 @@ function didJuggernautProc(player: Readonly<AbmPlayerState>, move: AbmMove): boo
 function isBlockDisabled(state: Readonly<AbmState>, player: PlayerId): boolean {
   const opponent = state.players[OTHER[player]];
   return opponent.classId === 'juggernaut' && (opponent.attackStreak ?? 0) > 0 && (opponent.attackStreak ?? 0) % 2 === 0;
+}
+function addMana(player: AbmPlayerState, amount: number): void {
+  if (amount <= 0 || player.classId === 'retired') return;
+  player.mana = Math.min(MAX_MANA, player.mana + amount);
+}
+function resolveRetiredMirror(players: Record<PlayerId, AbmPlayerState>): PlayerId[] | undefined {
+  if (players.p1.classId !== 'retired' || players.p2.classId !== 'retired' || players.p1.mana !== 0 || players.p2.mana !== 0) return undefined;
+  for (const id of ['p1', 'p2'] as const) {
+    delete players[id].classId;
+    players[id].mana = 1;
+    players[id].blocks = 5;
+  }
+  return ['p1', 'p2'];
 }
 function isActionPhase(phase: AbmState['phase']): boolean { return ['idle', 'waiting', 'conjurer-choosing', 'selecting-actions', 'waiting-for-action'].includes(phase as string); }
 function cue(type: 'class-ready' | 'class-reveal' | 'class-preview' | 'move-ready' | 'move-reveal' | 'move-timeout' | 'forced-mana' | 'round-result' | 'counter-pick' | 'conjure-reveal' | 'conjure-stalemate', startsAt: number, duration: number, payload: unknown) {

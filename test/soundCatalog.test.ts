@@ -9,4 +9,9 @@ describe('sound catalog', () => {
     ]);
     for (const src of Object.values(SOUND_CATALOG)) expect(src).toMatch(/^\/audio\/.+\.(mp3|m4a)$/);
   });
+
+  it('plays the former release clip on button down and the former press clip on button up', () => {
+    expect(SOUND_CATALOG['button-down']).toBe('/audio/button-released.mp3');
+    expect(SOUND_CATALOG['button-up']).toBe('/audio/button-depressed.mp3');
+  });
 });
