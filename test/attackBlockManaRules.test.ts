@@ -1157,6 +1157,103 @@ describe('Attack Block Mana rules', () => {
     expect(state.players.p1.fireShieldTurns ?? 0).toBe(0);
   });
 
+  test('arms Golden Arrow privately, starts it after activation, and consumes one use', () => {
+    let state = startedWith('cupid', 'lucky');
+    state = send(state, 'p1', { type: 'choose-move', move: 'block', ability: 'golden-arrow' });
+    expect(state.players.p1).toMatchObject({ abilityUses: { 'golden-arrow': 0 } });
+    expect(state.players.p1.goldenArrowTurns ?? 0).toBe(0);
+    expect(attackBlockManaRules.project(state, 'p1').ownPendingAbility).toBe('golden-arrow');
+    expect(attackBlockManaRules.project(state, 'p2').ownPendingAbility).toBeUndefined();
+
+    state = send(state, 'p2', { type: 'choose-move', move: 'block' });
+    expect(state.players).toMatchObject({ p1: { blocks: 4, goldenArrowTurns: 5 }, p2: { blocks: 4 } });
+    expect(state.cupidBlockImpactPlayers).toBeUndefined();
+    expect(attackBlockManaRules.project(state, 'p1').legalActions).not.toContain('golden-arrow');
+  });
+
+  test('applies all Golden Arrow matches before ordinary costs and respects caps and guards', () => {
+    let attack = startedWith('cupid', 'lucky');
+    attack.players.p1.goldenArrowTurns = 5;
+    attack.players.p1.mana = 2;
+    attack.players.p1.attackCost = 2;
+    attack.players.p2.mana = 2;
+    attack = playTurn(attack, 'attack', 'attack');
+    expect(attack.players.p1).toMatchObject({ mana: 1, goldenArrowTurns: 4 });
+    expect(attack.cupidAttackProcPlayers).toEqual(['p1']);
+
+    let capped = startedWith('cupid', 'lucky');
+    capped.players.p1.goldenArrowTurns = 5;
+    capped.players.p1.mana = 9;
+    capped.players.p2.mana = 1;
+    capped = playTurn(capped, 'attack', 'attack');
+    expect(capped.players.p1.mana).toBe(8);
+
+    let mana = startedWith('cupid', 'lucky');
+    mana.players.p1.goldenArrowTurns = 5;
+    mana = playTurn(mana, 'mana', 'mana');
+    expect(mana.players.p1).toMatchObject({ mana: 3, goldenArrowTurns: 4 });
+    expect(mana.cupidManaProcPlayers).toEqual(['p1']);
+
+    let block = startedWith('cupid', 'lucky');
+    block.players.p1.goldenArrowTurns = 5;
+    block.players.p2.blocks = 2;
+    block = playTurn(block, 'block', 'block');
+    expect(block.players.p2.blocks).toBe(0);
+    expect(block.cupidBlockImpactPlayers).toEqual(['p2']);
+
+    let guarded = startedWith('cupid', 'lucky');
+    guarded.players.p1.goldenArrowTurns = 5;
+    guarded.players.p2.blocks = 1;
+    guarded = playTurn(guarded, 'block', 'block');
+    expect(guarded.players.p2.blocks).toBe(0);
+    expect(guarded.cupidBlockImpactPlayers).toBeUndefined();
+  });
+
+  test('resolves mirror Golden Arrows independently', () => {
+    let state = startedWith('cupid', 'cupid');
+    state.players.p1.goldenArrowTurns = 5;
+    state.players.p2.goldenArrowTurns = 3;
+    state.players.p1.blocks = 2;
+    state.players.p2.blocks = 2;
+    state = playTurn(state, 'block', 'block');
+    expect(state.players).toMatchObject({ p1: { blocks: 0, goldenArrowTurns: 4 }, p2: { blocks: 0, goldenArrowTurns: 2 } });
+    expect(state.cupidBlockImpactPlayers).toEqual(['p2', 'p1']);
+  });
+
+  test('counts every nonlethal resolved turn and expires after the fifth active turn', () => {
+    let state = startedWith('cupid', 'lucky');
+    state.players.p1.goldenArrowTurns = 5;
+    state = playTurn(state, 'block', 'mana');
+    expect(state.players.p1.goldenArrowTurns).toBe(4);
+
+    state.players.p1.mana = 0;
+    state.players.p2.mana = 0;
+    state = playTurn(state, 'mana', 'mana');
+    expect(state.players.p1).toMatchObject({ mana: 2, goldenArrowTurns: 3 });
+    expect(state.cupidManaProcPlayers).toEqual(['p1']);
+
+    state = playTurn(state, 'block', 'mana');
+    state = playTurn(state, 'block', 'mana');
+    state = playTurn(state, 'mana', 'mana');
+    expect(state.players.p1.goldenArrowTurns).toBe(0);
+    expect(state.cupidManaProcPlayers).toEqual(['p1']);
+  });
+
+  test('decrements Golden Arrow through timeout and resets it with the round', () => {
+    let timeout = startedWith('cupid', 'lucky');
+    timeout.players.p1.goldenArrowTurns = 5;
+    timeout = send(timeout, 'p1', { type: 'choose-move', move: 'block' }, 2_000);
+    timeout = attackBlockManaRules.advanceDeadline!(timeout, { ...context, now: timeout.waitingDeadlineAt! })!.state;
+    expect(timeout.players.p1.goldenArrowTurns).toBe(4);
+
+    let reset = startedWith('cupid', 'lucky');
+    reset.players.p1.goldenArrowTurns = 3;
+    reset.players.p1.abilityUses = { 'golden-arrow': 0 };
+    reset.players.p1.mana = 2;
+    reset = playTurn(reset, 'attack', 'mana');
+    expect(reset).toMatchObject({ phase: 'counter-picking', players: { p1: { goldenArrowTurns: 0, abilityUses: { 'golden-arrow': 1 } } } });
+  });
+
   test('exhausts Blocks and restores them after a non-Block move', () => {
     let state = started();
     for (let remaining = 4; remaining >= 0; remaining--) {

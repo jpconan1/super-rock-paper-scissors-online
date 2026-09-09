@@ -88,7 +88,7 @@ A failed Parry needs no tag. The spent button or use counter tells its owner tha
 
 **Tags:**
 
-- **Status — Golden Arrow pending:** Golden Arrow was spent, but its effect does not begin until the next selectable turn.
+- **Status — Golden Arrow pending:** Golden Arrow was spent, but its effect does not begin until the next selectable turn. Reuse the Arrow-5 art during this pending state.
 - **Status — Arrow remaining:** five numbered variants, from 5 through 1 resolved turns remaining.
 - **Proc — Attack match:** active Arrow added 1 Mana to its Cupid before Attack cost.
 - **Proc — Mana match:** active Arrow granted its Cupid 1 additional Mana.

@@ -279,7 +279,7 @@ Blocks may exceed 3. Any non-Block resets to 3. Blocking Attack still rolls.
     before ordinary costs; ordinary Block then removes one.
   - Mana/Mana: add extra 1 before ordinary gains.
 - Mirrors apply independently.
-- **Literal bug:** Null omits `goldenArrow`, so an active Arrow survives reset.
+- Null clears both pending and active Golden Arrow state.
 
 ### Investor 📉
 
@@ -311,8 +311,8 @@ Blocks may exceed 3. Any non-Block resets to 3. Blocking Attack still rolls.
 - Activating Null remains at 0 uses; an already-spent nonactivating Null also
   remains at 0. Other limited-use classes recover uses.
 - Preserve strikes, absolute turn, and `zeroManaTurns`.
+- Clear pending and active Cupid Golden Arrow state.
 - Clear move history/selection; set `lastResetTurn`; restart same numbered turn.
-- **Literal bug:** active Cupid Arrow survives.
 
 ### Joe 👨
 
@@ -351,7 +351,6 @@ HEAD is recreation baseline unless JP chooses older or repaired behavior.
 
 ## Literal defects requiring design decisions
 
-- Cupid Arrow survives Null; other persistent state does not.
 - Lucky can survive Attack/Skip.
 - Paid Parry/Tax/Thief vanish after lethal ordinary resolution.
 - Investor may commit Attack before tax, then execute while unable to afford it.
@@ -369,8 +368,10 @@ Super ABM uses a universal 9-mana cap. Positive gains, including Gambler's
 gain and double outcomes, resolve as `mana = min(9, resultingMana)`. Joe's
 future interaction with this cap remains undecided.
 
-Decide before implementation: Cupid/Null, Lucky/Skip, lethal paid effects,
-Investor affordability, and delayed Fireborne/Cupid activation.
+Cupid preserves the delayed Golden Arrow activation described above.
+
+Decide before implementation: Lucky/Skip, lethal paid effects, Investor
+affordability, and delayed Fireborne activation.
 
 ## Evidence
 

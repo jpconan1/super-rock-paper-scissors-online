@@ -9,13 +9,13 @@ import { validateLayoutDocument } from '../src/layout/layoutDocument';
 import { ABM_TAG_ENTRANCE_SOURCES } from '../src/variants/attackBlockMana/abmTagEntrance';
 
 describe('Attack Block Mana presentation data', () => {
-  test('includes Parrymaster and marks every finished class playable', () => {
+  test('includes Cupid and marks every finished class playable', () => {
     expect(ABM_CLASSES.map(({ id }) => id)).toEqual([
-      'lucky', 'advantaged', 'thief', 'juggernaut', 'stunner', 'duplicator', 'sumo', 'cheater', 'investor', 'gambler', 'taxman', 'copywriter', 'conjurer', 'fireborne', 'retired', 'parrymaster',
+      'lucky', 'advantaged', 'thief', 'juggernaut', 'stunner', 'duplicator', 'sumo', 'cheater', 'investor', 'gambler', 'taxman', 'copywriter', 'conjurer', 'fireborne', 'retired', 'parrymaster', 'cupid',
     ]);
     expect(ABM_CLASS_IDS).toEqual(ABM_CLASSES.map(({ id }) => id));
     expect(ABM_CLASSES.filter(({ implemented }) => implemented).map(({ id }) => id)).toEqual([
-      'lucky', 'advantaged', 'thief', 'juggernaut', 'stunner', 'duplicator', 'sumo', 'cheater', 'investor', 'gambler', 'taxman', 'copywriter', 'conjurer', 'fireborne', 'retired', 'parrymaster',
+      'lucky', 'advantaged', 'thief', 'juggernaut', 'stunner', 'duplicator', 'sumo', 'cheater', 'investor', 'gambler', 'taxman', 'copywriter', 'conjurer', 'fireborne', 'retired', 'parrymaster', 'cupid',
     ]);
     expect(ABM_CLASSES.every(({ asset, badgeAsset }) => asset.endsWith('-sheet.webp') && badgeAsset.endsWith('-badge-sheet.webp') && !asset.includes('placeholder'))).toBe(true);
     expect(ABM_CLASSES.find(({ id }) => id === 'taxman')).toMatchObject({ name: 'Taxman', ability: { id: 'collect', label: 'Collect', uses: 3, manaCost: 0, inputStrategy: 'arm-with-move' } });
@@ -37,6 +37,10 @@ describe('Attack Block Mana presentation data', () => {
     expect(ABM_CLASSES.find(({ id }) => id === 'parrymaster')).toMatchObject({
       name: 'Parrymaster', implemented: true, ability: { id: 'parry', uses: 1, manaCost: 0, inputStrategy: 'arm-with-move' },
       asset: '/variants/abm/parrymaster-sheet.webp', badgeAsset: '/variants/abm/parrymaster-badge-sheet.webp',
+    });
+    expect(ABM_CLASSES.find(({ id }) => id === 'cupid')).toMatchObject({
+      name: 'Cupid', implemented: true, ability: { id: 'golden-arrow', label: 'Golden Arrow', uses: 1, manaCost: 0, inputStrategy: 'arm-with-move' },
+      asset: '/variants/abm/cupid-sheet.webp', badgeAsset: '/variants/abm/cupid-badge-sheet.webp',
     });
   });
 
@@ -148,6 +152,30 @@ describe('Attack Block Mana presentation data', () => {
     expect(resolveAbmTags({ players: { p1: { fireShieldTurns: 5 }, p2: {} } }, 'p1')).toEqual([]);
   });
 
+  test('maps Golden Arrow pending, countdown, proc, and directional impact tags', () => {
+    expect(resolveAbmTags({ pendingGoldenArrowPlayer: 'p1', players: { p1: {}, p2: {} } })).toEqual([{
+      category: 'status', kind: 'cupid-arrow', player: 'p1', src: '/variants/abm/scenes/tags/golden-arrow-5-sheet.webp',
+    }]);
+    expect(resolveAbmTags({ pendingGoldenArrowPlayer: 'p1', players: { p1: {}, p2: {} } }, 'p1')).toHaveLength(1);
+    for (const remaining of [1, 2, 3, 4, 5] as const) {
+      expect(resolveAbmTags({ players: { p1: { goldenArrowTurns: remaining }, p2: {} } })).toEqual([{
+        category: 'status', kind: 'cupid-arrow', player: 'p1', src: `/variants/abm/scenes/tags/golden-arrow-${remaining}-sheet.webp`,
+      }]);
+      expect(ABM_SCENE_URLS).toContain(`/variants/abm/scenes/tags/golden-arrow-${remaining}-sheet.webp`);
+    }
+    expect(resolveAbmTags({
+      cupidAttackProcPlayers: ['p1'], cupidManaProcPlayers: ['p2'], cupidBlockImpactPlayers: ['p1', 'p2'],
+    })).toEqual([
+      { category: 'proc', kind: 'cupid-attack', player: 'p1', src: '/variants/abm/scenes/tags/golden-arrow-attack-sheet.webp' },
+      { category: 'proc', kind: 'cupid-mana', player: 'p2', src: '/variants/abm/scenes/tags/golden-arrow-mana-sheet.webp' },
+      { category: 'impact', kind: 'cupid-block', player: 'p1', src: '/variants/abm/scenes/tags/golden-arrow-block-p2-sheet.webp' },
+      { category: 'impact', kind: 'cupid-block', player: 'p2', src: '/variants/abm/scenes/tags/golden-arrow-block-sheet.webp' },
+    ]);
+    for (const name of ['attack', 'mana', 'block', 'block-p2']) {
+      expect(ABM_SCENE_URLS).toContain(`/variants/abm/scenes/tags/golden-arrow-${name}-sheet.webp`);
+    }
+  });
+
   test('maps class feedback to player-side tags and supports stacking', () => {
     expect(resolveAbmTags({ advantagedProcPlayers: ['p1'], stunnedPlayers: ['p1'], juggernautProcPlayers: ['p2'] }))
       .toMatchObject([
@@ -176,10 +204,11 @@ describe('Attack Block Mana presentation data', () => {
       luckyProcPlayer: 'p1', advantagedProcPlayers: ['p1'], thiefTransferPlayer: 'p1', juggernautProcPlayers: ['p1'],
       stunnedPlayers: ['p2'], investorBullPlayers: ['p1'], investorBearPlayers: ['p1'], duplicatorProcPlayers: ['p1'],
       copywriterProcPlayers: ['p1'], sumoProcRemaining: { p1: 2 }, cheaterProcPlayers: ['p1'], gamblerOutcomes: { p1: 'plus-1-mana' }, taxmanCollectPlayers: ['p2'], parriedPlayers: ['p1'],
+      cupidAttackProcPlayers: ['p1'], cupidManaProcPlayers: ['p1'], cupidBlockImpactPlayers: ['p2'],
     });
     expect(Object.fromEntries(tags.map(({ kind, category }) => [kind, category]))).toEqual({
       lucky: 'proc', advantaged: 'proc', juggernaut: 'impact', thief: 'impact', stunned: 'impact', bull: 'proc', bear: 'proc',
-      duplicator: 'proc', copywriter: 'proc', cheater: 'proc', gambler: 'proc', sumo: 'proc', taxed: 'impact', parried: 'impact',
+      duplicator: 'proc', copywriter: 'proc', cheater: 'proc', 'cupid-attack': 'proc', 'cupid-mana': 'proc', 'cupid-block': 'impact', gambler: 'proc', sumo: 'proc', taxed: 'impact', parried: 'impact',
     });
   });
 

@@ -14,7 +14,7 @@ export function resolveConjureScene(move: AbmDisplayMove | 'conjure', conjurer: 
   return { src: `${ROOT}/conjure/conjure-${move}-sheet.webp`, flip: conjurer === 'p2' };
 }
 export type AbmTagCategory = 'proc' | 'impact' | 'status';
-export type AbmTagKind = 'advantaged' | 'bear' | 'bull' | 'cheater' | 'copywriter' | 'duplicator' | 'fireborne-shield' | 'gambler' | 'juggernaut' | 'lucky' | 'parried' | 'retired' | 'stunned' | 'sumo' | 'taxed' | 'thief';
+export type AbmTagKind = 'advantaged' | 'bear' | 'bull' | 'cheater' | 'copywriter' | 'cupid-arrow' | 'cupid-attack' | 'cupid-block' | 'cupid-mana' | 'duplicator' | 'fireborne-shield' | 'gambler' | 'juggernaut' | 'lucky' | 'parried' | 'retired' | 'stunned' | 'sumo' | 'taxed' | 'thief';
 export interface AbmTag { kind: AbmTagKind; category: AbmTagCategory; player: PlayerId; src: string }
 export type AbmProcBackgroundKind = 'bear' | 'bull';
 export interface AbmProcBackground { kind: AbmProcBackgroundKind; player: PlayerId; src: string }
@@ -31,11 +31,15 @@ interface TagState {
   copywriterProcPlayers?: readonly PlayerId[];
   sumoProcRemaining?: Partial<Record<PlayerId, 0 | 1 | 2>>;
   cheaterProcPlayers?: readonly PlayerId[];
+  cupidAttackProcPlayers?: readonly PlayerId[];
+  cupidManaProcPlayers?: readonly PlayerId[];
+  cupidBlockImpactPlayers?: readonly PlayerId[];
+  pendingGoldenArrowPlayer?: PlayerId;
   retiredProcPlayers?: readonly PlayerId[];
   gamblerOutcomes?: Partial<Record<PlayerId, AbmGamblerOutcome>>;
   taxmanCollectPlayers?: readonly PlayerId[];
   parriedPlayers?: readonly PlayerId[];
-  players?: Readonly<Record<PlayerId, { fireShieldTurns?: 0 | 1 | 2 | 3 | 4 | 5 }>>;
+  players?: Readonly<Record<PlayerId, { fireShieldTurns?: 0 | 1 | 2 | 3 | 4 | 5; goldenArrowTurns?: 0 | 1 | 2 | 3 | 4 | 5 }>>;
 }
 
 export function resolveAbmScene(moves?: Readonly<Record<PlayerId, AbmMove>>, luckyProcPlayer?: PlayerId, fireborneProcPlayer?: PlayerId): AbmScene {
@@ -85,6 +89,9 @@ export function resolveAbmTags(state: TagState, hiddenPlayer?: PlayerId): AbmTag
   add('proc', 'duplicator', state.duplicatorProcPlayers);
   add('proc', 'copywriter', state.copywriterProcPlayers);
   add('proc', 'cheater', state.cheaterProcPlayers);
+  add('proc', 'cupid-attack', state.cupidAttackProcPlayers);
+  add('proc', 'cupid-mana', state.cupidManaProcPlayers);
+  add('impact', 'cupid-block', state.cupidBlockImpactPlayers);
   for (const player of state.retiredProcPlayers ?? []) {
     tags.push({ category: 'proc', kind: 'retired', player, src: tagSource('proc', 'retired', player) });
   }
@@ -93,6 +100,14 @@ export function resolveAbmTags(state: TagState, hiddenPlayer?: PlayerId): AbmTag
     if (remaining > 0 && player !== hiddenPlayer) tags.push({
       category: 'status', kind: 'fireborne-shield', player,
       src: `${TAG_ROOT}/fireborne-cloud-${remaining}-sheet.webp`,
+    });
+  }
+  for (const player of ['p1', 'p2'] as const) {
+    const pending = state.pendingGoldenArrowPlayer === player;
+    const remaining = pending ? 5 : state.players?.[player].goldenArrowTurns ?? 0;
+    if (remaining > 0 && (pending || player !== hiddenPlayer)) tags.push({
+      category: 'status', kind: 'cupid-arrow', player,
+      src: `${TAG_ROOT}/golden-arrow-${remaining}-sheet.webp`,
     });
   }
   for (const player of ['p1', 'p2'] as const) {
@@ -130,8 +145,8 @@ const SPLIT_BASE_SCENE_VARIANTS = {
 } as const;
 const SPLIT_BASE_SCENE_NAMES = Object.keys(SPLIT_BASE_SCENE_VARIANTS) as (keyof typeof SPLIT_BASE_SCENE_VARIANTS)[];
 const BASE_SCENE_NAMES = [...SPLIT_BASE_SCENE_NAMES, 'mana-attack'] as const;
-const TAG_NAMES: readonly Exclude<AbmTagKind, 'sumo' | 'gambler' | 'fireborne-shield'>[] = ['advantaged', 'bear', 'bull', 'cheater', 'copywriter', 'duplicator', 'juggernaut', 'lucky', 'parried', 'retired', 'stunned', 'taxed', 'thief'];
-const DIRECTIONAL_IMPACT_TAGS = ['juggernaut', 'parried', 'stunned', 'thief'] as const;
+const TAG_NAMES: readonly Exclude<AbmTagKind, 'sumo' | 'gambler' | 'fireborne-shield' | 'cupid-arrow' | 'cupid-attack' | 'cupid-block' | 'cupid-mana'>[] = ['advantaged', 'bear', 'bull', 'cheater', 'copywriter', 'duplicator', 'juggernaut', 'lucky', 'parried', 'retired', 'stunned', 'taxed', 'thief'];
+const DIRECTIONAL_IMPACT_TAGS = ['juggernaut', 'parried', 'stunned', 'thief', 'cupid-block'] as const;
 const GAMBLER_TAG_NAMES: readonly Exclude<AbmGamblerOutcome, 'nothing'>[] = [
   'plus-2-mana', 'plus-1-mana', 'mana-drain', 'mana-double', 'plus-1-block', 'plus-2-block', 'minus-1-block',
 ];
@@ -145,9 +160,11 @@ export const ABM_SCENE_URLS = [
   ...(['attacker', 'charger'] as const).map((role) => `${SPLIT_ROOT}/exceptions/lucky-survival-${role}-ready-sheet.webp`),
   ...(['attacker', 'fireborne'] as const).map((role) => `${SPLIT_ROOT}/exceptions/fireborne-shield-${role}-ready-sheet.webp`),
   ...TAG_NAMES.map((name) => `${TAG_ROOT}/${name}-sheet.webp`),
-  ...DIRECTIONAL_IMPACT_TAGS.map((name) => `${TAG_ROOT}/${name}-p2-sheet.webp`),
+  ...DIRECTIONAL_IMPACT_TAGS.map((name) => tagSource('impact', name, 'p1')),
   ...GAMBLER_TAG_NAMES.map((name) => `${TAG_ROOT}/gambler-${name}-sheet.webp`),
   ...([1, 2, 3, 4, 5] as const).map((remaining) => `${TAG_ROOT}/fireborne-cloud-${remaining}-sheet.webp`),
+  ...([1, 2, 3, 4, 5] as const).map((remaining) => `${TAG_ROOT}/golden-arrow-${remaining}-sheet.webp`),
+  ...(['attack', 'mana', 'block', 'block-p2'] as const).map((name) => `${TAG_ROOT}/golden-arrow-${name}-sheet.webp`),
   ...([0, 1, 2] as const).map((remaining) => `${TAG_ROOT}/sumo-${remaining}-left-sheet.webp`),
   ...ABM_TAG_ENTRANCE_SOURCES,
   ...(['bear', 'bull'] as const).map((name) => `${BACKGROUND_ROOT}/${name}-sheet.webp`),
@@ -158,7 +175,10 @@ function tagSource(category: AbmTagCategory, kind: AbmTagKind, player: PlayerId)
   // Impact arrows point at the affected player. The authored `-p2` art points
   // left, so it belongs to P1's victim slot; the base art points right at P2.
   const directional = category === 'impact' && player === 'p1' && (DIRECTIONAL_IMPACT_TAGS as readonly string[]).includes(kind);
-  return `${TAG_ROOT}/${kind}${directional ? '-p2' : ''}-sheet.webp`;
+  const name = kind === 'cupid-attack' ? 'golden-arrow-attack'
+    : kind === 'cupid-mana' ? 'golden-arrow-mana'
+      : kind === 'cupid-block' ? 'golden-arrow-block' : kind;
+  return `${TAG_ROOT}/${name}${directional ? '-p2' : ''}-sheet.webp`;
 }
 
 function resolveBase(moves?: Readonly<Record<PlayerId, AbmMove>>): { name: typeof BASE_SCENE_NAMES[number]; flip: boolean } {

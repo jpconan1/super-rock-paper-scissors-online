@@ -286,13 +286,17 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   const labels: Record<AbmTagKind, string> = {
       lucky: 'Lucky', advantaged: 'Advantaged plus one Mana', juggernaut: 'Block broken', thief: 'Yoink', stunned: 'Stunned',
       bull: 'Bull Market', bear: 'Bear Market', cheater: 'Cheater bonus Mana', copywriter: 'Copied move bonus', duplicator: 'Mana duplicated',
+      'cupid-arrow': 'Golden Arrow turns remaining', 'cupid-attack': 'Golden Arrow free Attack', 'cupid-block': 'Golden Arrow Block loss', 'cupid-mana': 'Golden Arrow bonus Mana',
       'fireborne-shield': 'Extra life turns remaining', gambler: 'Gambler result', parried: 'Parried', retired: 'Un-Retired', sumo: 'Free Attack', taxed: 'Taxed',
   };
   for (const player of ['p1', 'p2'] as const) {
-    for (const kind of ['lucky', 'advantaged', 'juggernaut', 'thief', 'stunned', 'taxed', 'parried', 'bull', 'bear', 'cheater', 'copywriter', 'duplicator', 'fireborne-shield', 'gambler', 'retired', 'sumo'] as const satisfies readonly AbmTagKind[]) {
+    for (const kind of ['lucky', 'advantaged', 'juggernaut', 'thief', 'stunned', 'taxed', 'parried', 'bull', 'bear', 'cheater', 'copywriter', 'duplicator', 'cupid-arrow', 'cupid-attack', 'cupid-block', 'cupid-mana', 'fireborne-shield', 'gambler', 'retired', 'sumo'] as const satisfies readonly AbmTagKind[]) {
       const src = kind === 'sumo' ? `${ABM_ROOT}/scenes/tags/sumo-2-left-sheet.webp`
         : kind === 'gambler' ? `${ABM_ROOT}/scenes/tags/gambler-plus-1-mana-sheet.webp`
-          : kind === 'fireborne-shield' ? `${ABM_ROOT}/scenes/tags/fireborne-cloud-5-sheet.webp` : `${ABM_ROOT}/scenes/tags/${kind}-sheet.webp`;
+          : kind === 'fireborne-shield' ? `${ABM_ROOT}/scenes/tags/fireborne-cloud-5-sheet.webp`
+            : kind === 'cupid-arrow' ? `${ABM_ROOT}/scenes/tags/golden-arrow-5-sheet.webp`
+              : kind.startsWith('cupid-') ? `${ABM_ROOT}/scenes/tags/golden-arrow-${kind.slice(6)}-sheet.webp`
+                : `${ABM_ROOT}/scenes/tags/${kind}-sheet.webp`;
       const copies = 1;
       for (let occurrence = 1; occurrence <= copies; occurrence++) {
         const tag = createBoilingSprite({ src, clock, className: `abm-tag abm-tag--${kind}`, alt: labels[kind] });
@@ -482,6 +486,9 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     const copywriterProcPlayers = continuingRoundProc ? nextProjection.copywriterProcPlayers : undefined;
     const sumoProcRemaining = continuingRoundProc ? nextProjection.sumoProcRemaining : undefined;
     const cheaterProcPlayers = continuingRoundProc ? nextProjection.cheaterProcPlayers : undefined;
+    const cupidAttackProcPlayers = continuingRoundProc ? nextProjection.cupidAttackProcPlayers : undefined;
+    const cupidManaProcPlayers = continuingRoundProc ? nextProjection.cupidManaProcPlayers : undefined;
+    const cupidBlockImpactPlayers = continuingRoundProc ? nextProjection.cupidBlockImpactPlayers : undefined;
     const retiredProcPlayers = continuingRoundProc ? nextProjection.retiredProcPlayers : undefined;
     const gamblerOutcomes = continuingRoundProc ? nextProjection.gamblerOutcomes : undefined;
     const splitPlayer = nextProjection.phase === 'waiting' && nextProjection.waitingStartsAt !== undefined && serverTime >= nextProjection.waitingStartsAt
@@ -499,7 +506,8 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     if (sceneCanvas) sceneCanvas.style.transform = scene.flip ? 'scaleX(-1)' : '';
     const visibleTags = !picking && !showingResult ? resolveAbmTags({
       ...nextProjection, advantagedProcPlayers, juggernautProcPlayers, stunnedPlayers, investorBullPlayers, investorBearPlayers, duplicatorProcPlayers, copywriterProcPlayers,
-      sumoProcRemaining, cheaterProcPlayers, retiredProcPlayers, gamblerOutcomes,
+      sumoProcRemaining, cheaterProcPlayers, cupidAttackProcPlayers, cupidManaProcPlayers, cupidBlockImpactPlayers, retiredProcPlayers, gamblerOutcomes,
+      pendingGoldenArrowPlayer: nextProjection.ownPendingAbility === 'golden-arrow' ? nextProjection.self : undefined,
     }, splitPlayer) : [];
     const tagOccurrences = new Map<string, number>();
     const keyedTags = visibleTags.map((tag) => {

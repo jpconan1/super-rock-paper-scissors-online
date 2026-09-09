@@ -65,6 +65,9 @@ export const attackBlockManaRules: VariantRules<AbmState, AbmCommand, AbmProject
       ...(state.copywriterProcPlayers?.length ? { copywriterProcPlayers: [...state.copywriterProcPlayers] } : {}),
       ...(state.sumoProcRemaining && Object.keys(state.sumoProcRemaining).length ? { sumoProcRemaining: { ...state.sumoProcRemaining } } : {}),
       ...(state.cheaterProcPlayers?.length ? { cheaterProcPlayers: [...state.cheaterProcPlayers] } : {}),
+      ...(state.cupidAttackProcPlayers?.length ? { cupidAttackProcPlayers: [...state.cupidAttackProcPlayers] } : {}),
+      ...(state.cupidManaProcPlayers?.length ? { cupidManaProcPlayers: [...state.cupidManaProcPlayers] } : {}),
+      ...(state.cupidBlockImpactPlayers?.length ? { cupidBlockImpactPlayers: [...state.cupidBlockImpactPlayers] } : {}),
       ...(state.gamblerOutcomes && Object.keys(state.gamblerOutcomes).length ? { gamblerOutcomes: { ...state.gamblerOutcomes } } : {}),
       ...(state.earlyPlayer ? { earlyPlayer: state.earlyPlayer } : {}), ...(state.latePlayer ? { latePlayer: state.latePlayer } : {}),
       ...(state.waitingStartsAt !== undefined ? { waitingStartsAt: state.waitingStartsAt } : {}),
@@ -109,7 +112,8 @@ function lockClass(state: AbmState, player: PlayerId, classId: AbmClassId, now: 
         counterPickAvailableAt: undefined, resultRevealAt: undefined, lastCompleteMoves: undefined, heldSplitFor: undefined,
         luckyProcPlayer: undefined, fireborneProcPlayer: undefined, retiredProcPlayers: undefined, advantagedProcPlayers: undefined, thiefAttemptPlayers: undefined, thiefTransferPlayer: undefined, taxmanCollectPlayers: undefined, parriedPlayers: undefined,
         juggernautProcPlayers: undefined, stunnedPlayers: undefined, investorBullPlayers: undefined, investorBearPlayers: undefined,
-        duplicatorProcPlayers: undefined, copywriterProcPlayers: undefined, sumoProcRemaining: undefined, cheaterProcPlayers: undefined, gamblerOutcomes: undefined },
+        duplicatorProcPlayers: undefined, copywriterProcPlayers: undefined, sumoProcRemaining: undefined, cheaterProcPlayers: undefined,
+        cupidAttackProcPlayers: undefined, cupidManaProcPlayers: undefined, cupidBlockImpactPlayers: undefined, gamblerOutcomes: undefined },
       events: [cue('class-reveal', now, 800, { classes: classMap(players), round: state.round })],
     };
   }
@@ -198,6 +202,7 @@ function resolveTurn(state: AbmState, moves: Record<PlayerId, AbmMove>, context:
   const duplicatorProcPlayers = (['p1', 'p2'] as const).filter((id) => isDuplicatorProc(players[id], moves[id]));
   const copywriterProcPlayers = resolveCopywriters(players, moves);
   const cheaterProcPlayers = (['p1', 'p2'] as const).filter((id) => isCheaterMana(players[id], moves[id]) && context.random() < 1 / 3);
+  const cupidResult = resolveCupidMatches(players, moves);
   const sumoProcRemaining: Partial<Record<PlayerId, 0 | 1 | 2>> = {};
   const gamblerOutcomes: Partial<Record<PlayerId, AbmGamblerOutcome>> = {};
   for (const id of ['p1', 'p2'] as const) {
@@ -222,10 +227,12 @@ function resolveTurn(state: AbmState, moves: Record<PlayerId, AbmMove>, context:
   const defeatedPlayer = luckyProcPlayer || fireborneProcPlayer ? undefined : loser;
   const abilityResult = defeatedPlayer ? emptyAbilityResult() : resolveActivatedAbilities(players, moves, state.pendingAbilities ?? {});
   if (!defeatedPlayer) advanceFireborneShields(players, state.pendingAbilities ?? {}, fireborneProcPlayer);
+  if (!defeatedPlayer) advanceGoldenArrows(players, state.pendingAbilities ?? {});
   const retiredProcPlayers = defeatedPlayer ? undefined : resolveRetiredMirror(players);
   const revealDuration = defeatedPlayer ? ABM_LETHAL_TO_RESULT_MS : 800;
   const events = [cue('move-reveal', now, revealDuration, { moves, turn: state.turn, forced, luckyProcPlayer, fireborneProcPlayer, retiredProcPlayers, advantagedProcPlayers,
-    juggernautProcPlayers, stunnedPlayers, investorBullPlayers, investorBearPlayers, duplicatorProcPlayers, copywriterProcPlayers, sumoProcRemaining, cheaterProcPlayers, gamblerOutcomes })];
+    juggernautProcPlayers, stunnedPlayers, investorBullPlayers, investorBearPlayers, duplicatorProcPlayers, copywriterProcPlayers, sumoProcRemaining, cheaterProcPlayers,
+    cupidAttackProcPlayers: cupidResult.attack, cupidManaProcPlayers: cupidResult.mana, cupidBlockImpactPlayers: cupidResult.blockImpact, gamblerOutcomes })];
   const revealed = { ...state, players, pendingMoves: {}, pendingAbilities: {}, conjurer: undefined, conjuredMove: undefined,
     conjuredOpponentTimedOut: undefined, conjureStalemate: undefined, lastCompleteMoves: moves, heldSplitFor: undefined,
     luckyProcPlayer, fireborneProcPlayer, retiredProcPlayers, advantagedProcPlayers: advantagedProcPlayers.length ? advantagedProcPlayers : undefined,
@@ -240,6 +247,9 @@ function resolveTurn(state: AbmState, moves: Record<PlayerId, AbmMove>, context:
     copywriterProcPlayers: copywriterProcPlayers.length ? copywriterProcPlayers : undefined,
     sumoProcRemaining: Object.keys(sumoProcRemaining).length ? sumoProcRemaining : undefined,
     cheaterProcPlayers: cheaterProcPlayers.length ? cheaterProcPlayers : undefined,
+    cupidAttackProcPlayers: cupidResult.attack.length ? cupidResult.attack : undefined,
+    cupidManaProcPlayers: cupidResult.mana.length ? cupidResult.mana : undefined,
+    cupidBlockImpactPlayers: cupidResult.blockImpact.length ? cupidResult.blockImpact : undefined,
     gamblerOutcomes: Object.keys(gamblerOutcomes).length ? gamblerOutcomes : undefined };
   revealed.juggernautProcPlayers = juggernautProcPlayers.length ? juggernautProcPlayers : undefined;
   if (defeatedPlayer) return finishRound(revealed, OTHER[defeatedPlayer], events, now + revealDuration);
@@ -286,6 +296,7 @@ function resolveTimeout(state: AbmState, context: DeterministicContext): Variant
   const revealDuration = lethal ? ABM_LETHAL_TO_RESULT_MS : 800;
   const abilityResult = lethal ? emptyAbilityResult() : resolveActivatedAbilities(players, timeoutMoves, state.pendingAbilities ?? {});
   if (!lethal) advanceFireborneShields(players, state.pendingAbilities ?? {}, fireborneProcPlayer);
+  if (!lethal) advanceGoldenArrows(players, state.pendingAbilities ?? {});
   const retiredProcPlayers = lethal ? undefined : resolveRetiredMirror(players);
   const events = [cue('move-timeout', now, revealDuration, { earlyPlayer: early, latePlayer: late, move, strikes: players[late].strikes,
     turn: state.turn, advantagedProcPlayers, thiefAttemptPlayers: abilityResult.thiefAttemptPlayers, thiefTransferPlayer: abilityResult.thiefTransferPlayer,
@@ -296,6 +307,7 @@ function resolveTimeout(state: AbmState, context: DeterministicContext): Variant
     stunnedPlayers: stunnedPlayers.length ? stunnedPlayers : undefined, investorBullPlayers: undefined,
     investorBearPlayers: investorBearPlayers.length ? investorBearPlayers : undefined, duplicatorProcPlayers,
     copywriterProcPlayers: copywriterProcPlayers.length ? copywriterProcPlayers : undefined, sumoProcRemaining: undefined, cheaterProcPlayers,
+    cupidAttackProcPlayers: undefined, cupidManaProcPlayers: undefined, cupidBlockImpactPlayers: undefined,
     gamblerOutcomes: Object.keys(gamblerOutcomes).length ? gamblerOutcomes : undefined };
   if (players[late].strikes >= 2) return { state: { ...timedOut, phase: 'match-complete', winner: early, resultReason: 'forfeit', resultRevealAt: now + revealDuration }, events };
   if (move === 'attack' && !fireborneProcPlayer) return finishRound(timedOut, early, events, now + revealDuration);
@@ -309,6 +321,7 @@ function resolveDoubleConjureTimeout(state: AbmState, context: DeterministicCont
   applySkip(players[conjurer]);
   players[opponent].lastMove = 'skip'; recordRecentMove(players[opponent], 'skip');
   if (players[conjurer].strikes < 2) advanceFireborneShields(players, state.pendingAbilities ?? {});
+  if (players[conjurer].strikes < 2) advanceGoldenArrows(players, state.pendingAbilities ?? {});
   const duration = players[conjurer].strikes >= 2 ? ABM_LETHAL_TO_RESULT_MS : 800;
   const timedOut = { ...clearWaiting(state), players, phase: players[conjurer].strikes >= 2 ? 'match-complete' as const : 'idle' as const,
     turn: players[conjurer].strikes >= 2 ? state.turn : state.turn + 1, pendingMoves: {}, pendingAbilities: {}, conjurer: undefined,
@@ -331,6 +344,7 @@ function finishRound(state: AbmState, winner: PlayerId, events: ReturnType<typeo
     players[id].blocks = resources.blocks;
     players[id].recentMoves = undefined;
     players[id].fireShieldTurns = 0;
+    players[id].goldenArrowTurns = 0;
     Object.assign(players[id], initialAbilityUses(players[id].classId));
   }
   if (players.p1.classId === 'duplicator') players.p1.nextManaGain = 1;
@@ -381,6 +395,7 @@ function applySkip(player: AbmPlayerState, record = true): void {
   if (record) { player.lastMove = 'skip'; recordRecentMove(player, 'skip'); }
 }
 function fireShieldTurnsFor(player: Readonly<AbmPlayerState>): number { return player.fireShieldTurns ?? 0; }
+function goldenArrowTurnsFor(player: Readonly<AbmPlayerState>): number { return player.goldenArrowTurns ?? 0; }
 function advanceFireborneShields(
   players: Record<PlayerId, AbmPlayerState>,
   pending: Partial<Record<PlayerId, AbmAbilityId>>,
@@ -391,6 +406,35 @@ function advanceFireborneShields(
     else if (id === consumed) players[id].fireShieldTurns = 0;
     else if (fireShieldTurnsFor(players[id]) > 0) players[id].fireShieldTurns = Math.max(0, fireShieldTurnsFor(players[id]) - 1) as 0 | 1 | 2 | 3 | 4 | 5;
   }
+}
+function advanceGoldenArrows(players: Record<PlayerId, AbmPlayerState>, pending: Partial<Record<PlayerId, AbmAbilityId>>): void {
+  for (const id of ['p1', 'p2'] as const) {
+    if (pending[id] === 'golden-arrow') players[id].goldenArrowTurns = 5;
+    else if (goldenArrowTurnsFor(players[id]) > 0) players[id].goldenArrowTurns = Math.max(0, goldenArrowTurnsFor(players[id]) - 1) as 0 | 1 | 2 | 3 | 4 | 5;
+  }
+}
+function resolveCupidMatches(players: Record<PlayerId, AbmPlayerState>, moves: Readonly<Record<PlayerId, AbmMove>>) {
+  const attack: PlayerId[] = [];
+  const mana: PlayerId[] = [];
+  const blockImpact: PlayerId[] = [];
+  if (moves.p1 !== moves.p2) return { attack, mana, blockImpact };
+  for (const cupid of ['p1', 'p2'] as const) {
+    if (players[cupid].classId !== 'cupid' || goldenArrowTurnsFor(players[cupid]) < 1) continue;
+    if (moves[cupid] === 'attack') {
+      addMana(players[cupid], 1);
+      attack.push(cupid);
+    } else if (moves[cupid] === 'mana') {
+      addMana(players[cupid], 1);
+      mana.push(cupid);
+    } else {
+      const victim = OTHER[cupid];
+      if (players[victim].blocks > 1) {
+        players[victim].blocks--;
+        blockImpact.push(victim);
+      }
+    }
+  }
+  return { attack, mana, blockImpact };
 }
 function manaGainFor(player: Readonly<AbmPlayerState>, moves: Readonly<Record<PlayerId, AbmMove>> | undefined, playerId: PlayerId, turn: number): number {
   const classGain = player.classId ? ABM_CLASS_BY_ID.get(player.classId)?.hooks.manaGain : undefined;
