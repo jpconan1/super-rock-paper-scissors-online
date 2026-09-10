@@ -1,5 +1,5 @@
 import type { PlayerId } from '../../core/variant';
-import type { AbmDisplayMove, AbmGamblerOutcome, AbmMove } from './attackBlockManaTypes';
+import type { AbmDisplayMove, AbmGamblerOutcome, AbmLastDitchBonus, AbmMove } from './attackBlockManaTypes';
 import { ABM_TAG_ENTRANCE_SOURCES } from './abmTagEntrance';
 
 const ROOT = '/variants/abm/scenes';
@@ -14,7 +14,7 @@ export function resolveConjureScene(move: AbmDisplayMove | 'conjure', conjurer: 
   return { src: `${ROOT}/conjure/conjure-${move}-sheet.webp`, flip: conjurer === 'p2' };
 }
 export type AbmTagCategory = 'proc' | 'impact' | 'status';
-export type AbmTagKind = 'advantaged' | 'bear' | 'bull' | 'cheater' | 'copywriter' | 'cupid-arrow' | 'cupid-attack' | 'cupid-block' | 'cupid-mana' | 'duplicator' | 'fireborne-shield' | 'gambler' | 'juggernaut' | 'lucky' | 'parried' | 'retired' | 'stunned' | 'sumo' | 'taxed' | 'thief';
+export type AbmTagKind = 'advantaged' | 'bear' | 'bull' | 'cheater' | 'copywriter' | 'cupid-arrow' | 'cupid-attack' | 'cupid-block' | 'cupid-mana' | 'defender' | 'duplicator' | 'fireborne-shield' | 'gambler' | 'juggernaut' | 'last-ditch' | 'lucky' | 'parried' | 'retired' | 'stunned' | 'sumo' | 'taxed' | 'thief';
 export interface AbmTag { kind: AbmTagKind; category: AbmTagCategory; player: PlayerId; src: string }
 export type AbmProcBackgroundKind = 'bear' | 'bull';
 export interface AbmProcBackground { kind: AbmProcBackgroundKind; player: PlayerId; src: string }
@@ -34,6 +34,8 @@ interface TagState {
   cupidAttackProcPlayers?: readonly PlayerId[];
   cupidManaProcPlayers?: readonly PlayerId[];
   cupidBlockImpactPlayers?: readonly PlayerId[];
+  defenderProcPlayers?: readonly PlayerId[];
+  lastDitchBonusMana?: Partial<Record<PlayerId, AbmLastDitchBonus>>;
   pendingGoldenArrowPlayer?: PlayerId;
   retiredProcPlayers?: readonly PlayerId[];
   gamblerOutcomes?: Partial<Record<PlayerId, AbmGamblerOutcome>>;
@@ -92,6 +94,13 @@ export function resolveAbmTags(state: TagState, hiddenPlayer?: PlayerId): AbmTag
   add('proc', 'cupid-attack', state.cupidAttackProcPlayers);
   add('proc', 'cupid-mana', state.cupidManaProcPlayers);
   add('impact', 'cupid-block', state.cupidBlockImpactPlayers);
+  add('proc', 'defender', state.defenderProcPlayers);
+  for (const player of ['p1', 'p2'] as const) {
+    const bonus = state.lastDitchBonusMana?.[player];
+    if (bonus !== undefined && player !== hiddenPlayer) tags.push({
+      category: 'proc', kind: 'last-ditch', player, src: `${TAG_ROOT}/last-ditch-tag-${bonus}-sheet.webp`,
+    });
+  }
   for (const player of state.retiredProcPlayers ?? []) {
     tags.push({ category: 'proc', kind: 'retired', player, src: tagSource('proc', 'retired', player) });
   }
@@ -145,7 +154,7 @@ const SPLIT_BASE_SCENE_VARIANTS = {
 } as const;
 const SPLIT_BASE_SCENE_NAMES = Object.keys(SPLIT_BASE_SCENE_VARIANTS) as (keyof typeof SPLIT_BASE_SCENE_VARIANTS)[];
 const BASE_SCENE_NAMES = [...SPLIT_BASE_SCENE_NAMES, 'mana-attack'] as const;
-const TAG_NAMES: readonly Exclude<AbmTagKind, 'sumo' | 'gambler' | 'fireborne-shield' | 'cupid-arrow' | 'cupid-attack' | 'cupid-block' | 'cupid-mana'>[] = ['advantaged', 'bear', 'bull', 'cheater', 'copywriter', 'duplicator', 'juggernaut', 'lucky', 'parried', 'retired', 'stunned', 'taxed', 'thief'];
+const TAG_NAMES: readonly Exclude<AbmTagKind, 'sumo' | 'gambler' | 'fireborne-shield' | 'cupid-arrow' | 'cupid-attack' | 'cupid-block' | 'cupid-mana' | 'last-ditch'>[] = ['advantaged', 'bear', 'bull', 'cheater', 'copywriter', 'defender', 'duplicator', 'juggernaut', 'lucky', 'parried', 'retired', 'stunned', 'taxed', 'thief'];
 const DIRECTIONAL_IMPACT_TAGS = ['juggernaut', 'parried', 'stunned', 'thief', 'cupid-block'] as const;
 const GAMBLER_TAG_NAMES: readonly Exclude<AbmGamblerOutcome, 'nothing'>[] = [
   'plus-2-mana', 'plus-1-mana', 'mana-drain', 'mana-double', 'plus-1-block', 'plus-2-block', 'minus-1-block',
@@ -166,6 +175,7 @@ export const ABM_SCENE_URLS = [
   ...([1, 2, 3, 4, 5] as const).map((remaining) => `${TAG_ROOT}/golden-arrow-${remaining}-sheet.webp`),
   ...(['attack', 'mana', 'block', 'block-p2'] as const).map((name) => `${TAG_ROOT}/golden-arrow-${name}-sheet.webp`),
   ...([0, 1, 2] as const).map((remaining) => `${TAG_ROOT}/sumo-${remaining}-left-sheet.webp`),
+  ...([1, 2, 3, 4, 5, 6, 7, 8] as const).map((bonus) => `${TAG_ROOT}/last-ditch-tag-${bonus}-sheet.webp`),
   ...ABM_TAG_ENTRANCE_SOURCES,
   ...(['bear', 'bull'] as const).map((name) => `${BACKGROUND_ROOT}/${name}-sheet.webp`),
   `${ROOT}/effects/thief-transfer-sheet.webp`, `${ROOT}/effects/thief-transfer-mirror-sheet.webp`,

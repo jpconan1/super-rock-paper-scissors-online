@@ -3,7 +3,7 @@ import type { PlayerId, VariantGameResult } from '../../core/variant';
 export const ABM_CLASS_IDS = [
   'lucky', 'advantaged', 'thief', 'juggernaut', 'stunner', 'duplicator', 'sumo',
   'cheater', 'investor', 'gambler', 'taxman', 'copywriter', 'conjurer',
-  'fireborne', 'retired', 'parrymaster', 'cupid',
+  'fireborne', 'retired', 'parrymaster', 'cupid', 'defender', 'last-ditch',
 ] as const;
 
 export type AbmClassId = typeof ABM_CLASS_IDS[number];
@@ -13,6 +13,7 @@ export type AbmAbilityId = 'steal' | 'collect' | 'conjure' | 'flame' | 'parry' |
 export type AbmGamblerOutcome =
   | 'plus-2-mana' | 'plus-1-mana' | 'mana-drain' | 'mana-double'
   | 'plus-1-block' | 'plus-2-block' | 'minus-1-block' | 'nothing';
+export type AbmLastDitchBonus = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 export type AbmPhase =
   | 'selecting-classes' | 'waiting-for-class'
   | 'idle' | 'waiting' | 'conjurer-choosing' | 'counter-picking' | 'match-complete';
@@ -82,6 +83,10 @@ export interface AbmState {
   cupidAttackProcPlayers?: PlayerId[];
   cupidManaProcPlayers?: PlayerId[];
   cupidBlockImpactPlayers?: PlayerId[];
+  defenderProcPlayers?: PlayerId[];
+  /** Shared forced 0-0 Mana count. Missing on older persisted matches means zero. */
+  zeroManaTurns?: number;
+  lastDitchBonusMana?: Partial<Record<PlayerId, AbmLastDitchBonus>>;
   gamblerOutcomes?: Partial<Record<PlayerId, AbmGamblerOutcome>>;
   earlyPlayer?: PlayerId;
   latePlayer?: PlayerId;
@@ -140,6 +145,9 @@ export interface AbmProjection {
   cupidAttackProcPlayers?: PlayerId[];
   cupidManaProcPlayers?: PlayerId[];
   cupidBlockImpactPlayers?: PlayerId[];
+  defenderProcPlayers?: PlayerId[];
+  zeroManaTurns?: number;
+  lastDitchBonusMana?: Partial<Record<PlayerId, AbmLastDitchBonus>>;
   gamblerOutcomes?: Partial<Record<PlayerId, AbmGamblerOutcome>>;
   earlyPlayer?: PlayerId;
   latePlayer?: PlayerId;

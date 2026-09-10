@@ -48,6 +48,8 @@ export const ABM_CLASSES: readonly AbmClassDefinition[] = [
   entry('retired', 'Retired', 'Starts with 7 Mana and 4 Blocks, but cannot gain Mana. Two depleted Retired players become classless.', true, { initialMana: 7, maximumBlocks: 4, manaGain: () => 0 }),
   entry('parrymaster', 'Parrymaster', 'Once per game, Parry makes an attacking opponent lose 2 additional Mana.', true, {}, 'parrymaster', ability('parry', 'Parry', 1, 0)),
   entry('cupid', 'Cupid', 'Golden Arrow rewards matching the opponent\'s move for five turns, beginning next turn.', true, {}, 'cupid', ability('golden-arrow', 'Golden Arrow', 1, 0)),
+  entry('defender', 'Defender', 'When you successfully Block an Attack, it will not cause you to lose one of your consecutive Blocks remaining.', true),
+  entry('last-ditch', 'Last Ditch', 'When both players drop to 0 Mana, gains 2 Mana instead of 1. Every second reset increases that gain by 1.', true),
 ];
 
 export const ABM_CLASS_BY_ID = new Map(ABM_CLASSES.map((definition) => [definition.id, definition]));

@@ -57,12 +57,97 @@ describe('Attack Block Mana rules', () => {
     expect(state.players.p2).toMatchObject({ mana: 1, lastMove: 'mana' });
   });
 
+  test('gives Last Ditch escalating total Mana and publishes only its bonus', () => {
+    let state = startedWith('last-ditch', 'lucky');
+    const totals = [2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 9];
+    for (const [index, total] of totals.entries()) {
+      state.players.p1.mana = 0; state.players.p2.mana = 0;
+      state = playTurn(state, 'mana', 'mana');
+      expect(state.zeroManaTurns).toBe(index + 1);
+      expect(state.players.p1.mana).toBe(total);
+      expect(state.players.p2.mana).toBe(1);
+      expect(state.lastDitchBonusMana).toEqual({ p1: total - 1 });
+      expect(attackBlockManaRules.project(state, 'p1').lastDitchBonusMana).toEqual({ p1: total - 1 });
+      expect(attackBlockManaRules.project(state, 'p2').lastDitchBonusMana).toEqual({ p1: total - 1 });
+    }
+  });
+
+  test('uses the shared Last Ditch counter for mirrors and clears proc feedback on the next reveal', () => {
+    let state = startedWith('last-ditch', 'last-ditch');
+    state.players.p1.mana = 0; state.players.p2.mana = 0;
+    state = playTurn(state, 'mana', 'mana');
+    expect(state.players).toMatchObject({ p1: { mana: 2 }, p2: { mana: 2 } });
+    expect(state.lastDitchBonusMana).toEqual({ p1: 1, p2: 1 });
+
+    state = send(state, 'p1', { type: 'choose-move', move: 'mana' });
+    expect(state.lastDitchBonusMana).toEqual({ p1: 1, p2: 1 });
+    state = send(state, 'p2', { type: 'choose-move', move: 'block' });
+    expect(state.lastDitchBonusMana).toBeUndefined();
+    expect(state.zeroManaTurns).toBe(1);
+  });
+
+  test('preserves the Last Ditch counter between rounds and resets it for a fresh match', () => {
+    let state = startedWith('last-ditch', 'lucky');
+    state.zeroManaTurns = 4;
+    state = playTurn(state, 'attack', 'mana');
+    expect(state).toMatchObject({ phase: 'counter-picking', zeroManaTurns: 4, counterPicker: 'p2' });
+    state = send(state, 'p2', { type: 'lock-class', classId: 'last-ditch' }, state.counterPickAvailableAt);
+    expect(state).toMatchObject({ phase: 'idle', zeroManaTurns: 4 });
+    expect(attackBlockManaRules.initialize(context).zeroManaTurns).toBe(0);
+  });
+
   test('rejects illegal and unfinished selections', () => {
     let state = started();
     state.players.p1.mana = 0;
     state.players.p1.blocks = 0;
     expect(() => send(state, 'p1', { type: 'choose-move', move: 'attack' })).toThrow('requires');
     expect(() => send(state, 'p1', { type: 'choose-move', move: 'block' })).toThrow('No Blocks');
+  });
+
+  test('Defender preserves Blocks only when Blocking an Attack', () => {
+    let p1 = startedWith('defender', 'lucky');
+    p1.players.p1.blocks = 2;
+    p1 = send(p1, 'p1', { type: 'choose-move', move: 'block' });
+    const p1Resolution = attackBlockManaRules.resolve(p1, 'p2', { type: 'choose-move', move: 'attack' }, context);
+    expect(p1Resolution.state.players.p1).toMatchObject({ mana: 1, blocks: 2, lastMove: 'block' });
+    expect(p1Resolution.state.defenderProcPlayers).toEqual(['p1']);
+    expect(p1Resolution.events?.[0]?.payload).toMatchObject({ defenderProcPlayers: ['p1'] });
+    expect(attackBlockManaRules.project(p1Resolution.state, 'p1').defenderProcPlayers).toEqual(['p1']);
+    expect(attackBlockManaRules.project(p1Resolution.state, 'p2').defenderProcPlayers).toEqual(['p1']);
+
+    let p2 = startedWith('lucky', 'defender');
+    p2.players.p2.blocks = 2;
+    p2 = playTurn(p2, 'attack', 'block');
+    expect(p2.players.p2.blocks).toBe(2);
+    expect(p2.defenderProcPlayers).toEqual(['p2']);
+
+    let versusMana = startedWith('defender', 'lucky');
+    versusMana.players.p1.blocks = 2;
+    versusMana = playTurn(versusMana, 'block', 'mana');
+    expect(versusMana.players.p1.blocks).toBe(1);
+    expect(versusMana.defenderProcPlayers).toBeUndefined();
+
+    let mirror = startedWith('defender', 'defender');
+    mirror.players.p1.blocks = 2; mirror.players.p2.blocks = 2;
+    mirror = playTurn(mirror, 'block', 'block');
+    expect(mirror.players).toMatchObject({ p1: { blocks: 1 }, p2: { blocks: 1 } });
+    expect(mirror.defenderProcPlayers).toBeUndefined();
+  });
+
+  test('holds Defender proc through selection, clears it on reveal, and never procs on timeout', () => {
+    let state = playTurn(startedWith('defender', 'lucky'), 'block', 'attack');
+    state = send(state, 'p1', { type: 'choose-move', move: 'mana' });
+    expect(state.defenderProcPlayers).toEqual(['p1']);
+    state = send(state, 'p2', { type: 'choose-move', move: 'block' });
+    expect(state.defenderProcPlayers).toBeUndefined();
+    expect(state.players.p1.blocks).toBe(5);
+
+    let timeout = startedWith('defender', 'lucky');
+    timeout.players.p1.blocks = 2;
+    timeout = send(timeout, 'p1', { type: 'choose-move', move: 'block' }, 2_000);
+    timeout = attackBlockManaRules.advanceDeadline!(timeout, { ...context, now: timeout.waitingDeadlineAt! })!.state;
+    expect(timeout.players.p1.blocks).toBe(1);
+    expect(timeout.defenderProcPlayers).toBeUndefined();
   });
 
   test('locks winner, allows only loser counter-pick, and reports a 3-N result', () => {

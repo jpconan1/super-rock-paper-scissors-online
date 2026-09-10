@@ -118,7 +118,7 @@ The three match tags should share one Golden Arrow family but use different Atta
 
 **Tags:**
 
-- **Proc — Last Ditch + amount gained:** forced 0–0 Mana used the escalating Last Ditch total. Use one tag with reusable numeric counter art rather than an unlimited family of baked numbers.
+- **Proc — Last Ditch bonus Mana:** forced 0–0 Mana used the escalating Last Ditch total. Use the baked +1 through +8 bonus tags; the ordinary Mana move already supplies the first Mana.
 
 ## Null
 

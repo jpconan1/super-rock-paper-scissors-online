@@ -57,6 +57,15 @@ export function getAbmAbilityControlGeometry(id: string, orientation: LayoutOrie
   return ABILITY_MOVE_LAYOUT_IDS.has(id) ? { ...base, x: base.x + (orientation === 'portrait' ? 45 : 90) } : base;
 }
 
+export function getAbmClassBadgeGeometry(
+  player: 'p1' | 'p2',
+  base: LayoutGeometry,
+  frame: Readonly<{ width: number; height: number }>,
+): LayoutGeometry {
+  const width = base.height * frame.width / frame.height;
+  return { ...base, x: player === 'p2' ? base.x + base.width - width : base.x, width };
+}
+
 export const ABM_LAYOUTS: readonly ResponsiveScaleBoxLayout<LayoutOrientation>[] = [
   { name: 'landscape', width: 960, height: 540, minAspectRatio: 1 },
   { name: 'portrait', width: 390, height: 705, minAspectRatio: 0 },
@@ -255,7 +264,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   result.element.hidden = true; result.element.setAttribute('aria-live', 'polite'); sprites.push(result);
   let resultAsset: string = ABM_RESULT_SCENES.roundWon;
   let sceneArtwork: HTMLElement;
-  let classBadges: { player: 'p1' | 'p2'; badge: BoilingSprite; asset: string }[] = [];
+  let classBadges: { player: 'p1' | 'p2'; badge: BoilingSprite; asset: string; frame?: { width: number; height: number } }[] = [];
   let counterpickTag: BoilingSprite | undefined;
   const tagSprites = new Map<string, BoilingSprite>();
   const tagItems = new Map<string, HTMLElement>();
@@ -287,16 +296,17 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
       lucky: 'Lucky', advantaged: 'Advantaged plus one Mana', juggernaut: 'Block broken', thief: 'Yoink', stunned: 'Stunned',
       bull: 'Bull Market', bear: 'Bear Market', cheater: 'Cheater bonus Mana', copywriter: 'Copied move bonus', duplicator: 'Mana duplicated',
       'cupid-arrow': 'Golden Arrow turns remaining', 'cupid-attack': 'Golden Arrow free Attack', 'cupid-block': 'Golden Arrow Block loss', 'cupid-mana': 'Golden Arrow bonus Mana',
-      'fireborne-shield': 'Extra life turns remaining', gambler: 'Gambler result', parried: 'Parried', retired: 'Un-Retired', sumo: 'Free Attack', taxed: 'Taxed',
+      defender: 'Block preserved', 'last-ditch': 'Last Ditch bonus Mana', 'fireborne-shield': 'Extra life turns remaining', gambler: 'Gambler result', parried: 'Parried', retired: 'Un-Retired', sumo: 'Free Attack', taxed: 'Taxed',
   };
   for (const player of ['p1', 'p2'] as const) {
-    for (const kind of ['lucky', 'advantaged', 'juggernaut', 'thief', 'stunned', 'taxed', 'parried', 'bull', 'bear', 'cheater', 'copywriter', 'duplicator', 'cupid-arrow', 'cupid-attack', 'cupid-block', 'cupid-mana', 'fireborne-shield', 'gambler', 'retired', 'sumo'] as const satisfies readonly AbmTagKind[]) {
+    for (const kind of ['lucky', 'advantaged', 'juggernaut', 'thief', 'stunned', 'taxed', 'parried', 'bull', 'bear', 'cheater', 'copywriter', 'duplicator', 'cupid-arrow', 'cupid-attack', 'cupid-block', 'cupid-mana', 'defender', 'last-ditch', 'fireborne-shield', 'gambler', 'retired', 'sumo'] as const satisfies readonly AbmTagKind[]) {
       const src = kind === 'sumo' ? `${ABM_ROOT}/scenes/tags/sumo-2-left-sheet.webp`
         : kind === 'gambler' ? `${ABM_ROOT}/scenes/tags/gambler-plus-1-mana-sheet.webp`
           : kind === 'fireborne-shield' ? `${ABM_ROOT}/scenes/tags/fireborne-cloud-5-sheet.webp`
             : kind === 'cupid-arrow' ? `${ABM_ROOT}/scenes/tags/golden-arrow-5-sheet.webp`
               : kind.startsWith('cupid-') ? `${ABM_ROOT}/scenes/tags/golden-arrow-${kind.slice(6)}-sheet.webp`
-                : `${ABM_ROOT}/scenes/tags/${kind}-sheet.webp`;
+                : kind === 'last-ditch' ? `${ABM_ROOT}/scenes/tags/last-ditch-tag-1-sheet.webp`
+                  : `${ABM_ROOT}/scenes/tags/${kind}-sheet.webp`;
       const copies = 1;
       for (let occurrence = 1; occurrence <= copies; occurrence++) {
         const tag = createBoilingSprite({ src, clock, className: `abm-tag abm-tag--${kind}`, alt: labels[kind] });
@@ -337,13 +347,18 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   sceneArtwork.hidden = true;
   controls.append(previous.element, next.element);
   classBadges = (['p1', 'p2'] as const).map((player) => {
+    const item: { player: 'p1' | 'p2'; badge: BoilingSprite; asset: string; frame?: { width: number; height: number } } = { player, badge: undefined!, asset: '' };
     let badge!: BoilingSprite;
     badge = createBoilingSprite({
       src: ABM_CLASSES[selected]!.badgeAsset, clock, className: `abm-class-badge abm-class-badge--${player}`, alt: '',
-      onFrameSize(size) { const width = config(`${player}-class-badge`).layouts[orientation].width; badge.element.style.height = `${width * size.height / size.width}px`; },
+      onFrameSize(size) {
+        item.frame = size;
+        applyLayoutGeometry(badge.element, getAbmClassBadgeGeometry(player, config(`${player}-class-badge`).layouts[orientation], size));
+      },
     });
     sprites.push(badge); layout.composition.append(badge.element);
-    return { player, badge, asset: '' };
+    item.badge = badge;
+    return item;
   });
   applyVariantLayout();
 
@@ -367,7 +382,6 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
       ...(sceneArtwork ? [['scene-art', sceneArtwork] as [string, HTMLElement]] : []),
       ['picker-portrait', portrait.element], ['picker-copy', copy.element], ['waiting-ready', readyArt.element], ['waiting-dots', dotsArt.element],
       ['waiting-ready', countdownArt.element],
-      ...classBadges.map(({ player, badge }) => [`${player}-class-badge`, badge.element] as [string, HTMLElement]),
       ...p1Resources.bindings, ...p2Resources.bindings,
       ...tagSlots,
       ...arrows,
@@ -378,6 +392,10 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
       if (usingAbilityControlLayout && (id === 'ability' || ABILITY_MOVE_LAYOUT_IDS.has(id))) {
         applyLayoutGeometry(target, getAbmAbilityControlGeometry(id, orientation, definition.layouts[orientation]));
       }
+    }
+    for (const { player, badge, frame } of classBadges) {
+      const base = config(`${player}-class-badge`).layouts[orientation];
+      applyLayoutGeometry(badge.element, frame ? getAbmClassBadgeGeometry(player, base, frame) : base);
     }
   }
 
@@ -489,6 +507,8 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     const cupidAttackProcPlayers = continuingRoundProc ? nextProjection.cupidAttackProcPlayers : undefined;
     const cupidManaProcPlayers = continuingRoundProc ? nextProjection.cupidManaProcPlayers : undefined;
     const cupidBlockImpactPlayers = continuingRoundProc ? nextProjection.cupidBlockImpactPlayers : undefined;
+    const defenderProcPlayers = continuingRoundProc ? nextProjection.defenderProcPlayers : undefined;
+    const lastDitchBonusMana = continuingRoundProc ? nextProjection.lastDitchBonusMana : undefined;
     const retiredProcPlayers = continuingRoundProc ? nextProjection.retiredProcPlayers : undefined;
     const gamblerOutcomes = continuingRoundProc ? nextProjection.gamblerOutcomes : undefined;
     const splitPlayer = nextProjection.phase === 'waiting' && nextProjection.waitingStartsAt !== undefined && serverTime >= nextProjection.waitingStartsAt
@@ -506,7 +526,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     if (sceneCanvas) sceneCanvas.style.transform = scene.flip ? 'scaleX(-1)' : '';
     const visibleTags = !picking && !showingResult ? resolveAbmTags({
       ...nextProjection, advantagedProcPlayers, juggernautProcPlayers, stunnedPlayers, investorBullPlayers, investorBearPlayers, duplicatorProcPlayers, copywriterProcPlayers,
-      sumoProcRemaining, cheaterProcPlayers, cupidAttackProcPlayers, cupidManaProcPlayers, cupidBlockImpactPlayers, retiredProcPlayers, gamblerOutcomes,
+      sumoProcRemaining, cheaterProcPlayers, cupidAttackProcPlayers, cupidManaProcPlayers, cupidBlockImpactPlayers, defenderProcPlayers, lastDitchBonusMana, retiredProcPlayers, gamblerOutcomes,
       pendingGoldenArrowPlayer: nextProjection.ownPendingAbility === 'golden-arrow' ? nextProjection.self : undefined,
     }, splitPlayer) : [];
     const tagOccurrences = new Map<string, number>();

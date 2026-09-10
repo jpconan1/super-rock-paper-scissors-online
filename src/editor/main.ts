@@ -3,7 +3,7 @@ import { BoilClock } from '../animation/boilClock';
 import type { PlayerId } from '../core/variant';
 import { getLayoutDocument } from '../layout/layoutDocuments';
 import { applyLayoutGeometry, validateLayoutDocument, type LayoutDocument, type LayoutOrientation } from '../layout/layoutDocument';
-import { createAttackBlockManaPresentation } from '../variants/attackBlockMana/attackBlockManaPresentation';
+import { createAttackBlockManaPresentation, getAbmClassBadgeGeometry } from '../variants/attackBlockMana/attackBlockManaPresentation';
 import { ABM_CLASSES } from '../variants/attackBlockMana/attackBlockManaCatalog';
 import type { AbmClassId } from '../variants/attackBlockMana/attackBlockManaTypes';
 import { createPreviousMoveProjection, type PreviousMoveChoice } from './previousMoveFixture';
@@ -21,7 +21,7 @@ const LABELS: Record<EditableSlotId, string> = {
 const PICKED_RATIOS: Record<typeof PICKED_IDS[number], number> = { 'p1-picked': 2, 'p2-picked': 150 / 64 };
 const BADGE_FRAME_WIDTHS: Record<AbmClassId, number> = {
   lucky: 146, advantaged: 219, thief: 178, juggernaut: 218, stunner: 210,
-  duplicator: 199, sumo: 197, cheater: 160, investor: 217, gambler: 210, taxman: 210, copywriter: 192, conjurer: 196, fireborne: 202, retired: 145, parrymaster: 242, cupid: 124,
+  duplicator: 199, sumo: 197, cheater: 160, investor: 217, gambler: 210, taxman: 210, copywriter: 192, conjurer: 196, fireborne: 202, retired: 145, parrymaster: 242, cupid: 124, defender: 186, 'last-ditch': 193,
 };
 const MOVES: PreviousMoveChoice[] = ['none', 'attack', 'block', 'mana', 'skip'];
 const host = document.querySelector<HTMLElement>('#editor');
@@ -80,11 +80,12 @@ function renderSlotList(): void {
 
 function renderInspector(): void {
   const geometry = element(selectedId).layouts[orientation]; const panel = $<HTMLElement>('[data-inspector]');
-  panel.innerHTML = `<h2>${LABELS[selectedId]}</h2><p>${title(orientation)}</p><label>X<input type="number" data-geo="x" value="${round(geometry.x)}"></label><label>Y<input type="number" data-geo="y" value="${round(geometry.y)}"></label><label>Width<input type="number" min="1" data-geo="width" value="${round(geometry.width)}"></label>`;
+  const sizeKey = isBadgeSlotId(selectedId) ? 'height' : 'width';
+  panel.innerHTML = `<h2>${LABELS[selectedId]}</h2><p>${title(orientation)}</p><label>X<input type="number" data-geo="x" value="${round(geometry.x)}"></label><label>Y<input type="number" data-geo="y" value="${round(geometry.y)}"></label><label>${title(sizeKey)}<input type="number" min="1" data-geo="${sizeKey}" value="${round(geometry[sizeKey])}"></label>`;
   panel.querySelectorAll<HTMLInputElement>('[data-geo]').forEach((input) => {
     let before: Snapshot | undefined;
     input.onfocus = () => { before = snapshot(); };
-    input.oninput = () => { const key = input.dataset.geo! as 'x' | 'y' | 'width'; const value = Number(input.value); if (!Number.isFinite(value)) return; if (key === 'width') { geometry.width = Math.max(1, value); geometry.height = geometry.width / ratioFor(selectedId); } else geometry[key] = value; applySelectedGeometry(); updateDirty(); };
+    input.oninput = () => { const key = input.dataset.geo! as 'x' | 'y' | 'width' | 'height'; const value = Number(input.value); if (!Number.isFinite(value)) return; if (key === 'width') { geometry.width = Math.max(1, value); geometry.height = geometry.width / ratioFor(selectedId); } else if (key === 'height') geometry.height = Math.max(1, value); else geometry[key] = value; applySelectedGeometry(); updateDirty(); };
     input.onblur = () => { if (before) commit(before); before = undefined; };
     input.onkeydown = (event) => { if (event.key === 'Enter') input.blur(); };
   });
@@ -93,7 +94,7 @@ function renderInspector(): void {
 function applySelectedGeometry(): void {
   const geometry = element(selectedId).layouts[orientation];
   const handle = $<HTMLElement>('[data-canvas]').querySelector<HTMLElement>(`.move-editor__handle[data-id="${selectedId}"]`); if (handle) applyLayoutGeometry(handle, renderedGeometry(selectedId));
-  const target = $<HTMLElement>('[data-canvas]').querySelector<HTMLElement>(`[data-layout-element="${selectedId}"]`); if (target) applyLayoutGeometry(target, geometry);
+  const target = $<HTMLElement>('[data-canvas]').querySelector<HTMLElement>(`[data-layout-element="${selectedId}"]`); if (target) applyLayoutGeometry(target, isBadgeSlotId(selectedId) ? renderedGeometry(selectedId) : geometry);
 }
 
 function beginPointer(event: PointerEvent): void {
@@ -102,7 +103,7 @@ function beginPointer(event: PointerEvent): void {
   selectedId = handle.dataset.id; const geometry = element(selectedId).layouts[orientation]; const bounds = handle.getBoundingClientRect();
   const resizing = event.clientX >= bounds.right - 16 && event.clientY >= bounds.bottom - 16;
   const start = { x: event.clientX, y: event.clientY, geometry: { ...geometry } }; const before = snapshot();
-  const move = (next: PointerEvent) => { if (next.pointerId !== event.pointerId) return; const dx = (next.clientX - start.x) / zoom; const dy = (next.clientY - start.y) / zoom; if (resizing) { geometry.width = Math.max(10, snap(start.geometry.width + dx)); geometry.height = geometry.width / ratioFor(selectedId); } else { geometry.x = snap(start.geometry.x + dx); geometry.y = snap(start.geometry.y + dy); } applySelectedGeometry(); renderInspector(); updateDirty(); };
+  const move = (next: PointerEvent) => { if (next.pointerId !== event.pointerId) return; const dx = (next.clientX - start.x) / zoom; const dy = (next.clientY - start.y) / zoom; if (resizing) { if (isBadgeSlotId(selectedId)) geometry.height = Math.max(10, snap(start.geometry.height + dy)); else { geometry.width = Math.max(10, snap(start.geometry.width + dx)); geometry.height = geometry.width / ratioFor(selectedId); } } else { geometry.x = snap(start.geometry.x + dx); geometry.y = snap(start.geometry.y + dy); } applySelectedGeometry(); renderInspector(); updateDirty(); };
   const end = (next: PointerEvent) => { if (next.pointerId !== event.pointerId) return; window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', end); commit(before); render(); };
   window.addEventListener('pointermove', move); window.addEventListener('pointerup', end); renderSlotList(); renderInspector(); event.preventDefault();
 }
@@ -111,7 +112,10 @@ function isEditableSlotId(value: string): value is EditableSlotId { return EDITA
 function isBadgeSlotId(value: EditableSlotId): value is BadgeSlotId { return BADGE_IDS.some((id) => id === value); }
 function playerForBadge(id: BadgeSlotId): PlayerId { return id.startsWith('p1') ? 'p1' : 'p2'; }
 function ratioFor(id: EditableSlotId): number { return isBadgeSlotId(id) ? BADGE_FRAME_WIDTHS[previewClasses[playerForBadge(id)]] / 64 : PICKED_RATIOS[id]; }
-function renderedGeometry(id: EditableSlotId) { const geometry = element(id).layouts[orientation]; return isBadgeSlotId(id) ? { ...geometry, height: geometry.width / ratioFor(id) } : geometry; }
+function renderedGeometry(id: EditableSlotId) {
+  const geometry = element(id).layouts[orientation];
+  return isBadgeSlotId(id) ? getAbmClassBadgeGeometry(playerForBadge(id), geometry, { width: BADGE_FRAME_WIDTHS[previewClasses[playerForBadge(id)]], height: 64 }) : geometry;
+}
 function element(id: EditableSlotId) { const result = working.elements.find((candidate) => candidate.id === id); if (!result) throw new Error(`Missing ${id}.`); return result; }
 function snapshot(): Snapshot { return { document: structuredClone(working), selectedId }; }
 function mutate(change: () => void): void { const before = snapshot(); change(); commit(before); render(); }

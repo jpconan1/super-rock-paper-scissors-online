@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { ABM_CLASSES, startingResourcesForClass } from '../src/variants/attackBlockMana/attackBlockManaCatalog';
-import { ABM_BACK_LOBBY_ART, ABM_LAYOUTS, ABM_RESULT_SCENES, ABM_SELECT_ART, ABM_TAG_CATEGORIES, ABM_TAG_ORDERS, abmTagSlotId, blockSegments, displayedAbmMove, getAbmAttackCostDisplay, getAbmClassReadyFrame, getAbmResultScene, getAbmAbilityControlGeometry, getAbmWaitingVisual, initialManaForClass, latestClassPreview, sceneForMoves, shouldShowAbmContinuingRoundProcTags, shouldShowAbmYouTag, shouldShowClassBadge, shouldShowClassReadyOpponentTag } from '../src/variants/attackBlockMana/attackBlockManaPresentation';
+import { ABM_BACK_LOBBY_ART, ABM_LAYOUTS, ABM_RESULT_SCENES, ABM_SELECT_ART, ABM_TAG_CATEGORIES, ABM_TAG_ORDERS, abmTagSlotId, blockSegments, displayedAbmMove, getAbmAttackCostDisplay, getAbmClassBadgeGeometry, getAbmClassReadyFrame, getAbmResultScene, getAbmAbilityControlGeometry, getAbmWaitingVisual, initialManaForClass, latestClassPreview, sceneForMoves, shouldShowAbmContinuingRoundProcTags, shouldShowAbmYouTag, shouldShowClassBadge, shouldShowClassReadyOpponentTag } from '../src/variants/attackBlockMana/attackBlockManaPresentation';
 import type { AbmProjection } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 import { ABM_CLASS_IDS } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 import { ABM_SCENE_URLS, resolveAbmProcBackgrounds, resolveAbmScene, resolveAbmSplitScene, resolveAbmTags, resolveConjureScene } from '../src/variants/attackBlockMana/attackBlockManaScenes';
@@ -9,13 +9,13 @@ import { validateLayoutDocument } from '../src/layout/layoutDocument';
 import { ABM_TAG_ENTRANCE_SOURCES } from '../src/variants/attackBlockMana/abmTagEntrance';
 
 describe('Attack Block Mana presentation data', () => {
-  test('includes Cupid and marks every finished class playable', () => {
+  test('includes Defender and Last Ditch and marks every finished class playable', () => {
     expect(ABM_CLASSES.map(({ id }) => id)).toEqual([
-      'lucky', 'advantaged', 'thief', 'juggernaut', 'stunner', 'duplicator', 'sumo', 'cheater', 'investor', 'gambler', 'taxman', 'copywriter', 'conjurer', 'fireborne', 'retired', 'parrymaster', 'cupid',
+      'lucky', 'advantaged', 'thief', 'juggernaut', 'stunner', 'duplicator', 'sumo', 'cheater', 'investor', 'gambler', 'taxman', 'copywriter', 'conjurer', 'fireborne', 'retired', 'parrymaster', 'cupid', 'defender', 'last-ditch',
     ]);
     expect(ABM_CLASS_IDS).toEqual(ABM_CLASSES.map(({ id }) => id));
     expect(ABM_CLASSES.filter(({ implemented }) => implemented).map(({ id }) => id)).toEqual([
-      'lucky', 'advantaged', 'thief', 'juggernaut', 'stunner', 'duplicator', 'sumo', 'cheater', 'investor', 'gambler', 'taxman', 'copywriter', 'conjurer', 'fireborne', 'retired', 'parrymaster', 'cupid',
+      'lucky', 'advantaged', 'thief', 'juggernaut', 'stunner', 'duplicator', 'sumo', 'cheater', 'investor', 'gambler', 'taxman', 'copywriter', 'conjurer', 'fireborne', 'retired', 'parrymaster', 'cupid', 'defender', 'last-ditch',
     ]);
     expect(ABM_CLASSES.every(({ asset, badgeAsset }) => asset.endsWith('-sheet.webp') && badgeAsset.endsWith('-badge-sheet.webp') && !asset.includes('placeholder'))).toBe(true);
     expect(ABM_CLASSES.find(({ id }) => id === 'taxman')).toMatchObject({ name: 'Taxman', ability: { id: 'collect', label: 'Collect', uses: 3, manaCost: 0, inputStrategy: 'arm-with-move' } });
@@ -41,6 +41,12 @@ describe('Attack Block Mana presentation data', () => {
     expect(ABM_CLASSES.find(({ id }) => id === 'cupid')).toMatchObject({
       name: 'Cupid', implemented: true, ability: { id: 'golden-arrow', label: 'Golden Arrow', uses: 1, manaCost: 0, inputStrategy: 'arm-with-move' },
       asset: '/variants/abm/cupid-sheet.webp', badgeAsset: '/variants/abm/cupid-badge-sheet.webp',
+    });
+    expect(ABM_CLASSES.find(({ id }) => id === 'defender')).toMatchObject({
+      name: 'Defender', implemented: true, asset: '/variants/abm/defender-sheet.webp', badgeAsset: '/variants/abm/defender-badge-sheet.webp',
+    });
+    expect(ABM_CLASSES.find(({ id }) => id === 'last-ditch')).toMatchObject({
+      name: 'Last Ditch', implemented: true, asset: '/variants/abm/last-ditch-sheet.webp', badgeAsset: '/variants/abm/last-ditch-badge-sheet.webp',
     });
   });
 
@@ -76,6 +82,20 @@ describe('Attack Block Mana presentation data', () => {
     expect(getAbmAbilityControlGeometry('block', 'landscape', base)).toEqual({ ...base, x: 150 });
     expect(getAbmAbilityControlGeometry('ability', 'portrait', base)).toEqual({ x: 8, y: 550, width: 100, height: 50, aspectLock: true });
     expect(getAbmAbilityControlGeometry('ability', 'landscape', base)).toEqual({ x: 205, y: 412, width: 134, height: 67, aspectLock: true });
+  });
+
+  test('normalizes class badges by height and grows them inward', () => {
+    const p1Base = { x: 20, y: 92, width: 140, height: 35, aspectLock: true };
+    const p2Base = { x: 800, y: 92, width: 140, height: 35, aspectLock: true };
+    const cupidP1 = getAbmClassBadgeGeometry('p1', p1Base, { width: 124, height: 64 });
+    const cupidP2 = getAbmClassBadgeGeometry('p2', p2Base, { width: 124, height: 64 });
+    const parryP2 = getAbmClassBadgeGeometry('p2', p2Base, { width: 242, height: 64 });
+
+    expect(cupidP1).toMatchObject({ x: 20, height: 35, width: 67.8125 });
+    expect(cupidP2.height).toBe(parryP2.height);
+    expect(cupidP2.x + cupidP2.width).toBe(940);
+    expect(parryP2.x + parryP2.width).toBe(940);
+    expect(parryP2.x).toBeLessThan(cupidP2.x);
   });
 
   test('maps every move pairing to renamed ABM scene art', () => {
@@ -199,17 +219,35 @@ describe('Attack Block Mana presentation data', () => {
     expect(ABM_SCENE_URLS).toContain('/variants/abm/scenes/tags/copywriter-sheet.webp');
   });
 
+  test('maps every reachable Last Ditch bonus to baked proc art', () => {
+    for (const bonus of [1, 2, 3, 4, 5, 6, 7, 8] as const) {
+      expect(resolveAbmTags({ lastDitchBonusMana: { p1: bonus } })).toEqual([{
+        category: 'proc', kind: 'last-ditch', player: 'p1',
+        src: `/variants/abm/scenes/tags/last-ditch-tag-${bonus}-sheet.webp`,
+      }]);
+      expect(ABM_SCENE_URLS).toContain(`/variants/abm/scenes/tags/last-ditch-tag-${bonus}-sheet.webp`);
+    }
+    expect(resolveAbmTags({ lastDitchBonusMana: { p1: 1, p2: 8 } }, 'p1')).toEqual([{
+      category: 'proc', kind: 'last-ditch', player: 'p2', src: '/variants/abm/scenes/tags/last-ditch-tag-8-sheet.webp',
+    }]);
+  });
+
   test('categorizes every implemented tag family', () => {
     const tags = resolveAbmTags({
       luckyProcPlayer: 'p1', advantagedProcPlayers: ['p1'], thiefTransferPlayer: 'p1', juggernautProcPlayers: ['p1'],
       stunnedPlayers: ['p2'], investorBullPlayers: ['p1'], investorBearPlayers: ['p1'], duplicatorProcPlayers: ['p1'],
       copywriterProcPlayers: ['p1'], sumoProcRemaining: { p1: 2 }, cheaterProcPlayers: ['p1'], gamblerOutcomes: { p1: 'plus-1-mana' }, taxmanCollectPlayers: ['p2'], parriedPlayers: ['p1'],
-      cupidAttackProcPlayers: ['p1'], cupidManaProcPlayers: ['p1'], cupidBlockImpactPlayers: ['p2'],
+      cupidAttackProcPlayers: ['p1'], cupidManaProcPlayers: ['p1'], cupidBlockImpactPlayers: ['p2'], defenderProcPlayers: ['p1'], lastDitchBonusMana: { p1: 1 },
     });
     expect(Object.fromEntries(tags.map(({ kind, category }) => [kind, category]))).toEqual({
       lucky: 'proc', advantaged: 'proc', juggernaut: 'impact', thief: 'impact', stunned: 'impact', bull: 'proc', bear: 'proc',
-      duplicator: 'proc', copywriter: 'proc', cheater: 'proc', 'cupid-attack': 'proc', 'cupid-mana': 'proc', 'cupid-block': 'impact', gambler: 'proc', sumo: 'proc', taxed: 'impact', parried: 'impact',
+      duplicator: 'proc', copywriter: 'proc', cheater: 'proc', 'cupid-attack': 'proc', 'cupid-mana': 'proc', 'cupid-block': 'impact', defender: 'proc', 'last-ditch': 'proc', gambler: 'proc', sumo: 'proc', taxed: 'impact', parried: 'impact',
     });
+    expect(resolveAbmTags({ defenderProcPlayers: ['p1', 'p2'] })).toEqual([
+      { category: 'proc', kind: 'defender', player: 'p1', src: '/variants/abm/scenes/tags/defender-sheet.webp' },
+      { category: 'proc', kind: 'defender', player: 'p2', src: '/variants/abm/scenes/tags/defender-sheet.webp' },
+    ]);
+    expect(ABM_SCENE_URLS).toContain('/variants/abm/scenes/tags/defender-sheet.webp');
   });
 
   test('defines 18 independently editable ordinal tag slots', () => {
