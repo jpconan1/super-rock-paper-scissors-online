@@ -3,13 +3,14 @@ import type { PlayerId, VariantGameResult } from '../../core/variant';
 export const ABM_CLASS_IDS = [
   'lucky', 'advantaged', 'thief', 'juggernaut', 'stunner', 'duplicator', 'sumo',
   'cheater', 'investor', 'gambler', 'taxman', 'copywriter', 'conjurer',
-  'fireborne', 'retired', 'parrymaster', 'cupid', 'defender', 'last-ditch',
+  'fireborne', 'retired', 'parrymaster', 'cupid', 'defender', 'last-ditch', 'null',
+  'joe',
 ] as const;
 
 export type AbmClassId = typeof ABM_CLASS_IDS[number];
 export type AbmMove = 'attack' | 'block' | 'mana';
 export type AbmDisplayMove = AbmMove | 'skip';
-export type AbmAbilityId = 'steal' | 'collect' | 'conjure' | 'flame' | 'parry' | 'golden-arrow';
+export type AbmAbilityId = 'steal' | 'collect' | 'conjure' | 'flame' | 'parry' | 'golden-arrow' | 'reset';
 export type AbmGamblerOutcome =
   | 'plus-2-mana' | 'plus-1-mana' | 'mana-drain' | 'mana-double'
   | 'plus-1-block' | 'plus-2-block' | 'minus-1-block' | 'nothing';
@@ -21,7 +22,7 @@ export type AbmPhase =
 export type AbmCommand =
   | { type: 'lock-class'; classId: AbmClassId }
   | { type: 'preview-class'; classId: AbmClassId }
-  | { type: 'activate-ability'; ability: 'conjure' }
+  | { type: 'activate-ability'; ability: 'conjure' | 'reset' }
   | { type: 'choose-move'; move: AbmMove; ability?: AbmAbilityId };
 
 export interface AbmPlayerState {
@@ -46,6 +47,8 @@ export interface AbmPlayerState {
   goldenArrowTurns?: 0 | 1 | 2 | 3 | 4 | 5;
   /** Legacy persisted Thief state. Read when abilityUses is absent. */
   stealUsed?: boolean;
+  /** Joe has proc'd; finite Mana changes no longer apply this round. */
+  infiniteMana?: boolean;
 }
 
 export interface AbmState {
@@ -63,8 +66,10 @@ export interface AbmState {
   conjuredMove?: AbmDisplayMove;
   conjuredOpponentTimedOut?: boolean;
   conjureStalemate?: boolean;
+  nullResetPlayer?: PlayerId;
   lastCompleteMoves?: Record<PlayerId, AbmMove>;
   luckyProcPlayer?: PlayerId;
+  joeProcPlayers?: PlayerId[];
   fireborneProcPlayer?: PlayerId;
   retiredProcPlayers?: PlayerId[];
   advantagedProcPlayers?: PlayerId[];
@@ -118,6 +123,7 @@ export interface AbmProjection {
   conjurer?: PlayerId;
   conjuredMove?: AbmDisplayMove;
   conjureStalemate?: boolean;
+  nullResetPlayer?: PlayerId;
   opponentReady: boolean;
   legalActions: readonly AbmLegalAction[];
   counterPicker?: PlayerId;
@@ -127,6 +133,7 @@ export interface AbmProjection {
   winner?: PlayerId;
   lastCompleteMoves?: Record<PlayerId, AbmMove>;
   luckyProcPlayer?: PlayerId;
+  joeProcPlayers?: PlayerId[];
   fireborneProcPlayer?: PlayerId;
   retiredProcPlayers?: PlayerId[];
   advantagedProcPlayers?: PlayerId[];

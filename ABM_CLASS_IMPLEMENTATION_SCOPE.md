@@ -136,11 +136,11 @@ The three match tags should share one Golden Arrow family but use different Atta
 
 **Button:** None.
 
-**Scene:** JOE TIME. The extremely rare proc changes Mana to Infinity and needs unmistakable full-screen treatment.
+**Scene:** JOE TIME. After both moves are submitted, the one-in-1,000 proc changes Mana to Infinity and negates a lethal Attack against Joe on that reveal.
 
 **Tags:**
 
-- **Proc — JOE TIME:** Joe's one-in-a-million roll succeeded. The tag or equivalent status treatment persists after the scene so Infinity remains understandable.
+- **Proc — JOE TIME:** Joe's one-in-1,000 roll succeeded. The Infinite Mana status persists after the scene so Infinity remains understandable.
 
 ## Estimated remaining asset scope
 

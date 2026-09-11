@@ -846,6 +846,7 @@ input {
 .abm-resource__art { display: block; width: 100%; height: 100%; }
 .abm-resource__art.is-filled { overflow: visible; }
 .abm-resource__art.is-filled > .boiling-sprite__canvas { transform: scale(1.25); }
+.abm-resource--mana-count.is-infinite::after { display: grid; width: 100%; height: 100%; place-items: center; content: '∞'; font-size: 2.25em; line-height: 1; }
 .abm-waiting { position: absolute; z-index: 2; inset: 0; pointer-events: none; }
 .abm-waiting__ready, .abm-waiting__countdown { position: absolute; top: 28px; width: 120px; }
 .abm-waiting__dots { position: absolute; top: 0; width: 50px; transform: translateY(-15px); }

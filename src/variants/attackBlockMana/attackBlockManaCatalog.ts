@@ -5,7 +5,7 @@ export interface AbmActivatedAbilityDefinition {
   label: string;
   uses: number;
   manaCost: number;
-  inputStrategy: 'arm-with-move' | 'opponent-first';
+  inputStrategy: 'arm-with-move' | 'opponent-first' | 'standalone';
   buttonAssets: { up: string; between: string; depressed: string };
   available?(player: Readonly<AbmPlayerState>, turn: number): boolean;
 }
@@ -50,6 +50,8 @@ export const ABM_CLASSES: readonly AbmClassDefinition[] = [
   entry('cupid', 'Cupid', 'Golden Arrow rewards matching the opponent\'s move for five turns, beginning next turn.', true, {}, 'cupid', ability('golden-arrow', 'Golden Arrow', 1, 0)),
   entry('defender', 'Defender', 'When you successfully Block an Attack, it will not cause you to lose one of your consecutive Blocks remaining.', true),
   entry('last-ditch', 'Last Ditch', 'When both players drop to 0 Mana, gains 2 Mana instead of 1. Every second reset increases that gain by 1.', true),
+  entry('null', 'Null', 'Once per game, resets both players to their initial state without resetting strikes or the turn count.', true, {}, 'null', ability('reset', 'Reset', 1, 0, undefined, 'standalone')),
+  entry('joe', 'Joe', 'Every turn has a 1-in-1,000 chance to gain Infinite Mana. Good luck.', true),
 ];
 
 export const ABM_CLASS_BY_ID = new Map(ABM_CLASSES.map((definition) => [definition.id, definition]));

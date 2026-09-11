@@ -96,6 +96,52 @@ describe('Attack Block Mana rules', () => {
     expect(attackBlockManaRules.initialize(context).zeroManaTurns).toBe(0);
   });
 
+  test('Null discards a pending move and resets class state while preserving match counters', () => {
+    let state = startedWith('null', 'retired');
+    state.turn = 6; state.round = 2; state.score = { p1: 1, p2: 2 }; state.zeroManaTurns = 4;
+    Object.assign(state.players.p1, { mana: 0, blocks: 2, strikes: 1, lastMove: 'attack', recentMoves: ['attack', 'attack'], attackCost: 4, fireShieldTurns: 3, goldenArrowTurns: 2 });
+    Object.assign(state.players.p2, { mana: 3, blocks: 1, strikes: 1, lastMove: 'mana', recentMoves: ['mana'], attackCost: 2, nextManaGain: 4, refundsRemaining: 1, fireShieldTurns: 5, goldenArrowTurns: 4, abilityUses: { flame: 0 } });
+    state.lastCompleteMoves = { p1: 'attack', p2: 'mana' };
+    state = send(state, 'p2', { type: 'choose-move', move: 'attack' }, 2_000);
+
+    const resolution = attackBlockManaRules.resolve(state, 'p1', { type: 'activate-ability', ability: 'reset' }, { ...context, now: 2_100 });
+    state = resolution.state;
+    expect(state).toMatchObject({ phase: 'idle', turn: 6, round: 2, score: { p1: 1, p2: 2 }, zeroManaTurns: 4, nullResetPlayer: 'p1' });
+    expect(state.pendingMoves).toEqual({});
+    expect(state.pendingAbilities).toEqual({});
+    expect(state.lastCompleteMoves).toBeUndefined();
+    expect(state.players.p1).toEqual({ classId: 'null', mana: 1, blocks: 5, strikes: 1, attackCost: 1, abilityUses: { reset: 0 } });
+    expect(state.players.p2).toEqual({ classId: 'retired', mana: 7, blocks: 4, strikes: 1, attackCost: 1 });
+    expect(resolution.events).toMatchObject([{ type: 'null-reset', startsAt: 2_100, endsAt: 2_900, payload: { player: 'p1', turn: 6 } }]);
+    expect(attackBlockManaRules.project(state, 'p1')).toMatchObject({ nullResetPlayer: 'p1', legalActions: ['attack', 'block', 'mana'] });
+  });
+
+  test('Null stays available at zero Mana and preserves spent uses across sequential mirror resets', () => {
+    let state = startedWith('null', 'null');
+    state.players.p1.mana = 0; state.players.p2.mana = 0;
+    expect(attackBlockManaRules.project(state, 'p1').legalActions).toEqual(['mana', 'reset']);
+    state = send(state, 'p1', { type: 'activate-ability', ability: 'reset' });
+    expect(state.players.p1.abilityUses).toEqual({ reset: 0 });
+    expect(state.players.p2.abilityUses).toEqual({ reset: 1 });
+    state = send(state, 'p2', { type: 'activate-ability', ability: 'reset' });
+    expect(state.players.p1.abilityUses).toEqual({ reset: 0 });
+    expect(state.players.p2.abilityUses).toEqual({ reset: 0 });
+    expect(() => send(state, 'p1', { type: 'activate-ability', ability: 'reset' })).toThrow('already been used');
+  });
+
+  test('Null cancels pending Conjure but cannot reset after choosing a move', () => {
+    let state = startedWith('null', 'conjurer');
+    state = send(state, 'p2', { type: 'activate-ability', ability: 'conjure' });
+    expect(state.pendingAbilities).toEqual({ p2: 'conjure' });
+    state = send(state, 'p1', { type: 'activate-ability', ability: 'reset' });
+    expect(state.pendingAbilities).toEqual({});
+    expect(state.players.p2.abilityUses).toEqual({ conjure: 2 });
+
+    let moved = startedWith('null', 'lucky');
+    moved = send(moved, 'p1', { type: 'choose-move', move: 'mana' });
+    expect(() => send(moved, 'p1', { type: 'activate-ability', ability: 'reset' })).toThrow('before choosing a move');
+  });
+
   test('rejects illegal and unfinished selections', () => {
     let state = started();
     state.players.p1.mana = 0;
@@ -230,6 +276,53 @@ describe('Attack Block Mana rules', () => {
     expect(resolution.state).toMatchObject({ phase: 'counter-picking', score: { p1: 0, p2: 1 } });
     expect(resolution.state.luckyProcPlayer).toBeUndefined();
     expect(resolution.state.players.p1.mana).toBe(1);
+  });
+
+  test('Joe rolls after both moves lock and negates a lethal Attack on success', () => {
+    let state = startedWith('joe', 'advantaged');
+    state = send(state, 'p1', { type: 'choose-move', move: 'mana' });
+    const resolution = attackBlockManaRules.resolve(state, 'p2', { type: 'choose-move', move: 'attack' }, { ...context, random: () => 0 });
+
+    expect(resolution.state).toMatchObject({ phase: 'idle', turn: 2, joeProcPlayers: ['p1'] });
+    expect(resolution.state.players.p1).toMatchObject({ classId: 'joe', infiniteMana: true });
+    expect(resolution.events?.[0]?.payload).toMatchObject({ joeProcPlayers: ['p1'] });
+    expect(attackBlockManaRules.project(resolution.state, 'p2').joeProcPlayers).toEqual(['p1']);
+  });
+
+  test('Joe loses the lethal turn when the one-in-1,000 roll misses', () => {
+    let state = startedWith('joe', 'advantaged');
+    state = send(state, 'p1', { type: 'choose-move', move: 'mana' });
+    state = attackBlockManaRules.resolve(state, 'p2', { type: 'choose-move', move: 'attack' }, { ...context, random: () => 1 / 1_000 }).state;
+
+    expect(state).toMatchObject({ phase: 'counter-picking', score: { p1: 0, p2: 1 } });
+    expect(state.players.p1.infiniteMana).toBeUndefined();
+  });
+
+  test('Joe does not roll when his Attack already defeats the opponent', () => {
+    const random = vi.fn(() => 0);
+    let state = startedWith('joe', 'advantaged');
+    state = send(state, 'p1', { type: 'choose-move', move: 'attack' });
+    state = attackBlockManaRules.resolve(state, 'p2', { type: 'choose-move', move: 'mana' }, { ...context, random }).state;
+
+    expect(random).not.toHaveBeenCalled();
+    expect(state).toMatchObject({ phase: 'counter-picking', score: { p1: 1, p2: 0 } });
+    expect(state.joeProcPlayers).toBeUndefined();
+    expect(state.players.p1.infiniteMana).toBeUndefined();
+  });
+
+  test('Infinite Joe attacks without spending Mana and resets between rounds', () => {
+    let state = startedWith('joe', 'advantaged');
+    state = send(state, 'p1', { type: 'choose-move', move: 'attack' });
+    state = attackBlockManaRules.resolve(state, 'p2', { type: 'choose-move', move: 'attack' }, { ...context, random: () => 0 }).state;
+    expect(state.joeProcPlayers).toEqual(['p1']);
+    expect(state.players.p1).toMatchObject({ mana: 1, infiniteMana: true });
+    expect(state.players.p2.mana).toBe(0);
+    expect(attackBlockManaRules.project(state, 'p1').legalActions).toContain('attack');
+
+    state = playTurn(state, 'attack', 'mana');
+    expect(state.phase).toBe('counter-picking');
+    expect(state.players.p1.infiniteMana).toBeUndefined();
+    expect(state.players.p2.infiniteMana).toBeUndefined();
   });
 
   test('does not roll for a non-Lucky Mana player', () => {

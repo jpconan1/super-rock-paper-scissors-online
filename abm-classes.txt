@@ -113,6 +113,8 @@ If **both players** select conjurer and they **both** decide to **conjure** noth
 
 **Joe** 👨 
 **THIS ROLE IS NOT LEGAL IN LEAGUE/TOURNAMENT PLAY UNLESS OTHERWISE STATED**
-• **Every turn**, you have a **1 in a million chance** to gain **infinite mana**.
+• After both moves are submitted each turn, you have a **1 in 1,000 chance** to gain **infinite mana**.
+• If the proc happens while an Attack would defeat you, that defeat is negated.
+• If your Attack defeats your opponent that turn, Joe does not roll.
 • Otherwise, does **nothing**.
 • Good luck.

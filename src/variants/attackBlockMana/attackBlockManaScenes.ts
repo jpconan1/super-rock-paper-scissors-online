@@ -10,11 +10,15 @@ const TAG_ROOT = `${ROOT}/tags`;
 const BACKGROUND_ROOT = `${ROOT}/backgrounds`;
 
 export interface AbmScene { src: string; flip: boolean }
+export function resolveJoeScene(): AbmScene { return { src: `${ROOT}/joe-time-sheet.webp`, flip: false }; }
+export function resolveNullScene(readyPlayer?: PlayerId): AbmScene {
+  return { src: readyPlayer ? `${SPLIT_ROOT}/null-${readyPlayer}-ready-sheet.webp` : `${ROOT}/null-reset-sheet.webp`, flip: false };
+}
 export function resolveConjureScene(move: AbmDisplayMove | 'conjure', conjurer: PlayerId): AbmScene {
   return { src: `${ROOT}/conjure/conjure-${move}-sheet.webp`, flip: conjurer === 'p2' };
 }
 export type AbmTagCategory = 'proc' | 'impact' | 'status';
-export type AbmTagKind = 'advantaged' | 'bear' | 'bull' | 'cheater' | 'copywriter' | 'cupid-arrow' | 'cupid-attack' | 'cupid-block' | 'cupid-mana' | 'defender' | 'duplicator' | 'fireborne-shield' | 'gambler' | 'juggernaut' | 'last-ditch' | 'lucky' | 'parried' | 'retired' | 'stunned' | 'sumo' | 'taxed' | 'thief';
+export type AbmTagKind = 'advantaged' | 'bear' | 'bull' | 'cheater' | 'copywriter' | 'cupid-arrow' | 'cupid-attack' | 'cupid-block' | 'cupid-mana' | 'defender' | 'duplicator' | 'fireborne-shield' | 'gambler' | 'joe-infinite' | 'joe-proc' | 'juggernaut' | 'last-ditch' | 'lucky' | 'null-reset' | 'parried' | 'retired' | 'stunned' | 'sumo' | 'taxed' | 'thief';
 export interface AbmTag { kind: AbmTagKind; category: AbmTagCategory; player: PlayerId; src: string }
 export type AbmProcBackgroundKind = 'bear' | 'bull';
 export interface AbmProcBackground { kind: AbmProcBackgroundKind; player: PlayerId; src: string }
@@ -41,7 +45,9 @@ interface TagState {
   gamblerOutcomes?: Partial<Record<PlayerId, AbmGamblerOutcome>>;
   taxmanCollectPlayers?: readonly PlayerId[];
   parriedPlayers?: readonly PlayerId[];
-  players?: Readonly<Record<PlayerId, { fireShieldTurns?: 0 | 1 | 2 | 3 | 4 | 5; goldenArrowTurns?: 0 | 1 | 2 | 3 | 4 | 5 }>>;
+  nullResetPlayer?: PlayerId;
+  joeProcPlayers?: readonly PlayerId[];
+  players?: Readonly<Record<PlayerId, { fireShieldTurns?: 0 | 1 | 2 | 3 | 4 | 5; goldenArrowTurns?: 0 | 1 | 2 | 3 | 4 | 5; infiniteMana?: boolean }>>;
 }
 
 export function resolveAbmScene(moves?: Readonly<Record<PlayerId, AbmMove>>, luckyProcPlayer?: PlayerId, fireborneProcPlayer?: PlayerId): AbmScene {
@@ -95,6 +101,13 @@ export function resolveAbmTags(state: TagState, hiddenPlayer?: PlayerId): AbmTag
   add('proc', 'cupid-mana', state.cupidManaProcPlayers);
   add('impact', 'cupid-block', state.cupidBlockImpactPlayers);
   add('proc', 'defender', state.defenderProcPlayers);
+  add('proc', 'null-reset', state.nullResetPlayer ? [state.nullResetPlayer] : undefined);
+  const joeProcs = new Set(state.joeProcPlayers ?? []);
+  for (const player of ['p1', 'p2'] as const) {
+    if (player === hiddenPlayer) continue;
+    if (joeProcs.has(player)) tags.push({ category: 'proc', kind: 'joe-proc', player, src: tagSource('proc', 'joe-proc', player) });
+    if (state.players?.[player].infiniteMana) tags.push({ category: 'status', kind: 'joe-infinite', player, src: tagSource('status', 'joe-infinite', player) });
+  }
   for (const player of ['p1', 'p2'] as const) {
     const bonus = state.lastDitchBonusMana?.[player];
     if (bonus !== undefined && player !== hiddenPlayer) tags.push({
@@ -154,7 +167,7 @@ const SPLIT_BASE_SCENE_VARIANTS = {
 } as const;
 const SPLIT_BASE_SCENE_NAMES = Object.keys(SPLIT_BASE_SCENE_VARIANTS) as (keyof typeof SPLIT_BASE_SCENE_VARIANTS)[];
 const BASE_SCENE_NAMES = [...SPLIT_BASE_SCENE_NAMES, 'mana-attack'] as const;
-const TAG_NAMES: readonly Exclude<AbmTagKind, 'sumo' | 'gambler' | 'fireborne-shield' | 'cupid-arrow' | 'cupid-attack' | 'cupid-block' | 'cupid-mana' | 'last-ditch'>[] = ['advantaged', 'bear', 'bull', 'cheater', 'copywriter', 'defender', 'duplicator', 'juggernaut', 'lucky', 'parried', 'retired', 'stunned', 'taxed', 'thief'];
+const TAG_NAMES: readonly Exclude<AbmTagKind, 'sumo' | 'gambler' | 'fireborne-shield' | 'cupid-arrow' | 'cupid-attack' | 'cupid-block' | 'cupid-mana' | 'last-ditch' | 'joe-proc'>[] = ['advantaged', 'bear', 'bull', 'cheater', 'copywriter', 'defender', 'duplicator', 'joe-infinite', 'juggernaut', 'lucky', 'null-reset', 'parried', 'retired', 'stunned', 'taxed', 'thief'];
 const DIRECTIONAL_IMPACT_TAGS = ['juggernaut', 'parried', 'stunned', 'thief', 'cupid-block'] as const;
 const GAMBLER_TAG_NAMES: readonly Exclude<AbmGamblerOutcome, 'nothing'>[] = [
   'plus-2-mana', 'plus-1-mana', 'mana-drain', 'mana-double', 'plus-1-block', 'plus-2-block', 'minus-1-block',
@@ -164,11 +177,15 @@ export const ABM_SCENE_URLS = [
   ...BASE_SCENE_NAMES.map((name) => `${BASE_ROOT}/${name}-sheet.webp`),
   `${EXCEPTION_ROOT}/lucky-survival-sheet.webp`,
   `${EXCEPTION_ROOT}/fireborne-shield-sheet.webp`,
+  `${ROOT}/null-reset-sheet.webp`,
+  `${ROOT}/joe-time-sheet.webp`,
+  ...(['p1', 'p2'] as const).map((player) => `${SPLIT_ROOT}/null-${player}-ready-sheet.webp`),
   ...(['attack', 'block', 'mana', 'skip', 'conjure'] as const).map((move) => `${ROOT}/conjure/conjure-${move}-sheet.webp`),
   ...SPLIT_BASE_SCENE_NAMES.flatMap((name) => SPLIT_BASE_SCENE_VARIANTS[name].map((variant) => `${SPLIT_ROOT}/base/${name}-${variant}-ready-sheet.webp`)),
   ...(['attacker', 'charger'] as const).map((role) => `${SPLIT_ROOT}/exceptions/lucky-survival-${role}-ready-sheet.webp`),
   ...(['attacker', 'fireborne'] as const).map((role) => `${SPLIT_ROOT}/exceptions/fireborne-shield-${role}-ready-sheet.webp`),
   ...TAG_NAMES.map((name) => `${TAG_ROOT}/${name}-sheet.webp`),
+  `${TAG_ROOT}/joe-thousand-sheet.webp`,
   ...DIRECTIONAL_IMPACT_TAGS.map((name) => tagSource('impact', name, 'p1')),
   ...GAMBLER_TAG_NAMES.map((name) => `${TAG_ROOT}/gambler-${name}-sheet.webp`),
   ...([1, 2, 3, 4, 5] as const).map((remaining) => `${TAG_ROOT}/fireborne-cloud-${remaining}-sheet.webp`),
@@ -187,7 +204,8 @@ function tagSource(category: AbmTagCategory, kind: AbmTagKind, player: PlayerId)
   const directional = category === 'impact' && player === 'p1' && (DIRECTIONAL_IMPACT_TAGS as readonly string[]).includes(kind);
   const name = kind === 'cupid-attack' ? 'golden-arrow-attack'
     : kind === 'cupid-mana' ? 'golden-arrow-mana'
-      : kind === 'cupid-block' ? 'golden-arrow-block' : kind;
+      : kind === 'cupid-block' ? 'golden-arrow-block'
+        : kind === 'joe-proc' ? 'joe-thousand' : kind;
   return `${TAG_ROOT}/${name}${directional ? '-p2' : ''}-sheet.webp`;
 }
 

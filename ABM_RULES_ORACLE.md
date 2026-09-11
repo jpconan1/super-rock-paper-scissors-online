@@ -366,7 +366,10 @@ is desired; otherwise record repair below.
 
 Super ABM uses a universal 9-mana cap. Positive gains, including Gambler's
 gain and double outcomes, resolve as `mana = min(9, resultingMana)`. Joe's
-future interaction with this cap remains undecided.
+recreation rule rolls after both moves are submitted at 1-in-1,000. A successful
+roll grants uncapped Infinite Mana and negates a lethal Attack against Joe on
+that reveal. Joe does not roll when his Attack already defeats the opponent.
+This intentionally replaces the historical `beginTurn` behavior.
 
 Cupid preserves the delayed Golden Arrow activation described above.
 

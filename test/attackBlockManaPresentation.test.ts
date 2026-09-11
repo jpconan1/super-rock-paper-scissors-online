@@ -3,19 +3,19 @@ import { ABM_CLASSES, startingResourcesForClass } from '../src/variants/attackBl
 import { ABM_BACK_LOBBY_ART, ABM_LAYOUTS, ABM_RESULT_SCENES, ABM_SELECT_ART, ABM_TAG_CATEGORIES, ABM_TAG_ORDERS, abmTagSlotId, blockSegments, displayedAbmMove, getAbmAttackCostDisplay, getAbmClassBadgeGeometry, getAbmClassReadyFrame, getAbmResultScene, getAbmAbilityControlGeometry, getAbmWaitingVisual, initialManaForClass, latestClassPreview, sceneForMoves, shouldShowAbmContinuingRoundProcTags, shouldShowAbmYouTag, shouldShowClassBadge, shouldShowClassReadyOpponentTag } from '../src/variants/attackBlockMana/attackBlockManaPresentation';
 import type { AbmProjection } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 import { ABM_CLASS_IDS } from '../src/variants/attackBlockMana/attackBlockManaTypes';
-import { ABM_SCENE_URLS, resolveAbmProcBackgrounds, resolveAbmScene, resolveAbmSplitScene, resolveAbmTags, resolveConjureScene } from '../src/variants/attackBlockMana/attackBlockManaScenes';
+import { ABM_SCENE_URLS, resolveAbmProcBackgrounds, resolveAbmScene, resolveAbmSplitScene, resolveAbmTags, resolveConjureScene, resolveJoeScene, resolveNullScene } from '../src/variants/attackBlockMana/attackBlockManaScenes';
 import { getLayoutDocument } from '../src/layout/layoutDocuments';
 import { validateLayoutDocument } from '../src/layout/layoutDocument';
 import { ABM_TAG_ENTRANCE_SOURCES } from '../src/variants/attackBlockMana/abmTagEntrance';
 
 describe('Attack Block Mana presentation data', () => {
-  test('includes Defender and Last Ditch and marks every finished class playable', () => {
+  test('includes every class-select entry and marks every finished class playable', () => {
     expect(ABM_CLASSES.map(({ id }) => id)).toEqual([
-      'lucky', 'advantaged', 'thief', 'juggernaut', 'stunner', 'duplicator', 'sumo', 'cheater', 'investor', 'gambler', 'taxman', 'copywriter', 'conjurer', 'fireborne', 'retired', 'parrymaster', 'cupid', 'defender', 'last-ditch',
+      'lucky', 'advantaged', 'thief', 'juggernaut', 'stunner', 'duplicator', 'sumo', 'cheater', 'investor', 'gambler', 'taxman', 'copywriter', 'conjurer', 'fireborne', 'retired', 'parrymaster', 'cupid', 'defender', 'last-ditch', 'null', 'joe',
     ]);
     expect(ABM_CLASS_IDS).toEqual(ABM_CLASSES.map(({ id }) => id));
     expect(ABM_CLASSES.filter(({ implemented }) => implemented).map(({ id }) => id)).toEqual([
-      'lucky', 'advantaged', 'thief', 'juggernaut', 'stunner', 'duplicator', 'sumo', 'cheater', 'investor', 'gambler', 'taxman', 'copywriter', 'conjurer', 'fireborne', 'retired', 'parrymaster', 'cupid', 'defender', 'last-ditch',
+      'lucky', 'advantaged', 'thief', 'juggernaut', 'stunner', 'duplicator', 'sumo', 'cheater', 'investor', 'gambler', 'taxman', 'copywriter', 'conjurer', 'fireborne', 'retired', 'parrymaster', 'cupid', 'defender', 'last-ditch', 'null', 'joe',
     ]);
     expect(ABM_CLASSES.every(({ asset, badgeAsset }) => asset.endsWith('-sheet.webp') && badgeAsset.endsWith('-badge-sheet.webp') && !asset.includes('placeholder'))).toBe(true);
     expect(ABM_CLASSES.find(({ id }) => id === 'taxman')).toMatchObject({ name: 'Taxman', ability: { id: 'collect', label: 'Collect', uses: 3, manaCost: 0, inputStrategy: 'arm-with-move' } });
@@ -47,6 +47,10 @@ describe('Attack Block Mana presentation data', () => {
     });
     expect(ABM_CLASSES.find(({ id }) => id === 'last-ditch')).toMatchObject({
       name: 'Last Ditch', implemented: true, asset: '/variants/abm/last-ditch-sheet.webp', badgeAsset: '/variants/abm/last-ditch-badge-sheet.webp',
+    });
+    expect(ABM_CLASSES.find(({ id }) => id === 'null')).toMatchObject({
+      name: 'Null', implemented: true, ability: { id: 'reset', label: 'Reset', uses: 1, manaCost: 0, inputStrategy: 'standalone' },
+      asset: '/variants/abm/null-sheet.webp', badgeAsset: '/variants/abm/null-badge-sheet.webp',
     });
   });
 
@@ -230,6 +234,32 @@ describe('Attack Block Mana presentation data', () => {
     expect(resolveAbmTags({ lastDitchBonusMana: { p1: 1, p2: 8 } }, 'p1')).toEqual([{
       category: 'proc', kind: 'last-ditch', player: 'p2', src: '/variants/abm/scenes/tags/last-ditch-tag-8-sheet.webp',
     }]);
+  });
+
+  test('maps Null reset scene and authored proc tag', () => {
+    expect(resolveAbmTags({ nullResetPlayer: 'p2' })).toEqual([{
+      category: 'proc', kind: 'null-reset', player: 'p2', src: '/variants/abm/scenes/tags/null-reset-sheet.webp',
+    }]);
+    expect(ABM_SCENE_URLS).toEqual(expect.arrayContaining([
+      '/variants/abm/scenes/null-reset-sheet.webp',
+      '/variants/abm/scenes/splits/null-p1-ready-sheet.webp',
+      '/variants/abm/scenes/splits/null-p2-ready-sheet.webp',
+      '/variants/abm/scenes/tags/null-reset-sheet.webp',
+    ]));
+    expect(resolveNullScene()).toEqual({ src: '/variants/abm/scenes/null-reset-sheet.webp', flip: false });
+    expect(resolveNullScene('p1')).toEqual({ src: '/variants/abm/scenes/splits/null-p1-ready-sheet.webp', flip: false });
+    expect(resolveNullScene('p2')).toEqual({ src: '/variants/abm/scenes/splits/null-p2-ready-sheet.webp', flip: false });
+  });
+
+  test('maps Joe Time plus temporary and persistent Joe tags', () => {
+    expect(resolveJoeScene()).toEqual({ src: '/variants/abm/scenes/joe-time-sheet.webp', flip: false });
+    expect(resolveAbmTags({ joeProcPlayers: ['p1'], players: { p1: { infiniteMana: true }, p2: {} } })).toEqual([
+      { category: 'proc', kind: 'joe-proc', player: 'p1', src: '/variants/abm/scenes/tags/joe-thousand-sheet.webp' },
+      { category: 'status', kind: 'joe-infinite', player: 'p1', src: '/variants/abm/scenes/tags/joe-infinite-sheet.webp' },
+    ]);
+    expect(ABM_SCENE_URLS).toEqual(expect.arrayContaining([
+      '/variants/abm/scenes/joe-time-sheet.webp', '/variants/abm/scenes/tags/joe-thousand-sheet.webp', '/variants/abm/scenes/tags/joe-infinite-sheet.webp',
+    ]));
   });
 
   test('categorizes every implemented tag family', () => {
@@ -423,7 +453,7 @@ describe('Attack Block Mana presentation data', () => {
     for (const [moves, early, expected] of mappings) expect(resolveAbmSplitScene(moves, early).src).toContain(expected);
     expect(resolveAbmSplitScene({ p1: 'mana', p2: 'block' }, 'p1').flip).toBe(true);
     expect(resolveAbmSplitScene({ p1: 'attack', p2: 'block' }, 'p1').flip).toBe(true);
-    expect(ABM_SCENE_URLS.filter((src) => src.includes('/splits/')).some((src) => /(?:^|[-_])p[12](?:[-_.]|$)/.test(src))).toBe(false);
+    expect(ABM_SCENE_URLS.filter((src) => src.includes('/splits/') && !src.includes('/null-')).some((src) => /(?:^|[-_])p[12](?:[-_.]|$)/.test(src))).toBe(false);
     expect(ABM_SCENE_URLS.some((src) => src.includes('proc-sheet') || src.includes('survivor'))).toBe(false);
   });
 

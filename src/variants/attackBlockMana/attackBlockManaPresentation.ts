@@ -12,7 +12,7 @@ import { createBoilingSprite, type BoilingSprite } from '../../renderer/boilingS
 import { playStarburstWipe } from '../../renderer/starburstWipe';
 import { createTextbox } from '../../ui/textbox';
 import { ABM_CLASSES, ABM_CLASS_BY_ID, startingResourcesForClass, type AbmStartingResources } from './attackBlockManaCatalog';
-import { ABM_SCENE_URLS, resolveAbmProcBackgrounds, resolveAbmScene, resolveAbmSplitScene, resolveAbmTags, resolveConjureScene, type AbmProcBackgroundKind, type AbmTagCategory, type AbmTagKind } from './attackBlockManaScenes';
+import { ABM_SCENE_URLS, resolveAbmProcBackgrounds, resolveAbmScene, resolveAbmSplitScene, resolveAbmTags, resolveConjureScene, resolveJoeScene, resolveNullScene, type AbmProcBackgroundKind, type AbmTagCategory, type AbmTagKind } from './attackBlockManaScenes';
 import type { AbmAbilityId, AbmClassId, AbmCommand, AbmMove, AbmPlayerState, AbmProjection } from './attackBlockManaTypes';
 import { playCatalogSound, type SoundId } from '../../audio/soundCatalog';
 import type { MusicDirector } from '../../audio/musicDirector';
@@ -216,6 +216,10 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
         send({ type: 'activate-ability', ability: 'conjure' });
         return;
       }
+      if (ability.inputStrategy === 'standalone') {
+        send({ type: 'activate-ability', ability: 'reset' });
+        return;
+      }
       armedAbility = armedAbility === ability.id ? undefined : ability.id;
       button.setLockedDepressed(armedAbility === ability.id);
     }, upSheet: ability.buttonAssets.up, betweenSheet: ability.buttonAssets.between, depressedSheet: ability.buttonAssets.depressed });
@@ -296,17 +300,18 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
       lucky: 'Lucky', advantaged: 'Advantaged plus one Mana', juggernaut: 'Block broken', thief: 'Yoink', stunned: 'Stunned',
       bull: 'Bull Market', bear: 'Bear Market', cheater: 'Cheater bonus Mana', copywriter: 'Copied move bonus', duplicator: 'Mana duplicated',
       'cupid-arrow': 'Golden Arrow turns remaining', 'cupid-attack': 'Golden Arrow free Attack', 'cupid-block': 'Golden Arrow Block loss', 'cupid-mana': 'Golden Arrow bonus Mana',
-      defender: 'Block preserved', 'last-ditch': 'Last Ditch bonus Mana', 'fireborne-shield': 'Extra life turns remaining', gambler: 'Gambler result', parried: 'Parried', retired: 'Un-Retired', sumo: 'Free Attack', taxed: 'Taxed',
+      defender: 'Block preserved', 'last-ditch': 'Last Ditch bonus Mana', 'null-reset': 'Round Reset', 'joe-infinite': 'Infinite Mana', 'joe-proc': 'One in a thousand', 'fireborne-shield': 'Extra life turns remaining', gambler: 'Gambler result', parried: 'Parried', retired: 'Un-Retired', sumo: 'Free Attack', taxed: 'Taxed',
   };
   for (const player of ['p1', 'p2'] as const) {
-    for (const kind of ['lucky', 'advantaged', 'juggernaut', 'thief', 'stunned', 'taxed', 'parried', 'bull', 'bear', 'cheater', 'copywriter', 'duplicator', 'cupid-arrow', 'cupid-attack', 'cupid-block', 'cupid-mana', 'defender', 'last-ditch', 'fireborne-shield', 'gambler', 'retired', 'sumo'] as const satisfies readonly AbmTagKind[]) {
+    for (const kind of ['lucky', 'advantaged', 'juggernaut', 'thief', 'stunned', 'taxed', 'parried', 'bull', 'bear', 'cheater', 'copywriter', 'duplicator', 'cupid-arrow', 'cupid-attack', 'cupid-block', 'cupid-mana', 'defender', 'last-ditch', 'null-reset', 'joe-infinite', 'joe-proc', 'fireborne-shield', 'gambler', 'retired', 'sumo'] as const satisfies readonly AbmTagKind[]) {
       const src = kind === 'sumo' ? `${ABM_ROOT}/scenes/tags/sumo-2-left-sheet.webp`
         : kind === 'gambler' ? `${ABM_ROOT}/scenes/tags/gambler-plus-1-mana-sheet.webp`
           : kind === 'fireborne-shield' ? `${ABM_ROOT}/scenes/tags/fireborne-cloud-5-sheet.webp`
             : kind === 'cupid-arrow' ? `${ABM_ROOT}/scenes/tags/golden-arrow-5-sheet.webp`
               : kind.startsWith('cupid-') ? `${ABM_ROOT}/scenes/tags/golden-arrow-${kind.slice(6)}-sheet.webp`
                 : kind === 'last-ditch' ? `${ABM_ROOT}/scenes/tags/last-ditch-tag-1-sheet.webp`
-                  : `${ABM_ROOT}/scenes/tags/${kind}-sheet.webp`;
+                  : kind === 'joe-proc' ? `${ABM_ROOT}/scenes/tags/joe-thousand-sheet.webp`
+                    : `${ABM_ROOT}/scenes/tags/${kind}-sheet.webp`;
       const copies = 1;
       for (let occurrence = 1; occurrence <= copies; occurrence++) {
         const tag = createBoilingSprite({ src, clock, className: `abm-tag abm-tag--${kind}`, alt: labels[kind] });
@@ -513,7 +518,11 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     const gamblerOutcomes = continuingRoundProc ? nextProjection.gamblerOutcomes : undefined;
     const splitPlayer = nextProjection.phase === 'waiting' && nextProjection.waitingStartsAt !== undefined && serverTime >= nextProjection.waitingStartsAt
       ? nextProjection.earlyPlayer : nextProjection.heldSplitFor;
-    const scene = nextProjection.conjureStalemate
+    const scene = nextProjection.joeProcPlayers?.length && !splitPlayer
+      ? resolveJoeScene()
+      : nextProjection.nullResetPlayer
+      ? resolveNullScene(splitPlayer)
+      : nextProjection.conjureStalemate
       ? resolveConjureScene('conjure', 'p1')
       : nextProjection.conjurer && nextProjection.conjuredMove
         ? resolveConjureScene(nextProjection.conjuredMove, nextProjection.conjurer)
@@ -698,18 +707,20 @@ function resourceDisplay(label: string, player: 'p1' | 'p2', clock: BoilClock, s
 }
 function renderResources(target: ResourceDisplay, projection: AbmProjection, player: 'p1' | 'p2', override?: AbmStartingResources) {
   const state = projection.players[player];
-  setResourceDisplay(target, override ?? { mana: state.mana, blocks: state.blocks });
+  setResourceDisplay(target, override ?? { mana: state.mana, blocks: state.blocks }, !override && state.infiniteMana);
 }
-function setResourceDisplay(target: ResourceDisplay, resources: AbmStartingResources) {
-  setManaDisplay(target, resources.mana);
+function setResourceDisplay(target: ResourceDisplay, resources: AbmStartingResources, infiniteMana = false) {
+  setManaDisplay(target, resources.mana, infiniteMana);
   target.blocks.forEach((sprite, index) => {
     const filled = index < resources.blocks;
     sprite.element.classList.toggle('is-filled', Boolean(filled));
     sprite.setSource(filled ? `${ABM_ROOT}/block-icon-sheet.webp` : `${ABM_ROOT}/block-icon-empty-sheet.webp`);
   });
 }
-function setManaDisplay(target: ResourceDisplay, mana: number) {
+function setManaDisplay(target: ResourceDisplay, mana: number, infiniteMana = false) {
   target.manaCountElement.hidden = false;
+  target.manaCountElement.classList.toggle('is-infinite', infiniteMana);
+  target.manaMultiplier.element.hidden = infiniteMana;
   target.manaMultiplier.setSource(`/visual-elements/resource-counters/times${Math.max(0, Math.min(9, mana))}-sheet.webp`);
 }
 export function initialManaForClass(classId: AbmClassId): number {
@@ -731,7 +742,7 @@ export function latestClassPreview(events: readonly TimedSemanticEvent[], player
 }
 function element<K extends keyof HTMLElementTagNameMap>(tag: K, className: string) { const target = document.createElement(tag); target.className = className; return target; }
 function isWipeCue(type: TimedSemanticEvent['type']) {
-  return ['class-reveal', 'move-reveal', 'move-timeout', 'forced-mana', 'round-result', 'conjure-reveal', 'conjure-stalemate'].includes(type);
+  return ['class-reveal', 'move-reveal', 'move-timeout', 'forced-mana', 'round-result', 'conjure-reveal', 'conjure-stalemate', 'null-reset'].includes(type);
 }
 function turnArtwork(turn: number) { const value = Math.min(21, Math.max(0, turn)); return { src: `/visual-elements/time-counters/turn${value}-sheet.webp`, alt: `Turn ${turn}` }; }
 function winArtwork(player: string, wins: number) { const value = Math.min(3, Math.max(0, wins)); return { src: `/visual-elements/win-couters/ft3-win-counter-${value}-sheet.webp`, alt: `${player} wins: ${wins}` }; }
