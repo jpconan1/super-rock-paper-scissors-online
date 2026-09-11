@@ -9,6 +9,7 @@ export interface GameButtonStateOptions {
   render(view: GameButtonView): void;
   activate(): void;
   lockedDepressed?: boolean;
+  interactiveWhenLockedDepressed?: boolean;
   activateAtReleaseStart?: boolean;
   wait?: (milliseconds: number, signal: AbortSignal) => Promise<void>;
 }
@@ -35,7 +36,7 @@ export class GameButtonState {
   }
 
   press(): boolean {
-    if (this.destroyed || this.interaction || this.lockedDepressed) return false;
+    if (this.destroyed || this.interaction || (this.lockedDepressed && !this.options.interactiveWhenLockedDepressed)) return false;
     this.interaction = new AbortController();
     this.held = true;
     this.eligible = true;
@@ -72,7 +73,7 @@ export class GameButtonState {
     this.interaction.abort();
     this.interaction = null;
     this.stopJuiceFade();
-    this.visual = 'up';
+    this.visual = this.lockedDepressed ? 'depressed' : 'up';
     this.render();
   }
 

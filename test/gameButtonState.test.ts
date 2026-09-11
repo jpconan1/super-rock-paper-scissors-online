@@ -81,6 +81,24 @@ describe('GameButtonState', () => {
     expect(state.press()).toBe(true);
   });
 
+  test('can opt into activating again while locked depressed', () => {
+    const views: GameButtonView[] = [];
+    const activate = vi.fn();
+    const state = new GameButtonState({
+      render: (view) => views.push(view),
+      activate,
+      lockedDepressed: true,
+      interactiveWhenLockedDepressed: true,
+      activateAtReleaseStart: true,
+    });
+    expect(state.press()).toBe(true);
+    state.cancel();
+    expect(views.at(-1)).toEqual({ visual: 'depressed', juiceOpacity: 0 });
+    expect(state.press()).toBe(true);
+    state.release();
+    expect(activate).toHaveBeenCalledOnce();
+  });
+
   test('can lock depressed at release start without flashing the between frame', () => {
     const views: GameButtonView[] = [];
     let state!: GameButtonState;

@@ -99,6 +99,17 @@ export function shouldShowAbmContinuingRoundProcTags(phase: AbmProjection['phase
   return phase === 'idle' || phase === 'waiting';
 }
 
+export function reconcileAbmArmedAbility(
+  current: AbmAbilityId | undefined,
+  projection: Pick<AbmProjection, 'ownPendingAbility' | 'ownPendingMove' | 'nullResetPlayer'>,
+  abilityFeedback: boolean,
+): AbmAbilityId | undefined {
+  if (projection.ownPendingAbility) return projection.ownPendingAbility;
+  if (!current || projection.ownPendingMove || projection.nullResetPlayer || abilityFeedback) return undefined;
+  const ability = ABM_CLASSES.find((definition) => definition.ability?.id === current)?.ability;
+  return ability?.inputStrategy === 'arm-with-move' ? current : undefined;
+}
+
 export function displayedAbmMove(projection: AbmProjection, player: 'p1' | 'p2') {
   if (projection.phase === 'conjurer-choosing' && projection.conjurer && projection.conjuredMove && player !== projection.conjurer) {
     return projection.conjuredMove;
@@ -222,7 +233,8 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
       }
       armedAbility = armedAbility === ability.id ? undefined : ability.id;
       button.setLockedDepressed(armedAbility === ability.id);
-    }, upSheet: ability.buttonAssets.up, betweenSheet: ability.buttonAssets.between, depressedSheet: ability.buttonAssets.depressed });
+    }, interactiveWhenLockedDepressed: ability.inputStrategy === 'arm-with-move',
+    upSheet: ability.buttonAssets.up, betweenSheet: ability.buttonAssets.between, depressedSheet: ability.buttonAssets.depressed });
     button.element.classList.add('abm-controls__ability', `abm-controls__ability--${ability.id}`, 'game-button--baked-label');
     button.element.hidden = true; buttons.push(button); controls.append(button.element); return [ability.id, button] as const;
   });
@@ -473,7 +485,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
       applyVariantLayout();
     }
     const abilityFeedback = thiefFeedback || Boolean(nextProjection.taxmanCollectPlayers?.length);
-    armedAbility = nextProjection.ownPendingAbility ?? (armedAbility && !nextProjection.ownPendingMove && !abilityFeedback ? armedAbility : undefined);
+    armedAbility = reconcileAbmArmedAbility(armedAbility, nextProjection, abilityFeedback);
     for (const [abilityId, button] of abilityButtons) {
       button.element.hidden = picking || transitioning || ownAbility?.id !== abilityId || abilityFeedback
         || nextProjection.phase === 'conjurer-choosing' || Boolean(nextProjection.conjureStalemate);

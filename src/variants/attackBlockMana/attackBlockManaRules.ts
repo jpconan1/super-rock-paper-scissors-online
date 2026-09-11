@@ -1,6 +1,6 @@
 import type { DeterministicContext, PlayerId, VariantRules, VariantResolution } from '../../core/variant';
 import { beats, STARBURST_WIPE_MS } from '../../core/time';
-import { ABM_CLASS_BY_ID, startingResourcesForClass } from './attackBlockManaCatalog';
+import { ABM_CLASSES, ABM_CLASS_BY_ID, startingResourcesForClass } from './attackBlockManaCatalog';
 import type { AbmAbilityId, AbmClassId, AbmCommand, AbmDisplayMove, AbmGamblerOutcome, AbmLastDitchBonus, AbmMove, AbmPlayerState, AbmProjection, AbmResult, AbmState } from './attackBlockManaTypes';
 
 const OTHER: Record<PlayerId, PlayerId> = { p1: 'p2', p2: 'p1' };
@@ -141,7 +141,7 @@ function chooseMove(state: AbmState, player: PlayerId, move: AbmMove, ability: A
   if (!isMove(move)) throw new Error('Unknown ABM move.');
   if (state.pendingMoves[player]) throw new Error('Move is already locked.');
   if (state.pendingAbilities?.[player] === 'conjure' && !(state.phase === 'conjurer-choosing' && state.conjurer === player)) throw new Error('Waiting for the opponent to move.');
-  const forcedMana = state.phase !== 'conjurer-choosing' && bothPlayersHaveNoMana(state);
+  const forcedMana = state.phase !== 'conjurer-choosing' && isForcedManaTurn(state);
   if (forcedMana && move !== 'mana') throw new Error('Mana is the only move available at 0–0 Mana.');
   if (ability === 'conjure') throw new Error('Conjure must be activated before choosing a move.');
   if (ability) validateAbility(state, player, ability);
@@ -335,7 +335,7 @@ function resolveTimeout(state: AbmState, context: DeterministicContext): Variant
   }
   const early = state.earlyPlayer!; const late = state.latePlayer!; const move = state.pendingMoves[early]!;
   const players = clonePlayers(state.players);
-  const forced = bothPlayersHaveNoMana(state);
+  const forced = isForcedManaTurn(state);
   const zeroManaTurns = (state.zeroManaTurns ?? 0) + (forced ? 1 : 0);
   const lastDitchBonus = forced && move === 'mana' && players[early].classId === 'last-ditch'
     ? Math.min(8, 1 + Math.floor(zeroManaTurns / 2)) as AbmLastDitchBonus
@@ -583,7 +583,7 @@ function legalActions(state: AbmState, viewer: PlayerId) {
     const ability = target.classId ? ABM_CLASS_BY_ID.get(target.classId)?.ability : undefined;
     const legalAbility = ability && !state.conjureStalemate && abilityUsesFor(target, ability.id) > 0 && target.mana >= ability.manaCost && (!ability.available || ability.available(target, state.turn))
       ? ability.id : undefined;
-    if (state.phase !== 'conjurer-choosing' && bothPlayersHaveNoMana(state)) return legalAbility === 'reset' ? ['mana', 'reset'] as const : ['mana'] as const;
+    if (state.phase !== 'conjurer-choosing' && isForcedManaTurn(state)) return legalAbility === 'reset' ? ['mana', 'reset'] as const : ['mana'] as const;
     return legalAbility ? [...moves, legalAbility] : moves;
   }
   return [];
@@ -607,6 +607,13 @@ function classMap(players: Record<PlayerId, AbmPlayerState>) { return { p1: play
 function isMove(value: unknown): value is AbmMove { return value === 'attack' || value === 'block' || value === 'mana'; }
 function bothPlayersHaveNoMana(state: AbmState): boolean {
   return !state.players.p1.infiniteMana && !state.players.p2.infiniteMana && state.players.p1.mana === 0 && state.players.p2.mana === 0;
+}
+function isForcedManaTurn(state: AbmState): boolean {
+  if (!bothPlayersHaveNoMana(state)) return false;
+  return !Object.values(state.pendingAbilities ?? {}).some((abilityId) => {
+    const ability = ABM_CLASSES.find((definition) => definition.ability?.id === abilityId)?.ability;
+    return Boolean(ability?.manaCost);
+  });
 }
 function attackCostFor(player: Readonly<AbmPlayerState>): number { return player.attackCost ?? 1; }
 function initialAbilityUses(classId?: AbmClassId): Pick<AbmPlayerState, 'abilityUses'> | Record<string, never> {

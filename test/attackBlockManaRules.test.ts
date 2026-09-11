@@ -685,6 +685,7 @@ describe('Attack Block Mana rules', () => {
 
   test('stages Conjurer behind the opponent move and gives only the Conjurer a fresh response window', () => {
     let state = startedWith('conjurer', 'lucky');
+    state.players.p2.mana = 0;
     expect(attackBlockManaRules.project(state, 'p1').legalActions).toContain('conjure');
     expect(() => send(state, 'p1', { type: 'choose-move', move: 'block', ability: 'conjure' })).toThrow('activated before');
     state = send(state, 'p1', { type: 'activate-ability', ability: 'conjure' }, 2_000);
@@ -692,7 +693,7 @@ describe('Attack Block Mana rules', () => {
     expect(state.players.p1).toMatchObject({ mana: 0, abilityUses: { conjure: 1 } });
     expect(attackBlockManaRules.project(state, 'p1').ownPendingAbility).toBe('conjure');
     expect(attackBlockManaRules.project(state, 'p2').ownPendingAbility).toBeUndefined();
-    expect(attackBlockManaRules.project(state, 'p2').legalActions).toEqual(['attack', 'block', 'mana']);
+    expect(attackBlockManaRules.project(state, 'p2').legalActions).toEqual(['block', 'mana']);
 
     const reveal = attackBlockManaRules.resolve(state, 'p2', { type: 'choose-move', move: 'block' }, { ...context, now: 3_000 });
     state = reveal.state;
@@ -1256,6 +1257,15 @@ describe('Attack Block Mana rules', () => {
     empty.players.p1.mana = 0;
     expect(attackBlockManaRules.project(empty, 'p1').legalActions).not.toContain('flame');
     expect(() => send(empty, 'p1', { type: 'choose-move', move: 'block', ability: 'flame' })).toThrow('requires 1 Mana');
+  });
+
+  test('does not force Mana when a submitted Flame payment creates zero-zero mid-turn', () => {
+    let state = startedWith('fireborne', 'lucky');
+    state.players.p2.mana = 0;
+    state = send(state, 'p1', { type: 'choose-move', move: 'block', ability: 'flame' });
+    expect(state.players.p1.mana).toBe(0);
+    expect(attackBlockManaRules.project(state, 'p2').legalActions).toEqual(['block', 'mana']);
+    expect(() => send(state, 'p2', { type: 'choose-move', move: 'block' })).not.toThrow();
   });
 
   test('pops Flame back up and submits Attack when there is not enough Mana for both', () => {

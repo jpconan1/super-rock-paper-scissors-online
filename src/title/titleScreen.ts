@@ -57,8 +57,8 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
     label: 'Open letter to the ABM community',
     onActivate: () => onOpenLetter(logo.element),
     upSheet: titleElement('logo').assets!.src!,
-    betweenSheet: '/title/abm-logo-between-sheet.webp',
-    depressedSheet: '/title/abm-logo-depressed-sheet.webp',
+    betweenSheet: '/title/abm-logo-v2-between-sheet.webp',
+    depressedSheet: '/title/abm-logo-v2-depressed-sheet.webp',
     clock,
   });
   logo.element.classList.add('title-screen__logo', 'game-button--baked-label');

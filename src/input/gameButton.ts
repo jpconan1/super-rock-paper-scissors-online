@@ -15,6 +15,7 @@ export interface GameButtonOptions {
   depressedSheet: string;
   juiceSheet?: string;
   lockedDepressed?: boolean;
+  interactiveWhenLockedDepressed?: boolean;
   activateAtReleaseStart?: boolean;
   clock: BoilClock;
   depressedSound?: string;
@@ -97,6 +98,7 @@ export function createGameButton(options: GameButtonOptions): GameButton {
 
   const state = new GameButtonState({
     lockedDepressed: options.lockedDepressed,
+    interactiveWhenLockedDepressed: options.interactiveWhenLockedDepressed,
     activateAtReleaseStart: options.activateAtReleaseStart,
     activate() {
       releasedSound.play();

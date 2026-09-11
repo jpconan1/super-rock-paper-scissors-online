@@ -1,0 +1,21 @@
+Lucky: Has a 1/4 chance to survive a lethal attack.
+Advantaged: For the first three turns, Mana gives 2 instead of 1.
+Thief: Steal ability steals 1 Mana from your opponent. Only after turn 4, only once.
+Juggernaut: Two consecutive attacks disable your opponent's Block next turn.
+Stunner: Attacks double your opponent's next Attack cost, up to 8 Mana.
+Duplicator: Picking Mana consecutively doubles the amount gained each time.
+The Sumo: When both players Attack, The Sumo doesn't pay. Three charges.
+Cheater: Has a 1/3 chance to get an extra Mana when Mana-ing.
+Investor: Starts with 5 Mana, but loses 1 every third turn. Gains 1 extra when both players Mana.
+Gambler: When Blocking, rolls a random effect. Short Block meter.
+Taxman: Collect ability taxes both players 1 Mana. Three charges.
+Copywriter: If your opponent picks the same move three times in a row, gain a free Mana.
+Conjurer: Conjure ability reveals your opponent's move. Two charges.
+Fireborne: Flame ability grants an extra life for 5 turns.
+Retired: Starts with a bunch of Mana, but can't gain Mana and has a short Block meter.
+Parrymaster: Parry ability drains your opponent of 2 extra Mana, if you catch their Attack. One charge.
+Cupid: Golden Arrow ability gives you a bonus for matching your opponent's move. Lasts 5 turns.
+Defender: Blocking an Attack doesn't deplete your Block meter.
+Last Ditch: Gains extra Mana when both players have 0. Gain increases every second time it happens.
+Null: Reset ability resets both players to their starting state. One charge.
+Joe: Has a 1/1000 chance to gain infinite Mana every turn. Otherwise, does nothing.

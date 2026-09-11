@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { ABM_CLASSES, startingResourcesForClass } from '../src/variants/attackBlockMana/attackBlockManaCatalog';
-import { ABM_BACK_LOBBY_ART, ABM_LAYOUTS, ABM_RESULT_SCENES, ABM_SELECT_ART, ABM_TAG_CATEGORIES, ABM_TAG_ORDERS, abmTagSlotId, blockSegments, displayedAbmMove, getAbmAttackCostDisplay, getAbmClassBadgeGeometry, getAbmClassReadyFrame, getAbmResultScene, getAbmAbilityControlGeometry, getAbmWaitingVisual, initialManaForClass, latestClassPreview, sceneForMoves, shouldShowAbmContinuingRoundProcTags, shouldShowAbmYouTag, shouldShowClassBadge, shouldShowClassReadyOpponentTag } from '../src/variants/attackBlockMana/attackBlockManaPresentation';
+import { ABM_BACK_LOBBY_ART, ABM_LAYOUTS, ABM_RESULT_SCENES, ABM_SELECT_ART, ABM_TAG_CATEGORIES, ABM_TAG_ORDERS, abmTagSlotId, blockSegments, displayedAbmMove, getAbmAttackCostDisplay, getAbmClassBadgeGeometry, getAbmClassReadyFrame, getAbmResultScene, getAbmAbilityControlGeometry, getAbmWaitingVisual, initialManaForClass, latestClassPreview, reconcileAbmArmedAbility, sceneForMoves, shouldShowAbmContinuingRoundProcTags, shouldShowAbmYouTag, shouldShowClassBadge, shouldShowClassReadyOpponentTag } from '../src/variants/attackBlockMana/attackBlockManaPresentation';
 import type { AbmProjection } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 import { ABM_CLASS_IDS } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 import { ABM_SCENE_URLS, resolveAbmProcBackgrounds, resolveAbmScene, resolveAbmSplitScene, resolveAbmTags, resolveConjureScene, resolveJoeScene, resolveNullScene } from '../src/variants/attackBlockMana/attackBlockManaScenes';
@@ -56,6 +56,15 @@ describe('Attack Block Mana presentation data', () => {
 
   test('starts the class-select order with Lucky', () => {
     expect(ABM_CLASSES[0]?.id).toBe('lucky');
+  });
+
+  test('releases submitted Conjure after Null clears it while preserving locally armed abilities', () => {
+    const idle = { ownPendingAbility: undefined, ownPendingMove: undefined, nullResetPlayer: undefined };
+    expect(reconcileAbmArmedAbility('conjure', idle, false)).toBeUndefined();
+    expect(reconcileAbmArmedAbility('steal', idle, false)).toBe('steal');
+    expect(reconcileAbmArmedAbility(undefined, { ...idle, ownPendingAbility: 'conjure' }, false)).toBe('conjure');
+    expect(reconcileAbmArmedAbility('steal', { ...idle, nullResetPlayer: 'p2' }, false)).toBeUndefined();
+    expect(reconcileAbmArmedAbility('flame', { ...idle, ownPendingMove: 'attack' }, false)).toBeUndefined();
   });
 
   test('defines class-select starting resources and reads the newest counter-pick event', () => {

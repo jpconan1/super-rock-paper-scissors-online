@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "records": {
+    "lucky:lucky": {
+      "tested": true,
+      "interactions": {
+        "baseline": true,
+        "class:lucky": true
+      }
+    },
+    "lucky:advantaged": {
+      "tested": true,
+      "interactions": {
+        "opponent:advantaged": true
+      }
+    },
+    "taxman:null": {
+      "tested": true,
+      "interactions": {
+        "yours:taxman": true,
+        "opponent:null": true,
+        "baseline": true
+      }
+    },
+    "retired:retired": {
+      "tested": true,
+      "interactions": {
+        "baseline": true,
+        "class:retired": true
+      }
+    },
+    "parrymaster:retired": {
+      "tested": true,
+      "interactions": {
+        "baseline": true,
+        "yours:parrymaster": true,
+        "opponent:retired": true
+      }
+    },
+    "parrymaster:fireborne": {
+      "tested": false,
+      "interactions": {
+        "baseline": true,
+        "yours:parrymaster": true,
+        "opponent:fireborne": true
+      }
+    },
+    "fireborne:conjurer": {
+      "tested": true,
+      "interactions": {}
+    },
+    "thief:taxman": {
+      "tested": true,
+      "interactions": {
+        "baseline": true,
+        "yours:thief": true,
+        "opponent:taxman": true
+      }
+    }
+  }
+}
