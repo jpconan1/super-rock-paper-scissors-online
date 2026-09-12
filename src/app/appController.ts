@@ -113,6 +113,8 @@ export class AppController {
     });
     globalThis.addEventListener?.('keydown', this.onGlobalKeyDown as EventListener);
     const removeLoadingScreen = await runLoadingScreen(this.screenLayer, options.clock, assetLoader.retainBundle('shared'), true);
+    const guest = await options.session.initializeGuest();
+    if (guest) this.playerName = guest.displayName;
     this.transitionLayer.replaceChildren(...this.screenLayer.childNodes);
     await this.navigate('title', false);
     await this.screenReady;
@@ -235,8 +237,14 @@ export class AppController {
     if (destination === 'title') {
       const title = mountTitleScreen(this.screenLayer, options.clock, (name) => {
         this.playerName = name;
-        void options.session.enterLobby(name).then(() => this.navigate('lobby'));
-      }, () => options.session.getOnlinePlayerCount(), (trigger) => this.openAbmLetter(trigger));
+        void options.session.enterLobby(name).then((profile) => {
+          this.playerName = profile.displayName;
+          return this.navigate('lobby');
+        });
+      }, () => options.session.getOnlinePlayerCount(), (trigger) => this.openAbmLetter(trigger),
+      options.session.suggestedPlayerName(), (name) => {
+        void options.session.signInWithGoogle(name).catch((error) => this.showError(error));
+      }, options.session.accountState().signedIn);
       this.screenCleanup = title;
       this.screenReady = title.ready;
     } else if (destination === 'lobby') {
@@ -378,7 +386,15 @@ export class AppController {
       ? scaleContent.firstElementChild
       : this.screenLayer.firstElementChild instanceof HTMLElement ? this.screenLayer.firstElementChild : this.screenLayer;
     this.universalMenu = mountUniversalMenu(scaleContent ?? this.screenLayer, background, this.options.clock,
-      () => this.quitToTitle(), () => this.closeUniversalMenu());
+      () => this.quitToTitle(), () => this.closeUniversalMenu(), {
+        ...this.options.session.accountState(),
+        onSignOut: () => {
+          void this.options.session.signOut().then(() => {
+            this.closeUniversalMenu();
+            this.quitToTitle();
+          }).catch((error) => this.showError(error));
+        },
+      });
   }
 
   private openAbmLetter(trigger?: HTMLElement): void {

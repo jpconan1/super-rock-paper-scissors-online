@@ -15,7 +15,8 @@ function isLoopbackOrigin(origin: string): boolean {
 export function corsHeadersForOrigin(origin: string): Record<string, string> {
   return {
     'access-control-allow-origin': origin,
-    'access-control-allow-methods': 'GET,POST,DELETE,OPTIONS',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET,POST,PUT,DELETE,OPTIONS',
     'access-control-allow-headers': 'content-type',
     vary: 'Origin',
   };

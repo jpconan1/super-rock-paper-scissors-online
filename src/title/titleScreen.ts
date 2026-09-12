@@ -27,7 +27,8 @@ export function formatOnlinePlayerCount(count: number | null): string { return `
 
 export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPlay: (playerName: string) => void,
   getOnlinePlayerCount: () => Promise<number | null> = async () => null,
-  onOpenLetter: (trigger: HTMLElement) => void = () => {}): TitleScreenMount {
+  onOpenLetter: (trigger: HTMLElement) => void = () => {}, initialName?: string,
+  onGoogleSignIn: (playerName: string) => void = () => {}, googleSignedIn = false): TitleScreenMount {
   const screen = document.createElement('section');
   screen.className = 'title-screen';
   screen.setAttribute('aria-labelledby', 'title-screen-heading');
@@ -75,7 +76,7 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
 
   const nameEntry = createTextEntry({
     label: TITLE_LAYOUT.copy!.nameLabel!,
-    value: generateRandomName(),
+    value: initialName?.trim() || generateRandomName(),
     maxLength: 24,
     autocomplete: 'nickname',
     validate: isNonBlankText,
@@ -114,6 +115,21 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
   });
   enterLobby.element.classList.add('game-button--baked-label');
 
+  const handleGoogle = () => {
+    if (!nameEntry.validate()) { nameEntry.focus(); return; }
+    onGoogleSignIn(nameEntry.input.value.trim());
+  };
+  const google = createGameButton({
+    label: 'Sign in with Google',
+    onActivate: handleGoogle,
+    upSheet: titleElement('google-sign-in').assets!.up!,
+    betweenSheet: titleElement('google-sign-in').assets!.between!,
+    depressedSheet: titleElement('google-sign-in').assets!.depressed!,
+    clock,
+  });
+  google.element.classList.add('title-screen__google', 'game-button--baked-label');
+  google.element.hidden = googleSignedIn;
+
   const onNameKeyDown = (event: KeyboardEvent) => {
     if (event.key !== 'Enter' || event.isComposing) return;
     event.preventDefault();
@@ -121,11 +137,12 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
   };
   nameEntry.input.addEventListener('keydown', onNameKeyDown);
 
-  composition.append(logo.element, randomName.element, enterLobby.element, nameEntry.element,
+  composition.append(logo.element, randomName.element, enterLobby.element, nameEntry.element, google.element,
     soundToggle.element, musicVolume.element, sfxVolume.element, boilToggle.element, onlineCount);
   bindings.push(
     { id: 'logo', element: logo.element }, { id: 'random-name', element: randomName.element },
     { id: 'enter-lobby', element: enterLobby.element }, { id: 'name-entry', element: nameEntry.element },
+    { id: 'google-sign-in', element: google.element },
     { id: 'sound-toggle', element: soundToggle.element }, { id: 'music-slider', element: musicVolume.element },
     { id: 'sfx-slider', element: sfxVolume.element }, { id: 'boil-toggle', element: boilToggle.element },
     { id: 'online-count', element: onlineCount },
@@ -146,6 +163,7 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
     nameEntry.input.removeEventListener('keydown', onNameKeyDown);
     nameEntry.destroy();
     enterLobby.destroy();
+    google.destroy();
     countStopped = true; window.clearInterval(countTimer);
     screen.remove();
   }) as TitleScreenMount;

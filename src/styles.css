@@ -208,6 +208,9 @@ body::before {
 .universal-menu__controls .title-volume-slider { width: min(10rem, 100%); }
 .universal-menu__slider { grid-row: 1; }
 .universal-menu__toggle { grid-row: 2; }
+.universal-menu__account { grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; gap: 16px; font-size: 20px; }
+.universal-menu__account p { margin: 0; }
+.universal-menu__account button { min-height: 40px; padding: 6px 16px; }
 .game-button.universal-menu__continue, .game-button.universal-menu__quit { grid-row: 3; width: min(10rem, 100%); }
 .universal-menu__confirmation { display: grid; width: min(520px, 100%); padding: clamp(24px, 6vw, 48px); place-items: center; gap: 28px; }
 .universal-menu__confirmation[hidden] { display: none; }
@@ -356,6 +359,7 @@ input {
 .title-screen__logo > .game-button__art { inset: 0; }
 .title-screen__logo > .game-button__juice { display: none; }
 .title-screen__online-count { position: absolute; margin: 0; color: rgba(23,20,18,.72); font-size: 22px; font-weight: 950; line-height: 1; text-align: center; transform: rotate(.25deg); }
+.game-button.title-screen__google { position: absolute; width: auto; max-width: none; }
 
 .title-screen__primary-actions,
 .title-screen__toggles {

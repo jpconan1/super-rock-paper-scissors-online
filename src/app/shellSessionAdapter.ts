@@ -4,6 +4,10 @@ import type { SlotId } from '../core/slots';
 import { isWhiteboardServerMessage, type WhiteboardClientMessage, type WhiteboardServerMessage } from '../whiteboard/protocol';
 import { isLobbyServerMessage, type LobbyPlayer, type LobbyPresence } from '../lobby/protocol';
 import { LOBBY_SOCKET_PROTOCOL, MATCH_SOCKET_PROTOCOL, WHITEBOARD_SOCKET_PROTOCOL } from '../protocol/webSocketAuth';
+import { isGuestSessionResponse, type GuestProfile, type GuestSessionRequest, type GuestSessionResponse } from '../protocol/guestSession';
+import { createGameAuthClient, type GameAuthClient } from '../auth/authClient';
+
+export interface AccountState { signedIn: boolean; isAnonymous: boolean; displayName: string }
 
 export interface ShellSessionListener {
   connection(state: ConnectionState): void;
@@ -16,7 +20,12 @@ export interface ShellSessionListener {
 
 export interface ShellSessionAdapter {
   subscribe(listener: ShellSessionListener): () => void;
-  enterLobby(playerName: string): Promise<void>;
+  initializeGuest(): Promise<GuestProfile | null>;
+  suggestedPlayerName(): string;
+  accountState(): AccountState;
+  signInWithGoogle(playerName: string): Promise<void>;
+  signOut(): Promise<void>;
+  enterLobby(playerName: string): Promise<GuestProfile>;
   getOnlinePlayerCount(): Promise<number | null>;
   leaveLobby(): void;
   disconnectOnline(): void;
@@ -34,8 +43,8 @@ export interface ShellSessionAdapter {
 export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
   private listener?: ShellSessionListener;
   private playerName = '';
-  private readonly guestId: string;
-  private readonly guestSecret: string;
+  private guestId: string;
+  private guestSecret: string;
   private pollTimer?: ReturnType<typeof setTimeout>;
   private matchmakingRequest?: AbortController;
   private matchmakingGeneration = 0;
@@ -55,11 +64,14 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
   private lobbyReconnect?: ReturnType<typeof setTimeout>;
   private onlineActive = false;
   private lobbyPresence: LobbyPresence = 'idle';
+  private readonly authClient: GameAuthClient;
+  private authIsAnonymous = true;
 
   constructor(private readonly baseUrl = location.origin) {
+    this.authClient = createGameAuthClient(baseUrl);
     const identity = loadGuestIdentity();
-    this.guestId = identity.id;
-    this.guestSecret = identity.secret;
+    this.guestId = identity.id ?? '';
+    this.guestSecret = identity.secret ?? '';
   }
 
   subscribe(listener: ShellSessionListener): () => void {
@@ -67,23 +79,115 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
     listener.connection('connected');
     return () => { if (this.listener === listener) this.listener = undefined; };
   }
-  async enterLobby(playerName: string): Promise<void> {
-    this.playerName = playerName;
+  async initializeGuest(): Promise<GuestProfile | null> {
+    const authenticated = await this.loadAuthenticatedPlayer();
+    if (authenticated) return authenticated;
+    if (!this.guestId || !this.guestSecret) return null;
     try {
-      const response = await fetch(`${this.baseUrl}/health`, { cache: 'no-store' });
-      if (!response.ok) throw new Error(`Server health check failed: ${response.status}`);
-      const health = await response.json() as { ok?: boolean };
-      if (health.ok !== true) throw new Error('Server health check returned an invalid response.');
-      this.listener?.connection('connected');
-      if (!this.whiteboardActive) this.lobbyVisitId = crypto.randomUUID();
-      this.onlineActive = true;
-      this.connectLobbyPresence();
-      this.setLobbyPresence('idle');
-      this.whiteboardActive = true;
-      this.connectWhiteboard();
+      const response = await fetch(`${this.baseUrl}/guest-session`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ guestId: this.guestId, guestSecret: this.guestSecret } satisfies GuestSessionRequest),
+      });
+      if (!response.ok) return null;
+      const session: unknown = await response.json();
+      if (!isGuestSessionResponse(session)) return null;
+      this.playerName = session.displayName;
+      saveGuestIdentity(session);
+      return session;
+    } catch { return null; }
+  }
+  suggestedPlayerName(): string { return loadSavedGuestName(); }
+  accountState(): AccountState {
+    return { signedIn: !this.authIsAnonymous, isAnonymous: this.authIsAnonymous, displayName: this.playerName || loadSavedGuestName() };
+  }
+  async signInWithGoogle(playerName: string): Promise<void> {
+    await this.enterLobby(playerName);
+    await this.authClient.signIn.social({ provider: 'google', callbackURL: location.href });
+  }
+  async signOut(): Promise<void> {
+    await this.authClient.signOut();
+    clearGuestIdentity();
+    this.guestId = ''; this.guestSecret = ''; this.playerName = ''; this.authIsAnonymous = true;
+  }
+  async enterLobby(playerName: string): Promise<GuestProfile> {
+    const requestedName = playerName.trim();
+    saveGuestName(requestedName);
+    this.playerName = requestedName;
+    const accountPlayer = await this.loadAuthenticatedPlayer();
+    if (accountPlayer && !this.authIsAnonymous) {
+      let profile = accountPlayer;
+      try {
+        const response = await fetch(`${this.baseUrl}/player-session`, {
+          method: 'PUT', credentials: 'include', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ displayName: requestedName }),
+        });
+        if (!response.ok) throw new Error(`Name update failed: ${response.status}`);
+        profile = await response.json() as GuestProfile;
+        this.playerName = profile.displayName; saveGuestName(profile.displayName);
+        await this.connectOnlineServices();
+      } catch { this.listener?.connection('offline'); }
+      return profile;
+    }
+    let profile: GuestProfile = { playerId: this.guestId, displayName: requestedName, rating: 1500 };
+    try {
+      const body: GuestSessionRequest = {
+        displayName: requestedName,
+        ...(this.guestId && this.guestSecret ? { guestId: this.guestId, guestSecret: this.guestSecret } : {}),
+      };
+      const sessionResponse = await fetch(`${this.baseUrl}/guest-session`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+      });
+      if (!sessionResponse.ok) throw new Error(`Guest session failed: ${sessionResponse.status}`);
+      const session: unknown = await sessionResponse.json();
+      if (!isGuestSessionResponse(session)) throw new Error('Guest session returned invalid data.');
+      this.guestId = session.playerId;
+      this.guestSecret = session.guestSecret;
+      this.playerName = session.displayName;
+      profile = session;
+      saveGuestIdentity(session);
+      await this.ensureAnonymousAssociation();
+      await this.connectOnlineServices();
     } catch {
       this.listener?.connection('offline');
     }
+    return profile;
+  }
+  private async connectOnlineServices(): Promise<void> {
+    const response = await fetch(`${this.baseUrl}/health`, { cache: 'no-store' });
+    if (!response.ok) throw new Error(`Server health check failed: ${response.status}`);
+    const health = await response.json() as { ok?: boolean };
+    if (health.ok !== true) throw new Error('Server health check returned an invalid response.');
+    this.listener?.connection('connected');
+    if (!this.whiteboardActive) this.lobbyVisitId = crypto.randomUUID();
+    this.onlineActive = true;
+    this.connectLobbyPresence();
+    this.setLobbyPresence('idle');
+    this.whiteboardActive = true;
+    this.connectWhiteboard();
+  }
+  private async loadAuthenticatedPlayer(): Promise<GuestProfile | null> {
+    try {
+      const response = await fetch(`${this.baseUrl}/player-session`, { credentials: 'include', cache: 'no-store' });
+      if (!response.ok) return null;
+      const player = await response.json() as GuestProfile & { isAnonymous?: boolean };
+      if (!player.playerId || !player.displayName || !Number.isFinite(player.rating)) return null;
+      this.playerName = player.displayName;
+      this.authIsAnonymous = player.isAnonymous !== false;
+      saveGuestName(player.displayName);
+      if (!this.authIsAnonymous) clearGuestCredentials();
+      return player;
+    } catch { return null; }
+  }
+  private async ensureAnonymousAssociation(): Promise<void> {
+    if (await this.loadAuthenticatedPlayer()) return;
+    const result = await this.authClient.signIn.anonymous();
+    if (result.error) throw new Error(result.error.message || 'Could not start guest session.');
+    const response = await fetch(`${this.baseUrl}/player-session`, {
+      method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ guestId: this.guestId, guestSecret: this.guestSecret }),
+    });
+    if (!response.ok) throw new Error(`Could not link guest session: ${response.status}`);
+    this.authIsAnonymous = true;
   }
   async getOnlinePlayerCount(): Promise<number | null> {
     try {
@@ -136,7 +240,7 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
     this.setLobbyPresence('idle');
     if (!attemptId) return;
     void fetch(`${this.baseUrl}/matchmaking`, {
-      method: 'DELETE', headers: { 'content-type': 'application/json' },
+      method: 'DELETE', credentials: 'include', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ guestId: this.guestId, guestSecret: this.guestSecret, attemptId }),
     }).catch(() => {});
   }
@@ -153,8 +257,8 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
   private connectLobbyPresence(): void {
     if (!this.onlineActive || this.lobbySocket) return;
     const url = new URL(`${this.baseUrl}/lobby`); url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-    url.searchParams.set('guest', this.guestId); url.searchParams.set('name', this.playerName || 'Guest');
-    const socket = new WebSocket(url, [LOBBY_SOCKET_PROTOCOL, this.guestSecret]); this.lobbySocket = socket;
+    if (this.guestId) url.searchParams.set('guest', this.guestId);
+    const socket = new WebSocket(url, socketProtocols(LOBBY_SOCKET_PROTOCOL, this.guestSecret)); this.lobbySocket = socket;
     socket.addEventListener('open', () => socket.send(JSON.stringify({ type: 'presence', presence: this.lobbyPresence })));
     socket.addEventListener('message', (event) => {
       try { const message = JSON.parse(String(event.data)); if (isLobbyServerMessage(message) && message.type === 'roster') this.listener?.roster?.(message.players, message.selfId); } catch { /* ignore malformed server data */ }
@@ -169,8 +273,8 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
   private connectWhiteboard(): void {
     if (!this.whiteboardActive || this.whiteboardSocket) return;
     const url = new URL(`${this.baseUrl}/whiteboard`); url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-    url.searchParams.set('guest', this.guestId); url.searchParams.set('name', this.playerName || 'Guest'); url.searchParams.set('visit', this.lobbyVisitId);
-    const socket = new WebSocket(url, [WHITEBOARD_SOCKET_PROTOCOL, this.guestSecret]); this.whiteboardSocket = socket;
+    if (this.guestId) url.searchParams.set('guest', this.guestId); url.searchParams.set('visit', this.lobbyVisitId);
+    const socket = new WebSocket(url, socketProtocols(WHITEBOARD_SOCKET_PROTOCOL, this.guestSecret)); this.whiteboardSocket = socket;
     socket.addEventListener('open', () => { for (const message of this.whiteboardPending.values()) socket.send(JSON.stringify(message)); });
     socket.addEventListener('message', (event) => {
       try {
@@ -198,8 +302,8 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
     this.matchmakingRequest = request;
     try {
       const response = await fetch(`${this.baseUrl}/matchmaking`, {
-        method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ guestId: this.guestId, guestSecret: this.guestSecret, attemptId, name: this.playerName || 'Guest' }),
+        method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ guestId: this.guestId, guestSecret: this.guestSecret, attemptId }),
         signal: request.signal,
       });
       if (!response.ok) throw new Error(`Matchmaking failed: ${response.status}`);
@@ -271,14 +375,29 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
 
 const GUEST_ID_KEY = 'super-rps-guest';
 const GUEST_SECRET_KEY = 'super-rps-guest-secret';
-function loadGuestIdentity(): { id: string; secret: string } {
-  const id = localStorage.getItem(GUEST_ID_KEY) ?? crypto.randomUUID();
-  const secret = localStorage.getItem(GUEST_SECRET_KEY) ?? `${crypto.randomUUID()}${crypto.randomUUID()}`;
-  localStorage.setItem(GUEST_ID_KEY, id);
-  localStorage.setItem(GUEST_SECRET_KEY, secret);
+const GUEST_NAME_KEY = 'super-rps-guest-name';
+function loadGuestIdentity(): { id: string | null; secret: string | null } {
+  const id = localStorage.getItem(GUEST_ID_KEY);
+  const secret = localStorage.getItem(GUEST_SECRET_KEY);
   sessionStorage.removeItem(GUEST_ID_KEY);
   return { id, secret };
 }
+function loadSavedGuestName(): string { return localStorage.getItem(GUEST_NAME_KEY)?.trim() ?? ''; }
+function saveGuestName(name: string): void { if (name) localStorage.setItem(GUEST_NAME_KEY, name); }
+function saveGuestIdentity(session: GuestSessionResponse): void {
+  localStorage.setItem(GUEST_ID_KEY, session.playerId);
+  localStorage.setItem(GUEST_SECRET_KEY, session.guestSecret);
+  saveGuestName(session.displayName);
+}
+function clearGuestIdentity(): void {
+  clearGuestCredentials();
+  localStorage.removeItem(GUEST_NAME_KEY);
+}
+function clearGuestCredentials(): void {
+  localStorage.removeItem(GUEST_ID_KEY);
+  localStorage.removeItem(GUEST_SECRET_KEY);
+}
+function socketProtocols(protocol: string, credential: string): string[] { return credential ? [protocol, credential] : [protocol]; }
 
 export class LocalShellSessionAdapter implements ShellSessionAdapter {
   private listener?: ShellSessionListener;
@@ -292,7 +411,15 @@ export class LocalShellSessionAdapter implements ShellSessionAdapter {
     return () => { if (this.listener === listener) this.listener = undefined; };
   }
 
-  async enterLobby(_playerName: string): Promise<void> { this.listener?.connection('connected'); }
+  async initializeGuest(): Promise<GuestProfile | null> { return null; }
+  suggestedPlayerName(): string { return ''; }
+  accountState(): AccountState { return { signedIn: false, isAnonymous: true, displayName: '' }; }
+  async signInWithGoogle(_playerName: string): Promise<void> {}
+  async signOut(): Promise<void> {}
+  async enterLobby(playerName: string): Promise<GuestProfile> {
+    this.listener?.connection('connected');
+    return { playerId: 'local-player', displayName: playerName, rating: 1500 };
+  }
   async getOnlinePlayerCount(): Promise<number | null> { return 1; }
   leaveLobby(): void {}
   disconnectOnline(): void {}

@@ -8,6 +8,7 @@ function deferred<T>() {
 }
 
 describe('matchmaking session adapters', () => {
+  let storageValues: Map<string, string>;
   test('preserves ABM command envelopes while unwrapping legacy move commands', () => {
     const abm = { type: 'choose-move', move: 'attack' } as const;
     expect(serializeVariantCommand(abm)).toBe(abm);
@@ -17,15 +18,16 @@ describe('matchmaking session adapters', () => {
   });
   beforeEach(() => {
     vi.useFakeTimers();
-    const values = new Map<string, string>();
+    storageValues = new Map<string, string>();
     vi.stubGlobal('sessionStorage', {
-      getItem: (key: string) => values.get(key) ?? null,
-      setItem: (key: string, value: string) => values.set(key, value),
-      removeItem: (key: string) => values.delete(key),
+      getItem: (key: string) => storageValues.get(key) ?? null,
+      setItem: (key: string, value: string) => storageValues.set(key, value),
+      removeItem: (key: string) => storageValues.delete(key),
     });
     vi.stubGlobal('localStorage', {
-      getItem: (key: string) => values.get(`local:${key}`) ?? null,
-      setItem: (key: string, value: string) => values.set(`local:${key}`, value),
+      getItem: (key: string) => storageValues.get(`local:${key}`) ?? null,
+      setItem: (key: string, value: string) => storageValues.set(`local:${key}`, value),
+      removeItem: (key: string) => storageValues.delete(`local:${key}`),
     });
   });
 
@@ -68,8 +70,15 @@ describe('matchmaking session adapters', () => {
 
   test('entering the lobby detects server state without blocking offline access', async () => {
     const connection = vi.fn();
+    const guest = { playerId: 'guest-id', guestSecret: 's'.repeat(64), displayName: 'Player One', rating: 1500 };
     const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(null, { status: 401 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(guest), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...guest, isAnonymous: true }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...guest, isAnonymous: true }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...guest, displayName: 'Player Two' }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...guest, displayName: 'Player Two', isAnonymous: true }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ ok: false }), { status: 503 }));
     vi.stubGlobal('fetch', fetchMock);
     const adapter = new WebSocketShellSessionAdapter('https://example.test');
@@ -78,15 +87,61 @@ describe('matchmaking session adapters', () => {
     await adapter.enterLobby('Player One');
     await adapter.enterLobby('Player Two');
 
-    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://example.test/health');
-    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ cache: 'no-store' });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://example.test/player-session');
+    expect(fetchMock.mock.calls[1]?.[0]).toBe('https://example.test/guest-session');
+    expect(fetchMock.mock.calls[3]?.[0]).toBe('https://example.test/health');
+    expect(fetchMock.mock.calls[3]?.[1]).toMatchObject({ cache: 'no-store' });
     expect(connection).toHaveBeenLastCalledWith('offline');
+  });
+
+  test('persists a server-issued guest and suggests its saved name after reload', async () => {
+    const session = { playerId: 'server-guest', guestSecret: 'secret'.repeat(12), displayName: 'Saved Player', rating: 1512 };
+    let issued = false;
+    vi.stubGlobal('fetch', vi.fn((input: string | URL | Request) => {
+      const url = String(input);
+      if (url.endsWith('/guest-session')) { issued = true; return Promise.resolve(new Response(JSON.stringify(session), { status: 200 })); }
+      if (url.endsWith('/player-session')) return Promise.resolve(issued
+        ? new Response(JSON.stringify({ ...session, isAnonymous: true }), { status: 200 })
+        : new Response(null, { status: 401 }));
+      return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    }));
+    vi.stubGlobal('WebSocket', vi.fn(() => ({ addEventListener: vi.fn(), close: vi.fn() })));
+
+    const first = new WebSocketShellSessionAdapter('https://example.test');
+    expect(await first.enterLobby('Saved Player')).toMatchObject({ playerId: 'server-guest', displayName: 'Saved Player', rating: 1512 });
+    const reloaded = new WebSocketShellSessionAdapter('https://example.test');
+
+    expect(reloaded.suggestedPlayerName()).toBe('Saved Player');
+    expect(storageValues.get('local:super-rps-guest')).toBe('server-guest');
+    expect(storageValues.get('local:super-rps-guest-secret')).toBe(session.guestSecret);
+  });
+
+  test('migrates a legacy guest by loading its canonical server name', async () => {
+    storageValues.set('local:super-rps-guest', 'legacy-guest');
+    storageValues.set('local:super-rps-guest-secret', 'l'.repeat(64));
+    const session = { playerId: 'legacy-guest', guestSecret: 'l'.repeat(64), displayName: 'Legacy Name', rating: 1620 };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(null, { status: 401 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(session), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const adapter = new WebSocketShellSessionAdapter('https://example.test');
+    expect(await adapter.initializeGuest()).toMatchObject({ displayName: 'Legacy Name', rating: 1620 });
+
+    expect(adapter.suggestedPlayerName()).toBe('Legacy Name');
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({
+      guestId: 'legacy-guest', guestSecret: 'l'.repeat(64),
+    });
   });
 
   test('lobby and whiteboard authenticate without putting secrets in URLs', async () => {
     const socket = vi.fn((_url: string | URL, _protocols?: string | string[]) => ({ addEventListener: vi.fn(), close: vi.fn() }));
     vi.stubGlobal('WebSocket', socket);
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 })));
+    vi.stubGlobal('fetch', vi.fn((input: string | URL | Request) => Promise.resolve(new Response(JSON.stringify(
+      String(input).endsWith('/guest-session')
+        ? { playerId: 'guest-id', guestSecret: 's'.repeat(64), displayName: 'Player One', rating: 1500 }
+        : { ok: true },
+    ), { status: 200 }))));
     const adapter = new WebSocketShellSessionAdapter('https://example.test');
 
     await adapter.enterLobby('Player One');

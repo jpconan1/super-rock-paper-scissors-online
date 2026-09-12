@@ -61,7 +61,7 @@ const TYPE_SET = new Set<string>(LAYOUT_ELEMENT_TYPES);
 const ANCHORS = new Set<string>(['top-left', 'top-right', 'center', 'bottom-left', 'bottom-right']);
 const ASSET_PATH = /^\/[A-Za-z0-9][A-Za-z0-9._\-\/]*$/;
 const BEHAVIORS = new Set(['player-name', 'random-name', 'enter-lobby', 'toggle-sound', 'music-volume', 'sfx-volume',
-  'toggle-animation', 'lobby-chat', 'toggle-roster', 'preview-scoreboard', 'select-variant', 'back', 'game-menu',
+  'toggle-animation', 'lobby-chat', 'toggle-roster', 'preview-scoreboard', 'select-variant', 'back', 'game-menu', 'google-sign-in',
   'game-rules', 'fireball-war:fireball', 'fireball-war:block', 'fireball-war:charge']);
 const BINDINGS = new Set(['p1-info', 'p2-info', 'turn', 'p1-wins', 'p2-wins', 'scene', 'p1-move', 'p2-move',
   'p1-resources', 'p2-resources', 'controls', 'resource-count']);

@@ -22,8 +22,12 @@ import { refreshMatchmakingQueue, type MatchmakingQueueEntry } from '../src/core
 import {
   createMatchTicketRecords, matchmakingTicketKey, recoverableMatchTicket, type MatchTicket,
 } from '../src/core/matchmakingTickets';
+import {
+  GUEST_NAME_MAX_LENGTH, normalizeGuestDisplayName, type GuestSessionRequest, type GuestSessionResponse,
+} from '../src/protocol/guestSession';
+import { createAuth, type AuthEnv } from './auth';
 
-interface Env {
+interface Env extends AuthEnv {
   MATCHES: DurableObjectNamespace<MatchObject>;
   MATCHMAKER: DurableObjectNamespace<MatchmakerObject>;
   LOBBY: DurableObjectNamespace<LobbyObject>;
@@ -32,6 +36,7 @@ interface Env {
   SOCKET_RATE: RateLimit;
   MATCHMAKING_IP_RATE: RateLimit;
   MATCHMAKING_GUEST_RATE: RateLimit;
+  GUEST_SESSION_RATE: RateLimit;
   ALLOWED_ORIGINS?: string;
 }
 
@@ -233,8 +238,9 @@ const MATCHMAKING_QUEUE_TTL_MS = 5_000;
 const MATCH_TICKET_TTL_MS = 30_000;
 
 export class MatchmakerObject extends DurableObject<Env> {
-  async enqueue(guestId: string, guestSecret: string, attemptId: string, name: string): Promise<{ status: 'waiting' | 'owned-elsewhere' } | ({ status: 'matched' } & MatchTicket)> {
-    const player = await authenticateGuest(this.env.DB, guestId, guestSecret, name);
+  async enqueue(guestId: string, attemptId: string): Promise<{ status: 'waiting' | 'owned-elsewhere' } | ({ status: 'matched' } & MatchTicket)> {
+    const player = await getPlayer(this.env.DB, guestId);
+    const name = player.displayName;
     const now = Date.now();
     const ticketKey = matchmakingTicketKey(guestId, attemptId);
     const ticket = await this.ctx.storage.get<MatchTicket>(ticketKey);
@@ -269,8 +275,7 @@ export class MatchmakerObject extends DurableObject<Env> {
     return { status: 'matched', ...ticketRecords[ticketKey]! };
   }
 
-  async cancel(guestId: string, guestSecret: string, attemptId: string): Promise<void> {
-    await authenticateExistingGuest(this.env.DB, guestId, guestSecret);
+  async cancel(guestId: string, attemptId: string): Promise<void> {
     const queue = (await this.ctx.storage.get<MatchmakingQueueEntry[]>('queue')) ?? [];
     await this.ctx.storage.put('queue', queue.filter((entry) => entry.guestId !== guestId || entry.attemptId !== attemptId));
     await this.ctx.storage.delete(matchmakingTicketKey(guestId, attemptId));
@@ -330,12 +335,12 @@ export class LobbyObject extends DurableObject<Env> {
   async fetch(request: Request): Promise<Response> {
     if (request.headers.get('Upgrade') !== 'websocket') return json({ error: 'WebSocket required.' }, 426);
     const url = new URL(request.url);
-    const playerId = url.searchParams.get('guest');
-    if (!playerId || !validClientId(playerId)) return json({ error: 'Invalid guest.' }, 400);
-    const displayName = sanitizeText(url.searchParams.get('name'), 50) || 'Guest';
-    const guestSecret = socketCredential(request.headers.get('Sec-WebSocket-Protocol'), LOBBY_SOCKET_PROTOCOL);
-    if (!guestSecret) return json({ error: 'Invalid guest credentials.' }, 401);
-    try { await authenticateGuest(this.env.DB, playerId, guestSecret, displayName); }
+    let playerId: string; let displayName: string;
+    try {
+      const player = await authenticateRequestPlayer(request, this.env, url.searchParams.get('guest'),
+        socketCredential(request.headers.get('Sec-WebSocket-Protocol'), LOBBY_SOCKET_PROTOCOL));
+      playerId = player.playerId; displayName = player.displayName;
+    }
     catch { return json({ error: 'Invalid guest credentials.' }, 401); }
     const clientKey = request.headers.get('CF-Connecting-IP') ?? 'unknown-client';
     const connections = this.connectedPlayers();
@@ -428,12 +433,12 @@ export class WhiteboardObject extends DurableObject<Env> {
   async fetch(request: Request): Promise<Response> {
     if (request.headers.get('Upgrade') !== 'websocket') return json({ error: 'WebSocket required.' }, 426);
     const url = new URL(request.url);
-    const guestId = url.searchParams.get('guest');
-    if (!guestId || !validClientId(guestId)) return json({ error: 'Invalid guest.' }, 400);
-    const displayName = sanitizeText(url.searchParams.get('name'), 50) || 'Guest';
-    const guestSecret = socketCredential(request.headers.get('Sec-WebSocket-Protocol'), WHITEBOARD_SOCKET_PROTOCOL);
-    if (!guestSecret) return json({ error: 'Invalid guest credentials.' }, 401);
-    try { await authenticateGuest(this.env.DB, guestId, guestSecret, displayName); }
+    let guestId: string; let displayName: string;
+    try {
+      const player = await authenticateRequestPlayer(request, this.env, url.searchParams.get('guest'),
+        socketCredential(request.headers.get('Sec-WebSocket-Protocol'), WHITEBOARD_SOCKET_PROTOCOL));
+      guestId = player.playerId; displayName = player.displayName;
+    }
     catch { return json({ error: 'Invalid guest credentials.' }, 401); }
     const clientKey = request.headers.get('CF-Connecting-IP') ?? 'unknown-client';
     const connections = this.ctx.getWebSockets().flatMap((socket) => {
@@ -579,24 +584,74 @@ export async function finalizeMatch(db: D1Database, result: {
   return responses[3]?.meta.changes === 1 ? 'applied' : 'duplicate';
 }
 
-async function authenticateGuest(db: D1Database, guestId: string, secret: string, displayName: string): Promise<{ rating: number }> {
-  if (!validClientId(guestId) || secret.length < 32 || secret.length > 256) throw new Error('Invalid guest credentials.');
-  const secretHash = await sha256(secret);
-  await db.prepare('INSERT OR IGNORE INTO players (player_id, guest_secret_hash, display_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
-    .bind(guestId, secretHash, displayName, Date.now(), Date.now()).run();
-  const player = await db.prepare('SELECT guest_secret_hash, rating FROM players WHERE player_id = ?').bind(guestId)
-    .first<{ guest_secret_hash: string; rating: number }>();
-  if (!player || player.guest_secret_hash !== secretHash) throw new Error('Invalid guest credentials.');
-  await db.prepare('UPDATE players SET display_name = ?, updated_at = ? WHERE player_id = ?').bind(displayName, Date.now(), guestId).run();
-  return { rating: player.rating };
+class GuestAuthError extends Error {}
+
+interface AuthenticatedPlayer { playerId: string; displayName: string; rating: number }
+
+async function getPlayer(db: D1Database, playerId: string): Promise<{ displayName: string; rating: number }> {
+  const player = await db.prepare('SELECT display_name, rating FROM players WHERE player_id = ?').bind(playerId)
+    .first<{ display_name: string; rating: number }>();
+  if (!player) throw new GuestAuthError('Player not found.');
+  return { displayName: player.display_name, rating: player.rating };
 }
 
-async function authenticateExistingGuest(db: D1Database, guestId: string, secret: string): Promise<void> {
-  if (!validClientId(guestId) || secret.length < 32 || secret.length > 256) throw new Error('Invalid guest credentials.');
+async function authenticateRequestPlayer(request: Request, env: Env, guestId?: string | null,
+  guestSecret?: string | null): Promise<AuthenticatedPlayer> {
+  const session = await createAuth(env).api.getSession({ headers: request.headers });
+  if (session) {
+    const player = await env.DB.prepare('SELECT player_id, display_name, rating FROM players WHERE auth_user_id = ?')
+      .bind(session.user.id).first<{ player_id: string; display_name: string; rating: number }>();
+    if (player) return { playerId: player.player_id, displayName: player.display_name, rating: player.rating };
+  }
+  if (!guestId || !guestSecret) throw new GuestAuthError('Authentication required.');
+  const player = await authenticateExistingGuest(env.DB, guestId, guestSecret);
+  return { playerId: guestId, ...player };
+}
+
+async function authenticateExistingGuest(db: D1Database, guestId: string, secret: string): Promise<{ displayName: string; rating: number }> {
+  if (!validClientId(guestId) || secret.length < 32 || secret.length > 256) throw new GuestAuthError('Invalid guest credentials.');
   const secretHash = await sha256(secret);
-  const player = await db.prepare('SELECT guest_secret_hash FROM players WHERE player_id = ?').bind(guestId)
-    .first<{ guest_secret_hash: string }>();
-  if (!player || player.guest_secret_hash !== secretHash) throw new Error('Invalid guest credentials.');
+  const player = await db.prepare('SELECT guest_secret_hash, display_name, rating FROM players WHERE player_id = ?').bind(guestId)
+    .first<{ guest_secret_hash: string; display_name: string; rating: number }>();
+  if (!player || !constantTimeEqual(player.guest_secret_hash, secretHash)) throw new GuestAuthError('Invalid guest credentials.');
+  return { displayName: player.display_name, rating: player.rating };
+}
+
+async function createGuestSession(db: D1Database, request: GuestSessionRequest): Promise<GuestSessionResponse> {
+  if (request.guestId && request.guestSecret) {
+    try {
+      const current = await authenticateExistingGuest(db, request.guestId, request.guestSecret);
+      if (request.displayName === undefined) {
+        return { playerId: request.guestId, guestSecret: request.guestSecret, displayName: current.displayName, rating: current.rating };
+      }
+      const displayName = normalizeGuestDisplayName(request.displayName);
+      if (!displayName) throw new RequestBodyError(400, `Display name must be 1-${GUEST_NAME_MAX_LENGTH} characters.`);
+      if (current.displayName !== displayName) {
+        await db.prepare('UPDATE players SET display_name = ?, updated_at = ? WHERE player_id = ?')
+          .bind(displayName, Date.now(), request.guestId).run();
+      }
+      return { playerId: request.guestId, guestSecret: request.guestSecret, displayName, rating: current.rating };
+    } catch (error) {
+      if (error instanceof RequestBodyError) throw error;
+      if (!(error instanceof GuestAuthError)) throw error;
+      /* invalid legacy credentials become a fresh guest once a valid name is supplied */
+    }
+  }
+  const displayName = normalizeGuestDisplayName(request.displayName);
+  if (!displayName) throw new RequestBodyError(400, `Display name must be 1-${GUEST_NAME_MAX_LENGTH} characters.`);
+  const playerId = crypto.randomUUID();
+  const guestSecret = `${crypto.randomUUID()}${crypto.randomUUID()}`;
+  const now = Date.now();
+  await db.prepare('INSERT INTO players (player_id, guest_secret_hash, display_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
+    .bind(playerId, await sha256(guestSecret), displayName, now, now).run();
+  return { playerId, guestSecret, displayName, rating: 1500 };
+}
+
+function constantTimeEqual(left: string, right: string): boolean {
+  const length = Math.max(left.length, right.length);
+  let difference = left.length ^ right.length;
+  for (let index = 0; index < length; index++) difference |= (left.charCodeAt(index) || 0) ^ (right.charCodeAt(index) || 0);
+  return difference === 0;
 }
 
 async function sha256(value: string): Promise<string> {
@@ -616,18 +671,62 @@ export default {
 
 async function routeRequest(request: Request, env: Env, url: URL): Promise<Response> {
     const clientKey = request.headers.get('CF-Connecting-IP') ?? 'unknown-client';
+    if (url.pathname.startsWith('/api/auth/')) return createAuth(env).handler(request);
     if (url.pathname === '/health') return json({ ok: true });
     if (url.pathname === '/online-status') {
       if (!await allowed(env.SOCKET_RATE, `status:${clientKey}`)) return rateLimited();
       return json({ playersOnline: await env.LOBBY.getByName('global').getOnlinePlayerCount() });
     }
+    if (url.pathname === '/guest-session' && request.method === 'POST') {
+      try {
+        if (!await allowed(env.GUEST_SESSION_RATE, clientKey)) return rateLimited();
+        const body = await readJsonBody<GuestSessionRequest>(request, 1_000);
+        if (!body || typeof body !== 'object') return json({ error: 'Invalid guest session request.' }, 400);
+        return json(await createGuestSession(env.DB, body));
+      } catch (error) {
+        if (error instanceof RequestBodyError) return json({ error: error.message }, error.status);
+        return json({ error: 'Guest session failed.' }, 500);
+      }
+    }
+    if (url.pathname === '/player-session') {
+      try {
+        const authSession = await createAuth(env).api.getSession({ headers: request.headers });
+        if (!authSession) return json({ error: 'Authentication required.' }, 401);
+        if (request.method === 'POST') {
+          const body = await readJsonBody<{ guestId?: string; guestSecret?: string }>(request, 1_000);
+          if (!body.guestId || !body.guestSecret) return json({ error: 'Guest credentials required.' }, 400);
+          await authenticateExistingGuest(env.DB, body.guestId, body.guestSecret);
+          const occupied = await env.DB.prepare('SELECT player_id FROM players WHERE auth_user_id = ?').bind(authSession.user.id)
+            .first<{ player_id: string }>();
+          if (occupied && occupied.player_id !== body.guestId) return json({ error: 'Account already has a player.' }, 409);
+          const result = await env.DB.prepare('UPDATE players SET auth_user_id = ?, updated_at = ? WHERE player_id = ? AND (auth_user_id IS NULL OR auth_user_id = ?)')
+            .bind(authSession.user.id, Date.now(), body.guestId, authSession.user.id).run();
+          if (result.meta.changes !== 1) return json({ error: 'Guest belongs to another account.' }, 409);
+        } else if (request.method === 'PUT') {
+          const body = await readJsonBody<{ displayName?: unknown }>(request, 1_000);
+          const displayName = normalizeGuestDisplayName(body.displayName);
+          if (!displayName) return json({ error: `Display name must be 1-${GUEST_NAME_MAX_LENGTH} characters.` }, 400);
+          await env.DB.prepare('UPDATE players SET display_name = ?, updated_at = ? WHERE auth_user_id = ?')
+            .bind(displayName, Date.now(), authSession.user.id).run();
+        } else if (request.method !== 'GET') return json({ error: 'Method not allowed.' }, 405);
+        const player = await env.DB.prepare('SELECT player_id, display_name, rating, guest_secret_hash FROM players WHERE auth_user_id = ?')
+          .bind(authSession.user.id).first<{ player_id: string; display_name: string; rating: number; guest_secret_hash: string }>();
+        if (!player) return json({ error: 'Player not found.' }, 404);
+        return json({ playerId: player.player_id, displayName: player.display_name, rating: player.rating,
+          isAnonymous: Boolean((authSession.user as { isAnonymous?: boolean }).isAnonymous) });
+      } catch (error) {
+        if (error instanceof RequestBodyError) return json({ error: error.message }, error.status);
+        return json({ error: 'Player session failed.' }, 401);
+      }
+    }
     if (url.pathname === '/matchmaking' && request.method === 'POST') {
       try {
         if (!await allowed(env.MATCHMAKING_IP_RATE, clientKey)) return rateLimited();
-        const body = await readJsonBody<{ guestId?: string; guestSecret?: string; attemptId?: string; name?: string }>(request);
-        if (!body.guestId || !body.guestSecret || !validClientId(body.attemptId) || !body.name) return json({ error: 'guestId, guestSecret, attemptId, and name are required.' }, 400);
-        if (!await allowed(env.MATCHMAKING_GUEST_RATE, body.guestId)) return rateLimited();
-        return json(await env.MATCHMAKER.getByName('global').enqueue(body.guestId, body.guestSecret, body.attemptId, sanitizeText(body.name, 50) || 'Guest'));
+        const body = await readJsonBody<{ guestId?: string; guestSecret?: string; attemptId?: string }>(request);
+        if (!validClientId(body.attemptId)) return json({ error: 'attemptId is required.' }, 400);
+        const player = await authenticateRequestPlayer(request, env, body.guestId, body.guestSecret);
+        if (!await allowed(env.MATCHMAKING_GUEST_RATE, player.playerId)) return rateLimited();
+        return json(await env.MATCHMAKER.getByName('global').enqueue(player.playerId, body.attemptId));
       } catch (error) {
         if (error instanceof RequestBodyError) return json({ error: error.message }, error.status);
         return json({ error: error instanceof Error ? error.message : 'Matchmaking failed.' }, 401);
@@ -637,9 +736,10 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
       try {
         if (!await allowed(env.MATCHMAKING_IP_RATE, clientKey)) return rateLimited();
         const body = await readJsonBody<{ guestId?: string; guestSecret?: string; attemptId?: string }>(request);
-        if (!body.guestId || !body.guestSecret || !validClientId(body.attemptId)) return json({ error: 'guestId, guestSecret, and attemptId are required.' }, 400);
-        if (!await allowed(env.MATCHMAKING_GUEST_RATE, body.guestId)) return rateLimited();
-        await env.MATCHMAKER.getByName('global').cancel(body.guestId, body.guestSecret, body.attemptId);
+        if (!validClientId(body.attemptId)) return json({ error: 'attemptId is required.' }, 400);
+        const player = await authenticateRequestPlayer(request, env, body.guestId, body.guestSecret);
+        if (!await allowed(env.MATCHMAKING_GUEST_RATE, player.playerId)) return rateLimited();
+        await env.MATCHMAKER.getByName('global').cancel(player.playerId, body.attemptId);
         return new Response(null, { status: 204 });
       } catch (error) {
         if (error instanceof RequestBodyError) return json({ error: error.message }, error.status);
@@ -654,8 +754,8 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
     if (url.pathname === '/lobby' || url.pathname === '/whiteboard') {
       if (!await allowed(env.SOCKET_RATE, `socket:${clientKey}`)) return rateLimited();
       const guestId = url.searchParams.get('guest');
-      if (!guestId || !validClientId(guestId)) return json({ error: 'Invalid guest.' }, 400);
-      if (!await allowed(env.SOCKET_RATE, `guest:${guestId}`)) return rateLimited();
+      const rateIdentity = guestId && validClientId(guestId) ? guestId : clientKey;
+      if (!await allowed(env.SOCKET_RATE, `guest:${rateIdentity}`)) return rateLimited();
       return url.pathname === '/lobby' ? env.LOBBY.getByName('global').fetch(request) : env.WHITEBOARD.getByName('global').fetch(request);
     }
     return json({ error: 'Not found.' }, 404);

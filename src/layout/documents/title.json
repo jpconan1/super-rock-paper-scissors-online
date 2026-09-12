@@ -127,6 +127,33 @@
       }
     },
     {
+      "id": "google-sign-in",
+      "type": "button",
+      "protected": true,
+      "behavior": "google-sign-in",
+      "assets": {
+        "up": "/title/google-sign-in/google-sign-in-button-up-sheet.webp",
+        "between": "/title/google-sign-in/google-sign-in-button-between-sheet.webp",
+        "depressed": "/title/google-sign-in/google-sign-in-button-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 384,
+          "y": 323,
+          "width": 192,
+          "height": 50,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 129,
+          "y": 805,
+          "width": 282,
+          "height": 73,
+          "aspectLock": true
+        }
+      }
+    },
+    {
       "id": "online-count",
       "type": "dynamic-text",
       "protected": true,

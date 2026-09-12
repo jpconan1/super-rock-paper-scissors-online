@@ -27,6 +27,7 @@ describe('request origin policy', () => {
   test('cors response names the approved origin instead of using a wildcard', () => {
     const headers = corsHeadersForOrigin('https://game.example');
     expect(headers['access-control-allow-origin']).toBe('https://game.example');
+    expect(headers['access-control-allow-credentials']).toBe('true');
     expect(headers.vary).toBe('Origin');
   });
 });
