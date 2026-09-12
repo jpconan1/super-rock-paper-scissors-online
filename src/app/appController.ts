@@ -22,7 +22,7 @@ import { beats } from '../core/time';
 import { MusicDirector } from '../audio/musicDirector';
 import { destroySoundCatalog } from '../audio/soundCatalog';
 import { LocalAbmMatch } from './localAbmMatch';
-import { hasSeenAbmLetter, mountAbmLetterModal } from './abmLetterModal';
+import { hasSeenAbmNewsletter, mountAbmLetterModal } from './abmLetterModal';
 
 export type ConnectionState = 'connected' | 'reconnecting' | 'offline';
 export type ShellDestination = 'title' | 'lobby' | 'match-found' | 'slot-picker' | 'scoreboard' | 'gameplay';
@@ -262,7 +262,7 @@ export class AppController {
       lobby.setConnectionState(this.connectionState);
       this.lobbyScreen = lobby;
       this.screenCleanup = lobby;
-      if (!hasSeenAbmLetter()) this.openAbmLetter();
+      if (!hasSeenAbmNewsletter()) this.openAbmLetter();
     } else if (destination === 'match-found') {
       const projection = this.matchProjection;
       if (!projection) throw new Error('Match information is unavailable.');

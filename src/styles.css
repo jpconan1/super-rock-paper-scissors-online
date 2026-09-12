@@ -185,17 +185,22 @@ body::before {
   text-align: left;
   user-select: text;
 }
-.abm-letter__content :is(h1, h3, p) { width: 100%; margin: 0; }
+.abm-letter__content :is(h1, h2, h3, p, ul, ol) { width: 100%; margin: 0; }
 .abm-letter__content h1 { color: #ac3235; font-size: clamp(1.65rem, 5vw, 2.75rem); text-align: center; }
-.abm-letter__content h3 { margin-top: .75rem; color: #ac3235; font-size: clamp(1.2rem, 3.5vw, 1.75rem); }
-.abm-letter__content p { font-size: clamp(1rem, 2.7vw, 1.25rem); line-height: 1.45; }
+.abm-letter__content :is(h2, h3) { margin-top: .75rem; color: #ac3235; }
+.abm-letter__content h2 { font-size: clamp(1.35rem, 4vw, 2rem); text-align: center; }
+.abm-letter__content h3 { font-size: clamp(1.2rem, 3.5vw, 1.75rem); }
+.abm-letter__content :is(p, li) { font-size: clamp(1rem, 2.7vw, 1.25rem); line-height: 1.45; }
+.abm-letter__content :is(ul, ol) { box-sizing: border-box; padding-left: 2rem; }
 .boiling-sprite.abm-letter__image { display: block; max-width: 100%; height: auto; overflow: hidden; }
 .abm-letter__static-image { display: block; max-width: 100%; height: auto; object-fit: contain; }
 .abm-letter__s-rps-o-logo { width: min(360px, 80%); }
 .abm-letter__meme { width: min(420px, 100%); }
 .abm-letter__variant-grid { width: 100%; }
+.abm-letter__rip-logo { width: min(420px, 100%); }
 .abm-letter__placeholder { padding: 12px; border: 2px dashed rgba(33,29,25,.45); text-align: center; opacity: .72; }
-.game-button.abm-letter-modal__dismiss { justify-self: center; width: 128px; min-width: 0; }
+.abm-letter-modal__controls { display: grid; grid-template-columns: repeat(3, minmax(0, 128px)); justify-content: center; align-items: center; gap: clamp(8px, 2vw, 18px); }
+.abm-letter-modal__controls .game-button { width: 100%; min-width: 0; }
 
 .universal-menu { position: absolute; z-index: 100; inset: 0; display: grid; padding: 20px; place-items: center; background: rgba(29, 27, 24, .48); pointer-events: auto; }
 .universal-menu__box { width: min(560px, 100%); padding: clamp(20px, 5vw, 42px); }

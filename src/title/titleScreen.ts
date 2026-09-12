@@ -54,7 +54,7 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
   const countTimer = window.setInterval(() => void updateCount(), 7_000);
 
   const logo = createGameButton({
-    label: 'Open letter to the ABM community',
+    label: 'Open ABM newsletter',
     onActivate: () => onOpenLetter(logo.element),
     upSheet: titleElement('logo').assets!.src!,
     betweenSheet: '/title/abm-logo-v2-between-sheet.webp',
