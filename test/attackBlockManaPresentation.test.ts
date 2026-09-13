@@ -170,10 +170,16 @@ describe('Attack Block Mana presentation data', () => {
     });
     expect(resolveAbmScene({ p1: 'attack', p2: 'mana' }, undefined, 'p2')).toMatchObject({ flip: true });
     expect(resolveAbmSplitScene({ p1: 'mana', p2: 'attack' }, 'p1', undefined, 'p1')).toEqual({
-      src: '/variants/abm/scenes/splits/exceptions/fireborne-shield-attacker-ready-sheet.webp', flip: true,
+      src: '/variants/abm/scenes/splits/exceptions/fireborne-shield-fireborne-ready-sheet.webp', flip: false,
     });
     expect(resolveAbmSplitScene({ p1: 'mana', p2: 'attack' }, 'p2', undefined, 'p1')).toEqual({
-      src: '/variants/abm/scenes/splits/exceptions/fireborne-shield-fireborne-ready-sheet.webp', flip: false,
+      src: '/variants/abm/scenes/splits/exceptions/fireborne-shield-attacker-ready-sheet.webp', flip: false,
+    });
+    expect(resolveAbmSplitScene({ p1: 'attack', p2: 'mana' }, 'p1', undefined, 'p2')).toEqual({
+      src: '/variants/abm/scenes/splits/exceptions/fireborne-shield-attacker-ready-sheet.webp', flip: true,
+    });
+    expect(resolveAbmSplitScene({ p1: 'attack', p2: 'mana' }, 'p2', undefined, 'p2')).toEqual({
+      src: '/variants/abm/scenes/splits/exceptions/fireborne-shield-fireborne-ready-sheet.webp', flip: true,
     });
     for (const remaining of [1, 2, 3, 4, 5] as const) {
       expect(resolveAbmTags({ players: { p1: { fireShieldTurns: remaining }, p2: {} } })).toEqual([{

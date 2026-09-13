@@ -118,7 +118,8 @@ export class AppController {
     const googleReturn = options.session.isGoogleSignInReturn();
     const googlePlayer = googleReturn ? await options.session.completeGoogleSignIn() : null;
     if (!googlePlayer) await options.session.prepareTitle();
-    else this.playerName = googlePlayer.displayName;
+    const restoredAccount = options.session.accountState();
+    this.playerName = googlePlayer?.displayName ?? restoredAccount.displayName;
     this.transitionLayer.replaceChildren(...this.screenLayer.childNodes);
     await this.navigate(googlePlayer ? 'lobby' : 'title', false);
     await this.screenReady;
@@ -250,9 +251,9 @@ export class AppController {
           return this.navigate('lobby');
         }).catch((error) => this.showError(error, 'title'));
       }, () => options.session.getOnlinePlayerCount(), (trigger) => this.openAbmLetter(trigger),
-      options.session.suggestedPlayerName(), (name) => {
+      options.session.accountState().displayName || options.session.suggestedPlayerName(), (name) => {
         void this.startGoogleSignIn('title', name);
-      });
+      }, options.session.accountState().signedIn ? options.session.accountState().displayName : undefined);
       this.screenCleanup = title;
       this.screenReady = title.ready;
     } else if (destination === 'lobby') {
@@ -285,7 +286,7 @@ export class AppController {
         const profile = await options.session.updateDisplayName(name);
         this.playerName = profile.displayName;
         return options.session.accountState();
-      }, () => void this.startGoogleSignIn('claim'), () => void this.navigate('lobby'));
+      }, () => void this.startGoogleSignIn('claim'), () => void this.logOutToTitle(), () => void this.returnFromAccount());
       this.screenCleanup = () => account.destroy();
     } else if (destination === 'match-found') {
       const projection = this.matchProjection;
@@ -470,16 +471,24 @@ export class AppController {
     this.setMatchmaking(false);
     if (this.localMatch) { this.localMatch.destroy(); this.localMatch = undefined; }
     else if (wasInMatch) this.options.session.leaveMatch();
-    try {
-      await this.options.session.signOut();
-    } catch (error) {
-      this.showError(error);
-      return;
-    }
+    this.options.session.disconnectOnline();
     this.closeUniversalMenu();
     this.latestSnapshot = undefined;
     this.matchFlowDirector?.cancel();
     void this.navigate('title');
+  }
+
+  private async logOutToTitle(): Promise<void> {
+    try { await this.options.session.signOut(); }
+    catch (error) { this.showError(error); return; }
+    this.playerName = '';
+    void this.navigate('title');
+  }
+
+  private async returnFromAccount(): Promise<void> {
+    try { await this.options.session.refreshOnlineIdentity(); }
+    catch (error) { this.showError(error); return; }
+    void this.navigate('lobby');
   }
 
   private get options(): AppControllerOptions {

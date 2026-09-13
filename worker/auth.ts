@@ -25,7 +25,6 @@ export function createAuth(env: AuthEnv) {
       },
     },
     plugins: [anonymous({
-      disableDeleteAnonymousUser: true,
       generateName: () => 'Guest',
       onLinkAccount: async ({ anonymousUser, newUser }) => {
         const anonymousId = anonymousUser.user.id;
@@ -33,7 +32,8 @@ export function createAuth(env: AuthEnv) {
         const target = await env.DB.prepare('SELECT player_id FROM players WHERE auth_user_id = ?').bind(newId)
           .first<{ player_id: string }>();
         if (target) {
-          await env.DB.prepare('UPDATE players SET auth_user_id = NULL WHERE auth_user_id = ?').bind(anonymousId).run();
+          await env.DB.prepare('UPDATE players SET auth_user_id = NULL, updated_at = ? WHERE auth_user_id = ?')
+            .bind(Date.now(), anonymousId).run();
           return;
         }
         await env.DB.prepare("UPDATE players SET auth_user_id = ?, guest_secret_hash = 'revoked', updated_at = ? WHERE auth_user_id = ?")

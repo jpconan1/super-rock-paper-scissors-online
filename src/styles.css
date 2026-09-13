@@ -367,6 +367,7 @@ input {
 .account-screen__details dd { margin: 0; overflow-wrap: anywhere; }
 .account-screen__name, .game-button.account-screen__random, .game-button.account-screen__change,
 .game-button.account-screen__google, .account-screen__connected, .game-button.account-screen__back,
+.game-button.account-screen__logout,
 .account-screen__error, .account-screen__curtain-open, .account-screen__curtain-left, .account-screen__curtain-right { position: absolute; }
 .account-screen__connected { margin: 0; text-align: center; font-size: 22px; }
 .account-screen__error { margin: 0; color: #ac3235; text-align: center; }

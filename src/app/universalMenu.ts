@@ -8,7 +8,7 @@ import { createTextbox } from '../ui/textbox';
 
 export interface UniversalMenu { element: HTMLElement; destroy(): void; }
 export interface UniversalMenuAccount { signedIn: boolean; displayName: string }
-export const QUIT_CONFIRMATION_COPY = 'Are you sure? This will log you out.';
+export const QUIT_CONFIRMATION_COPY = 'Are you sure you want to quit to the title screen?';
 
 export function mountUniversalMenu(container: HTMLElement, background: HTMLElement, clock: BoilClock, onQuit: () => void, onClose: () => void,
   account?: UniversalMenuAccount): UniversalMenu {

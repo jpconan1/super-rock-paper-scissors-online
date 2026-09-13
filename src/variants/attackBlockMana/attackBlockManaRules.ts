@@ -152,6 +152,10 @@ function chooseMove(state: AbmState, player: PlayerId, move: AbmMove, ability: A
   validateMove({ ...state, players }, player, move);
   const pendingMoves = { ...state.pendingMoves, [player]: move };
   const pendingAbilities = { ...(state.pendingAbilities ?? {}), ...(committedAbility ? { [player]: committedAbility } : {}) };
+  const opponent = OTHER[player];
+  if (pendingAbilities[opponent] === 'reset') {
+    return completeReset({ ...state, players, pendingMoves, pendingAbilities }, opponent, now);
+  }
   if (state.phase === 'conjurer-choosing') {
     if (state.conjurer !== player) throw new Error('Only the Conjurer can choose now.');
     if (state.conjuredMove === 'skip') {
@@ -179,6 +183,9 @@ function activateConjure(state: AbmState, player: PlayerId, now: number): Varian
   validateAbility(state, player, 'conjure');
   const players = clonePlayers(state.players); spendAbility(players[player], 'conjure');
   const opponent = OTHER[player];
+  if (state.pendingAbilities?.[opponent] === 'reset') {
+    return completeReset({ ...state, players, pendingAbilities: { ...(state.pendingAbilities ?? {}), [player]: 'conjure' } }, opponent, now);
+  }
   if (state.pendingAbilities?.[opponent] === 'conjure') {
     return { state: { ...clearWaiting(state), phase: 'idle', players, pendingAbilities: {}, conjureStalemate: true },
       events: [cue('conjure-stalemate', now, 800, { players: ['p1', 'p2'] })] };
@@ -194,19 +201,32 @@ function activateConjure(state: AbmState, player: PlayerId, now: number): Varian
 
 function activateReset(state: AbmState, player: PlayerId, now: number): VariantResolution<AbmState> {
   if (!isActionPhase(state.phase)) throw new Error('Reset cannot be used now.');
-  if (state.pendingMoves[player]) throw new Error('Reset must be used before choosing a move.');
+  if (state.pendingMoves[player] || state.pendingAbilities?.[player]) throw new Error('Reset must be used before choosing a move.');
   validateAbility(state, player, 'reset');
-  const previousResetUses = {
-    p1: abilityUsesFor(state.players.p1, 'reset'),
-    p2: abilityUsesFor(state.players.p2, 'reset'),
+  const players = clonePlayers(state.players);
+  spendAbility(players[player], 'reset');
+  const opponent = OTHER[player];
+  const pendingAbilities = { ...(state.pendingAbilities ?? {}), [player]: 'reset' as const };
+  if (state.pendingMoves[opponent] || state.pendingAbilities?.[opponent]) {
+    return completeReset({ ...state, players, pendingAbilities }, player, now);
+  }
+  const waitingStartsAt = now + ABM_READY_SPLIT_MS;
+  const waitingDeadlineAt = waitingStartsAt + ABM_WAITING_MS;
+  return {
+    state: { ...state, phase: 'waiting', players, pendingAbilities, nullResetPlayer: undefined,
+      earlyPlayer: player, latePlayer: opponent, waitingStartsAt, waitingDeadlineAt },
+    events: [cue('move-ready', now, ABM_READY_SPLIT_MS + ABM_WAITING_MS, { earlyPlayer: player, waitingStartsAt, waitingDeadlineAt })],
   };
+}
+
+function completeReset(state: AbmState, player: PlayerId, now: number): VariantResolution<AbmState> {
   const players = {
     p1: resetPlayer(state.players.p1, state.players.p1.classId),
     p2: resetPlayer(state.players.p2, state.players.p2.classId),
   };
   for (const id of ['p1', 'p2'] as const) {
     if (players[id].classId !== 'null') continue;
-    const uses = id === player || previousResetUses[id] === 0 ? 0 : 1;
+    const uses = abilityUsesFor(state.players[id], 'reset') === 0 ? 0 : 1;
     players[id].abilityUses = { ...players[id].abilityUses, reset: uses };
   }
   return {
@@ -320,6 +340,12 @@ function resolveTimeout(state: AbmState, context: DeterministicContext): Variant
     return resolveDoubleConjureTimeout(state, context);
   }
   if (state.phase === 'waiting') {
+    const resetter = (['p1', 'p2'] as const).find((id) => state.pendingAbilities?.[id] === 'reset');
+    if (resetter) {
+      const players = clonePlayers(state.players);
+      applySkip(players[OTHER[resetter]], false);
+      return completeReset({ ...state, players }, resetter, now);
+    }
     const conjurer = (['p1', 'p2'] as const).find((id) => state.pendingAbilities?.[id] === 'conjure');
     if (conjurer && !state.pendingMoves[OTHER[conjurer]]) {
       const opponent = OTHER[conjurer]; const players = clonePlayers(state.players);
@@ -574,6 +600,7 @@ function legalActions(state: AbmState, viewer: PlayerId) {
   if (state.phase === 'counter-picking' && state.counterPicker === viewer) return ['lock-class'] as const;
   if (isActionPhase(state.phase) && !state.pendingMoves[viewer]) {
     if (state.phase === 'conjurer-choosing' && state.conjurer !== viewer) return [];
+    if (state.pendingAbilities?.[viewer] === 'reset') return [];
     if (state.pendingAbilities?.[viewer] === 'conjure' && !(state.phase === 'conjurer-choosing' && state.conjurer === viewer)) return [];
     const target = state.players[viewer];
     const attackCost = attackCostFor(target);

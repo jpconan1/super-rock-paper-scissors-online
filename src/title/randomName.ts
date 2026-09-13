@@ -1,4 +1,5 @@
 import nameData from './nameGeneratorData.json';
+import { GUEST_NAME_MAX_LENGTH } from '../protocol/guestSession';
 
 type RandomSource = () => number;
 
@@ -20,8 +21,17 @@ export function generateRandomName(random: RandomSource = Math.random): string {
   const parts = patterns[Math.floor(random() * patterns.length)] ?? patterns[0]!;
   const spacedName = parts.join(' ').replace(' ,', ',');
   const separator = spacedName.includes(',') ? ' ' : pick(nameData.separators, random);
-  const name = spacedName.replaceAll(' ', separator);
-  return random() < 0.75 ? name : pick(nameData.brackets, random).replace('{name}', name);
+  const bracket = random() < 0.75 ? undefined : pick(nameData.brackets, random);
+  const format = (candidate: string[]) => {
+    const spaced = candidate.join(' ').replace(' ,', ',');
+    const name = spaced.replaceAll(' ', spaced.includes(',') ? ' ' : separator);
+    return bracket ? bracket.replace('{name}', name) : name;
+  };
+  for (const candidate of [parts, [main, suffix], [prefix, main], [main]]) {
+    const name = format(candidate);
+    if (name.length <= GUEST_NAME_MAX_LENGTH) return name;
+  }
+  return main.slice(0, GUEST_NAME_MAX_LENGTH);
 }
 
 export interface WritableFocusableText {

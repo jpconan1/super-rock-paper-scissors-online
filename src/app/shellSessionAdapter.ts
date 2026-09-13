@@ -31,6 +31,7 @@ export interface ShellSessionAdapter {
   signInWithGoogleFromTitle(playerName: string): Promise<void>;
   claimGuestWithGoogle(): Promise<void>;
   updateDisplayName(displayName: string): Promise<GuestProfile>;
+  refreshOnlineIdentity(): Promise<void>;
   signOut(): Promise<void>;
   enterLobby(playerName: string): Promise<GuestProfile>;
   getOnlinePlayerCount(): Promise<number | null>;
@@ -92,9 +93,8 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
   }
   async prepareTitle(): Promise<void> {
     this.disconnectOnline();
-    const result = await this.authClient.signOut();
-    if (result.error) throw new Error(result.error.message || 'Could not log out.');
     this.resetAuthenticationState();
+    await this.loadAuthenticatedPlayer();
   }
   isGoogleSignInReturn(): boolean {
     return new URL(location.href).searchParams.get(GOOGLE_RETURN_PARAM) === '1';
@@ -107,7 +107,8 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
   async finishGoogleSignIn(): Promise<GuestProfile | null> {
     const flow = this.googleFlow ?? loadGoogleFlow();
     const savedGuestName = localStorage.getItem(GUEST_NAME_KEY);
-    const player = await this.loadAuthenticatedPlayer();
+    let player = await this.loadAuthenticatedPlayer();
+    if (!player && flow === 'title') player = await this.createAuthenticatedPlayer(loadGoogleTitleName());
     if (!player || this.authIsAnonymous) return null;
     const claimedGuestId = this.claimedGuestId ?? (flow === 'claim' ? loadGuestIdentity().id ?? undefined : undefined);
     const claimed = flow === 'claim' && player.playerId === claimedGuestId;
@@ -118,7 +119,7 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
     if (flow === 'title' || (flow === 'claim' && !claimed)) {
       if (savedGuestName === null) localStorage.removeItem(GUEST_NAME_KEY); else localStorage.setItem(GUEST_NAME_KEY, savedGuestName);
     }
-    this.googleFlow = undefined; this.claimedGuestId = undefined; sessionStorage.removeItem(GOOGLE_FLOW_KEY);
+    this.googleFlow = undefined; this.claimedGuestId = undefined; sessionStorage.removeItem(GOOGLE_FLOW_KEY); sessionStorage.removeItem(GOOGLE_TITLE_NAME_KEY);
     await this.connectOnlineServices();
     return player;
   }
@@ -165,14 +166,25 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
     this.playerName = player.displayName; this.playerId = player.playerId; this.rating = player.rating; saveGuestName(player.displayName);
     return player;
   }
+  async refreshOnlineIdentity(): Promise<void> {
+    this.disconnectOnline();
+    await this.connectOnlineServices(true);
+  }
   async signOut(): Promise<void> {
     this.disconnectOnline();
     const result = await this.authClient.signOut();
     if (result.error) throw new Error(result.error.message || 'Could not log out.');
+    clearGuestIdentity();
     this.resetAuthenticationState();
   }
   async enterLobby(playerName: string): Promise<GuestProfile> {
     const requestedName = playerName.trim();
+    const authenticated = await this.loadAuthenticatedPlayer();
+    if (authenticated && !this.authIsAnonymous) {
+      const player = authenticated.displayName === requestedName ? authenticated : await this.updateDisplayName(requestedName);
+      await this.connectOnlineServices();
+      return player;
+    }
     saveGuestName(requestedName);
     this.playerName = requestedName;
     const body: GuestSessionRequest = {
@@ -194,13 +206,13 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
     await this.connectOnlineServices();
     return session;
   }
-  private async connectOnlineServices(): Promise<void> {
+  private async connectOnlineServices(preserveVisit = false): Promise<void> {
     const response = await fetch(`${this.baseUrl}/health`, { cache: 'no-store' });
     if (!response.ok) throw new Error(`Server health check failed: ${response.status}`);
     const health = await response.json() as { ok?: boolean };
     if (health.ok !== true) throw new Error('Server health check returned an invalid response.');
     this.listener?.connection('connected');
-    if (!this.whiteboardActive) this.lobbyVisitId = crypto.randomUUID();
+    if (!this.whiteboardActive && !preserveVisit) this.lobbyVisitId = crypto.randomUUID();
     this.onlineActive = true;
     this.connectLobbyPresence();
     this.setLobbyPresence('idle');
@@ -245,19 +257,17 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
   }
   private async prepareFreshPlayerForGoogle(playerName: string): Promise<void> {
     const requestedName = playerName.trim();
-    const savedName = localStorage.getItem(GUEST_NAME_KEY);
-    const savedGuest = loadGuestIdentity();
     const signedOut = await this.authClient.signOut();
     if (signedOut.error) throw new Error(signedOut.error.message || 'Could not log out.');
+    sessionStorage.setItem(GOOGLE_TITLE_NAME_KEY, requestedName);
     this.playerName = requestedName;
-    const response = await fetch(`${this.baseUrl}/guest-session`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ displayName: requestedName } satisfies GuestSessionRequest) });
-    if (!response.ok) throw new Error(`Guest session failed: ${response.status}`);
-    const session: unknown = await response.json();
-    if (!isGuestSessionResponse(session)) throw new Error('Guest session returned invalid data.');
-    this.guestId = session.playerId; this.guestSecret = session.guestSecret; this.playerName = session.displayName; this.playerId = session.playerId; this.rating = session.rating;
-    await this.ensureAnonymousAssociation();
-    if (savedName === null) localStorage.removeItem(GUEST_NAME_KEY); else localStorage.setItem(GUEST_NAME_KEY, savedName);
-    this.guestId = savedGuest.id ?? ''; this.guestSecret = savedGuest.secret ?? ''; this.playerId = this.guestId;
+  }
+  private async createAuthenticatedPlayer(displayName: string): Promise<GuestProfile | null> {
+    const response = await fetch(`${this.baseUrl}/player-session`, {
+      method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ displayName }),
+    });
+    if (!response.ok) return null;
+    return this.loadAuthenticatedPlayer();
   }
   private setGoogleFlow(flow: 'title' | 'claim'): void { this.googleFlow = flow; sessionStorage.setItem(GOOGLE_FLOW_KEY, flow); }
   private resetAuthenticationState(): void {
@@ -452,6 +462,7 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
 
 const GOOGLE_RETURN_PARAM = 'google-sign-in-return';
 const GOOGLE_FLOW_KEY = 'super-rps-google-flow';
+const GOOGLE_TITLE_NAME_KEY = 'super-rps-google-title-name';
 const GUEST_ID_KEY = 'super-rps-guest';
 const GUEST_SECRET_KEY = 'super-rps-guest-secret';
 const GUEST_NAME_KEY = 'super-rps-guest-name';
@@ -463,6 +474,7 @@ function loadGuestIdentity(): { id: string | null; secret: string | null } {
 }
 function loadSavedGuestName(): string { return localStorage.getItem(GUEST_NAME_KEY)?.trim() ?? ''; }
 function loadGoogleFlow(): 'title' | 'claim' | undefined { const value = sessionStorage.getItem(GOOGLE_FLOW_KEY); return value === 'title' || value === 'claim' ? value : undefined; }
+function loadGoogleTitleName(): string { return sessionStorage.getItem(GOOGLE_TITLE_NAME_KEY)?.trim() ?? ''; }
 function saveGuestName(name: string): void { if (name) localStorage.setItem(GUEST_NAME_KEY, name); }
 function saveGuestIdentity(session: GuestSessionResponse): void {
   localStorage.setItem(GUEST_ID_KEY, session.playerId);
@@ -477,6 +489,10 @@ function removeGoogleReturnMarker(): void {
 function clearGuestCredentials(): void {
   localStorage.removeItem(GUEST_ID_KEY);
   localStorage.removeItem(GUEST_SECRET_KEY);
+}
+function clearGuestIdentity(): void {
+  clearGuestCredentials();
+  localStorage.removeItem(GUEST_NAME_KEY);
 }
 function socketProtocols(protocol: string, credential: string): string[] { return credential ? [protocol, credential] : [protocol]; }
 
@@ -503,6 +519,7 @@ export class LocalShellSessionAdapter implements ShellSessionAdapter {
   async signInWithGoogleFromTitle(_playerName: string): Promise<void> {}
   async claimGuestWithGoogle(): Promise<void> {}
   async updateDisplayName(displayName: string): Promise<GuestProfile> { return { playerId: 'local-player', displayName, rating: 1500 }; }
+  async refreshOnlineIdentity(): Promise<void> {}
   async signOut(): Promise<void> {}
   async enterLobby(playerName: string): Promise<GuestProfile> {
     this.listener?.connection('connected');

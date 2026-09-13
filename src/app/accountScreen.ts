@@ -1,17 +1,19 @@
 import type { BoilClock } from '../animation/boilClock';
 import { createGameButton, type GameButton } from '../input/gameButton';
-import { createTextEntry, isNonBlankText } from '../input/textEntry';
+import { createTextEntry } from '../input/textEntry';
 import { createMenuCanvas } from '../layout/menuLayout';
 import { getLayoutDocument } from '../layout/layoutDocuments';
 import { applyDocumentLayout } from '../layout/layoutRuntime';
 import { createBoilingSprite } from '../renderer/boilingSprite';
 import { generateRandomName } from '../title/randomName';
 import type { AccountState } from './shellSessionAdapter';
+import { normalizeGuestDisplayName } from '../protocol/guestSession';
 
 export interface AccountScreenMount { destroy(): void; update(account: AccountState): void }
 
 export function mountAccountScreen(container: HTMLElement, clock: BoilClock, initial: AccountState,
-  onChangeName: (name: string) => Promise<AccountState>, onClaim: () => void, onBack: () => void): AccountScreenMount {
+  onChangeName: (name: string) => Promise<AccountState>, onClaim: () => void, onLogout: () => void,
+  onBack: () => void): AccountScreenMount {
   const layout = getLayoutDocument('account');
   let orientation: 'landscape' | 'portrait' = 'landscape';
   const bindings: { id: string; element: HTMLElement }[] = [];
@@ -20,7 +22,7 @@ export function mountAccountScreen(container: HTMLElement, clock: BoilClock, ini
   const canvas = createMenuCanvas(screen, 'account-screen', (next) => { orientation = next; applyLayout(); });
   const composition = canvas.composition;
   const heading = document.createElement('h1'); heading.className = 'account-screen__heading'; heading.textContent = layout.elements.find((item) => item.id === 'header')!.label!;
-  const nameEntry = createTextEntry({ label: 'New player name', value: initial.displayName, maxLength: 24, autocomplete: 'nickname', validate: isNonBlankText,
+  const nameEntry = createTextEntry({ label: 'New player name', value: initial.displayName, maxLength: 24, autocomplete: 'nickname', validate: (value) => normalizeGuestDisplayName(value) !== null,
     sheet: '/interactive-elements/text-entry/text-frame-sheet.webp', clock });
   nameEntry.element.classList.add('account-screen__name');
   const buttons: GameButton[] = [];
@@ -48,6 +50,7 @@ export function mountAccountScreen(container: HTMLElement, clock: BoilClock, ini
       .catch((reason) => { error.textContent = reason instanceof Error ? reason.message : 'Name change failed.'; });
   }, 'account-screen__change');
   const back = button('Back to lobby', '/interactive-elements/menu-buttons/back-button-w', onBack, 'account-screen__back');
+  const logout = button('Log out', '/account/log-out-button', onLogout, 'account-screen__logout');
   const google = account.isAnonymous ? button('Claim account with Google', '/title/google-sign-in/google-sign-in-button', onClaim, 'account-screen__google') : undefined;
   const connected = document.createElement('p'); connected.className = 'account-screen__connected'; connected.textContent = 'Google connected'; connected.hidden = account.isAnonymous;
   const decoration = (id: string, className: string) => createBoilingSprite({ src: layout.elements.find((item) => item.id === id)!.assets!.src!, clock, className, alt: '' });
@@ -56,10 +59,10 @@ export function mountAccountScreen(container: HTMLElement, clock: BoilClock, ini
   const right = decoration('curtain-right', 'account-screen__curtain-right');
   renderDetails();
   const googleElement = google?.element ?? connected;
-  composition.append(heading, details, nameEntry.element, random.element, change.element, googleElement, error, back.element, openCurtain.element, left.element, right.element);
+  composition.append(heading, details, nameEntry.element, random.element, change.element, googleElement, error, logout.element, back.element, openCurtain.element, left.element, right.element);
   bindings.push({ id: 'header', element: heading }, { id: 'info-box', element: details }, { id: 'name-entry', element: nameEntry.element },
     { id: 'random-name', element: random.element }, { id: 'change-name', element: change.element }, { id: google ? 'google' : 'connected', element: googleElement },
-    { id: 'error', element: error }, { id: 'back', element: back.element }, { id: 'curtain-open', element: openCurtain.element },
+    { id: 'error', element: error }, { id: 'logout', element: logout.element }, { id: 'back', element: back.element }, { id: 'curtain-open', element: openCurtain.element },
     { id: 'curtain-left', element: left.element }, { id: 'curtain-right', element: right.element });
   applyLayout();
   container.replaceChildren(screen);

@@ -65,8 +65,9 @@ export function resolveAbmSplitScene(
 ): AbmScene {
   if (fireborneProcPlayer) {
     const late = other(early);
-    const visibleRole = late === fireborneProcPlayer ? 'fireborne' : 'attacker';
-    return { src: `${SPLIT_ROOT}/exceptions/fireborne-shield-${visibleRole}-ready-sheet.webp`, flip: late === 'p2' };
+    const readyRole = early === fireborneProcPlayer ? 'fireborne' : 'attacker';
+    const flip = readyRole === 'fireborne' ? late === 'p1' : late === 'p2';
+    return { src: `${SPLIT_ROOT}/exceptions/fireborne-shield-${readyRole}-ready-sheet.webp`, flip };
   }
   if (luckyProcPlayer) {
     const late = other(early);

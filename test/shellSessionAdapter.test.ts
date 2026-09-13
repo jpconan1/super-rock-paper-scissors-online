@@ -77,7 +77,7 @@ describe('matchmaking session adapters', () => {
 
     await expect(adapter.enterLobby('Player One')).rejects.toThrow('Guest session failed: 401');
 
-    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://example.test/guest-session');
+    expect(fetchMock.mock.calls[1]?.[0]).toBe('https://example.test/guest-session');
     expect(connection).toHaveBeenLastCalledWith('connected');
   });
 
@@ -107,10 +107,17 @@ describe('matchmaking session adapters', () => {
     storageValues.set('local:super-rps-guest', 'legacy-guest');
     storageValues.set('local:super-rps-guest-secret', 'l'.repeat(64));
     const session = { playerId: 'legacy-guest', guestSecret: 'l'.repeat(64), displayName: 'Legacy Name', rating: 1620 };
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify(session), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ ...session, isAnonymous: true }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    let playerSessionCalls = 0;
+    const fetchMock = vi.fn((input: string | URL | Request, _init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/guest-session')) return Promise.resolve(new Response(JSON.stringify(session), { status: 200 }));
+      if (url.endsWith('/player-session')) {
+        playerSessionCalls++;
+        return Promise.resolve(playerSessionCalls === 1 ? new Response(null, { status: 401 })
+          : new Response(JSON.stringify({ ...session, isAnonymous: true }), { status: 200 }));
+      }
+      return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    });
     vi.stubGlobal('fetch', fetchMock);
     vi.stubGlobal('WebSocket', vi.fn(() => ({ addEventListener: vi.fn(), close: vi.fn() })));
 
@@ -118,13 +125,14 @@ describe('matchmaking session adapters', () => {
     expect(await adapter.enterLobby('Legacy Name')).toMatchObject({ displayName: 'Legacy Name', rating: 1620 });
 
     expect(adapter.suggestedPlayerName()).toBe('Legacy Name');
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+    const guestRequest = fetchMock.mock.calls.find(([input]) => String(input).endsWith('/guest-session'));
+    expect(JSON.parse(String(guestRequest?.[1]?.body))).toEqual({
       guestId: 'legacy-guest', guestSecret: 'l'.repeat(64),
       displayName: 'Legacy Name',
     });
   });
 
-  test('logging out preserves the saved guest profile', async () => {
+  test('logging out resets the saved guest profile', async () => {
     storageValues.set('local:super-rps-guest', 'saved-guest');
     storageValues.set('local:super-rps-guest-secret', 's'.repeat(64));
     storageValues.set('local:super-rps-guest-name', 'Saved Name');
@@ -135,28 +143,34 @@ describe('matchmaking session adapters', () => {
     const adapter = new WebSocketShellSessionAdapter('https://example.test');
     await adapter.signOut();
 
-    expect(storageValues.get('local:super-rps-guest')).toBe('saved-guest');
-    expect(storageValues.get('local:super-rps-guest-secret')).toBe('s'.repeat(64));
-    expect(adapter.suggestedPlayerName()).toBe('Saved Name');
+    expect(storageValues.has('local:super-rps-guest')).toBe(false);
+    expect(storageValues.has('local:super-rps-guest-secret')).toBe(false);
+    expect(adapter.suggestedPlayerName()).toBe('');
   });
 
-  test('title Google flow creates an ephemeral player without submitting the saved guest', async () => {
+  test('restores a connected account on the title screen without logging out', async () => {
+    const fetchMock = vi.fn((input: string | URL | Request) => Promise.resolve(new Response(JSON.stringify(
+      String(input).endsWith('/player-session')
+        ? { playerId: 'google-player', displayName: 'Google Player', rating: 1700, isAnonymous: false }
+        : { success: true },
+    ), { status: 200 })));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const adapter = new WebSocketShellSessionAdapter('https://example.test');
+    await adapter.prepareTitle();
+
+    expect(adapter.accountState()).toMatchObject({ signedIn: true, displayName: 'Google Player', rating: 1700 });
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/api/auth/sign-out'))).toBe(false);
+  });
+
+  test('title Google flow starts without creating or submitting a guest', async () => {
     storageValues.set('local:super-rps-guest', 'saved-guest');
     storageValues.set('local:super-rps-guest-secret', 's'.repeat(64));
     storageValues.set('local:super-rps-guest-name', 'Saved Name');
-    const fresh = { playerId: 'fresh-player', guestSecret: 'f'.repeat(64), displayName: 'Google Name', rating: 1500 };
-    let associationAttempts = 0;
-    const fetchMock = vi.fn((input: string | URL | Request, init?: RequestInit) => {
+    const fetchMock = vi.fn((input: string | URL | Request) => {
       const url = String(input);
-      if (url.endsWith('/guest-session')) return Promise.resolve(new Response(JSON.stringify(fresh), { status: 200 }));
-      if (url.endsWith('/player-session') && init?.method === 'POST') {
-        associationAttempts++;
-        return Promise.resolve(associationAttempts === 1 ? new Response(null, { status: 401 })
-          : new Response(JSON.stringify({ ...fresh, isAnonymous: true }), { status: 200 }));
-      }
-      if (url.endsWith('/player-session')) return Promise.resolve(new Response(null, { status: 401 }));
       if (url.includes('/api/auth/sign-in/social')) return Promise.resolve(new Response(JSON.stringify({ url: 'https://accounts.google.test/' }), { status: 200 }));
-      return Promise.resolve(new Response(JSON.stringify({ user: { id: 'anonymous-user', name: 'Guest' } }), { status: 200 }));
+      return Promise.resolve(new Response(JSON.stringify({ success: true }), { status: 200 }));
     });
     vi.stubGlobal('fetch', fetchMock);
     const adapter = new WebSocketShellSessionAdapter('https://example.test');
@@ -164,11 +178,38 @@ describe('matchmaking session adapters', () => {
     await expect(adapter.requestGoogleSignInFromTitle('Google Name', 'https://game.test/success', 'https://game.test/error'))
       .resolves.toBe('https://accounts.google.test/');
 
-    const guestRequest = fetchMock.mock.calls.find(([input]) => String(input).endsWith('/guest-session'));
-    expect(JSON.parse(String(guestRequest?.[1]?.body))).toEqual({ displayName: 'Google Name' });
+    expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith('/guest-session'))).toBe(false);
+    expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith('/player-session'))).toBe(false);
+    expect(storageValues.get('super-rps-google-title-name')).toBe('Google Name');
     expect(storageValues.get('local:super-rps-guest')).toBe('saved-guest');
     expect(storageValues.get('local:super-rps-guest-secret')).toBe('s'.repeat(64));
     expect(storageValues.get('local:super-rps-guest-name')).toBe('Saved Name');
+  });
+
+  test('creates a player after a new title-screen Google account returns', async () => {
+    storageValues.set('super-rps-google-flow', 'title');
+    storageValues.set('super-rps-google-title-name', 'Google Name');
+    const player = { playerId: 'google-player', displayName: 'Google Name', rating: 1500, isAnonymous: false };
+    let playerGets = 0;
+    const fetchMock = vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/player-session') && init?.method === 'POST') return Promise.resolve(new Response(JSON.stringify(player), { status: 200 }));
+      if (url.endsWith('/player-session')) {
+        playerGets++;
+        return Promise.resolve(playerGets === 1 ? new Response(null, { status: 404 })
+          : new Response(JSON.stringify(player), { status: 200 }));
+      }
+      return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('WebSocket', vi.fn(() => ({ addEventListener: vi.fn(), close: vi.fn() })));
+
+    const adapter = new WebSocketShellSessionAdapter('https://example.test');
+    await expect(adapter.finishGoogleSignIn()).resolves.toMatchObject({ playerId: 'google-player' });
+
+    const creation = fetchMock.mock.calls.find(([input, init]) => String(input).endsWith('/player-session') && init?.method === 'POST');
+    expect(JSON.parse(String(creation?.[1]?.body))).toEqual({ displayName: 'Google Name' });
+    expect(storageValues.has('super-rps-google-title-name')).toBe(false);
   });
 
   test('completes an intentional Google return and removes its URL marker', async () => {

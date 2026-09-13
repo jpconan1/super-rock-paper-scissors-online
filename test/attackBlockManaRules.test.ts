@@ -129,6 +129,34 @@ describe('Attack Block Mana rules', () => {
     expect(() => send(state, 'p1', { type: 'activate-ability', ability: 'reset' })).toThrow('already been used');
   });
 
+  test('submits Null reset as the early action and waits for the opponent', () => {
+    let state = startedWith('null', 'lucky');
+    state.players.p1.mana = 0;
+    state.players.p2.mana = 4;
+
+    const submitted = attackBlockManaRules.resolve(state, 'p1', { type: 'activate-ability', ability: 'reset' }, { ...context, now: 2_000 });
+    state = submitted.state;
+    expect(state).toMatchObject({
+      phase: 'waiting', earlyPlayer: 'p1', latePlayer: 'p2',
+      waitingStartsAt: 2_174, waitingDeadlineAt: 32_174,
+      pendingAbilities: { p1: 'reset' }, players: { p1: { mana: 0, abilityUses: { reset: 0 } }, p2: { mana: 4 } },
+    });
+    expect(state.nullResetPlayer).toBeUndefined();
+    expect(state.pendingMoves).toEqual({});
+    expect(submitted.events).toMatchObject([{ type: 'move-ready', payload: { earlyPlayer: 'p1' } }]);
+    expect(attackBlockManaRules.project(state, 'p1').legalActions).toEqual([]);
+    expect(attackBlockManaRules.project(state, 'p2').legalActions).toEqual(['attack', 'block', 'mana']);
+
+    const resolved = attackBlockManaRules.resolve(state, 'p2', { type: 'choose-move', move: 'mana' }, { ...context, now: 3_000 });
+    state = resolved.state;
+    expect(state).toMatchObject({ phase: 'idle', turn: 1, nullResetPlayer: 'p1' });
+    expect(state.pendingMoves).toEqual({});
+    expect(state.pendingAbilities).toEqual({});
+    expect(state.players.p1).toEqual({ classId: 'null', mana: 1, blocks: 5, strikes: 0, attackCost: 1, abilityUses: { reset: 0 } });
+    expect(state.players.p2).toEqual({ classId: 'lucky', mana: 1, blocks: 5, strikes: 0, attackCost: 1 });
+    expect(resolved.events).toMatchObject([{ type: 'null-reset', startsAt: 3_000, payload: { player: 'p1', turn: 1 } }]);
+  });
+
   test('Null cancels pending Conjure but cannot reset after choosing a move', () => {
     let state = startedWith('null', 'conjurer');
     state = send(state, 'p2', { type: 'activate-ability', ability: 'conjure' });

@@ -693,15 +693,27 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
         const authSession = await createAuth(env).api.getSession({ headers: request.headers });
         if (!authSession) return json({ error: 'Authentication required.' }, 401);
         if (request.method === 'POST') {
-          const body = await readJsonBody<{ guestId?: string; guestSecret?: string }>(request, 1_000);
-          if (!body.guestId || !body.guestSecret) return json({ error: 'Guest credentials required.' }, 400);
-          await authenticateExistingGuest(env.DB, body.guestId, body.guestSecret);
-          const occupied = await env.DB.prepare('SELECT player_id FROM players WHERE auth_user_id = ?').bind(authSession.user.id)
-            .first<{ player_id: string }>();
-          if (occupied && occupied.player_id !== body.guestId) return json({ error: 'Account already has a player.' }, 409);
-          const result = await env.DB.prepare('UPDATE players SET auth_user_id = ?, updated_at = ? WHERE player_id = ?')
-            .bind(authSession.user.id, Date.now(), body.guestId).run();
-          if (result.meta.changes !== 1) return json({ error: 'Guest belongs to another account.' }, 409);
+          const body = await readJsonBody<{ guestId?: string; guestSecret?: string; displayName?: unknown }>(request, 1_000);
+          if (body.guestId && body.guestSecret) {
+            await authenticateExistingGuest(env.DB, body.guestId, body.guestSecret);
+            const occupied = await env.DB.prepare('SELECT player_id FROM players WHERE auth_user_id = ?').bind(authSession.user.id)
+              .first<{ player_id: string }>();
+            if (occupied && occupied.player_id !== body.guestId) return json({ error: 'Account already has a player.' }, 409);
+            const result = await env.DB.prepare(`UPDATE players SET auth_user_id = ?, updated_at = ? WHERE player_id = ? AND (
+              auth_user_id IS NULL OR auth_user_id = ? OR EXISTS (
+                SELECT 1 FROM user WHERE user.id = players.auth_user_id AND user.isAnonymous = 1
+              )
+            )`).bind(authSession.user.id, Date.now(), body.guestId, authSession.user.id).run();
+            if (result.meta.changes !== 1) return json({ error: 'Guest belongs to another account.' }, 409);
+          } else {
+            if ((authSession.user as { isAnonymous?: boolean }).isAnonymous) return json({ error: 'Guest credentials required.' }, 400);
+            const displayName = normalizeGuestDisplayName(body.displayName);
+            if (!displayName) return json({ error: `Display name must be 1-${GUEST_NAME_MAX_LENGTH} characters.` }, 400);
+            const now = Date.now();
+            await env.DB.prepare(`INSERT OR IGNORE INTO players
+              (player_id, guest_secret_hash, display_name, auth_user_id, created_at, updated_at)
+              VALUES (?, 'revoked', ?, ?, ?, ?)`).bind(crypto.randomUUID(), displayName, authSession.user.id, now, now).run();
+          }
         } else if (request.method === 'PUT') {
           const body = await readJsonBody<{ displayName?: unknown }>(request, 1_000);
           const displayName = normalizeGuestDisplayName(body.displayName);

@@ -11,12 +11,13 @@ import {
 import { createBoilToggle } from '../input/boilToggle';
 import { createGameButton } from '../input/gameButton';
 import { createSoundToggle } from '../input/soundToggle';
-import { createTextEntry, isNonBlankText } from '../input/textEntry';
+import { createTextEntry } from '../input/textEntry';
 import { createMenuCanvas } from '../layout/menuLayout';
 import { generateRandomName } from './randomName';
 import { createVolumeSlider } from './volumeSlider';
 import { getLayoutDocument } from '../layout/layoutDocuments';
 import { applyDocumentLayout } from '../layout/layoutRuntime';
+import { normalizeGuestDisplayName } from '../protocol/guestSession';
 
 const TITLE_LAYOUT = getLayoutDocument('title');
 const titleElement = (id: string) => TITLE_LAYOUT.elements.find((element) => element.id === id)!;
@@ -27,7 +28,7 @@ export function formatOnlinePlayerCount(count: number | null): string { return `
 export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPlay: (playerName: string) => void,
   getOnlinePlayerCount: () => Promise<number | null> = async () => null,
   onOpenLetter: (trigger: HTMLElement) => void = () => {}, initialName?: string,
-  onGoogleSignIn: (playerName: string) => void = () => {}): TitleScreenMount {
+  onGoogleSignIn: (playerName: string) => void = () => {}, connectedAccount?: string): TitleScreenMount {
   const screen = document.createElement('section');
   screen.className = 'title-screen';
   screen.setAttribute('aria-labelledby', 'title-screen-heading');
@@ -89,7 +90,7 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
     value: initialName?.trim() || generateRandomName(),
     maxLength: 24,
     autocomplete: 'nickname',
-    validate: isNonBlankText,
+    validate: (value) => normalizeGuestDisplayName(value) !== null,
     sheet: titleElement('name-entry').assets!.src!,
     clock,
   });
@@ -129,7 +130,7 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
     if (!nameEntry.validate()) { nameEntry.focus(); return; }
     onGoogleSignIn(nameEntry.input.value.trim());
   };
-  const google = createGameButton({
+  const google = connectedAccount ? undefined : createGameButton({
     label: 'Sign in with Google',
     onActivate: handleGoogle,
     upSheet: titleElement('google-sign-in').assets!.up!,
@@ -137,7 +138,11 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
     depressedSheet: titleElement('google-sign-in').assets!.depressed!,
     clock,
   });
-  google.element.classList.add('title-screen__google', 'game-button--baked-label');
+  google?.element.classList.add('title-screen__google', 'game-button--baked-label');
+  const accountStatus = document.createElement('p');
+  accountStatus.className = 'title-screen__account-status';
+  accountStatus.textContent = `${connectedAccount ?? ''} — Account connected`;
+  const googleElement = google?.element ?? accountStatus;
 
   const onNameKeyDown = (event: KeyboardEvent) => {
     if (event.key !== 'Enter' || event.isComposing) return;
@@ -146,12 +151,12 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
   };
   nameEntry.input.addEventListener('keydown', onNameKeyDown);
 
-  composition.append(logo.element, randomName.element, enterLobby.element, nameEntry.element, google.element,
+  composition.append(logo.element, randomName.element, enterLobby.element, nameEntry.element, googleElement,
     soundToggle.element, musicVolume.element, sfxVolume.element, boilToggle.element, onlineCount);
   bindings.push(
     { id: 'logo', element: logo.element }, { id: 'random-name', element: randomName.element },
     { id: 'enter-lobby', element: enterLobby.element }, { id: 'name-entry', element: nameEntry.element },
-    { id: 'google-sign-in', element: google.element },
+    { id: 'google-sign-in', element: googleElement },
     { id: 'sound-toggle', element: soundToggle.element }, { id: 'music-slider', element: musicVolume.element },
     { id: 'sfx-slider', element: sfxVolume.element }, { id: 'boil-toggle', element: boilToggle.element },
     { id: 'online-count', element: onlineCount },
@@ -172,7 +177,7 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
     nameEntry.input.removeEventListener('keydown', onNameKeyDown);
     nameEntry.destroy();
     enterLobby.destroy();
-    google.destroy();
+    google?.destroy();
     countStopped = true; window.clearInterval(countTimer);
     screen.remove();
   }) as TitleScreenMount;
