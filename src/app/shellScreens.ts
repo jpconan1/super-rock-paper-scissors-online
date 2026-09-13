@@ -78,6 +78,7 @@ export function mountLobbyScreen(
   onTutorial: () => void,
   onScoreboard: () => void,
   onSettings: () => void,
+  onAccount: () => void,
   sendWhiteboard: (message: WhiteboardClientMessage) => void,
   multiVariantFlow = true,
 ): LobbyScreenMount {
@@ -189,6 +190,10 @@ export function mountLobbyScreen(
     { id: 'tutorial', element: menuButton('Tutorial', 'tutorial-button', 'lobby-screen__action', leaveQueue(onTutorial)) },
     { id: 'ready', element: matchmakingToggle.element },
     { id: 'settings', element: menuButton('Settings', 'settings-button', 'lobby-screen__action', onSettings) },
+    { id: 'account', element: (() => {
+      const item = createGameButton({ label: 'Account settings', onActivate: leaveQueue(onAccount), upSheet: lobbyElement('account').assets!.up!, betweenSheet: lobbyElement('account').assets!.between!, depressedSheet: lobbyElement('account').assets!.depressed!, clock });
+      item.element.classList.add('lobby-screen__action', 'game-button--baked-label'); gameButtons.push(item); gameButtonByElement.set(item.element, item); return item.element;
+    })() },
   ];
   const scoreboard = multiVariantFlow ? action('Scoreboard', leaveQueue(onScoreboard)) : undefined;
   scoreboard?.classList.add('lobby-screen__scoreboard-preview');
@@ -326,10 +331,10 @@ export function mountDisconnectResult(
   return () => { back.destroy(); textbox.destroy(); modal.remove(); };
 }
 
-export function mountErrorScreen(container: HTMLElement, error: unknown, onBack: () => void): ScreenCleanup {
+export function mountErrorScreen(container: HTMLElement, error: unknown, onBack: () => void, backLabel = 'Return to Lobby'): ScreenCleanup {
   const { panel, cleanup } = mountPanel(container, 'Could Not Continue');
   const message = document.createElement('p');
   message.textContent = error instanceof Error ? error.message : 'Unknown error.';
-  panel.append(message, action('Return to Lobby', onBack));
+  panel.append(message, action(backLabel, onBack));
   return cleanup;
 }

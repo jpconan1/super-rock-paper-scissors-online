@@ -1,0 +1,112 @@
+# Super ABM Terms of Service
+
+**Effective date:** September 13, 2026
+
+These Terms of Service govern your use of Super ABM. By accessing or using the game, you agree to these terms and the [Privacy Policy](/privacy.html). If you do not agree, do not use the game.
+
+Super ABM is a free, non-commercial community project. It is provided for fun, without paid features or advertising. We may use the game to promote other projects, including commercial projects made by us, our friends, or our partners.
+
+## Who may use Super ABM
+
+You must be at least 13 years old to use Super ABM. If the law where you live requires permission from a parent or guardian, you must have that permission.
+
+You are responsible for activity through your account or guest profile and for keeping your sign-in credentials and device secure. Do not impersonate another person or misrepresent your affiliation with a person or project.
+
+## The rule: no offensive content
+
+Don't post anything that would offend a general audience.
+
+This includes, but is not limited to:
+
+- racist, homophobic, or sexist language or jokes;
+- sexually explicit content;
+- harassment, threats, hateful content, or attacks on other people;
+- insults and rants that aren't funny;
+- illegal content or content that violates another person's privacy or rights; and
+- AI-generated walls of text, repeated messages, or other spam.
+
+If a Jannie or Admin finds your behaviour or content offensive, disruptive, unsafe, or otherwise bad for the community, it may be removed and you may be warned, muted, suspended, or banned. “Jannie” and “Admin” mean the people who moderate or operate Super ABM.
+
+## Permitted behaviour
+
+### Trash talk is okay if you keep it light
+
+Taking this doodled RPS webgame way too seriously is encouraged. You can get mad as long as you're okay with others laughing at you. Do not cross the line into harassment, threats, hate, or sustained personal attacks.
+
+### Promoting your project or game is okay, within reason
+
+Drop your link—we want to see it. Posting it repeatedly, disguising spam as participation, or generally being annoying about it is offensive and violates our one rule.
+
+### Critical feedback is okay
+
+You can say the game sucks. We can take it. Express yourself. Criticism is welcome; abuse directed at people is not.
+
+## Don't attack or misuse the service
+
+You must not:
+
+- break the law through Super ABM;
+- gain or attempt to gain unauthorized access to accounts, data, servers, or non-public parts of the service;
+- probe, scan, exploit, or publicly disclose a security vulnerability in a way that risks harm to the service or its users;
+- interfere with the service, overload it, distribute malware, evade rate limits, or disrupt another person's use;
+- use bots, scripts, or coordinated activity to spam, scrape personal information, manipulate ratings or matches, or gain an unfair advantage;
+- steal credentials, collect personal information without permission, or expose another person's private information.
+
+Super ABM's source code is open source. Nothing in this section limits rights granted by its open-source licence. You may study, modify, and share the source code according to that licence. Those rights do not include attacking the hosted game or misusing other people's accounts or data.
+
+If you discover a security problem, please report it privately to the contact below and give us a reasonable chance to fix it before publishing details that could put users at risk.
+
+## Your content
+
+You keep ownership of content you submit. You promise that you have the right to submit it and that it complies with these terms.
+
+You give the Super ABM project a non-exclusive, worldwide, royalty-free licence to host, store, reproduce, display, transmit, and moderate that content only as reasonably needed to operate, protect, and improve the game and its community features. This licence ends when the content is deleted from our active systems, except where continued storage is reasonably required for backups, security, legal obligations, or the integrity of game records.
+
+Content submitted to shared or public features may be seen, copied, or shared by other people. Do not submit anything you need to keep private.
+
+## Moderation and enforcement
+
+We may investigate suspected violations and remove content or restrict access when we reasonably believe it protects Super ABM, its users, or others. Serious or repeated violations may result in an immediate ban. We may also preserve or disclose information as described in the Privacy Policy or when required by law.
+
+Moderation calls are judgment calls. Context, frequency, severity, and effect on the community matter. These rules are not a loophole-hunting contest, and the examples above are not exhaustive.
+
+If you think we made a mistake, contact us. We may reconsider the decision, but we do not promise that every restriction will be reversed or that every moderation action will receive a detailed explanation.
+
+## The service may change or stop
+
+We may add, change, remove, reset, suspend, or discontinue any part of Super ABM at any time. This includes features, game rules, ratings, records, accounts, and access to the hosted service. We may experience bugs, outages, lost progress, security incidents, or other failures. We do not promise permanent availability or preservation of any account, content, rating, or game history.
+
+## Project rights and licences
+
+The Super ABM source code is available under the licence identified in the project's source repository. Original artwork and other assets may have different terms and may be all rights reserved. Third-party code, fonts, audio, services, and other materials remain subject to their respective terms.
+
+These Terms do not transfer ownership of Super ABM's name, artwork, assets, or other project rights to you. Any permission to use project materials comes from the applicable licence or separate written permission, not from these Terms.
+
+## Third-party services and links
+
+Super ABM uses third-party services, including Cloudflare and optional Google sign-in. It may also link to community members' projects or other websites. Their services, content, availability, and privacy practices are controlled by them, not by Super ABM. A link or promotion does not guarantee or endorse what a third party offers.
+
+## No warranties
+
+To the fullest extent permitted by applicable law, Super ABM is provided “as is” and “as available,” without warranties or promises of any kind, whether express, implied, or statutory. We do not promise that the game will be secure, uninterrupted, error-free, accurate, compatible with your device, or free from harmful components.
+
+Some places do not allow certain warranty exclusions. Rights that cannot legally be excluded still apply to you.
+
+## Limits on liability
+
+To the fullest extent permitted by applicable law, the Super ABM project and its operator, contributors, moderators, and partners will not be liable for indirect, incidental, special, consequential, exemplary, or punitive damages, or for lost data, lost profits, loss of goodwill, device damage, or interruption arising from or related to the game.
+
+## Changes to these terms
+
+We may update these Terms as Super ABM changes. We will post the revised Terms with a new effective date. If a change is material, we will provide reasonable notice in the game or on the website. Your continued use after the new Terms take effect means you accept them. If you do not accept an update, stop using the game.
+
+## If part of these terms is invalid
+
+If a court finds part of these Terms invalid or unenforceable, the remaining terms will continue to apply. Our failure to enforce a term immediately does not waive our right to enforce it later.
+
+## Contact
+
+Questions, moderation appeals, and security reports may be sent to:
+
+**Super ABM Contact**  
+**Email:** jeanpaulconan@gmail.com

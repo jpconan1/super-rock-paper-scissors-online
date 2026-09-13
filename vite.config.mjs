@@ -7,7 +7,7 @@ const virtualAssetBundles = 'virtual:asset-bundles';
 const resolvedVirtualAssetBundles = `\0${virtualAssetBundles}`;
 const imageExtensions = /\.(?:avif|gif|jpe?g|png|svg|webp)$/i;
 const layoutFiles = {
-  title: 'src/layout/documents/title.json', lobby: 'src/layout/documents/lobby.json',
+  title: 'src/layout/documents/title.json', lobby: 'src/layout/documents/lobby.json', account: 'src/layout/documents/account.json',
   'variant-select': 'src/layout/documents/variant-select.json', scoreboard: 'src/layout/documents/scoreboard.json',
   'game-parent': 'src/layout/documents/game-parent.json',
   'variant-fireball-war': 'src/layout/documents/variants/fireball-war.json',

@@ -438,6 +438,21 @@
       }
     },
     {
+      "id": "account",
+      "type": "button",
+      "layer": 22,
+      "protected": true,
+      "assets": {
+        "up": "/account/account-button-up-sheet.webp",
+        "between": "/account/account-button-between-sheet.webp",
+        "depressed": "/account/account-button-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": { "x": 715, "y": 460, "width": 148, "height": 74 },
+        "portrait": { "x": 196, "y": 700, "width": 148, "height": 74 }
+      }
+    },
+    {
       "id": "roster",
       "type": "group",
       "layer": 20,

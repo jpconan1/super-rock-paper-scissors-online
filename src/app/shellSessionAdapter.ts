@@ -7,7 +7,7 @@ import { LOBBY_SOCKET_PROTOCOL, MATCH_SOCKET_PROTOCOL, WHITEBOARD_SOCKET_PROTOCO
 import { isGuestSessionResponse, type GuestProfile, type GuestSessionRequest, type GuestSessionResponse } from '../protocol/guestSession';
 import { createGameAuthClient, type GameAuthClient } from '../auth/authClient';
 
-export interface AccountState { signedIn: boolean; isAnonymous: boolean; displayName: string }
+export interface AccountState { signedIn: boolean; isAnonymous: boolean; displayName: string; playerId: string; rating: number }
 
 export interface ShellSessionListener {
   connection(state: ConnectionState): void;
@@ -20,10 +20,17 @@ export interface ShellSessionListener {
 
 export interface ShellSessionAdapter {
   subscribe(listener: ShellSessionListener): () => void;
-  initializeGuest(): Promise<GuestProfile | null>;
+  prepareTitle(): Promise<void>;
+  isGoogleSignInReturn(): boolean;
+  completeGoogleSignIn(): Promise<GuestProfile | null>;
   suggestedPlayerName(): string;
   accountState(): AccountState;
-  signInWithGoogle(playerName: string): Promise<void>;
+  requestGoogleSignInFromTitle(playerName: string, callbackURL: string, errorCallbackURL: string): Promise<string>;
+  requestGuestClaimWithGoogle(callbackURL: string, errorCallbackURL: string): Promise<string>;
+  finishGoogleSignIn(): Promise<GuestProfile | null>;
+  signInWithGoogleFromTitle(playerName: string): Promise<void>;
+  claimGuestWithGoogle(): Promise<void>;
+  updateDisplayName(displayName: string): Promise<GuestProfile>;
   signOut(): Promise<void>;
   enterLobby(playerName: string): Promise<GuestProfile>;
   getOnlinePlayerCount(): Promise<number | null>;
@@ -66,6 +73,10 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
   private lobbyPresence: LobbyPresence = 'idle';
   private readonly authClient: GameAuthClient;
   private authIsAnonymous = true;
+  private playerId = '';
+  private rating = 1500;
+  private googleFlow?: 'title' | 'claim';
+  private claimedGuestId?: string;
 
   constructor(private readonly baseUrl = location.origin) {
     this.authClient = createGameAuthClient(baseUrl);
@@ -79,78 +90,109 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
     listener.connection('connected');
     return () => { if (this.listener === listener) this.listener = undefined; };
   }
-  async initializeGuest(): Promise<GuestProfile | null> {
-    const authenticated = await this.loadAuthenticatedPlayer();
-    if (authenticated) return authenticated;
-    if (!this.guestId || !this.guestSecret) return null;
-    try {
-      const response = await fetch(`${this.baseUrl}/guest-session`, {
-        method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ guestId: this.guestId, guestSecret: this.guestSecret } satisfies GuestSessionRequest),
-      });
-      if (!response.ok) return null;
-      const session: unknown = await response.json();
-      if (!isGuestSessionResponse(session)) return null;
-      this.playerName = session.displayName;
-      saveGuestIdentity(session);
-      return session;
-    } catch { return null; }
+  async prepareTitle(): Promise<void> {
+    this.disconnectOnline();
+    const result = await this.authClient.signOut();
+    if (result.error) throw new Error(result.error.message || 'Could not log out.');
+    this.resetAuthenticationState();
+  }
+  isGoogleSignInReturn(): boolean {
+    return new URL(location.href).searchParams.get(GOOGLE_RETURN_PARAM) === '1';
+  }
+  async completeGoogleSignIn(): Promise<GuestProfile | null> {
+    if (!this.isGoogleSignInReturn()) return null;
+    removeGoogleReturnMarker();
+    return this.finishGoogleSignIn();
+  }
+  async finishGoogleSignIn(): Promise<GuestProfile | null> {
+    const flow = this.googleFlow ?? loadGoogleFlow();
+    const savedGuestName = localStorage.getItem(GUEST_NAME_KEY);
+    const player = await this.loadAuthenticatedPlayer();
+    if (!player || this.authIsAnonymous) return null;
+    const claimedGuestId = this.claimedGuestId ?? (flow === 'claim' ? loadGuestIdentity().id ?? undefined : undefined);
+    const claimed = flow === 'claim' && player.playerId === claimedGuestId;
+    if (claimed) clearGuestCredentials();
+    const saved = loadGuestIdentity();
+    this.guestId = saved.id ?? '';
+    this.guestSecret = saved.secret ?? '';
+    if (flow === 'title' || (flow === 'claim' && !claimed)) {
+      if (savedGuestName === null) localStorage.removeItem(GUEST_NAME_KEY); else localStorage.setItem(GUEST_NAME_KEY, savedGuestName);
+    }
+    this.googleFlow = undefined; this.claimedGuestId = undefined; sessionStorage.removeItem(GOOGLE_FLOW_KEY);
+    await this.connectOnlineServices();
+    return player;
   }
   suggestedPlayerName(): string { return loadSavedGuestName(); }
   accountState(): AccountState {
-    return { signedIn: !this.authIsAnonymous, isAnonymous: this.authIsAnonymous, displayName: this.playerName || loadSavedGuestName() };
+    return { signedIn: !this.authIsAnonymous, isAnonymous: this.authIsAnonymous, displayName: this.playerName || loadSavedGuestName(), playerId: this.playerId || this.guestId, rating: this.rating };
   }
-  async signInWithGoogle(playerName: string): Promise<void> {
-    await this.enterLobby(playerName);
-    await this.authClient.signIn.social({ provider: 'google', callbackURL: location.href });
+  async requestGoogleSignInFromTitle(playerName: string, callbackURL: string, errorCallbackURL: string): Promise<string> {
+    await this.prepareFreshPlayerForGoogle(playerName); this.setGoogleFlow('title');
+    return this.requestGoogleAuthorization(callbackURL, errorCallbackURL);
+  }
+  async requestGuestClaimWithGoogle(callbackURL: string, errorCallbackURL: string): Promise<string> {
+    if (!this.authIsAnonymous || !this.guestId) throw new Error('A guest account is required.');
+    this.claimedGuestId = this.guestId; this.setGoogleFlow('claim');
+    return this.requestGoogleAuthorization(callbackURL, errorCallbackURL);
+  }
+  private async requestGoogleAuthorization(callbackURL: string, errorCallbackURL: string): Promise<string> {
+    const result = await this.authClient.signIn.social({
+      provider: 'google', callbackURL, errorCallbackURL, disableRedirect: true,
+    });
+    if (result.error) throw new Error(result.error.message || 'Google sign-in could not start.');
+    const authorizationUrl = result.data?.url;
+    if (!authorizationUrl) throw new Error('Google sign-in returned no authorization URL.');
+    return authorizationUrl;
+  }
+  async signInWithGoogleFromTitle(playerName: string): Promise<void> {
+    await this.prepareFreshPlayerForGoogle(playerName); this.setGoogleFlow('title'); await this.redirectToGoogle();
+  }
+  async claimGuestWithGoogle(): Promise<void> {
+    if (!this.authIsAnonymous || !this.guestId) throw new Error('A guest account is required.');
+    this.claimedGuestId = this.guestId; this.setGoogleFlow('claim'); await this.redirectToGoogle();
+  }
+  private async redirectToGoogle(): Promise<void> {
+    const callback = new URL(location.href);
+    callback.searchParams.set(GOOGLE_RETURN_PARAM, '1');
+    const result = await this.authClient.signIn.social({ provider: 'google', callbackURL: callback.toString() });
+    if (result.error) throw new Error(result.error.message || 'Google sign-in could not start.');
+  }
+  async updateDisplayName(displayName: string): Promise<GuestProfile> {
+    const response = await fetch(`${this.baseUrl}/player-session`, { method: 'PUT', credentials: 'include', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ displayName }) });
+    if (!response.ok) throw new Error(`Name update failed: ${response.status}`);
+    const player = await response.json() as GuestProfile;
+    if (!player.playerId || !player.displayName || !Number.isFinite(player.rating)) throw new Error('Name update returned invalid data.');
+    this.playerName = player.displayName; this.playerId = player.playerId; this.rating = player.rating; saveGuestName(player.displayName);
+    return player;
   }
   async signOut(): Promise<void> {
-    await this.authClient.signOut();
-    clearGuestIdentity();
-    this.guestId = ''; this.guestSecret = ''; this.playerName = ''; this.authIsAnonymous = true;
+    this.disconnectOnline();
+    const result = await this.authClient.signOut();
+    if (result.error) throw new Error(result.error.message || 'Could not log out.');
+    this.resetAuthenticationState();
   }
   async enterLobby(playerName: string): Promise<GuestProfile> {
     const requestedName = playerName.trim();
     saveGuestName(requestedName);
     this.playerName = requestedName;
-    const accountPlayer = await this.loadAuthenticatedPlayer();
-    if (accountPlayer && !this.authIsAnonymous) {
-      let profile = accountPlayer;
-      try {
-        const response = await fetch(`${this.baseUrl}/player-session`, {
-          method: 'PUT', credentials: 'include', headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ displayName: requestedName }),
-        });
-        if (!response.ok) throw new Error(`Name update failed: ${response.status}`);
-        profile = await response.json() as GuestProfile;
-        this.playerName = profile.displayName; saveGuestName(profile.displayName);
-        await this.connectOnlineServices();
-      } catch { this.listener?.connection('offline'); }
-      return profile;
-    }
-    let profile: GuestProfile = { playerId: this.guestId, displayName: requestedName, rating: 1500 };
-    try {
-      const body: GuestSessionRequest = {
-        displayName: requestedName,
-        ...(this.guestId && this.guestSecret ? { guestId: this.guestId, guestSecret: this.guestSecret } : {}),
-      };
-      const sessionResponse = await fetch(`${this.baseUrl}/guest-session`, {
-        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
-      });
-      if (!sessionResponse.ok) throw new Error(`Guest session failed: ${sessionResponse.status}`);
-      const session: unknown = await sessionResponse.json();
-      if (!isGuestSessionResponse(session)) throw new Error('Guest session returned invalid data.');
-      this.guestId = session.playerId;
-      this.guestSecret = session.guestSecret;
-      this.playerName = session.displayName;
-      profile = session;
-      saveGuestIdentity(session);
-      await this.ensureAnonymousAssociation();
-      await this.connectOnlineServices();
-    } catch {
-      this.listener?.connection('offline');
-    }
-    return profile;
+    const body: GuestSessionRequest = {
+      displayName: requestedName,
+      ...(this.guestId && this.guestSecret ? { guestId: this.guestId, guestSecret: this.guestSecret } : {}),
+    };
+    const sessionResponse = await fetch(`${this.baseUrl}/guest-session`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+    });
+    if (!sessionResponse.ok) throw new Error(`Guest session failed: ${sessionResponse.status}`);
+    const session: unknown = await sessionResponse.json();
+    if (!isGuestSessionResponse(session)) throw new Error('Guest session returned invalid data.');
+    this.guestId = session.playerId;
+    this.guestSecret = session.guestSecret;
+    this.playerName = session.displayName;
+    this.playerId = session.playerId; this.rating = session.rating;
+    saveGuestIdentity(session);
+    await this.ensureAnonymousAssociation();
+    await this.connectOnlineServices();
+    return session;
   }
   private async connectOnlineServices(): Promise<void> {
     const response = await fetch(`${this.baseUrl}/health`, { cache: 'no-store' });
@@ -172,21 +214,56 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
       const player = await response.json() as GuestProfile & { isAnonymous?: boolean };
       if (!player.playerId || !player.displayName || !Number.isFinite(player.rating)) return null;
       this.playerName = player.displayName;
+      this.playerId = player.playerId; this.rating = player.rating;
       this.authIsAnonymous = player.isAnonymous !== false;
       saveGuestName(player.displayName);
-      if (!this.authIsAnonymous) clearGuestCredentials();
       return player;
     } catch { return null; }
   }
   private async ensureAnonymousAssociation(): Promise<void> {
     if (await this.loadAuthenticatedPlayer()) return;
+    const existingSessionLink = await this.associateGuestWithCurrentSession();
+    if (existingSessionLink) return;
     const result = await this.authClient.signIn.anonymous();
     if (result.error) throw new Error(result.error.message || 'Could not start guest session.');
+    if (!await this.associateGuestWithCurrentSession()) throw new Error('Could not link guest session.');
+    this.authIsAnonymous = true;
+  }
+  private async associateGuestWithCurrentSession(): Promise<boolean> {
     const response = await fetch(`${this.baseUrl}/player-session`, {
       method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ guestId: this.guestId, guestSecret: this.guestSecret }),
     });
+    if (response.status === 401) return false;
     if (!response.ok) throw new Error(`Could not link guest session: ${response.status}`);
+    const player = await response.json() as GuestProfile & { isAnonymous?: boolean };
+    this.playerName = player.displayName;
+    this.playerId = player.playerId; this.rating = player.rating;
+    this.authIsAnonymous = player.isAnonymous !== false;
+    saveGuestName(player.displayName);
+    return true;
+  }
+  private async prepareFreshPlayerForGoogle(playerName: string): Promise<void> {
+    const requestedName = playerName.trim();
+    const savedName = localStorage.getItem(GUEST_NAME_KEY);
+    const savedGuest = loadGuestIdentity();
+    const signedOut = await this.authClient.signOut();
+    if (signedOut.error) throw new Error(signedOut.error.message || 'Could not log out.');
+    this.playerName = requestedName;
+    const response = await fetch(`${this.baseUrl}/guest-session`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ displayName: requestedName } satisfies GuestSessionRequest) });
+    if (!response.ok) throw new Error(`Guest session failed: ${response.status}`);
+    const session: unknown = await response.json();
+    if (!isGuestSessionResponse(session)) throw new Error('Guest session returned invalid data.');
+    this.guestId = session.playerId; this.guestSecret = session.guestSecret; this.playerName = session.displayName; this.playerId = session.playerId; this.rating = session.rating;
+    await this.ensureAnonymousAssociation();
+    if (savedName === null) localStorage.removeItem(GUEST_NAME_KEY); else localStorage.setItem(GUEST_NAME_KEY, savedName);
+    this.guestId = savedGuest.id ?? ''; this.guestSecret = savedGuest.secret ?? ''; this.playerId = this.guestId;
+  }
+  private setGoogleFlow(flow: 'title' | 'claim'): void { this.googleFlow = flow; sessionStorage.setItem(GOOGLE_FLOW_KEY, flow); }
+  private resetAuthenticationState(): void {
+    this.playerName = '';
+    this.playerId = '';
+    this.rating = 1500;
     this.authIsAnonymous = true;
   }
   async getOnlinePlayerCount(): Promise<number | null> {
@@ -373,6 +450,8 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
   }
 }
 
+const GOOGLE_RETURN_PARAM = 'google-sign-in-return';
+const GOOGLE_FLOW_KEY = 'super-rps-google-flow';
 const GUEST_ID_KEY = 'super-rps-guest';
 const GUEST_SECRET_KEY = 'super-rps-guest-secret';
 const GUEST_NAME_KEY = 'super-rps-guest-name';
@@ -383,15 +462,17 @@ function loadGuestIdentity(): { id: string | null; secret: string | null } {
   return { id, secret };
 }
 function loadSavedGuestName(): string { return localStorage.getItem(GUEST_NAME_KEY)?.trim() ?? ''; }
+function loadGoogleFlow(): 'title' | 'claim' | undefined { const value = sessionStorage.getItem(GOOGLE_FLOW_KEY); return value === 'title' || value === 'claim' ? value : undefined; }
 function saveGuestName(name: string): void { if (name) localStorage.setItem(GUEST_NAME_KEY, name); }
 function saveGuestIdentity(session: GuestSessionResponse): void {
   localStorage.setItem(GUEST_ID_KEY, session.playerId);
   localStorage.setItem(GUEST_SECRET_KEY, session.guestSecret);
   saveGuestName(session.displayName);
 }
-function clearGuestIdentity(): void {
-  clearGuestCredentials();
-  localStorage.removeItem(GUEST_NAME_KEY);
+function removeGoogleReturnMarker(): void {
+  const url = new URL(location.href);
+  url.searchParams.delete(GOOGLE_RETURN_PARAM);
+  history.replaceState(history.state, '', url);
 }
 function clearGuestCredentials(): void {
   localStorage.removeItem(GUEST_ID_KEY);
@@ -411,10 +492,17 @@ export class LocalShellSessionAdapter implements ShellSessionAdapter {
     return () => { if (this.listener === listener) this.listener = undefined; };
   }
 
-  async initializeGuest(): Promise<GuestProfile | null> { return null; }
+  async prepareTitle(): Promise<void> {}
+  isGoogleSignInReturn(): boolean { return false; }
+  async completeGoogleSignIn(): Promise<GuestProfile | null> { return null; }
   suggestedPlayerName(): string { return ''; }
-  accountState(): AccountState { return { signedIn: false, isAnonymous: true, displayName: '' }; }
-  async signInWithGoogle(_playerName: string): Promise<void> {}
+  accountState(): AccountState { return { signedIn: false, isAnonymous: true, displayName: '', playerId: 'local-player', rating: 1500 }; }
+  async requestGoogleSignInFromTitle(_playerName: string, _callbackURL: string, _errorCallbackURL: string): Promise<string> { return ''; }
+  async requestGuestClaimWithGoogle(_callbackURL: string, _errorCallbackURL: string): Promise<string> { return ''; }
+  async finishGoogleSignIn(): Promise<GuestProfile | null> { return null; }
+  async signInWithGoogleFromTitle(_playerName: string): Promise<void> {}
+  async claimGuestWithGoogle(): Promise<void> {}
+  async updateDisplayName(displayName: string): Promise<GuestProfile> { return { playerId: 'local-player', displayName, rating: 1500 }; }
   async signOut(): Promise<void> {}
   async enterLobby(playerName: string): Promise<GuestProfile> {
     this.listener?.connection('connected');

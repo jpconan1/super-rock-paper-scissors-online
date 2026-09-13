@@ -23,9 +23,10 @@ import { MusicDirector } from '../audio/musicDirector';
 import { destroySoundCatalog } from '../audio/soundCatalog';
 import { LocalAbmMatch } from './localAbmMatch';
 import { hasSeenAbmNewsletter, mountAbmLetterModal } from './abmLetterModal';
+import { mountAccountScreen } from './accountScreen';
 
 export type ConnectionState = 'connected' | 'reconnecting' | 'offline';
-export type ShellDestination = 'title' | 'lobby' | 'match-found' | 'slot-picker' | 'scoreboard' | 'gameplay';
+export type ShellDestination = 'title' | 'lobby' | 'account' | 'match-found' | 'slot-picker' | 'scoreboard' | 'gameplay';
 
 export interface AppControllerOptions {
   readonly clock: BoilClock;
@@ -65,6 +66,7 @@ export class AppController {
   private lobbySelfId = '';
   private terminalCleanup?: () => void;
   private localMatch?: LocalAbmMatch;
+  private googleSignIn?: AbortController;
   private readonly music = new MusicDirector();
   private readonly onGlobalKeyDown = (event: KeyboardEvent) => {
     if (event.key !== 'Escape' || event.repeat || this.destination === 'title') return;
@@ -113,10 +115,12 @@ export class AppController {
     });
     globalThis.addEventListener?.('keydown', this.onGlobalKeyDown as EventListener);
     const removeLoadingScreen = await runLoadingScreen(this.screenLayer, options.clock, assetLoader.retainBundle('shared'), true);
-    const guest = await options.session.initializeGuest();
-    if (guest) this.playerName = guest.displayName;
+    const googleReturn = options.session.isGoogleSignInReturn();
+    const googlePlayer = googleReturn ? await options.session.completeGoogleSignIn() : null;
+    if (!googlePlayer) await options.session.prepareTitle();
+    else this.playerName = googlePlayer.displayName;
     this.transitionLayer.replaceChildren(...this.screenLayer.childNodes);
-    await this.navigate('title', false);
+    await this.navigate(googlePlayer ? 'lobby' : 'title', false);
     await this.screenReady;
     await nextFrame();
     removeLoadingScreen();
@@ -129,6 +133,8 @@ export class AppController {
     }
     const revision = ++this.loadRevision;
     this.lifecycle?.abort();
+    this.googleSignIn?.abort();
+    this.googleSignIn = undefined;
     this.lifecycle = new AbortController();
     const signal = this.lifecycle.signal;
     const commit = () => {
@@ -141,7 +147,7 @@ export class AppController {
     if (!animated) { commit(); return; }
     try {
       const curtain = this.getCurtain();
-      curtain.setOpenDecoration(destination === 'lobby' || destination === 'slot-picker' || destination === 'scoreboard');
+      curtain.setOpenDecoration(destination === 'lobby' || destination === 'account' || destination === 'slot-picker' || destination === 'scoreboard');
       await curtain.transition(commit, signal);
     }
     catch (error) { if (!signal.aborted) this.showError(error); }
@@ -213,6 +219,8 @@ export class AppController {
     this.closeUniversalMenu();
     this.lifecycle?.abort();
     this.lifecycle = undefined;
+    this.googleSignIn?.abort();
+    this.googleSignIn = undefined;
     this.clearScreen();
     this.modalCleanup?.();
     this.modalCleanup = undefined;
@@ -240,15 +248,14 @@ export class AppController {
         void options.session.enterLobby(name).then((profile) => {
           this.playerName = profile.displayName;
           return this.navigate('lobby');
-        });
+        }).catch((error) => this.showError(error, 'title'));
       }, () => options.session.getOnlinePlayerCount(), (trigger) => this.openAbmLetter(trigger),
       options.session.suggestedPlayerName(), (name) => {
-        void options.session.signInWithGoogle(name).catch((error) => this.showError(error));
-      }, options.session.accountState().signedIn);
+        void this.startGoogleSignIn('title', name);
+      });
       this.screenCleanup = title;
       this.screenReady = title.ready;
     } else if (destination === 'lobby') {
-      void options.session.enterLobby(this.playerName);
       this.screenReady = Promise.resolve();
       this.modalCleanup?.();
       this.modalCleanup = undefined;
@@ -262,6 +269,7 @@ export class AppController {
         () => {},
         () => void this.navigate('scoreboard'),
         () => this.openUniversalMenu(),
+        () => void this.navigate('account'),
         (message) => options.session.sendWhiteboard(message),
         options.season.mode === 'multi-variant',
       );
@@ -271,6 +279,14 @@ export class AppController {
       this.lobbyScreen = lobby;
       this.screenCleanup = lobby;
       if (!hasSeenAbmNewsletter()) this.openAbmLetter();
+    } else if (destination === 'account') {
+      this.screenReady = Promise.resolve();
+      const account = mountAccountScreen(this.screenLayer, options.clock, options.session.accountState(), async (name) => {
+        const profile = await options.session.updateDisplayName(name);
+        this.playerName = profile.displayName;
+        return options.session.accountState();
+      }, () => void this.startGoogleSignIn('claim'), () => void this.navigate('lobby'));
+      this.screenCleanup = () => account.destroy();
     } else if (destination === 'match-found') {
       const projection = this.matchProjection;
       if (!projection) throw new Error('Match information is unavailable.');
@@ -374,9 +390,9 @@ export class AppController {
     this.music.leaveAbm();
   }
 
-  private showError(error: unknown): void {
+  private showError(error: unknown, returnTo: 'title' | 'lobby' = 'lobby'): void {
     this.clearScreen();
-    this.screenCleanup = mountErrorScreen(this.screenLayer, error, () => void this.navigate('lobby'));
+    this.screenCleanup = mountErrorScreen(this.screenLayer, error, () => void this.navigate(returnTo), returnTo === 'title' ? 'Return to Title' : 'Return to Lobby');
   }
 
   private openUniversalMenu(): void {
@@ -386,15 +402,7 @@ export class AppController {
       ? scaleContent.firstElementChild
       : this.screenLayer.firstElementChild instanceof HTMLElement ? this.screenLayer.firstElementChild : this.screenLayer;
     this.universalMenu = mountUniversalMenu(scaleContent ?? this.screenLayer, background, this.options.clock,
-      () => this.quitToTitle(), () => this.closeUniversalMenu(), {
-        ...this.options.session.accountState(),
-        onSignOut: () => {
-          void this.options.session.signOut().then(() => {
-            this.closeUniversalMenu();
-            this.quitToTitle();
-          }).catch((error) => this.showError(error));
-        },
-      });
+      () => void this.quitToTitle(), () => this.closeUniversalMenu(), this.options.session.accountState());
   }
 
   private openAbmLetter(trigger?: HTMLElement): void {
@@ -416,13 +424,59 @@ export class AppController {
     menu?.destroy();
   }
 
-  private quitToTitle(): void {
+  private async startGoogleSignIn(flow: 'title' | 'claim', name = ''): Promise<void> {
+    const popup = window.open('', 'super-rps-google-sign-in', 'popup,width=520,height=720');
+    const curtain = this.getCurtain();
+    if (!popup) {
+      try {
+        await curtain.close(this.lifecycle?.signal);
+        if (flow === 'title') await this.options.session.signInWithGoogleFromTitle(name); else await this.options.session.claimGuestWithGoogle();
+      }
+      catch (error) { await curtain.open(); console.error('Google sign-in failed.', error); }
+      return;
+    }
+    this.googleSignIn?.abort();
+    const controller = new AbortController();
+    this.googleSignIn = controller;
+    const nonce = crypto.randomUUID();
+    const callbackURL = googlePopupCallbackUrl('success', nonce);
+    const errorCallbackURL = googlePopupCallbackUrl('error', nonce);
+    try {
+      await curtain.close(controller.signal);
+      if (controller.signal.aborted) return;
+      const authorizationUrl = flow === 'title'
+        ? await this.options.session.requestGoogleSignInFromTitle(name, callbackURL, errorCallbackURL)
+        : await this.options.session.requestGuestClaimWithGoogle(callbackURL, errorCallbackURL);
+      popup.location.replace(authorizationUrl);
+      const result = await waitForGoogleAuthPopup(popup, nonce, location.origin, controller.signal);
+      if (result === 'error') throw new Error('Google sign-in was not completed.');
+      const player = await this.options.session.finishGoogleSignIn();
+      if (!player) throw new Error('Google sign-in completed without a player session.');
+      this.playerName = player.displayName;
+      await this.navigate(flow === 'claim' ? 'account' : 'lobby');
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        await curtain.open();
+        console.error('Google sign-in failed.', error);
+      }
+    } finally {
+      if (!popup.closed) popup.close();
+      if (this.googleSignIn === controller) this.googleSignIn = undefined;
+    }
+  }
+
+  private async quitToTitle(): Promise<void> {
     const wasInMatch = Boolean(this.matchProjection) || this.destination === 'gameplay' || this.destination === 'match-found';
-    this.closeUniversalMenu();
     this.setMatchmaking(false);
     if (this.localMatch) { this.localMatch.destroy(); this.localMatch = undefined; }
     else if (wasInMatch) this.options.session.leaveMatch();
-    this.options.session.disconnectOnline();
+    try {
+      await this.options.session.signOut();
+    } catch (error) {
+      this.showError(error);
+      return;
+    }
+    this.closeUniversalMenu();
     this.latestSnapshot = undefined;
     this.matchFlowDirector?.cancel();
     void this.navigate('title');
@@ -545,6 +599,47 @@ function waitFor(milliseconds: number, signal?: AbortSignal): Promise<void> {
     const timer = setTimeout(done, milliseconds);
     signal?.addEventListener('abort', done, { once: true });
     function done() { clearTimeout(timer); signal?.removeEventListener('abort', done); resolve(); }
+  });
+}
+
+export const GOOGLE_AUTH_POPUP_MESSAGE = 'super-rps-google-auth-complete';
+type GoogleAuthPopupResult = 'success' | 'error';
+
+export function googlePopupCallbackUrl(result: GoogleAuthPopupResult, nonce: string): string {
+  const url = new URL('/auth-complete.html', location.origin);
+  url.searchParams.set('result', result);
+  url.searchParams.set('nonce', nonce);
+  return url.toString();
+}
+
+export function isGoogleAuthPopupMessage(event: MessageEvent, popup: Window, nonce: string, origin: string):
+  event is MessageEvent<{ type: typeof GOOGLE_AUTH_POPUP_MESSAGE; nonce: string; result: GoogleAuthPopupResult }> {
+  const data: unknown = event.data;
+  return event.origin === origin && event.source === popup && typeof data === 'object' && data !== null
+    && (data as { type?: unknown }).type === GOOGLE_AUTH_POPUP_MESSAGE
+    && (data as { nonce?: unknown }).nonce === nonce
+    && ((data as { result?: unknown }).result === 'success' || (data as { result?: unknown }).result === 'error');
+}
+
+function waitForGoogleAuthPopup(popup: Window, nonce: string, origin: string, signal: AbortSignal): Promise<GoogleAuthPopupResult> {
+  return new Promise((resolve, reject) => {
+    let closeTimer: ReturnType<typeof setTimeout> | undefined;
+    const cleanup = () => {
+      window.removeEventListener('message', onMessage);
+      signal.removeEventListener('abort', onAbort);
+      clearInterval(closedPoll);
+      if (closeTimer) clearTimeout(closeTimer);
+    };
+    const finish = (result: GoogleAuthPopupResult) => { cleanup(); resolve(result); };
+    const onMessage = (event: MessageEvent) => { if (isGoogleAuthPopupMessage(event, popup, nonce, origin)) finish(event.data.result); };
+    const onAbort = () => { cleanup(); reject(new DOMException('Google sign-in cancelled.', 'AbortError')); };
+    const closedPoll = setInterval(() => {
+      if (!popup.closed || closeTimer) return;
+      closeTimer = setTimeout(() => { cleanup(); reject(new Error('Google sign-in window was closed.')); }, 250);
+    }, 250);
+    window.addEventListener('message', onMessage);
+    signal.addEventListener('abort', onAbort, { once: true });
+    if (signal.aborted) onAbort();
   });
 }
 

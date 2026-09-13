@@ -699,8 +699,8 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
           const occupied = await env.DB.prepare('SELECT player_id FROM players WHERE auth_user_id = ?').bind(authSession.user.id)
             .first<{ player_id: string }>();
           if (occupied && occupied.player_id !== body.guestId) return json({ error: 'Account already has a player.' }, 409);
-          const result = await env.DB.prepare('UPDATE players SET auth_user_id = ?, updated_at = ? WHERE player_id = ? AND (auth_user_id IS NULL OR auth_user_id = ?)')
-            .bind(authSession.user.id, Date.now(), body.guestId, authSession.user.id).run();
+          const result = await env.DB.prepare('UPDATE players SET auth_user_id = ?, updated_at = ? WHERE player_id = ?')
+            .bind(authSession.user.id, Date.now(), body.guestId).run();
           if (result.meta.changes !== 1) return json({ error: 'Guest belongs to another account.' }, 409);
         } else if (request.method === 'PUT') {
           const body = await readJsonBody<{ displayName?: unknown }>(request, 1_000);

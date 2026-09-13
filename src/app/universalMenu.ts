@@ -7,7 +7,8 @@ import { createVolumeSlider } from '../title/volumeSlider';
 import { createTextbox } from '../ui/textbox';
 
 export interface UniversalMenu { element: HTMLElement; destroy(): void; }
-export interface UniversalMenuAccount { signedIn: boolean; displayName: string; onSignOut(): void }
+export interface UniversalMenuAccount { signedIn: boolean; displayName: string }
+export const QUIT_CONFIRMATION_COPY = 'Are you sure? This will log you out.';
 
 export function mountUniversalMenu(container: HTMLElement, background: HTMLElement, clock: BoilClock, onQuit: () => void, onClose: () => void,
   account?: UniversalMenuAccount): UniversalMenu {
@@ -46,15 +47,13 @@ export function mountUniversalMenu(container: HTMLElement, background: HTMLEleme
   const accountPanel = document.createElement('div'); accountPanel.className = 'universal-menu__account';
   const accountLabel = document.createElement('p');
   accountLabel.textContent = account?.signedIn ? `${account.displayName} — Google connected` : `${account?.displayName || 'Guest'} — Guest`;
-  const signOut = document.createElement('button'); signOut.type = 'button'; signOut.textContent = 'Sign out'; signOut.hidden = !account?.signedIn;
-  const handleSignOut = () => account?.onSignOut(); signOut.addEventListener('click', handleSignOut);
-  accountPanel.append(accountLabel, signOut);
+  accountPanel.append(accountLabel);
   controls.append(music.element, sfx.element, sound.element, boil.element, accountPanel, continueButton.element, quit.element);
   const box = createTextbox({ className: 'universal-menu__box', role: 'dialog', ariaLabel: 'Menu', content: controls });
   box.element.setAttribute('aria-modal', 'true');
   const question = document.createElement('p');
   question.className = 'universal-menu__question';
-  question.textContent = 'Are you sure?';
+  question.textContent = QUIT_CONFIRMATION_COPY;
   const confirmationActions = document.createElement('div');
   confirmationActions.className = 'universal-menu__confirmation-actions';
   const confirmQuit = createGameButton({ label: 'Quit', onActivate: onQuit, clock,
@@ -80,7 +79,7 @@ export function mountUniversalMenu(container: HTMLElement, background: HTMLEleme
   };
   overlay.addEventListener('keydown', onKeyDown); (focusables()[0] ?? box.element).focus();
   return { element: overlay, destroy() {
-    overlay.removeEventListener('keydown', onKeyDown); signOut.removeEventListener('click', handleSignOut); unsubscribe(); sound.destroy(); music.destroy(); sfx.destroy(); boil.destroy(); continueButton.destroy(); quit.destroy(); back.destroy(); confirmQuit.destroy(); confirmation.destroy(); box.destroy(); overlay.remove();
+    overlay.removeEventListener('keydown', onKeyDown); unsubscribe(); sound.destroy(); music.destroy(); sfx.destroy(); boil.destroy(); continueButton.destroy(); quit.destroy(); back.destroy(); confirmQuit.destroy(); confirmation.destroy(); box.destroy(); overlay.remove();
     background.inert = false; if (previousFocus?.isConnected) previousFocus.focus();
   } };
 }

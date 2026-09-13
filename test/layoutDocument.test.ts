@@ -10,12 +10,21 @@ describe('layout documents', () => {
   });
 
   it('ships every requested shared document and nine variants', () => {
-    expect([...layoutDocuments.keys()]).toEqual(expect.arrayContaining(['title', 'lobby', 'variant-select', 'scoreboard', 'game-parent']));
+    expect([...layoutDocuments.keys()]).toEqual(expect.arrayContaining(['title', 'lobby', 'account', 'variant-select', 'scoreboard', 'game-parent']));
     expect(variantLayoutDocuments).toHaveLength(9);
     for (const variant of variantLayoutDocuments) {
       expect(variant.rules?.lead).toBeTruthy();
       expect(variant.copy?.buttonAssetKey).toBeTruthy();
     }
+  });
+
+  it('places an account button in both lobby layouts', () => {
+    const account = layoutDocuments.get('lobby')!.elements.find((element) => element.id === 'account');
+    expect(account?.assets).toMatchObject({
+      up: '/account/account-button-up-sheet.webp', between: '/account/account-button-between-sheet.webp', depressed: '/account/account-button-depressed-sheet.webp',
+    });
+    expect(account?.layouts.landscape).toMatchObject({ x: 715, y: 460, width: 148, height: 74 });
+    expect(account?.layouts.portrait).toMatchObject({ x: 196, y: 700, width: 148, height: 74 });
   });
 
   it('ships one closed-curtain composition for every variant', () => {

@@ -22,13 +22,12 @@ const TITLE_LAYOUT = getLayoutDocument('title');
 const titleElement = (id: string) => TITLE_LAYOUT.elements.find((element) => element.id === id)!;
 
 export type TitleScreenMount = (() => void) & { readonly ready: Promise<void> };
-
 export function formatOnlinePlayerCount(count: number | null): string { return `players online: ${count ?? '?'}`; }
 
 export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPlay: (playerName: string) => void,
   getOnlinePlayerCount: () => Promise<number | null> = async () => null,
   onOpenLetter: (trigger: HTMLElement) => void = () => {}, initialName?: string,
-  onGoogleSignIn: (playerName: string) => void = () => {}, googleSignedIn = false): TitleScreenMount {
+  onGoogleSignIn: (playerName: string) => void = () => {}): TitleScreenMount {
   const screen = document.createElement('section');
   screen.className = 'title-screen';
   screen.setAttribute('aria-labelledby', 'title-screen-heading');
@@ -43,6 +42,17 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
   heading.id = 'title-screen-heading';
   heading.className = 'visually-hidden';
   heading.textContent = TITLE_LAYOUT.copy!.heading!;
+  const privacyLink = document.createElement('a');
+  privacyLink.className = 'title-screen__privacy-link';
+  privacyLink.href = '/privacy.html';
+  privacyLink.textContent = 'Privacy Policy';
+  const termsLink = document.createElement('a');
+  termsLink.href = '/terms.html';
+  termsLink.textContent = 'Terms of Service';
+  const legalLinks = document.createElement('nav');
+  legalLinks.className = 'title-screen__legal-links';
+  legalLinks.setAttribute('aria-label', 'Legal');
+  legalLinks.append(privacyLink, termsLink);
   const onlineCount = document.createElement('p');
   onlineCount.className = 'title-screen__online-count'; onlineCount.setAttribute('aria-live', 'polite');
   onlineCount.textContent = formatOnlinePlayerCount(null);
@@ -128,7 +138,6 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
     clock,
   });
   google.element.classList.add('title-screen__google', 'game-button--baked-label');
-  google.element.hidden = googleSignedIn;
 
   const onNameKeyDown = (event: KeyboardEvent) => {
     if (event.key !== 'Enter' || event.isComposing) return;
@@ -148,7 +157,7 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
     { id: 'online-count', element: onlineCount },
   );
   applyLayout();
-  screen.append(heading);
+  screen.append(heading, legalLinks);
   container.replaceChildren(screen);
 
   const cleanup = (() => {

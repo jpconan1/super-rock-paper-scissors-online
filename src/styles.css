@@ -1,6 +1,6 @@
 @font-face {
   font-family: 'Architects Daughter';
-  src: url('/ArchitectsDaughter-Regular.ttf') format('truetype');
+  src: url('/architects-daughter-regular.ttf') format('truetype');
   font-display: swap;
 }
 
@@ -360,6 +360,40 @@ input {
 .title-screen__logo > .game-button__juice { display: none; }
 .title-screen__online-count { position: absolute; margin: 0; color: rgba(23,20,18,.72); font-size: 22px; font-weight: 950; line-height: 1; text-align: center; transform: rotate(.25deg); }
 .game-button.title-screen__google { position: absolute; width: auto; max-width: none; }
+
+.account-screen__heading { position: absolute; margin: 0; color: #222; font-size: 42px; text-align: center; }
+.account-screen__details { position: absolute; margin: 0; padding: 22px 28px; box-sizing: border-box; display: grid; grid-template-columns: 145px 1fr; gap: 8px 18px; background: rgb(255 255 255 / 88%); border: 4px solid #171717; box-shadow: 8px 8px 0 #171717; font-size: 19px; }
+.account-screen__details dt { font-weight: 700; }
+.account-screen__details dd { margin: 0; overflow-wrap: anywhere; }
+.account-screen__name, .game-button.account-screen__random, .game-button.account-screen__change,
+.game-button.account-screen__google, .account-screen__connected, .game-button.account-screen__back,
+.account-screen__error, .account-screen__curtain-open, .account-screen__curtain-left, .account-screen__curtain-right { position: absolute; }
+.account-screen__connected { margin: 0; text-align: center; font-size: 22px; }
+.account-screen__error { margin: 0; color: #ac3235; text-align: center; }
+.account-screen__curtain-open, .account-screen__curtain-left, .account-screen__curtain-right { pointer-events: none; }
+.menu-canvas__composition[data-layout='portrait'] .account-screen__heading { font-size: 38px; }
+.menu-canvas__composition[data-layout='portrait'] .account-screen__details { grid-template-columns: 115px 1fr; font-size: 18px; }
+.title-screen__account-status { position: absolute; display: grid; place-items: center; margin: 0; color: #24533d; font-size: 17px; font-weight: 950; line-height: 1.05; text-align: center; transform: rotate(-.4deg); }
+.title-screen__account-status[hidden] { display: none; }
+.title-screen__legal-links {
+  position: absolute;
+  z-index: 2;
+  bottom: max(8px, env(safe-area-inset-bottom));
+  left: 50%;
+  display: flex;
+  gap: 1rem;
+  transform: translateX(-50%) rotate(-.25deg);
+  white-space: nowrap;
+}
+.title-screen__legal-links a {
+  padding: 4px;
+  color: rgba(23, 20, 18, .72);
+  font-size: clamp(.85rem, 2.5vmin, 1rem);
+  font-weight: 700;
+  text-underline-offset: 3px;
+}
+.title-screen__legal-links a:hover { color: #ac3235; }
+.title-screen__legal-links a:focus-visible { border-radius: 3px; outline: 3px solid #ac3235; outline-offset: 2px; }
 
 .title-screen__primary-actions,
 .title-screen__toggles {
