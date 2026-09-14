@@ -2,6 +2,7 @@ export const PROTOCOL_VERSION = 1 as const;
 
 import type { SlotId } from '../core/slots';
 import type { PlayerId, VariantGameResult } from '../core/variant';
+import type { ProgressAward } from '../core/progression';
 
 export interface ClientCommand<TPayload = unknown> {
   protocolVersion: typeof PROTOCOL_VERSION;
@@ -57,6 +58,7 @@ export interface MatchProjection {
   completionReason?: 'played' | 'disconnect';
   disconnectedPlayer?: PlayerId;
   reconnectingPlayers: readonly PlayerId[];
+  progressAward?: ProgressAward;
 }
 
 export type MatchCommandPayload =

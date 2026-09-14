@@ -1,3 +1,5 @@
+import { progressionForTotal, type PlayerProgression } from '../core/progression';
+
 export const GUEST_NAME_MAX_LENGTH = 24;
 
 export function normalizeGuestDisplayName(value: unknown): string | null {
@@ -12,7 +14,7 @@ export interface GuestSessionRequest {
   guestSecret?: string;
 }
 
-export interface GuestProfile {
+export interface GuestProfile extends PlayerProgression {
   playerId: string;
   displayName: string;
   rating: number;
@@ -28,5 +30,20 @@ export function isGuestSessionResponse(value: unknown): value is GuestSessionRes
   return typeof candidate.playerId === 'string' && candidate.playerId.length > 0 && candidate.playerId.length <= 100
     && typeof candidate.guestSecret === 'string' && candidate.guestSecret.length >= 32 && candidate.guestSecret.length <= 256
     && normalizeGuestDisplayName(candidate.displayName) === candidate.displayName
-    && typeof candidate.rating === 'number' && Number.isFinite(candidate.rating);
+    && typeof candidate.rating === 'number' && Number.isFinite(candidate.rating)
+    && ensureProgression(candidate);
+}
+
+export function guestProfile(playerId: string, displayName: string, rating: number, totalProgressUnits = 0): GuestProfile {
+  return { playerId, displayName, rating, ...progressionForTotal(totalProgressUnits) };
+}
+
+function ensureProgression(candidate: Partial<GuestProfile>): boolean {
+  if (candidate.totalProgressUnits === undefined) Object.assign(candidate, progressionForTotal(0));
+  if (!Number.isSafeInteger(candidate.totalProgressUnits) || (candidate.totalProgressUnits ?? -1) < 0) return false;
+  const expected = progressionForTotal(candidate.totalProgressUnits!);
+  return candidate.level === expected.level && candidate.progressUnitsInLevel === expected.progressUnitsInLevel
+    && candidate.nextUnlock === expected.nextUnlock && Array.isArray(candidate.unlockedClassIds)
+    && candidate.unlockedClassIds.length === expected.unlockedClassIds.length
+    && candidate.unlockedClassIds.every((id, index) => id === expected.unlockedClassIds[index]);
 }

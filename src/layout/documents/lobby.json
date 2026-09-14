@@ -76,6 +76,33 @@
       }
     },
     {
+      "id": "whiteboard-button",
+      "type": "button",
+      "layer": 6,
+      "protected": true,
+      "assets": {
+        "up": "/lobby/whiteboard-button-up-sheet.webp",
+        "between": "/lobby/whiteboard-button-between-sheet.webp",
+        "depressed": "/lobby/whiteboard-button-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 416,
+          "y": 216,
+          "width": 128,
+          "height": 64,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 207,
+          "y": 390,
+          "width": 128,
+          "height": 64,
+          "aspectLock": true
+        }
+      }
+    },
+    {
       "id": "player-name",
       "type": "dynamic-text",
       "protected": true,

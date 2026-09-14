@@ -2,6 +2,7 @@ import type { SlotId } from './slots';
 import type { MatchPlayer, TimedSemanticEvent } from '../protocol/protocol';
 import type { AssetBundleId } from '../assets/assetBundleTypes';
 import type { MusicDirector } from '../audio/musicDirector';
+import type { AbmClassId } from '../variants/attackBlockMana/attackBlockManaTypes';
 
 export type PlayerId = 'p1' | 'p2';
 
@@ -45,6 +46,7 @@ export interface VariantPresentationContext<TCommand> {
   self?: PlayerId;
   players?: Readonly<Record<PlayerId, MatchPlayer>>;
   music?: MusicDirector;
+  unlockedClassIds?: readonly AbmClassId[];
 }
 
 export interface PresentationAssetLease {

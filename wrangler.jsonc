@@ -3,6 +3,10 @@
   "name": "super-rps-online",
   "main": "worker/index.ts",
   "compatibility_date": "2026-08-12",
+  "dev": {
+    "ip": "localhost",
+    "port": 8787
+  },
   "routes": [
     { "pattern": "abm.jpconan.ca", "custom_domain": true }
   ],

@@ -14,6 +14,8 @@ import {
 } from '../src/whiteboard/protocol';
 import { isLobbyPresence, type LobbyPlayer, type LobbyPresence, type LobbyServerMessage } from '../src/lobby/protocol';
 import { eloDeltas } from '../src/core/elo';
+import { createProgressAward, isClassUnlocked, type ProgressAward } from '../src/core/progression';
+import type { AbmCommand } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 import { WhiteboardRateLimiter, type WhiteboardRateCategory } from '../src/whiteboard/rateLimiter';
 import { LOBBY_SOCKET_PROTOCOL, MATCH_SOCKET_PROTOCOL, socketCredential, WHITEBOARD_SOCKET_PROTOCOL } from '../src/protocol/webSocketAuth';
 import { consumeSlidingWindow, messageFitsUtf8Limit, readJsonBody, RequestBodyError } from '../src/protocol/abuseProtection';
@@ -23,7 +25,7 @@ import {
   createMatchTicketRecords, matchmakingTicketKey, recoverableMatchTicket, type MatchTicket,
 } from '../src/core/matchmakingTickets';
 import {
-  GUEST_NAME_MAX_LENGTH, normalizeGuestDisplayName, type GuestSessionRequest, type GuestSessionResponse,
+  GUEST_NAME_MAX_LENGTH, guestProfile, normalizeGuestDisplayName, type GuestSessionRequest, type GuestSessionResponse,
 } from '../src/protocol/guestSession';
 import { createAuth, type AuthEnv } from './auth';
 
@@ -48,6 +50,8 @@ interface MatchRecord extends OnlineMatchState {
   playerIds?: Record<Seat, string>;
   ratingsFinalized?: boolean;
   ratingRetryAt?: number;
+  playerProgress?: Record<Seat, number>;
+  progressAwards?: Partial<Record<Seat, ProgressAward>>;
 }
 interface SocketAttachment { seat: Seat; messageTimes: number[] }
 const MATCH_SOCKETS_PER_SEAT = 2;
@@ -77,7 +81,7 @@ export class MatchObject extends DurableObject<Env> {
     });
   }
 
-  async initialize(matchId: string, players?: Record<Seat, MatchPlayer>, playerIds?: Record<Seat, string>, format: 'abm-only' | 'multi-slot' = 'multi-slot'): Promise<{ matchId: string; seats: Record<Seat, string> }> {
+  async initialize(matchId: string, players?: Record<Seat, MatchPlayer>, playerIds?: Record<Seat, string>, format: 'abm-only' | 'multi-slot' = 'multi-slot', playerProgress?: Record<Seat, number>): Promise<{ matchId: string; seats: Record<Seat, string> }> {
     if (!this.record) {
       const seed = crypto.getRandomValues(new Uint32Array(1))[0]!;
       this.record = Object.assign(createOnlineMatch(matchId, players ?? {
@@ -88,6 +92,7 @@ export class MatchObject extends DurableObject<Env> {
         accepted: [],
         connections: { p1: false, p2: false },
         ...(playerIds ? { playerIds } : {}),
+        ...(playerProgress ? { playerProgress } : {}),
       });
       await this.ctx.storage.put('match', this.record);
       await this.scheduleAlarm();
@@ -136,6 +141,7 @@ export class MatchObject extends DurableObject<Env> {
         socket.send(JSON.stringify({ type: 'stale', snapshot: this.snapshot(attachment.seat) }));
         return;
       }
+      this.assertClassUnlocked(attachment.seat, command.payload as MatchCommandPayload);
       const status = acceptMatchCommand(this.record, attachment.seat, {
         commandId: command.commandId,
         expectedRevision: command.expectedRevision,
@@ -186,7 +192,9 @@ export class MatchObject extends DurableObject<Env> {
       revision: this.record?.revision ?? 0,
       serverTime: Date.now(),
       deadlineAt: this.record?.deadlineAt,
-      projection,
+      projection: projection && this.record?.progressAwards?.[seat]
+        ? { ...projection, progressAward: this.record.progressAwards[seat] }
+        : projection,
       events: this.record?.events ?? [],
     };
   }
@@ -217,11 +225,14 @@ export class MatchObject extends DurableObject<Env> {
     const record = this.record;
     if (!record?.winner || !record.playerIds || record.ratingsFinalized) return;
     const deltas = eloDeltas(record.players.p1.rating, record.players.p2.rating, record.winner);
+    const progressAwards = record.progressAwards ??= this.createProgressAwards(record);
     try {
       await finalizeMatch(this.env.DB, {
         resultId: record.matchId, matchId: record.matchId, seasonId: 'public-abm-test',
         p1Id: record.playerIds.p1, p2Id: record.playerIds.p2, winnerId: record.playerIds[record.winner],
         p1Delta: deltas.p1, p2Delta: deltas.p2,
+        p1ProgressAward: progressAwards.p1?.gainedProgressUnits ?? 0,
+        p2ProgressAward: progressAwards.p2?.gainedProgressUnits ?? 0,
         summary: JSON.stringify({ format: record.format, games: record.games, winner: record.winner,
           completionReason: record.completionReason, disconnectedPlayer: record.disconnectedPlayer,
           ratings: { p1: record.players.p1.rating, p2: record.players.p2.rating }, deltas }),
@@ -230,6 +241,24 @@ export class MatchObject extends DurableObject<Env> {
       record.ratingRetryAt = undefined;
     } catch {
       record.ratingRetryAt = Date.now() + 5_000;
+    }
+  }
+
+  private createProgressAwards(record: MatchRecord): Partial<Record<Seat, ProgressAward>> {
+    if (!record.playerProgress || !record.winner) return {};
+    const awards: Partial<Record<Seat, ProgressAward>> = {};
+    for (const seat of ['p1', 'p2'] as const) {
+      if (record.completionReason === 'disconnect' && record.disconnectedPlayer === seat) continue;
+      awards[seat] = createProgressAward(record.playerProgress[seat], seat === record.winner ? 'win' : 'loss');
+    }
+    return awards;
+  }
+
+  private assertClassUnlocked(seat: Seat, payload: MatchCommandPayload): void {
+    if (payload.type !== 'variant-command' || payload.slotId !== 'slot-1' || !this.record?.playerProgress) return;
+    const command = payload.command as Partial<AbmCommand> | null;
+    if (command?.type === 'lock-class' && command.classId && !isClassUnlocked(this.record.playerProgress[seat], command.classId)) {
+      throw new Error('Class is locked.');
     }
   }
 }
@@ -250,7 +279,7 @@ export class MatchmakerObject extends DurableObject<Env> {
       await this.ctx.storage.delete(ticketKey);
     }
     const queue = (await this.ctx.storage.get<MatchmakingQueueEntry[]>('queue')) ?? [];
-    const refreshed = refreshMatchmakingQueue(queue, guestId, attemptId, name, player.rating, now, MATCHMAKING_QUEUE_TTL_MS);
+    const refreshed = refreshMatchmakingQueue(queue, guestId, attemptId, name, player.rating, now, MATCHMAKING_QUEUE_TTL_MS, player.totalProgressUnits);
     if (refreshed.ownedElsewhere) return { status: 'owned-elsewhere' };
     const opponent = refreshed.opponent;
     if (!opponent) {
@@ -264,7 +293,9 @@ export class MatchmakerObject extends DurableObject<Env> {
     const initialized = await this.env.MATCHES.get(id).initialize(matchId, {
       p1: { name: opponent.name, platform: 'Web', rating: opponent.rating },
       p2: { name, platform: 'Web', rating: player.rating },
-    }, { p1: opponent.guestId, p2: guestId }, 'abm-only');
+    }, { p1: opponent.guestId, p2: guestId }, 'abm-only', {
+      p1: opponent.totalProgressUnits ?? 0, p2: player.totalProgressUnits,
+    });
     const expiresAt = now + MATCH_TICKET_TTL_MS;
     const ticketRecords = createMatchTicketRecords(matchId, initialized.seats, {
       p1: { guestId: opponent.guestId, attemptId: opponent.attemptId },
@@ -571,50 +602,53 @@ function sanitizePoints(value: unknown, minimumY: number, maximumY: number): Whi
 
 export async function finalizeMatch(db: D1Database, result: {
   resultId: string; matchId: string; seasonId: string; p1Id: string; p2Id: string;
-  winnerId: string | null; p1Delta: number; p2Delta: number; summary: string;
+  winnerId: string | null; p1Delta: number; p2Delta: number; p1ProgressAward: number; p2ProgressAward: number; summary: string;
 }): Promise<'applied' | 'duplicate'> {
   const statements = [
-    db.prepare('INSERT OR IGNORE INTO match_results (result_id, match_id, season_id, p1_id, p2_id, winner_id, summary_json) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .bind(result.resultId, result.matchId, result.seasonId, result.p1Id, result.p2Id, result.winnerId, result.summary),
+    db.prepare('INSERT OR IGNORE INTO match_results (result_id, match_id, season_id, p1_id, p2_id, winner_id, summary_json, progress_applied, p1_progress_award, p2_progress_award) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)')
+      .bind(result.resultId, result.matchId, result.seasonId, result.p1Id, result.p2Id, result.winnerId, result.summary, result.p1ProgressAward, result.p2ProgressAward),
     db.prepare('UPDATE players SET rating = rating + ? WHERE player_id = ? AND EXISTS (SELECT 1 FROM match_results WHERE result_id = ? AND ratings_applied = 0)').bind(result.p1Delta, result.p1Id, result.resultId),
     db.prepare('UPDATE players SET rating = rating + ? WHERE player_id = ? AND EXISTS (SELECT 1 FROM match_results WHERE result_id = ? AND ratings_applied = 0)').bind(result.p2Delta, result.p2Id, result.resultId),
     db.prepare('UPDATE match_results SET ratings_applied = 1 WHERE result_id = ? AND ratings_applied = 0').bind(result.resultId),
+    db.prepare('UPDATE players SET total_progress_units = MIN(200000, total_progress_units + ?) WHERE player_id = ? AND EXISTS (SELECT 1 FROM match_results WHERE result_id = ? AND progress_applied = 0)').bind(result.p1ProgressAward, result.p1Id, result.resultId),
+    db.prepare('UPDATE players SET total_progress_units = MIN(200000, total_progress_units + ?) WHERE player_id = ? AND EXISTS (SELECT 1 FROM match_results WHERE result_id = ? AND progress_applied = 0)').bind(result.p2ProgressAward, result.p2Id, result.resultId),
+    db.prepare('UPDATE match_results SET progress_applied = 1 WHERE result_id = ? AND progress_applied = 0').bind(result.resultId),
   ];
   const responses = await db.batch(statements);
-  return responses[3]?.meta.changes === 1 ? 'applied' : 'duplicate';
+  return responses[3]?.meta.changes === 1 || responses[6]?.meta.changes === 1 ? 'applied' : 'duplicate';
 }
 
 class GuestAuthError extends Error {}
 
-interface AuthenticatedPlayer { playerId: string; displayName: string; rating: number }
+interface AuthenticatedPlayer { playerId: string; displayName: string; rating: number; totalProgressUnits: number }
 
-async function getPlayer(db: D1Database, playerId: string): Promise<{ displayName: string; rating: number }> {
-  const player = await db.prepare('SELECT display_name, rating FROM players WHERE player_id = ?').bind(playerId)
-    .first<{ display_name: string; rating: number }>();
+async function getPlayer(db: D1Database, playerId: string): Promise<{ displayName: string; rating: number; totalProgressUnits: number }> {
+  const player = await db.prepare('SELECT display_name, rating, total_progress_units FROM players WHERE player_id = ?').bind(playerId)
+    .first<{ display_name: string; rating: number; total_progress_units: number }>();
   if (!player) throw new GuestAuthError('Player not found.');
-  return { displayName: player.display_name, rating: player.rating };
+  return { displayName: player.display_name, rating: player.rating, totalProgressUnits: player.total_progress_units };
 }
 
 async function authenticateRequestPlayer(request: Request, env: Env, guestId?: string | null,
   guestSecret?: string | null): Promise<AuthenticatedPlayer> {
   const session = await createAuth(env).api.getSession({ headers: request.headers });
   if (session) {
-    const player = await env.DB.prepare('SELECT player_id, display_name, rating FROM players WHERE auth_user_id = ?')
-      .bind(session.user.id).first<{ player_id: string; display_name: string; rating: number }>();
-    if (player) return { playerId: player.player_id, displayName: player.display_name, rating: player.rating };
+    const player = await env.DB.prepare('SELECT player_id, display_name, rating, total_progress_units FROM players WHERE auth_user_id = ?')
+      .bind(session.user.id).first<{ player_id: string; display_name: string; rating: number; total_progress_units: number }>();
+    if (player) return { playerId: player.player_id, displayName: player.display_name, rating: player.rating, totalProgressUnits: player.total_progress_units };
   }
   if (!guestId || !guestSecret) throw new GuestAuthError('Authentication required.');
   const player = await authenticateExistingGuest(env.DB, guestId, guestSecret);
   return { playerId: guestId, ...player };
 }
 
-async function authenticateExistingGuest(db: D1Database, guestId: string, secret: string): Promise<{ displayName: string; rating: number }> {
+async function authenticateExistingGuest(db: D1Database, guestId: string, secret: string): Promise<{ displayName: string; rating: number; totalProgressUnits: number }> {
   if (!validClientId(guestId) || secret.length < 32 || secret.length > 256) throw new GuestAuthError('Invalid guest credentials.');
   const secretHash = await sha256(secret);
-  const player = await db.prepare('SELECT guest_secret_hash, display_name, rating FROM players WHERE player_id = ?').bind(guestId)
-    .first<{ guest_secret_hash: string; display_name: string; rating: number }>();
+  const player = await db.prepare('SELECT guest_secret_hash, display_name, rating, total_progress_units FROM players WHERE player_id = ?').bind(guestId)
+    .first<{ guest_secret_hash: string; display_name: string; rating: number; total_progress_units: number }>();
   if (!player || !constantTimeEqual(player.guest_secret_hash, secretHash)) throw new GuestAuthError('Invalid guest credentials.');
-  return { displayName: player.display_name, rating: player.rating };
+  return { displayName: player.display_name, rating: player.rating, totalProgressUnits: player.total_progress_units };
 }
 
 async function createGuestSession(db: D1Database, request: GuestSessionRequest): Promise<GuestSessionResponse> {
@@ -622,7 +656,7 @@ async function createGuestSession(db: D1Database, request: GuestSessionRequest):
     try {
       const current = await authenticateExistingGuest(db, request.guestId, request.guestSecret);
       if (request.displayName === undefined) {
-        return { playerId: request.guestId, guestSecret: request.guestSecret, displayName: current.displayName, rating: current.rating };
+        return { ...guestProfile(request.guestId, current.displayName, current.rating, current.totalProgressUnits), guestSecret: request.guestSecret };
       }
       const displayName = normalizeGuestDisplayName(request.displayName);
       if (!displayName) throw new RequestBodyError(400, `Display name must be 1-${GUEST_NAME_MAX_LENGTH} characters.`);
@@ -630,7 +664,7 @@ async function createGuestSession(db: D1Database, request: GuestSessionRequest):
         await db.prepare('UPDATE players SET display_name = ?, updated_at = ? WHERE player_id = ?')
           .bind(displayName, Date.now(), request.guestId).run();
       }
-      return { playerId: request.guestId, guestSecret: request.guestSecret, displayName, rating: current.rating };
+      return { ...guestProfile(request.guestId, displayName, current.rating, current.totalProgressUnits), guestSecret: request.guestSecret };
     } catch (error) {
       if (error instanceof RequestBodyError) throw error;
       if (!(error instanceof GuestAuthError)) throw error;
@@ -644,7 +678,7 @@ async function createGuestSession(db: D1Database, request: GuestSessionRequest):
   const now = Date.now();
   await db.prepare('INSERT INTO players (player_id, guest_secret_hash, display_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
     .bind(playerId, await sha256(guestSecret), displayName, now, now).run();
-  return { playerId, guestSecret, displayName, rating: 1500 };
+  return { ...guestProfile(playerId, displayName, 1500), guestSecret };
 }
 
 function constantTimeEqual(left: string, right: string): boolean {
@@ -721,10 +755,10 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
           await env.DB.prepare('UPDATE players SET display_name = ?, updated_at = ? WHERE auth_user_id = ?')
             .bind(displayName, Date.now(), authSession.user.id).run();
         } else if (request.method !== 'GET') return json({ error: 'Method not allowed.' }, 405);
-        const player = await env.DB.prepare('SELECT player_id, display_name, rating, guest_secret_hash FROM players WHERE auth_user_id = ?')
-          .bind(authSession.user.id).first<{ player_id: string; display_name: string; rating: number; guest_secret_hash: string }>();
+        const player = await env.DB.prepare('SELECT player_id, display_name, rating, guest_secret_hash, total_progress_units FROM players WHERE auth_user_id = ?')
+          .bind(authSession.user.id).first<{ player_id: string; display_name: string; rating: number; guest_secret_hash: string; total_progress_units: number }>();
         if (!player) return json({ error: 'Player not found.' }, 404);
-        return json({ playerId: player.player_id, displayName: player.display_name, rating: player.rating,
+        return json({ ...guestProfile(player.player_id, player.display_name, player.rating, player.total_progress_units),
           isAnonymous: Boolean((authSession.user as { isAnonymous?: boolean }).isAnonymous) });
       } catch (error) {
         if (error instanceof RequestBodyError) return json({ error: error.message }, error.status);

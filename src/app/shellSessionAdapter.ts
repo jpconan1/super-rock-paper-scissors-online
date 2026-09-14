@@ -6,8 +6,10 @@ import { isLobbyServerMessage, type LobbyPlayer, type LobbyPresence } from '../l
 import { LOBBY_SOCKET_PROTOCOL, MATCH_SOCKET_PROTOCOL, WHITEBOARD_SOCKET_PROTOCOL } from '../protocol/webSocketAuth';
 import { isGuestSessionResponse, type GuestProfile, type GuestSessionRequest, type GuestSessionResponse } from '../protocol/guestSession';
 import { createGameAuthClient, type GameAuthClient } from '../auth/authClient';
+import { progressionForTotal } from '../core/progression';
+import type { ProgressAward } from '../core/progression';
 
-export interface AccountState { signedIn: boolean; isAnonymous: boolean; displayName: string; playerId: string; rating: number }
+export interface AccountState { signedIn: boolean; isAnonymous: boolean; displayName: string; playerId: string; rating: number; totalProgressUnits: number; level: number; unlockedClassIds: readonly import('../variants/attackBlockMana/attackBlockManaTypes').AbmClassId[] }
 
 export interface ShellSessionListener {
   connection(state: ConnectionState): void;
@@ -25,6 +27,7 @@ export interface ShellSessionAdapter {
   completeGoogleSignIn(): Promise<GuestProfile | null>;
   suggestedPlayerName(): string;
   accountState(): AccountState;
+  applyProgressAward(award: ProgressAward): void;
   requestGoogleSignInFromTitle(playerName: string, callbackURL: string, errorCallbackURL: string): Promise<string>;
   requestGuestClaimWithGoogle(callbackURL: string, errorCallbackURL: string): Promise<string>;
   finishGoogleSignIn(): Promise<GuestProfile | null>;
@@ -76,6 +79,7 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
   private authIsAnonymous = true;
   private playerId = '';
   private rating = 1500;
+  private totalProgressUnits = 0;
   private googleFlow?: 'title' | 'claim';
   private claimedGuestId?: string;
 
@@ -125,8 +129,10 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
   }
   suggestedPlayerName(): string { return loadSavedGuestName(); }
   accountState(): AccountState {
-    return { signedIn: !this.authIsAnonymous, isAnonymous: this.authIsAnonymous, displayName: this.playerName || loadSavedGuestName(), playerId: this.playerId || this.guestId, rating: this.rating };
+    const progression = progressionForTotal(this.totalProgressUnits);
+    return { signedIn: !this.authIsAnonymous, isAnonymous: this.authIsAnonymous, displayName: this.playerName || loadSavedGuestName(), playerId: this.playerId || this.guestId, rating: this.rating, totalProgressUnits: this.totalProgressUnits, level: progression.level, unlockedClassIds: progression.unlockedClassIds };
   }
+  applyProgressAward(award: ProgressAward): void { this.totalProgressUnits = award.after.totalProgressUnits; }
   async requestGoogleSignInFromTitle(playerName: string, callbackURL: string, errorCallbackURL: string): Promise<string> {
     await this.prepareFreshPlayerForGoogle(playerName); this.setGoogleFlow('title');
     return this.requestGoogleAuthorization(callbackURL, errorCallbackURL);
@@ -163,7 +169,7 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
     if (!response.ok) throw new Error(`Name update failed: ${response.status}`);
     const player = await response.json() as GuestProfile;
     if (!player.playerId || !player.displayName || !Number.isFinite(player.rating)) throw new Error('Name update returned invalid data.');
-    this.playerName = player.displayName; this.playerId = player.playerId; this.rating = player.rating; saveGuestName(player.displayName);
+    this.playerName = player.displayName; this.playerId = player.playerId; this.rating = player.rating; this.totalProgressUnits = player.totalProgressUnits ?? 0; saveGuestName(player.displayName);
     return player;
   }
   async refreshOnlineIdentity(): Promise<void> {
@@ -200,7 +206,7 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
     this.guestId = session.playerId;
     this.guestSecret = session.guestSecret;
     this.playerName = session.displayName;
-    this.playerId = session.playerId; this.rating = session.rating;
+    this.playerId = session.playerId; this.rating = session.rating; this.totalProgressUnits = session.totalProgressUnits;
     saveGuestIdentity(session);
     await this.ensureAnonymousAssociation();
     await this.connectOnlineServices();
@@ -226,7 +232,7 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
       const player = await response.json() as GuestProfile & { isAnonymous?: boolean };
       if (!player.playerId || !player.displayName || !Number.isFinite(player.rating)) return null;
       this.playerName = player.displayName;
-      this.playerId = player.playerId; this.rating = player.rating;
+      this.playerId = player.playerId; this.rating = player.rating; this.totalProgressUnits = player.totalProgressUnits ?? 0;
       this.authIsAnonymous = player.isAnonymous !== false;
       saveGuestName(player.displayName);
       return player;
@@ -250,7 +256,7 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
     if (!response.ok) throw new Error(`Could not link guest session: ${response.status}`);
     const player = await response.json() as GuestProfile & { isAnonymous?: boolean };
     this.playerName = player.displayName;
-    this.playerId = player.playerId; this.rating = player.rating;
+    this.playerId = player.playerId; this.rating = player.rating; this.totalProgressUnits = player.totalProgressUnits ?? 0;
     this.authIsAnonymous = player.isAnonymous !== false;
     saveGuestName(player.displayName);
     return true;
@@ -274,6 +280,7 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
     this.playerName = '';
     this.playerId = '';
     this.rating = 1500;
+    this.totalProgressUnits = 0;
     this.authIsAnonymous = true;
   }
   async getOnlinePlayerCount(): Promise<number | null> {
@@ -512,18 +519,19 @@ export class LocalShellSessionAdapter implements ShellSessionAdapter {
   isGoogleSignInReturn(): boolean { return false; }
   async completeGoogleSignIn(): Promise<GuestProfile | null> { return null; }
   suggestedPlayerName(): string { return ''; }
-  accountState(): AccountState { return { signedIn: false, isAnonymous: true, displayName: '', playerId: 'local-player', rating: 1500 }; }
+  accountState(): AccountState { const progress = progressionForTotal(0); return { signedIn: false, isAnonymous: true, displayName: '', playerId: 'local-player', rating: 1500, totalProgressUnits: 0, level: progress.level, unlockedClassIds: progress.unlockedClassIds }; }
+  applyProgressAward(_award: ProgressAward): void {}
   async requestGoogleSignInFromTitle(_playerName: string, _callbackURL: string, _errorCallbackURL: string): Promise<string> { return ''; }
   async requestGuestClaimWithGoogle(_callbackURL: string, _errorCallbackURL: string): Promise<string> { return ''; }
   async finishGoogleSignIn(): Promise<GuestProfile | null> { return null; }
   async signInWithGoogleFromTitle(_playerName: string): Promise<void> {}
   async claimGuestWithGoogle(): Promise<void> {}
-  async updateDisplayName(displayName: string): Promise<GuestProfile> { return { playerId: 'local-player', displayName, rating: 1500 }; }
+  async updateDisplayName(displayName: string): Promise<GuestProfile> { return { playerId: 'local-player', displayName, rating: 1500, ...progressionForTotal(0) }; }
   async refreshOnlineIdentity(): Promise<void> {}
   async signOut(): Promise<void> {}
   async enterLobby(playerName: string): Promise<GuestProfile> {
     this.listener?.connection('connected');
-    return { playerId: 'local-player', displayName: playerName, rating: 1500 };
+    return { playerId: 'local-player', displayName: playerName, rating: 1500, ...progressionForTotal(0) };
   }
   async getOnlinePlayerCount(): Promise<number | null> { return 1; }
   leaveLobby(): void {}

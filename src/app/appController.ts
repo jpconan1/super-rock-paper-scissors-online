@@ -24,9 +24,10 @@ import { destroySoundCatalog } from '../audio/soundCatalog';
 import { LocalAbmMatch } from './localAbmMatch';
 import { hasSeenAbmNewsletter, mountAbmLetterModal } from './abmLetterModal';
 import { mountAccountScreen } from './accountScreen';
+import { mountProgressScreen } from './progressScreen';
 
 export type ConnectionState = 'connected' | 'reconnecting' | 'offline';
-export type ShellDestination = 'title' | 'lobby' | 'account' | 'match-found' | 'slot-picker' | 'scoreboard' | 'gameplay';
+export type ShellDestination = 'title' | 'lobby' | 'account' | 'match-found' | 'slot-picker' | 'scoreboard' | 'gameplay' | 'progress';
 
 export interface AppControllerOptions {
   readonly clock: BoilClock;
@@ -62,6 +63,7 @@ export class AppController {
   private variantSelectScreen?: VariantSelectScreen;
   private matchFlowDirector?: MatchFlowDirector;
   private whiteboard: WhiteboardSnapshot = createEmptyWhiteboard();
+  private whiteboardVisible = false;
   private lobbyPlayers: LobbyPlayer[] = [];
   private lobbySelfId = '';
   private terminalCleanup?: () => void;
@@ -176,7 +178,8 @@ export class AppController {
       container: this.screenLayer, signal: this.lifecycle.signal, send: emit,
       openMenu: () => this.openUniversalMenu(), backToLobby: () => this.returnToLobbyFromMatch(),
       self: this.matchProjection?.self ?? 'p1', players: this.matchProjection?.players,
-      music: this.music,
+      music: this.music, ...(isControllerOptions(this.optionsOrRegistry)
+        ? { unlockedClassIds: this.optionsOrRegistry.session.accountState().unlockedClassIds } : {}),
     });
     this.timeline = new AnimationTimeline(({ event, serverTime }) => {
       if (this.latestSnapshot) {
@@ -260,6 +263,7 @@ export class AppController {
       this.screenReady = Promise.resolve();
       this.modalCleanup?.();
       this.modalCleanup = undefined;
+      const account = options.session.accountState();
       const lobby = mountLobbyScreen(
         this.screenLayer,
         options.clock,
@@ -273,6 +277,10 @@ export class AppController {
         () => void this.navigate('account'),
         (message) => options.session.sendWhiteboard(message),
         options.season.mode === 'multi-variant',
+        account.level,
+        account.level === 21 ? 10_000 : account.totalProgressUnits % 10_000,
+        this.whiteboardVisible,
+        (visible) => { this.whiteboardVisible = visible; },
       );
       lobby.receiveWhiteboard({ type: 'snapshot', board: this.whiteboard });
       lobby.updateRoster(this.lobbyPlayers, this.lobbySelfId);
@@ -319,6 +327,11 @@ export class AppController {
         projection: this.matchProjection,
         variants: this.variants,
       });
+    } else if (destination === 'progress') {
+      const award = this.matchProjection?.progressAward;
+      if (!award) throw new Error('Progress award is unavailable.');
+      const progress = mountProgressScreen(this.screenLayer, options.clock, award, () => this.finishReturnToLobby());
+      this.screenCleanup = () => progress.destroy();
     } else if (destination === 'gameplay') {
       throw new Error('Gameplay requires a selected slot.');
     }
@@ -520,6 +533,7 @@ export class AppController {
     this.localMatch?.destroy();
     this.localMatch = new LocalAbmMatch({
       playerName: this.playerName,
+      unlockedClassIds: this.options.session.accountState().unlockedClassIds,
       publish: (snapshot) => this.receiveSnapshot(snapshot, true),
     });
     this.localMatch.start();
@@ -571,6 +585,16 @@ export class AppController {
   private returnToLobbyFromMatch(): void {
     this.terminalCleanup?.();
     this.terminalCleanup = undefined;
+    const award = this.matchProjection?.progressAward;
+    if (award && award.gainedProgressUnits > 0 && !this.localMatch) {
+      this.options.session.applyProgressAward(award);
+      void this.navigate('progress');
+      return;
+    }
+    this.finishReturnToLobby();
+  }
+
+  private finishReturnToLobby(): void {
     if (this.localMatch) {
       this.localMatch.destroy();
       this.localMatch = undefined;

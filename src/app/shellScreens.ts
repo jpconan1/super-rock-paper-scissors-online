@@ -14,6 +14,9 @@ import { createTextbox } from '../ui/textbox';
 import { mountWhiteboard } from '../whiteboard/whiteboard';
 import type { WhiteboardClientMessage, WhiteboardServerMessage } from '../whiteboard/protocol';
 import type { LobbyPlayer } from '../lobby/protocol';
+import { AnimationPlayer } from '../animation/animationPlayer';
+import { assetLoader } from '../assets/assetLoader';
+import { WHITEBOARD_ROTATION_FRAMES, whiteboardFlipFrames } from '../whiteboard/flipAnimation';
 
 export type ScreenCleanup = () => void;
 export type LobbyScreenMount = ScreenCleanup & {
@@ -81,6 +84,10 @@ export function mountLobbyScreen(
   onAccount: () => void,
   sendWhiteboard: (message: WhiteboardClientMessage) => void,
   multiVariantFlow = true,
+  playerLevel = 1,
+  progressUnitsInLevel = 0,
+  whiteboardInitiallyVisible = false,
+  onWhiteboardVisibilityChange: (visible: boolean) => void = () => {},
 ): LobbyScreenMount {
   const layoutDocument = getLayoutDocument('lobby');
   let layoutName: 'landscape' | 'portrait' = 'landscape';
@@ -119,6 +126,8 @@ export function mountLobbyScreen(
   const lobbyElement = (id: string) => layoutDocument.elements.find((item) => item.id === id)!;
 
   const header = sprite(layoutDocument.elements.find((item) => item.id === 'header')!.assets!.src!, 'lobby-screen__header', layoutDocument.copy!.heading);
+  const profile = document.createElement('div'); profile.className = 'lobby-screen__profile';
+  profile.textContent = `${playerName} · Level ${playerLevel} · ${progressUnitsInLevel.toLocaleString()} / 10,000 XP`;
   const curtainLeft = sprite(layoutDocument.elements.find((item) => item.id === 'curtain-left')!.assets!.src!, 'portrait-curtain-piece');
   const curtainRight = sprite(layoutDocument.elements.find((item) => item.id === 'curtain-right')!.assets!.src!, 'portrait-curtain-piece');
   const whiteboard = document.createElement('div');
@@ -130,6 +139,22 @@ export function mountLobbyScreen(
   whiteboardArt.src = '/lobby/whiteboard.webp';
   whiteboardArt.alt = '';
   whiteboard.append(whiteboardFill, whiteboardArt);
+  const closeWhiteboardButtons = ['top', 'right', 'bottom', 'left'].map((edge, index) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `lobby-screen__whiteboard-close lobby-screen__whiteboard-close--${edge}`;
+    button.setAttribute('aria-label', 'Hide whiteboard');
+    if (index > 0) { button.tabIndex = -1; button.setAttribute('aria-hidden', 'true'); }
+    whiteboard.append(button);
+    return button;
+  });
+  const flipArt = document.createElement('img');
+  flipArt.className = 'lobby-screen__whiteboard-flip-art';
+  flipArt.alt = '';
+  const flip = document.createElement('div');
+  flip.className = 'lobby-screen__whiteboard-flip';
+  flip.hidden = true;
+  flip.append(flipArt);
   const toolButtons = new Map<'black' | 'red' | 'blue' | 'purple' | 'green' | 'erase', HTMLButtonElement>();
   const tools = ['black-marker', 'red-marker', 'blue-marker', 'purple-marker', 'green-marker', 'eraser'].map((id) => {
     const name = (id === 'eraser' ? 'erase' : id.replace('-marker', '')) as 'black' | 'red' | 'blue' | 'purple' | 'green' | 'erase';
@@ -151,6 +176,18 @@ export function mountLobbyScreen(
   chatEntry.element.classList.add('lobby-screen__chat-input');
   const chatButton = menuButton('Chat', 'chat-button', 'lobby-screen__chat-button');
   chat.append(chatEntry.element, chatButton);
+  let revealWhiteboard!: GameButton;
+  revealWhiteboard = createGameButton({
+    label: 'Show whiteboard',
+    onActivate: () => { void setWhiteboardVisible(true); },
+    upSheet: '/lobby/whiteboard-button-up-sheet.webp',
+    betweenSheet: '/lobby/whiteboard-button-between-sheet.webp',
+    depressedSheet: '/lobby/whiteboard-button-depressed-sheet.webp',
+    clock,
+  });
+  revealWhiteboard.element.classList.add('lobby-screen__whiteboard-button', 'game-button--baked-label');
+  gameButtons.push(revealWhiteboard);
+  gameButtonByElement.set(revealWhiteboard.element, revealWhiteboard);
   const roster = document.createElement('aside');
   roster.className = 'textbox lobby-screen__roster';
   roster.hidden = true;
@@ -197,11 +234,12 @@ export function mountLobbyScreen(
   ];
   const scoreboard = multiVariantFlow ? action('Scoreboard', leaveQueue(onScoreboard)) : undefined;
   scoreboard?.classList.add('lobby-screen__scoreboard-preview');
-  composition.append(header, whiteboard, ...tools.map((item) => item.element), chat,
+  composition.append(header, profile, whiteboard, flip, revealWhiteboard.element, ...tools.map((item) => item.element), chat,
     ...actions.map((item) => item.element), roster, ...(scoreboard ? [scoreboard] : []), curtainLeft, curtainRight);
   composition.append(rosterToggle.element);
   layoutBindings.push(
-    { id: 'header', element: header }, { id: 'whiteboard', element: whiteboard }, ...tools,
+    { id: 'header', element: header }, { id: 'whiteboard', element: whiteboard },
+    { id: 'whiteboard', element: flip }, { id: 'whiteboard-button', element: revealWhiteboard.element }, ...tools,
     { id: 'chat-input', element: chatEntry.element }, { id: 'chat-button', element: chatButton },
     { id: 'roster-toggle', element: rosterToggle.element }, ...actions, { id: 'roster', element: roster },
     ...(scoreboard ? [{ id: 'scoreboard-preview', element: scoreboard }] : []), { id: 'curtain-left', element: curtainLeft },
@@ -213,6 +251,46 @@ export function mountLobbyScreen(
     board: whiteboard, composition, toolButtons, clock,
     isPortrait: () => layoutName === 'portrait', send: sendWhiteboard,
   });
+  const rotationLease = assetLoader.retainUrls(WHITEBOARD_ROTATION_FRAMES);
+  const flipPlayer = new AnimationPlayer<string>({ commit: (source) => { flipArt.src = source; } });
+  const reducedMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+  let whiteboardVisible = whiteboardInitiallyVisible;
+  let animatingWhiteboard = false;
+  let connected = true;
+  let destroyed = false;
+
+  function applyWhiteboardState(): void {
+    const showLiveBoard = whiteboardVisible && !animatingWhiteboard;
+    whiteboard.hidden = !showLiveBoard;
+    for (const item of tools) item.element.hidden = !showLiveBoard;
+    chatEntry.element.hidden = !showLiveBoard;
+    chatButton.hidden = !showLiveBoard;
+    revealWhiteboard.element.hidden = whiteboardVisible || animatingWhiteboard;
+    flip.hidden = !animatingWhiteboard;
+    whiteboardController.setEnabled(connected && showLiveBoard);
+    chatEntry.input.disabled = !connected || !showLiveBoard;
+    gameButtonByElement.get(chatButton)?.setDisabled(!connected || !showLiveBoard);
+    revealWhiteboard.setDisabled(!connected || animatingWhiteboard);
+  }
+
+  async function setWhiteboardVisible(visible: boolean): Promise<void> {
+    if (destroyed || animatingWhiteboard || visible === whiteboardVisible || !connected) return;
+    animatingWhiteboard = true;
+    applyWhiteboardState();
+    if (!reducedMotion) {
+      try { await rotationLease.ready; } catch (error) { console.error('Could not prepare whiteboard rotation.', error); }
+      if (destroyed) return;
+      await flipPlayer.play(whiteboardFlipFrames(visible, false));
+      if (destroyed) return;
+    }
+    whiteboardVisible = visible;
+    animatingWhiteboard = false;
+    applyWhiteboardState();
+    onWhiteboardVisibilityChange(visible);
+  }
+  const closeWhiteboard = () => { void setWhiteboardVisible(false); };
+  for (const button of closeWhiteboardButtons) button.addEventListener('click', closeWhiteboard);
+  applyWhiteboardState();
   const submitChat = (event: Event) => {
     event.preventDefault();
     const text = chatEntry.input.value.trim().replace(/\s+/g, ' ');
@@ -223,6 +301,10 @@ export function mountLobbyScreen(
   chat.addEventListener('submit', submitChat);
   chatButton.addEventListener('click', submitChat);
   const cleanup = (() => {
+    destroyed = true;
+    flipPlayer.cancel();
+    rotationLease.release();
+    for (const button of closeWhiteboardButtons) button.removeEventListener('click', closeWhiteboard);
     canvas.destroy();
     for (const button of gameButtons) button.destroy();
     for (const item of sprites) item.destroy();
@@ -236,12 +318,14 @@ export function mountLobbyScreen(
   }) as LobbyScreenMount;
   cleanup.setConnectionState = (state) => {
     const unavailable = state !== 'connected';
+    connected = !unavailable;
     screen.dataset.connection = state;
-    chatEntry.input.disabled = unavailable;
-    gameButtonByElement.get(chatButton)?.setDisabled(unavailable);
+    chatEntry.input.disabled = unavailable || !whiteboardVisible || animatingWhiteboard;
+    gameButtonByElement.get(chatButton)?.setDisabled(unavailable || !whiteboardVisible || animatingWhiteboard);
     rosterToggle.setDisabled(unavailable);
     matchmakingToggle.setDisabled(unavailable);
-    whiteboardController.setEnabled(!unavailable);
+    whiteboardController.setEnabled(!unavailable && whiteboardVisible && !animatingWhiteboard);
+    revealWhiteboard.setDisabled(unavailable || animatingWhiteboard);
   };
   cleanup.setMatchmaking = (active) => matchmakingToggle.setPressed(active);
   cleanup.receiveWhiteboard = (message) => whiteboardController.receive(message);

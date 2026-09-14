@@ -464,6 +464,12 @@ input {
 
 .lobby-screen__header { position: absolute; }
 .lobby-screen__whiteboard { position: absolute; isolation: isolate; }
+.lobby-screen__whiteboard[hidden],
+.lobby-screen__whiteboard-flip[hidden],
+.lobby-screen__whiteboard-button[hidden],
+.lobby-screen__tool[hidden],
+.lobby-screen__chat-input[hidden],
+.lobby-screen__chat-button[hidden] { display: none; }
 .lobby-screen__whiteboard-fill {
   position: absolute;
   inset: 9.2% 6.1% 9.4% 6%;
@@ -471,6 +477,22 @@ input {
   clip-path: polygon(1% 0, 99% 0, 100% 1.5%, 100% 98.5%, 99% 100%, 1% 100%, 0 98.5%, 0 1.5%);
 }
 .lobby-screen__whiteboard-art { position: absolute; z-index: 3; inset: 0; display: block; width: 100%; height: 100%; pointer-events: none; }
+.lobby-screen__whiteboard-close { position: absolute; z-index: 5; padding: 0; border: 0; background: transparent; cursor: pointer; }
+.lobby-screen__whiteboard-close--top { top: 0; right: 0; left: 0; height: 9.2%; }
+.lobby-screen__whiteboard-close--right { top: 9.2%; right: 0; bottom: 9.4%; width: 6.1%; }
+.lobby-screen__whiteboard-close--bottom { right: 0; bottom: 0; left: 0; height: 9.4%; }
+.lobby-screen__whiteboard-close--left { top: 9.2%; bottom: 9.4%; left: 0; width: 6%; }
+.lobby-screen__whiteboard-close:focus-visible { outline: 3px solid #1857a6; outline-offset: -3px; }
+.lobby-screen__whiteboard-flip { position: absolute; z-index: 6; pointer-events: none; }
+.lobby-screen__whiteboard-flip-art {
+  position: absolute;
+  top: -14.308682%;
+  left: -9.52381%;
+  display: block;
+  width: 119.047619%;
+  height: 128.617363%;
+}
+.game-button.lobby-screen__whiteboard-button { position: absolute; z-index: 6; }
 .lobby-screen__tool { position: absolute; z-index: 5; padding: 0; border: 0; outline: 0; background: transparent; cursor: pointer; }
 .lobby-screen__tool::before { position: absolute; inset: -12px 0; content: ''; }
 .lobby-screen__tool-art { width: 100%; height: 100%; pointer-events: none; }
@@ -502,6 +524,7 @@ input {
 .lobby-screen__scoreboard-preview { position: absolute; min-width: 110px; min-height: 42px; }
 
 .lobby-screen__whiteboard,
+.lobby-screen__whiteboard-button,
 .lobby-screen__tool,
 .lobby-screen__chat-input,
 .lobby-screen__chat-button,
@@ -513,6 +536,8 @@ input {
 
 .lobby-screen:not([data-connection='connected']) :is(
   .lobby-screen__whiteboard,
+  .lobby-screen__whiteboard-button,
+  .lobby-screen__whiteboard-flip,
   .lobby-screen__player,
   .lobby-screen__tool,
   .lobby-screen__chat-input,
@@ -845,6 +870,7 @@ input {
 .abm-picker { position: absolute; z-index: 3; inset: 0; display: grid; grid-template-columns: 176px 176px; overflow: visible; }
 .abm-picker[hidden] { display: none; }
 .abm-picker__portrait { width: 176px; height: 176px; }
+.abm-picker__portrait .boiling-sprite__canvas { object-fit: contain; }
 .abm-picker__copy { display: grid; align-content: center; justify-items: center; gap: 5px; width: 176px; height: 176px; padding: 10px 12px; overflow: hidden; text-align: center; }
 .abm-picker__name { color: #ac3235; font-size: 22px; line-height: 1; }
 .abm-class-badge { position: absolute; overflow: visible; }
@@ -1026,4 +1052,44 @@ input {
   inset: 0;
   width: 100%;
   height: 100%;
+}
+
+.lobby-screen__profile {
+  position: absolute;
+  z-index: 8;
+  top: 20px;
+  left: 20px;
+  padding: 6px 10px;
+  border: 2px solid #1d1b18;
+  background: #fffdf0;
+  font-weight: 900;
+  transform: rotate(-1deg);
+}
+
+.progress-screen__panel {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(720px, 88%);
+  min-height: 330px;
+  padding: 34px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+  transform: translate(-50%, -50%) rotate(-.25deg);
+}
+
+.progress-screen__panel h1,
+.progress-screen__panel p { margin: 0; }
+.progress-screen__gain { font-size: 24px; font-weight: 900; }
+.progress-screen__bar { width: min(560px, 92%); height: auto; aspect-ratio: 2; }
+.progress-screen__unlocks { min-height: 1.4em; font-size: 20px; }
+.progress-screen__continue { width: 190px; height: 95px; }
+
+@media (orientation: portrait) {
+  .lobby-screen__profile { top: 18px; left: 50%; transform: translateX(-50%) rotate(-1deg); white-space: nowrap; }
+  .progress-screen__panel { width: 86%; min-height: 420px; padding: 24px 18px; }
 }

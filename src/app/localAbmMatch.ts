@@ -17,6 +17,7 @@ interface LocalAbmMatchOptions {
   random?: () => number;
   setTimer?: (run: () => void, delay: number) => ReturnType<typeof setTimeout>;
   clearTimer?: (timer: ReturnType<typeof setTimeout>) => void;
+  unlockedClassIds?: readonly import('../variants/attackBlockMana/attackBlockManaTypes').AbmClassId[];
 }
 
 const HUMAN: PlayerId = 'p1';
@@ -55,6 +56,10 @@ export class LocalAbmMatch {
 
   send(command: unknown): void {
     if (this.stopped || this.state.phase !== 'playing') return;
+    const candidate = command as Partial<AbmCommand>;
+    if (candidate.type === 'lock-class' && candidate.classId && this.options.unlockedClassIds && !this.options.unlockedClassIds.includes(candidate.classId)) {
+      throw new Error('Class is locked.');
+    }
     this.mutate(HUMAN, command as AbmCommand);
   }
 

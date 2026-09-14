@@ -4,6 +4,14 @@ import { LocalAbmMatch, chooseComputerCommand } from '../src/app/localAbmMatch';
 import type { AbmProjection } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 
 describe('LocalAbmMatch', () => {
+  test('rejects a locked human class while leaving computer selection unrestricted', () => {
+    const match = new LocalAbmMatch({ playerName: 'JP', publish: () => {}, unlockedClassIds: ['lucky'], now: () => 10_000 });
+    match.start();
+    expect(() => match.send({ type: 'lock-class', classId: 'advantaged' })).toThrow('Class is locked.');
+    expect(() => match.send({ type: 'lock-class', classId: 'lucky' })).not.toThrow();
+    expect(chooseComputerCommand({ legalActions: ['lock-class'] } as never, () => .999)).toEqual({ type: 'lock-class', classId: 'joe' });
+    match.destroy();
+  });
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
