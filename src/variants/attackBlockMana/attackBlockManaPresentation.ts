@@ -21,6 +21,7 @@ import { AbmTagEntranceSequence } from './abmTagEntrance';
 const ABM_ROOT = '/variants/abm';
 const STUNNED_BUTTON_TAG = `${ABM_ROOT}/stunned-button-tag-sheet.webp`;
 const COUNTERPICK_TAG = `${ABM_ROOT}/counterpick-tag-sheet.webp`;
+const PICK_CLASS_HEADER = `${ABM_ROOT}/pick-class-sheet.webp`;
 const SYSTEM_SCENE_ROOT = '/visual-elements/system-scenes';
 export const ABM_RESULT_SCENES = {
   roundWon: `${SYSTEM_SCENE_ROOT}/round-won-sheet.webp`,
@@ -154,7 +155,7 @@ export function createAttackBlockManaPresentation(
         ...Array.from({ length: 10 }, (_, index) => `/visual-elements/resource-counters/times${index}-sheet.webp`),
         ...Array.from({ length: 5 }, (_, index) => `/visual-elements/ready-waiting/countdown${index + 1}-sheet.webp`),
         ...Object.values(ABM_RESULT_SCENES), ...Object.values(ABM_BACK_LOBBY_ART),
-        STUNNED_BUTTON_TAG, COUNTERPICK_TAG, ...ABM_SCENE_URLS];
+        STUNNED_BUTTON_TAG, COUNTERPICK_TAG, PICK_CLASS_HEADER, ...ABM_SCENE_URLS];
       const lease = assetLoader.retainUrls(urls); await lease.ready; return lease;
     },
     mount({ container, send, openMenu, backToLobby, self, players, music }) {
@@ -282,6 +283,8 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   let sceneArtwork: HTMLElement;
   let classBadges: { player: 'p1' | 'p2'; badge: BoilingSprite; asset: string; frame?: { width: number; height: number } }[] = [];
   let counterpickTag: BoilingSprite | undefined;
+  const pickClassHeader = createBoilingSprite({ src: PICK_CLASS_HEADER, clock, className: 'abm-pick-class-header', alt: 'Pick class' });
+  pickClassHeader.element.hidden = true; sprites.push(pickClassHeader);
   const tagSprites = new Map<string, BoilingSprite>();
   const tagItems = new Map<string, HTMLElement>();
   const tagAssets = new Map<string, string>();
@@ -357,7 +360,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   thiefTransfer.element.hidden = true; thiefTransferMirror.element.hidden = true; sprites.push(thiefTransfer, thiefTransferMirror);
   layout.slots.scene.append(thiefTransfer.element, thiefTransferMirror.element);
   for (const [, button] of abilityButtons) layout.composition.append(button.element);
-  layout.composition.append(classReadyArt.element, classReadyOpponentTag.element);
+  layout.composition.append(classReadyArt.element, classReadyOpponentTag.element, pickClassHeader.element);
   counterpickTag = createBoilingSprite({ src: COUNTERPICK_TAG, clock, className: 'abm-counterpick-tag', alt: 'Counterpick' });
   counterpickTag.element.hidden = true; sprites.push(counterpickTag); layout.composition.append(counterpickTag.element);
   sceneArtwork = layout.slots.scene.querySelector<HTMLElement>('.game-layout__scene')!;
@@ -395,6 +398,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
       ...abilityButtons.map(([, button]) => ['ability', button.element] as [string, HTMLElement]),
       ['back-lobby', lobby.element],
       ['class-ready', classReadyArt.element], ['class-ready-opponent-tag', classReadyOpponentTag.element],
+      ['pick-class-header', pickClassHeader.element],
       ...(counterpickTag ? [['p2-counterpick-tag', counterpickTag.element] as [string, HTMLElement]] : []),
       ...(sceneArtwork ? [['scene-art', sceneArtwork] as [string, HTMLElement]] : []),
       ['picker-portrait', portrait.element], ['picker-copy', copy.element], ['waiting-ready', readyArt.element], ['waiting-dots', dotsArt.element],
@@ -467,6 +471,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     const picking = ['selecting-classes', 'waiting-for-class'].includes(nextProjection.phase)
       || (nextProjection.phase === 'counter-picking' && !counterLocked);
     layout.composition.classList.toggle('is-class-picking', picking);
+    pickClassHeader.element.hidden = !picking;
     layout.slots['p1-picked'].hidden = picking;
     layout.slots['p2-picked'].hidden = picking;
     layout.setYouTagVisible(shouldShowAbmYouTag(nextProjection.phase));

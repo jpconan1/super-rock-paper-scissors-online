@@ -454,6 +454,8 @@ describe('Attack Block Mana presentation data', () => {
     expect(landscape('mana').width).toBe(180);
     expect(landscape('menu')).toMatchObject({ x: 12, y: 464 });
     expect(landscape('rules')).toMatchObject({ x: 884, y: 464 });
+    expect(landscape('class-ready-opponent-tag')).toMatchObject({ x: 410, y: 489, width: 70, height: 35 });
+    expect(landscape('class-ready')).toMatchObject({ x: 491, y: 489, height: 50 });
   });
 
   test('maps the complete twelve-asset split-scene set', () => {
@@ -481,7 +483,7 @@ describe('Attack Block Mana presentation data', () => {
     expect(document.elements.map(({ id }) => id)).toEqual(expect.arrayContaining([
       'p1-info', 'p2-info', 'turn', 'scene', 'scene-art', 'menu', 'rules',
       'picker-portrait', 'picker-copy', 'picker-prev', 'picker-next', 'lock-class', 'p1-class-badge', 'p2-class-badge',
-      'p2-counterpick-tag',
+      'p2-counterpick-tag', 'pick-class-header',
       'attack', 'block', 'mana', 'back-lobby', 'arrow-attack-block', 'arrow-block-mana', 'arrow-mana-attack', 'waiting-ready', 'waiting-dots',
       'p1-mana-group', 'p1-mana-icon', 'p1-mana-count', 'p1-block-group', 'p1-block-1', 'p1-block-5',
       'p2-mana-group', 'p2-mana-icon', 'p2-mana-count', 'p2-block-group', 'p2-block-1', 'p2-block-5',
@@ -518,6 +520,7 @@ describe('Attack Block Mana presentation data', () => {
     expect(assets('p1-mana-count')?.src).toBe('/visual-elements/resource-counters/times1-sheet.webp');
     expect(assets('p1-block-1')?.src).toBe('/variants/abm/block-icon-sheet.webp');
     expect(assets('p2-counterpick-tag')?.src).toBe('/variants/abm/counterpick-tag-sheet.webp');
+    expect(assets('pick-class-header')?.src).toBe('/variants/abm/pick-class-sheet.webp');
     for (const element of document.elements) expect(Object.keys(element.layouts).sort()).toEqual(['landscape', 'portrait']);
   });
 

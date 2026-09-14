@@ -34,7 +34,7 @@ host.innerHTML = `<main class="layout-editor">
   <header class="editor-toolbar">
     <select data-action="document" aria-label="Document"></select>
     <select data-action="orientation"><option value="landscape">Landscape</option><option value="portrait">Portrait</option></select>
-    <select data-action="state"><option>Default</option><option>Depressed buttons</option><option>Disabled/banned</option><option>Rules open</option><option>Roster open</option><option>Populated scoreboard</option></select>
+    <select data-action="state"><option>Default</option><option>ABM class select</option><option>Depressed buttons</option><option>Disabled/banned</option><option>Rules open</option><option>Roster open</option><option>Populated scoreboard</option></select>
     <button data-action="undo">Undo</button><button data-action="redo">Redo</button>
     <button data-action="save">Save</button><button data-action="export">Export</button><button data-action="import">Import</button>
     <span class="dirty" data-dirty></span><span class="editor-status" data-status></span>
@@ -66,7 +66,7 @@ function render(): void {
     const node = makeNode(config);
     applyLayoutGeometry(node.element, config.layouts[orientation]);
     node.element.style.zIndex = String((config.layer ?? 0) + (isVariantDetail(current) ? 1 : 0));
-    node.element.hidden = config.visible === false || (config.id === 'rules-panel' && previewState !== 'Rules open');
+    node.element.hidden = !visibleInPreview(config);
     node.element.dataset.id = config.id;
     if (current.id === 'account' && config.type === 'decoration') node.element.style.pointerEvents = 'none';
     if (current.id === 'variant-select') {
@@ -103,6 +103,16 @@ function render(): void {
   thirdsGrid.setAttribute('aria-hidden', 'true');
   canvas.append(thirdsGrid);
   renderTree(); renderInspector(); renderRules(); updateDirty();
+}
+
+function visibleInPreview(config: LayoutElement): boolean {
+  if (config.visible === false || (config.id === 'rules-panel' && previewState !== 'Rules open')) return false;
+  if (current.id !== 'variant-abm' || previewState !== 'ABM class select') return true;
+  if (config.stateVisibility?.['class-select'] === false) return false;
+  return !['p1-picked', 'p2-picked', 'scene-art', 'p1-move', 'p2-move', 'p1-class-badge', 'p2-class-badge',
+    'waiting-ready', 'waiting-dots', 'class-ready', 'class-ready-opponent-tag', 'p2-counterpick-tag',
+    'attack', 'block', 'mana', 'ability', 'back-lobby', 'arrow-attack-block', 'arrow-block-mana', 'arrow-mana-attack']
+    .includes(config.id) && !config.id.includes('-tag-');
 }
 
 function makeNode(config: LayoutElement): { element: HTMLElement; cleanup(): void } {
