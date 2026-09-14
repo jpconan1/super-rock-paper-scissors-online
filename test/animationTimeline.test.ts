@@ -15,6 +15,20 @@ describe('AnimationTimeline', () => {
     timeline.schedule([active], 10_000);
     expect(handled).toHaveBeenCalledOnce();
     expect(handled.mock.calls[0]![0].elapsedMs).toBe(500);
+    expect(handled.mock.calls[0]![0].serverTime).toBe(10_000);
+  });
+
+  test('keeps scheduled server time independent from the device wall clock', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000_000);
+    const handled = vi.fn();
+    const timeline = new AnimationTimeline(handled, false);
+    timeline.schedule([{ id: 'future', type: 'round-result', startsAt: 11_000, endsAt: 12_000 }], 10_000);
+
+    vi.advanceTimersByTime(1_000);
+
+    expect(handled).toHaveBeenCalledOnce();
+    expect(handled.mock.calls[0]![0].serverTime).toBe(11_000);
   });
 
   test('cancels future events and reduced motion commits their final point', () => {

@@ -2,6 +2,7 @@ import type { TimedSemanticEvent } from '../protocol/protocol';
 
 export interface ScheduledSemanticEvent {
   readonly event: TimedSemanticEvent;
+  readonly serverTime: number;
   readonly elapsedMs: number;
   readonly durationMs: number;
   readonly reducedMotion: boolean;
@@ -29,6 +30,7 @@ export class AnimationTimeline {
         const elapsedMs = Math.max(0, estimatedServerNow - event.startsAt);
         this.handle({
           event,
+          serverTime: estimatedServerNow,
           elapsedMs: this.reducedMotion ? Math.max(0, event.endsAt - event.startsAt) : elapsedMs,
           durationMs: Math.max(0, event.endsAt - event.startsAt),
           reducedMotion: this.reducedMotion,

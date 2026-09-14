@@ -178,9 +178,9 @@ export class AppController {
       self: this.matchProjection?.self ?? 'p1', players: this.matchProjection?.players,
       music: this.music,
     });
-    this.timeline = new AnimationTimeline(({ event }) => {
+    this.timeline = new AnimationTimeline(({ event, serverTime }) => {
       if (this.latestSnapshot) {
-        presentation.render(variantProjection(this.latestSnapshot.projection), [event], Date.now());
+        presentation.render(variantProjection(this.latestSnapshot.projection), [event], serverTime);
       }
     });
   }
