@@ -19,8 +19,14 @@ body { user-select: none; background: #201f1c; font: 14px/1.25 system-ui, sans-s
 .editor-node.boiling-sprite > .boiling-sprite__canvas { pointer-events: none; }
 .editor-node:hover { outline-color: #66b7ff; }
 .editor-node.is-selected { outline: 2px solid #20a5ff; outline-offset: 1px; }
+.editor-canvas.has-single-selection .editor-node.is-selected { overflow: visible !important; }
 .editor-node.is-selected::after { position: absolute; right: -6px; bottom: -6px; width: 10px; height: 10px; border: 1px solid white; background: #20a5ff; content: ''; cursor: nwse-resize; }
+.editor-rotation-handle { position: absolute; z-index: 10001; top: -29px; left: 50%; display: none; width: 12px; height: 12px; border: 2px solid white; border-radius: 50%; background: #20a5ff; box-shadow: 0 0 0 1px #176fa8; cursor: grab; transform: translateX(-50%); pointer-events: auto; }
+.editor-rotation-handle::after { position: absolute; top: 12px; left: 50%; width: 2px; height: 15px; background: #20a5ff; content: ''; transform: translateX(-50%); pointer-events: none; }
+.editor-rotation-handle:active { cursor: grabbing; }
+.editor-canvas.has-single-selection .editor-node.is-selected > .editor-rotation-handle { display: block; }
 .editor-node > img { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+.editor-node[data-id='whiteboard-blank-face'] { pointer-events: none; }
 .editor-thirds-grid { position: absolute; z-index: 9998; inset: 0; pointer-events: none; background: linear-gradient(to right, transparent calc(33.333% - .5px), rgba(255, 45, 169, .72) calc(33.333% - .5px), rgba(255, 45, 169, .72) calc(33.333% + .5px), transparent calc(33.333% + .5px), transparent calc(66.666% - .5px), rgba(255, 45, 169, .72) calc(66.666% - .5px), rgba(255, 45, 169, .72) calc(66.666% + .5px), transparent calc(66.666% + .5px)), linear-gradient(to bottom, transparent calc(33.333% - .5px), rgba(255, 45, 169, .72) calc(33.333% - .5px), rgba(255, 45, 169, .72) calc(33.333% + .5px), transparent calc(33.333% + .5px), transparent calc(66.666% - .5px), rgba(255, 45, 169, .72) calc(66.666% - .5px), rgba(255, 45, 169, .72) calc(66.666% + .5px), transparent calc(66.666% + .5px)); }
 .editor-node--group, .editor-node--collection { border: 1px dashed rgba(30,100,190,.55); }
 .editor-node--text-entry { border: 3px solid #211d19; background: rgba(255,255,255,.6); }

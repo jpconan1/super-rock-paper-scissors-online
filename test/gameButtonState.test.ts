@@ -112,4 +112,20 @@ describe('GameButtonState', () => {
     expect(views.at(-1)).toEqual({ visual: 'depressed', juiceOpacity: 0 });
     expect(views.some((view) => view.visual === 'between')).toBe(false);
   });
+
+  test('can unlock depressed at release start without flashing the between frame', () => {
+    const views: GameButtonView[] = [];
+    let state!: GameButtonState;
+    state = new GameButtonState({
+      render: (view) => views.push(view),
+      lockedDepressed: true,
+      interactiveWhenLockedDepressed: true,
+      activateAtReleaseStart: true,
+      activate: () => state.setLockedDepressed(false),
+    });
+    state.press();
+    state.release();
+    expect(views.at(-1)).toEqual({ visual: 'up', juiceOpacity: 0 });
+    expect(views.some((view) => view.visual === 'between')).toBe(false);
+  });
 });

@@ -7,6 +7,7 @@ import { createGameButton, type GameButton } from '../input/gameButton';
 import type { MatchProjection } from '../protocol/protocol';
 import { getLayoutDocument } from '../layout/layoutDocuments';
 import { applyDocumentLayout } from '../layout/layoutRuntime';
+import { applyLayoutGeometry } from '../layout/layoutDocument';
 import { createTextEntry } from '../input/textEntry';
 import { createToggleButton } from '../input/toggleButton';
 import type { ConnectionState } from './appController';
@@ -14,9 +15,12 @@ import { createTextbox } from '../ui/textbox';
 import { mountWhiteboard } from '../whiteboard/whiteboard';
 import type { WhiteboardClientMessage, WhiteboardServerMessage } from '../whiteboard/protocol';
 import type { LobbyPlayer } from '../lobby/protocol';
+import { ABM_CLASSES } from '../variants/attackBlockMana/attackBlockManaCatalog';
+import { ABM_CLASS_IDS, type AbmClassId } from '../variants/attackBlockMana/attackBlockManaTypes';
 import { AnimationPlayer } from '../animation/animationPlayer';
 import { assetLoader } from '../assets/assetLoader';
-import { WHITEBOARD_ROTATION_FRAMES, whiteboardFlipFrames } from '../whiteboard/flipAnimation';
+import { WHITEBOARD_ROTATION_FRAMES, whiteboardFlipFrames, whiteboardRotationProgress } from '../whiteboard/flipAnimation';
+import { mountClassCardDrag, type ClassCardDragController } from '../lobby/classCardDrag';
 
 export type ScreenCleanup = () => void;
 export type LobbyScreenMount = ScreenCleanup & {
@@ -25,6 +29,23 @@ export type LobbyScreenMount = ScreenCleanup & {
   receiveWhiteboard(message: WhiteboardServerMessage): void;
   updateRoster(players: LobbyPlayer[], selfId: string): void;
 };
+
+export interface LobbyClassCardDefinition {
+  id: `class-card-${AbmClassId}`;
+  classId: AbmClassId;
+  asset: string;
+  faceUp: boolean;
+}
+
+export function lobbyClassCardDefinitions(playerLevel: number): LobbyClassCardDefinition[] {
+  const unlockedCount = Math.max(1, Math.min(ABM_CLASS_IDS.length, Math.floor(playerLevel)));
+  return ABM_CLASS_IDS.map((classId, index) => ({
+    id: `class-card-${classId}`,
+    classId,
+    asset: `/lobby/class-cards/${classId}-${index < unlockedCount ? 'card' : 'back'}-sheet.webp`,
+    faceUp: index < unlockedCount,
+  }));
+}
 
 export function orderLobbyPlayers(players: readonly LobbyPlayer[], selfId: string): LobbyPlayer[] {
   const weight = { ready: 1, idle: 2, 'playing-computer': 3, 'in-match': 3 } as const;
@@ -91,6 +112,7 @@ export function mountLobbyScreen(
 ): LobbyScreenMount {
   const layoutDocument = getLayoutDocument('lobby');
   let layoutName: 'landscape' | 'portrait' = 'landscape';
+  let classCardDrag: ClassCardDragController | undefined;
   const layoutBindings: { id: string; element: HTMLElement }[] = [];
   const screen = document.createElement('section');
   screen.className = 'menu-canvas-screen lobby-screen';
@@ -98,6 +120,7 @@ export function mountLobbyScreen(
   const canvas = createMenuCanvas(screen, 'lobby-screen', (name) => {
     layoutName = name;
     applyDocumentLayout(layoutDocument, layoutName, layoutBindings);
+    classCardDrag?.reset();
   });
   const composition = canvas.composition;
   const sprites: ReturnType<typeof createBoilingSprite>[] = [];
@@ -126,8 +149,21 @@ export function mountLobbyScreen(
   const lobbyElement = (id: string) => layoutDocument.elements.find((item) => item.id === id)!;
 
   const header = sprite(layoutDocument.elements.find((item) => item.id === 'header')!.assets!.src!, 'lobby-screen__header', layoutDocument.copy!.heading);
-  const profile = document.createElement('div'); profile.className = 'lobby-screen__profile';
-  profile.textContent = `${playerName} · Level ${playerLevel} · ${progressUnitsInLevel.toLocaleString()} / 10,000 XP`;
+  const playerNameDisplay = document.createElement('strong'); playerNameDisplay.className = 'lobby-screen__player-name'; playerNameDisplay.textContent = playerName;
+  const playerLevelDisplay = document.createElement('strong'); playerLevelDisplay.className = 'lobby-screen__player-level'; playerLevelDisplay.textContent = `Level ${playerLevel}`;
+  const progressBar = document.createElement('canvas'); progressBar.className = 'lobby-screen__progress-bar'; progressBar.width = 512; progressBar.height = 256;
+  progressBar.setAttribute('role', 'progressbar'); progressBar.setAttribute('aria-valuemin', '0'); progressBar.setAttribute('aria-valuemax', '10000'); progressBar.setAttribute('aria-valuenow', String(progressUnitsInLevel));
+  const progressCopy = document.createElement('span'); progressCopy.className = 'lobby-screen__progress-copy'; progressCopy.textContent = `${progressUnitsInLevel.toLocaleString()} / 10,000 XP`;
+  const nextClass = ABM_CLASSES[playerLevel];
+  const nextUnlock = document.createElement('small'); nextUnlock.className = 'lobby-screen__progress-next'; nextUnlock.textContent = nextClass ? `Next class: ${nextClass.name}` : 'All classes unlocked';
+  const classCards = lobbyClassCardDefinitions(playerLevel).map((definition) => {
+    const item = lobbyElement(definition.id);
+    return {
+      id: definition.id,
+      element: sprite(definition.asset, 'lobby-screen__class-card', item.label ?? ''),
+    };
+  });
+  const progressElements = [playerNameDisplay, playerLevelDisplay, progressBar, progressCopy, nextUnlock, ...classCards.map((item) => item.element)];
   const curtainLeft = sprite(layoutDocument.elements.find((item) => item.id === 'curtain-left')!.assets!.src!, 'portrait-curtain-piece');
   const curtainRight = sprite(layoutDocument.elements.find((item) => item.id === 'curtain-right')!.assets!.src!, 'portrait-curtain-piece');
   const whiteboard = document.createElement('div');
@@ -139,15 +175,6 @@ export function mountLobbyScreen(
   whiteboardArt.src = '/lobby/whiteboard.webp';
   whiteboardArt.alt = '';
   whiteboard.append(whiteboardFill, whiteboardArt);
-  const closeWhiteboardButtons = ['top', 'right', 'bottom', 'left'].map((edge, index) => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = `lobby-screen__whiteboard-close lobby-screen__whiteboard-close--${edge}`;
-    button.setAttribute('aria-label', 'Hide whiteboard');
-    if (index > 0) { button.tabIndex = -1; button.setAttribute('aria-hidden', 'true'); }
-    whiteboard.append(button);
-    return button;
-  });
   const flipArt = document.createElement('img');
   flipArt.className = 'lobby-screen__whiteboard-flip-art';
   flipArt.alt = '';
@@ -179,10 +206,13 @@ export function mountLobbyScreen(
   let revealWhiteboard!: GameButton;
   revealWhiteboard = createGameButton({
     label: 'Show whiteboard',
-    onActivate: () => { void setWhiteboardVisible(true); },
+    onActivate: () => { void setWhiteboardVisible(!whiteboardVisible); },
     upSheet: '/lobby/whiteboard-button-up-sheet.webp',
     betweenSheet: '/lobby/whiteboard-button-between-sheet.webp',
     depressedSheet: '/lobby/whiteboard-button-depressed-sheet.webp',
+    lockedDepressed: whiteboardInitiallyVisible,
+    interactiveWhenLockedDepressed: true,
+    activateAtReleaseStart: true,
     clock,
   });
   revealWhiteboard.element.classList.add('lobby-screen__whiteboard-button', 'game-button--baked-label');
@@ -234,25 +264,55 @@ export function mountLobbyScreen(
   ];
   const scoreboard = multiVariantFlow ? action('Scoreboard', leaveQueue(onScoreboard)) : undefined;
   scoreboard?.classList.add('lobby-screen__scoreboard-preview');
-  composition.append(header, profile, whiteboard, flip, revealWhiteboard.element, ...tools.map((item) => item.element), chat,
+  composition.append(header, ...progressElements, whiteboard, flip, revealWhiteboard.element, ...tools.map((item) => item.element), chat,
     ...actions.map((item) => item.element), roster, ...(scoreboard ? [scoreboard] : []), curtainLeft, curtainRight);
   composition.append(rosterToggle.element);
   layoutBindings.push(
-    { id: 'header', element: header }, { id: 'whiteboard', element: whiteboard },
-    { id: 'whiteboard', element: flip }, { id: 'whiteboard-button', element: revealWhiteboard.element }, ...tools,
+    { id: 'header', element: header }, { id: 'player-name', element: playerNameDisplay }, { id: 'player-level', element: playerLevelDisplay },
+    { id: 'xp-bar', element: progressBar }, { id: 'xp-count', element: progressCopy }, { id: 'next-unlock', element: nextUnlock }, ...classCards, { id: 'whiteboard', element: whiteboard },
+    { id: 'whiteboard-blank-face', element: flip }, { id: 'whiteboard-button', element: revealWhiteboard.element }, ...tools,
     { id: 'chat-input', element: chatEntry.element }, { id: 'chat-button', element: chatButton },
     { id: 'roster-toggle', element: rosterToggle.element }, ...actions, { id: 'roster', element: roster },
     ...(scoreboard ? [{ id: 'scoreboard-preview', element: scoreboard }] : []), { id: 'curtain-left', element: curtainLeft },
     { id: 'curtain-right', element: curtainRight },
   );
   applyDocumentLayout(layoutDocument, layoutName, layoutBindings);
+  classCardDrag = mountClassCardDrag(classCards.map((item) => ({
+    element: item.element,
+    geometry: () => lobbyElement(item.id).layouts[layoutName],
+  })), composition, () => layoutDocument.canvases[layoutName]);
   container.replaceChildren(screen);
   const whiteboardController = mountWhiteboard({
     board: whiteboard, composition, toolButtons, clock,
     isPortrait: () => layoutName === 'portrait', send: sendWhiteboard,
   });
   const rotationLease = assetLoader.retainUrls(WHITEBOARD_ROTATION_FRAMES);
-  const flipPlayer = new AnimationPlayer<string>({ commit: (source) => { flipArt.src = source; } });
+  const progressEmpty = new Image(); progressEmpty.src = '/visual-elements/progress-bar-empty-sheet.webp';
+  const progressFull = new Image(); progressFull.src = '/visual-elements/progress-bar-full-sheet.webp';
+  const drawProgress = (frame: 0 | 1 | 2) => {
+    if (!progressEmpty.complete || !progressEmpty.naturalWidth || !progressFull.complete || !progressFull.naturalWidth) return;
+    const context = progressBar.getContext('2d'); if (!context) return;
+    const activeFrame = clock.isEnabled() ? frame : 0;
+    const width = Math.round(512 * Math.max(0, Math.min(1, progressUnitsInLevel / 10_000)));
+    context.clearRect(0, 0, 512, 256);
+    context.drawImage(progressEmpty, 0, activeFrame * 256, 512, 256, 0, 0, 512, 256);
+    if (width) context.drawImage(progressFull, 0, activeFrame * 256, width, 256, 0, 0, width, 256);
+  };
+  progressEmpty.addEventListener('load', () => drawProgress(0)); progressFull.addEventListener('load', () => drawProgress(0));
+  const unsubscribeProgress = clock.subscribe(drawProgress);
+  const flipPlayer = new AnimationPlayer<string>({ commit: (source) => {
+    flipArt.src = source;
+    const progress = whiteboardRotationProgress(source);
+    const face = lobbyElement('whiteboard').layouts[layoutName];
+    const blank = lobbyElement('whiteboard-blank-face').layouts[layoutName];
+    applyLayoutGeometry(flip, {
+      x: face.x + (blank.x - face.x) * progress,
+      y: face.y + (blank.y - face.y) * progress,
+      width: face.width + (blank.width - face.width) * progress,
+      height: face.height + (blank.height - face.height) * progress,
+      rotation: (face.rotation ?? 0) + ((blank.rotation ?? 0) - (face.rotation ?? 0)) * progress,
+    });
+  } });
   const reducedMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
   let whiteboardVisible = whiteboardInitiallyVisible;
   let animatingWhiteboard = false;
@@ -265,7 +325,10 @@ export function mountLobbyScreen(
     for (const item of tools) item.element.hidden = !showLiveBoard;
     chatEntry.element.hidden = !showLiveBoard;
     chatButton.hidden = !showLiveBoard;
-    revealWhiteboard.element.hidden = whiteboardVisible || animatingWhiteboard;
+    revealWhiteboard.element.hidden = false;
+    revealWhiteboard.element.setAttribute('aria-label', whiteboardVisible ? 'Hide whiteboard' : 'Show whiteboard');
+    for (const element of progressElements) element.hidden = whiteboardVisible || animatingWhiteboard;
+    classCardDrag?.setEnabled(!whiteboardVisible && !animatingWhiteboard);
     flip.hidden = !animatingWhiteboard;
     whiteboardController.setEnabled(connected && showLiveBoard);
     chatEntry.input.disabled = !connected || !showLiveBoard;
@@ -275,6 +338,7 @@ export function mountLobbyScreen(
 
   async function setWhiteboardVisible(visible: boolean): Promise<void> {
     if (destroyed || animatingWhiteboard || visible === whiteboardVisible || !connected) return;
+    revealWhiteboard.setLockedDepressed(visible);
     animatingWhiteboard = true;
     applyWhiteboardState();
     if (!reducedMotion) {
@@ -288,8 +352,6 @@ export function mountLobbyScreen(
     applyWhiteboardState();
     onWhiteboardVisibilityChange(visible);
   }
-  const closeWhiteboard = () => { void setWhiteboardVisible(false); };
-  for (const button of closeWhiteboardButtons) button.addEventListener('click', closeWhiteboard);
   applyWhiteboardState();
   const submitChat = (event: Event) => {
     event.preventDefault();
@@ -304,7 +366,8 @@ export function mountLobbyScreen(
     destroyed = true;
     flipPlayer.cancel();
     rotationLease.release();
-    for (const button of closeWhiteboardButtons) button.removeEventListener('click', closeWhiteboard);
+    unsubscribeProgress();
+    classCardDrag?.destroy();
     canvas.destroy();
     for (const button of gameButtons) button.destroy();
     for (const item of sprites) item.destroy();

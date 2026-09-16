@@ -463,6 +463,41 @@ input {
 }
 
 .lobby-screen__header { position: absolute; }
+.lobby-screen__player-name,
+.lobby-screen__player-level,
+.lobby-screen__progress-bar,
+.lobby-screen__progress-copy,
+.lobby-screen__progress-next { position: absolute; z-index: 4; text-align: center; }
+.lobby-screen__player-name,
+.lobby-screen__player-level { display: grid; place-items: center; font-size: 25px; }
+.lobby-screen__progress-bar { display: block; }
+.lobby-screen__progress-copy { display: grid; place-items: center; font-size: 18px; font-weight: 900; }
+.lobby-screen__progress-next { display: grid; place-items: center; font-size: 15px; font-weight: 900; }
+.lobby-screen__class-card { position: absolute; z-index: 5; cursor: grab; pointer-events: auto; touch-action: none; }
+.lobby-screen__class-card.is-dragging { cursor: grabbing; }
+.lobby-screen__class-card-string { position: absolute; z-index: 4; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.lobby-screen__class-card-shadow {
+  position: absolute;
+  background: #000;
+  mask-image: url('/lobby/class-cards/lucky-back-sheet.webp');
+  mask-position: center top;
+  mask-repeat: no-repeat;
+  mask-size: 100% 300%;
+  opacity: 1;
+  pointer-events: none;
+  transform-origin: center;
+  -webkit-mask-image: url('/lobby/class-cards/lucky-back-sheet.webp');
+  -webkit-mask-position: center top;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 300%;
+}
+.lobby-screen__class-card > .boiling-sprite__canvas { width: 100%; height: 100%; object-fit: contain; }
+.lobby-screen__player-name[hidden],
+.lobby-screen__player-level[hidden],
+.lobby-screen__progress-bar[hidden],
+.lobby-screen__progress-copy[hidden],
+.lobby-screen__progress-next[hidden],
+.lobby-screen__class-card[hidden] { display: none; }
 .lobby-screen__whiteboard { position: absolute; isolation: isolate; }
 .lobby-screen__whiteboard[hidden],
 .lobby-screen__whiteboard-flip[hidden],
@@ -477,12 +512,6 @@ input {
   clip-path: polygon(1% 0, 99% 0, 100% 1.5%, 100% 98.5%, 99% 100%, 1% 100%, 0 98.5%, 0 1.5%);
 }
 .lobby-screen__whiteboard-art { position: absolute; z-index: 3; inset: 0; display: block; width: 100%; height: 100%; pointer-events: none; }
-.lobby-screen__whiteboard-close { position: absolute; z-index: 5; padding: 0; border: 0; background: transparent; cursor: pointer; }
-.lobby-screen__whiteboard-close--top { top: 0; right: 0; left: 0; height: 9.2%; }
-.lobby-screen__whiteboard-close--right { top: 9.2%; right: 0; bottom: 9.4%; width: 6.1%; }
-.lobby-screen__whiteboard-close--bottom { right: 0; bottom: 0; left: 0; height: 9.4%; }
-.lobby-screen__whiteboard-close--left { top: 9.2%; bottom: 9.4%; left: 0; width: 6%; }
-.lobby-screen__whiteboard-close:focus-visible { outline: 3px solid #1857a6; outline-offset: -3px; }
 .lobby-screen__whiteboard-flip { position: absolute; z-index: 6; pointer-events: none; }
 .lobby-screen__whiteboard-flip-art {
   position: absolute;
@@ -1054,18 +1083,6 @@ input {
   height: 100%;
 }
 
-.lobby-screen__profile {
-  position: absolute;
-  z-index: 8;
-  top: 20px;
-  left: 20px;
-  padding: 6px 10px;
-  border: 2px solid #1d1b18;
-  background: #fffdf0;
-  font-weight: 900;
-  transform: rotate(-1deg);
-}
-
 .progress-screen__panel {
   position: absolute;
   left: 50%;
@@ -1090,6 +1107,5 @@ input {
 .progress-screen__continue { width: 190px; height: 95px; }
 
 @media (orientation: portrait) {
-  .lobby-screen__profile { top: 18px; left: 50%; transform: translateX(-50%) rotate(-1deg); white-space: nowrap; }
   .progress-screen__panel { width: 86%; min-height: 420px; padding: 24px 18px; }
 }

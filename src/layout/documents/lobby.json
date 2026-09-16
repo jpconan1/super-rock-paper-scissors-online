@@ -87,15 +87,15 @@
       },
       "layouts": {
         "landscape": {
-          "x": 416,
-          "y": 216,
+          "x": 730,
+          "y": 320,
           "width": 128,
           "height": 64,
           "aspectLock": true
         },
         "portrait": {
-          "x": 207,
-          "y": 390,
+          "x": 380,
+          "y": 765,
           "width": 128,
           "height": 64,
           "aspectLock": true
@@ -103,21 +103,674 @@
       }
     },
     {
+      "id": "whiteboard-blank-face",
+      "type": "resource",
+      "layer": -1,
+      "protected": true,
+      "assets": {
+        "src": "/lobby/whiteboard-wall-rotation-11-180deg.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 270,
+          "y": 92,
+          "width": 420,
+          "height": 311
+        },
+        "portrait": {
+          "x": 25,
+          "y": 240,
+          "width": 492,
+          "height": 364
+        }
+      }
+    },
+    {
       "id": "player-name",
       "type": "dynamic-text",
+      "label": "Player Name",
       "protected": true,
       "layouts": {
         "landscape": {
-          "x": 318,
-          "y": 134,
-          "width": 180,
-          "height": 28
+          "x": 460,
+          "y": 300,
+          "width": 145,
+          "height": 40
         },
         "portrait": {
-          "x": 73,
-          "y": 282,
-          "width": 180,
+          "x": 155,
+          "y": 535,
+          "width": 230,
+          "height": 34
+        }
+      }
+    },
+    {
+      "id": "class-card-lucky",
+      "type": "sprite",
+      "layer": 5,
+      "protected": true,
+      "assets": {
+        "src": "/lobby/class-cards/lucky-card-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 145,
+          "y": 215,
+          "width": 72,
+          "height": 101.8125,
+          "aspectLock": true,
+          "rotation": -90
+        },
+        "portrait": {
+          "x": 75,
+          "y": 265,
+          "width": 82,
+          "height": 115.96875,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "class-card-advantaged",
+      "type": "sprite",
+      "layer": 5,
+      "protected": true,
+      "assets": {
+        "src": "/lobby/class-cards/advantaged-card-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 165,
+          "y": 195,
+          "width": 72,
+          "height": 101.8125,
+          "aspectLock": true,
+          "rotation": -85
+        },
+        "portrait": {
+          "x": 190,
+          "y": 265,
+          "width": 82,
+          "height": 115.96875,
+          "aspectLock": true
+        }
+      },
+      "visible": true
+    },
+    {
+      "id": "class-card-thief",
+      "type": "sprite",
+      "layer": 5,
+      "protected": true,
+      "assets": {
+        "src": "/lobby/class-cards/thief-card-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 180,
+          "y": 170,
+          "width": 72,
+          "height": 101.8125,
+          "aspectLock": true,
+          "rotation": -80
+        },
+        "portrait": {
+          "x": 305,
+          "y": 265,
+          "width": 82,
+          "height": 115.96875,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "class-card-juggernaut",
+      "type": "sprite",
+      "layer": 5,
+      "protected": true,
+      "assets": {
+        "src": "/lobby/class-cards/juggernaut-card-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 200,
+          "y": 150,
+          "width": 72,
+          "height": 101.8125,
+          "aspectLock": true,
+          "rotation": -75
+        },
+        "portrait": {
+          "x": 420,
+          "y": 265,
+          "width": 82,
+          "height": 115.96875,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "class-card-stunner",
+      "type": "sprite",
+      "layer": 5,
+      "protected": true,
+      "assets": {
+        "src": "/lobby/class-cards/stunner-card-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 250,
+          "y": 130,
+          "width": 72,
+          "height": 101.8125,
+          "aspectLock": true,
+          "rotation": -65
+        },
+        "portrait": {
+          "x": 75,
+          "y": 420,
+          "width": 82,
+          "height": 115.96875,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "class-card-duplicator",
+      "type": "sprite",
+      "layer": 5,
+      "protected": true,
+      "assets": {
+        "src": "/lobby/class-cards/duplicator-card-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 225,
+          "y": 140,
+          "width": 72,
+          "height": 101.8125,
+          "aspectLock": true,
+          "rotation": -70
+        },
+        "portrait": {
+          "x": 190,
+          "y": 420,
+          "width": 82,
+          "height": 115.96875,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "class-card-sumo",
+      "type": "sprite",
+      "layer": 5,
+      "protected": true,
+      "assets": {
+        "src": "/lobby/class-cards/sumo-card-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 275,
+          "y": 120,
+          "width": 72,
+          "height": 101.8125,
+          "aspectLock": true,
+          "rotation": -60
+        },
+        "portrait": {
+          "x": 305,
+          "y": 420,
+          "width": 82,
+          "height": 115.96875,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "class-card-cheater",
+      "type": "sprite",
+      "layer": 5,
+      "protected": true,
+      "assets": {
+        "src": "/lobby/class-cards/cheater-back-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 665,
+          "y": 165,
+          "width": 72,
+          "height": 101.8125,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 420,
+          "y": 420,
+          "width": 82,
+          "height": 115.96875,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "class-card-investor",
+      "type": "sprite",
+      "layer": 5,
+      "protected": true,
+      "assets": {
+        "src": "/lobby/class-cards/investor-back-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 630,
+          "y": 120,
+          "width": 72,
+          "height": 101.8125,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 75,
+          "y": 480,
+          "width": 82,
+          "height": 115.96875,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "class-card-gambler",
+      "type": "sprite",
+      "layer": 5,
+      "protected": true,
+      "assets": {
+        "src": "/lobby/class-cards/gambler-back-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 605,
+          "y": 105,
+          "width": 72,
+          "height": 101.8125,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 105,
+          "y": 480,
+          "width": 82,
+          "height": 115.96875,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "class-card-taxman",
+      "type": "sprite",
+      "layer": 5,
+      "protected": true,
+      "assets": {
+        "src": "/lobby/class-cards/taxman-back-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 530,
+          "y": 110,
+          "width": 72,
+          "height": 101.8125,
+          "aspectLock": true,
+          "rotation": -5
+        },
+        "portrait": {
+          "x": 135,
+          "y": 480,
+          "width": 82,
+          "height": 115.96875,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "class-card-copywriter",
+      "type": "sprite",
+      "layer": 5,
+      "protected": true,
+      "assets": {
+        "src": "/lobby/class-cards/copywriter-back-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 515,
+          "y": 120,
+          "width": 72,
+          "height": 101.8125,
+          "aspectLock": true,
+          "rotation": -10
+        },
+        "portrait": {
+          "x": 165,
+          "y": 480,
+          "width": 82,
+          "height": 115.96875,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "class-card-conjurer",
+      "type": "sprite",
+      "layer": 5,
+      "protected": true,
+      "assets": {
+        "src": "/lobby/class-cards/conjurer-back-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 490,
+          "y": 120,
+          "width": 72,
+          "height": 101.8125,
+          "aspectLock": true,
+          "rotation": -15
+        },
+        "portrait": {
+          "x": 195,
+          "y": 480,
+          "width": 82,
+          "height": 115.96875,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "class-card-fireborne",
+      "type": "sprite",
+      "layer": 5,
+      "protected": true,
+      "assets": {
+        "src": "/lobby/class-cards/fireborne-back-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 460,
+          "y": 130,
+          "width": 72,
+          "height": 101.8125,
+          "aspectLock": true,
+          "rotation": -20
+        },
+        "portrait": {
+          "x": 225,
+          "y": 480,
+          "width": 82,
+          "height": 115.96875,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "class-card-retired",
+      "type": "sprite",
+      "layer": 5,
+      "protected": true,
+      "assets": {
+        "src": "/lobby/class-cards/retired-back-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 435,
+          "y": 120,
+          "width": 72,
+          "height": 101.8125,
+          "aspectLock": true,
+          "rotation": -25
+        },
+        "portrait": {
+          "x": 255,
+          "y": 480,
+          "width": 82,
+          "height": 115.96875,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "class-card-parrymaster",
+      "type": "sprite",
+      "layer": 5,
+      "protected": true,
+      "assets": {
+        "src": "/lobby/class-cards/parrymaster-back-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 390,
+          "y": 110,
+          "width": 72,
+          "height": 101.8125,
+          "aspectLock": true,
+          "rotation": -35
+        },
+        "portrait": {
+          "x": 285,
+          "y": 480,
+          "width": 82,
+          "height": 115.96875,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "class-card-cupid",
+      "type": "sprite",
+      "layer": 5,
+      "protected": true,
+      "assets": {
+        "src": "/lobby/class-cards/cupid-back-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 370,
+          "y": 110,
+          "width": 72,
+          "height": 101.8125,
+          "aspectLock": true,
+          "rotation": -40
+        },
+        "portrait": {
+          "x": 315,
+          "y": 480,
+          "width": 82,
+          "height": 115.96875,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "class-card-defender",
+      "type": "sprite",
+      "layer": 5,
+      "protected": true,
+      "assets": {
+        "src": "/lobby/class-cards/defender-back-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 350,
+          "y": 110,
+          "width": 72,
+          "height": 101.8125,
+          "aspectLock": true,
+          "rotation": -45
+        },
+        "portrait": {
+          "x": 345,
+          "y": 480,
+          "width": 82,
+          "height": 115.96875,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "class-card-last-ditch",
+      "type": "sprite",
+      "layer": 5,
+      "protected": true,
+      "assets": {
+        "src": "/lobby/class-cards/last-ditch-back-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 410,
+          "y": 115,
+          "width": 72,
+          "height": 101.8125,
+          "aspectLock": true,
+          "rotation": -30
+        },
+        "portrait": {
+          "x": 375,
+          "y": 480,
+          "width": 82,
+          "height": 115.96875,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "class-card-null",
+      "type": "sprite",
+      "layer": 5,
+      "protected": true,
+      "assets": {
+        "src": "/lobby/class-cards/null-back-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 325,
+          "y": 115,
+          "width": 72,
+          "height": 101.8125,
+          "aspectLock": true,
+          "rotation": -50
+        },
+        "portrait": {
+          "x": 405,
+          "y": 480,
+          "width": 82,
+          "height": 115.96875,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "class-card-joe",
+      "type": "sprite",
+      "layer": 5,
+      "protected": true,
+      "assets": {
+        "src": "/lobby/class-cards/joe-back-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 300,
+          "y": 115,
+          "width": 72,
+          "height": 101.8125,
+          "aspectLock": true,
+          "rotation": -55
+        },
+        "portrait": {
+          "x": 435,
+          "y": 480,
+          "width": 82,
+          "height": 115.96875,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "player-level",
+      "type": "dynamic-text",
+      "label": "Player Level",
+      "protected": true,
+      "layouts": {
+        "landscape": {
+          "x": 600,
+          "y": 365,
+          "width": 95,
+          "height": 20
+        },
+        "portrait": {
+          "x": 360,
+          "y": 575,
+          "width": 150,
+          "height": 45
+        }
+      }
+    },
+    {
+      "id": "xp-bar",
+      "type": "sprite",
+      "label": "XP Bar",
+      "protected": true,
+      "assets": {
+        "src": "/visual-elements/progress-bar-full-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 245,
+          "y": 305,
+          "width": 340,
+          "height": 170,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 30,
+          "y": 530,
+          "width": 335,
+          "height": 167.5,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "xp-count",
+      "type": "dynamic-text",
+      "label": "XP Count",
+      "protected": true,
+      "layouts": {
+        "landscape": {
+          "x": 295,
+          "y": 420,
+          "width": 220,
+          "height": 26
+        },
+        "portrait": {
+          "x": 65,
+          "y": 655,
+          "width": 250,
           "height": 28
+        }
+      }
+    },
+    {
+      "id": "next-unlock",
+      "type": "dynamic-text",
+      "label": "Next Unlock",
+      "protected": true,
+      "layouts": {
+        "landscape": {
+          "x": 590,
+          "y": 395,
+          "width": 120,
+          "height": 35
+        },
+        "portrait": {
+          "x": 370,
+          "y": 600,
+          "width": 130,
+          "height": 65
         }
       }
     },
@@ -475,8 +1128,18 @@
         "depressed": "/account/account-button-depressed-sheet.webp"
       },
       "layouts": {
-        "landscape": { "x": 715, "y": 460, "width": 148, "height": 74 },
-        "portrait": { "x": 196, "y": 700, "width": 148, "height": 74 }
+        "landscape": {
+          "x": 715,
+          "y": 460,
+          "width": 148,
+          "height": 74
+        },
+        "portrait": {
+          "x": 196,
+          "y": 700,
+          "width": 148,
+          "height": 74
+        }
       }
     },
     {
@@ -492,8 +1155,8 @@
           "height": 372
         },
         "portrait": {
-          "x": 240,
-          "y": 210,
+          "x": 215,
+          "y": 230,
           "width": 290,
           "height": 460
         }

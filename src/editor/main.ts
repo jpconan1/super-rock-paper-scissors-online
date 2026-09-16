@@ -11,6 +11,7 @@ import { applyLayoutGeometry, validateLayoutDocument, type LayoutDocument, type 
 import { createVariantButton } from '../variantSelect/variantButton';
 import { createVariantDetail } from '../variantSelect/variantDetail';
 import { curtainOpenAsset } from '../renderer/curtainWipe';
+import { pointerAngleDegrees, rotationFromPointerDrag, setElementRotation } from './rotationMath';
 
 const host = document.querySelector<HTMLElement>('#editor');
 if (!host) throw new Error('Missing editor mount.');
@@ -34,7 +35,7 @@ host.innerHTML = `<main class="layout-editor">
   <header class="editor-toolbar">
     <select data-action="document" aria-label="Document"></select>
     <select data-action="orientation"><option value="landscape">Landscape</option><option value="portrait">Portrait</option></select>
-    <select data-action="state"><option>Default</option><option>ABM class select</option><option>Depressed buttons</option><option>Disabled/banned</option><option>Rules open</option><option>Roster open</option><option>Populated scoreboard</option></select>
+    <select data-action="state"><option>Default</option><option>Whiteboard face</option><option>Whiteboard blank face</option><option>ABM class select</option><option>Depressed buttons</option><option>Disabled/banned</option><option>Rules open</option><option>Roster open</option><option>Populated scoreboard</option></select>
     <button data-action="undo">Undo</button><button data-action="redo">Redo</button>
     <button data-action="save">Save</button><button data-action="export">Export</button><button data-action="import">Import</button>
     <span class="dirty" data-dirty></span><span class="editor-status" data-status></span>
@@ -59,6 +60,7 @@ function render(): void {
   const canvas = $<HTMLElement>('[data-canvas]');
   const size = current.canvases[orientation];
   canvas.style.width = `${size.width}px`; canvas.style.height = `${size.height}px`; canvas.replaceChildren();
+  canvas.classList.toggle('has-single-selection', selected.size === 1);
   applyZoom();
   const nodes = new Map<string, HTMLElement>();
   const ordered = [...current.elements].sort((a,b) => (a.layer ?? 0) - (b.layer ?? 0));
@@ -73,7 +75,17 @@ function render(): void {
       if (config.id === 'header') node.element.classList.add('variant-select-screen__header');
       if (config.id === 'back') node.element.classList.add('variant-select-screen__back');
     }
+    if (current.id === 'lobby' && config.id === 'whiteboard-blank-face') {
+      node.element.classList.add('lobby-screen__whiteboard-flip');
+      node.element.querySelector('img')?.classList.add('lobby-screen__whiteboard-flip-art');
+    }
     node.element.classList.toggle('is-selected', selected.has(config.id));
+    if (!(node.element instanceof HTMLInputElement)) {
+      const rotationHandle = document.createElement('div');
+      rotationHandle.className = 'editor-rotation-handle';
+      rotationHandle.setAttribute('aria-hidden', 'true');
+      node.element.append(rotationHandle);
+    }
     nodes.set(config.id, node.element); cleanupNodes.push(node.cleanup);
   }
   if (isVariantDetail(current)) {
@@ -107,6 +119,16 @@ function render(): void {
 
 function visibleInPreview(config: LayoutElement): boolean {
   if (config.visible === false || (config.id === 'rules-panel' && previewState !== 'Rules open')) return false;
+  if (current.id === 'lobby') {
+    if (['player-name', 'player-level', 'xp-bar', 'xp-count', 'next-unlock'].includes(config.id) || config.id.startsWith('class-card-')) {
+      return previewState === 'Whiteboard blank face';
+    }
+    if (config.id === 'whiteboard-blank-face') return previewState === 'Whiteboard blank face';
+    if (config.id === 'whiteboard') return previewState !== 'Whiteboard blank face';
+    if (previewState === 'Whiteboard blank face' && [
+      'black-marker', 'red-marker', 'blue-marker', 'purple-marker', 'green-marker', 'eraser', 'chat-input', 'chat-button',
+    ].includes(config.id)) return false;
+  }
   if (current.id !== 'variant-abm' || previewState !== 'ABM class select') return true;
   if (config.stateVisibility?.['class-select'] === false) return false;
   return !['p1-picked', 'p2-picked', 'scene-art', 'p1-move', 'p2-move', 'p1-class-badge', 'p2-class-badge',
@@ -231,9 +253,15 @@ function makeNode(config: LayoutElement): { element: HTMLElement; cleanup(): voi
 function beginPointer(event: PointerEvent, id: string, target: HTMLElement): void {
   if (event.button !== 0) return;
   const bounds = target.getBoundingClientRect();
-  const resize = event.clientX >= bounds.right - 14 && event.clientY >= bounds.bottom - 14;
-  if (!event.shiftKey && !selected.has(id)) selected = new Set([id]); else if (event.shiftKey) selected.has(id) ? selected.delete(id) : selected.add(id);
+  const rotating = Boolean((event.target as Element).closest('.editor-rotation-handle')) && selected.size === 1 && selected.has(id);
+  const resize = !rotating && event.clientX >= bounds.right - 14 && event.clientY >= bounds.bottom - 14;
+  if (!rotating) {
+    if (!event.shiftKey && !selected.has(id)) selected = new Set([id]);
+    else if (event.shiftKey) selected.has(id) ? selected.delete(id) : selected.add(id);
+  }
   const start = { x: event.clientX, y: event.clientY };
+  const center = { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 };
+  const startPointerAngle = pointerAngleDegrees(start.x, start.y, center.x, center.y);
   const before = snapshot();
   const originals = new Map([...selected].map((key) => [key, { ...current.elements.find((item) => item.id === key)!.layouts[orientation] }]));
   const canvas = $<HTMLElement>('[data-canvas]');
@@ -241,6 +269,16 @@ function beginPointer(event: PointerEvent, id: string, target: HTMLElement): voi
   updateSelectionUi();
   const move = (next: PointerEvent) => {
     if (next.pointerId !== event.pointerId) return;
+    if (rotating) {
+      const item = current.elements.find((candidate) => candidate.id === id)!;
+      const original = originals.get(id)!;
+      const pointerAngle = pointerAngleDegrees(next.clientX, next.clientY, center.x, center.y);
+      setElementRotation(item, orientation, rotationFromPointerDrag(original.rotation ?? 0, startPointerAngle, pointerAngle, next.shiftKey ? 15 : 5));
+      const preview = canvas.querySelector<HTMLElement>(`[data-id="${id}"]`);
+      if (preview) applyLayoutGeometry(preview, item.layouts[orientation]);
+      renderInspector(); updateDirty();
+      return;
+    }
     const dx = (next.clientX - start.x) / zoom, dy = (next.clientY - start.y) / zoom;
     for (const key of selected) {
       const geometry = current.elements.find((item) => item.id === key)!.layouts[orientation]; const original = originals.get(key)!;
@@ -273,7 +311,9 @@ function beginPointer(event: PointerEvent, id: string, target: HTMLElement): voi
 }
 
 function updateSelectionUi(): void {
-  $<HTMLElement>('[data-canvas]').querySelectorAll<HTMLElement>('.editor-node').forEach((node) => node.classList.toggle('is-selected', selected.has(node.dataset.id ?? '')));
+  const canvas = $<HTMLElement>('[data-canvas]');
+  canvas.classList.toggle('has-single-selection', selected.size === 1);
+  canvas.querySelectorAll<HTMLElement>('.editor-node').forEach((node) => node.classList.toggle('is-selected', selected.has(node.dataset.id ?? '')));
   renderTree(); renderInspector();
 }
 
