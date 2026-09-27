@@ -6,7 +6,7 @@ import { createGameButton, type GameButton } from '../../input/gameButton';
 import { createGameLayout, type GameLayout } from '../../layout/gameLayout';
 import { getLayoutDocument } from '../../layout/layoutDocuments';
 import { applyConfiguredElement } from '../../layout/layoutRuntime';
-import { applyLayoutGeometry, type LayoutDocument, type LayoutGeometry, type LayoutOrientation } from '../../layout/layoutDocument';
+import { applyLayoutGeometry, type LayoutDocument, type LayoutElement, type LayoutGeometry, type LayoutOrientation } from '../../layout/layoutDocument';
 import type { ResponsiveScaleBoxLayout } from '../../layout/scaleBox';
 import { createBoilingSprite, type BoilingSprite } from '../../renderer/boilingSprite';
 import { playStarburstWipe } from '../../renderer/starburstWipe';
@@ -52,11 +52,21 @@ export function abmTagSlotId(player: 'p1' | 'p2', category: AbmTagCategory, orde
   return `${player}-${category}-tag-${order}`;
 }
 
-export function getAbmAbilityControlGeometry(id: string, orientation: LayoutOrientation, base: LayoutGeometry): LayoutGeometry {
-  if (id === 'ability') return orientation === 'portrait'
-    ? { x: 8, y: 550, width: 100, height: 50, aspectLock: true }
-    : { x: 205, y: 412, width: 134, height: 67, aspectLock: true };
+export function getAbmClassResourceControlGeometry(id: string, orientation: LayoutOrientation, base: LayoutGeometry): LayoutGeometry {
   return ABILITY_MOVE_LAYOUT_IDS.has(id) ? { ...base, x: base.x + (orientation === 'portrait' ? 45 : 90) } : base;
+}
+
+export function getAbmClassResourceGeometry(element: LayoutElement, orientation: LayoutOrientation): LayoutGeometry {
+  return element.alternateLayouts?.['class-resource']?.[orientation]
+    ?? getAbmClassResourceControlGeometry(element.id, orientation, element.layouts[orientation]);
+}
+
+export function getAbmPlayerResourceGeometry(
+  element: LayoutElement,
+  orientation: LayoutOrientation,
+  hasLimitedResource: boolean,
+): LayoutGeometry {
+  return hasLimitedResource ? getAbmClassResourceGeometry(element, orientation) : element.layouts[orientation];
 }
 
 export function getAbmClassBadgeGeometry(
@@ -124,6 +134,28 @@ export function getAbmAttackCostDisplay(player: Readonly<AbmPlayerState>): { vis
   return { visible: cost > 1, cost, label: `Attack, costs ${cost} Mana` };
 }
 
+const LIMITED_RESOURCE_ICONS: Partial<Record<AbmClassId, { icon: string; ability?: AbmAbilityId; uses: number }>> = {
+  thief: { icon: `${ABM_ROOT}/steal-icon-sheet.webp`, ability: 'steal', uses: 1 },
+  sumo: { icon: `${ABM_ROOT}/sumo-refund-icon-sheet.webp`, uses: 3 },
+  taxman: { icon: `${ABM_ROOT}/collect-icon-sheet.webp`, ability: 'collect', uses: 3 },
+  conjurer: { icon: `${ABM_ROOT}/conjure-icon-sheet.webp`, ability: 'conjure', uses: 2 },
+  fireborne: { icon: `${ABM_ROOT}/flame-icon-sheet.webp`, ability: 'flame', uses: 1 },
+  parrymaster: { icon: `${ABM_ROOT}/parry-icon-sheet.webp`, ability: 'parry', uses: 1 },
+  cupid: { icon: `${ABM_ROOT}/golden-arrow-icon-sheet.webp`, ability: 'golden-arrow', uses: 1 },
+  null: { icon: `${ABM_ROOT}/reset-icon-sheet.webp`, ability: 'reset', uses: 1 },
+};
+
+export function getAbmLimitedResource(player: Readonly<AbmPlayerState>, classId = player.classId): { icon: string; remaining: number } | undefined {
+  const limited = classId ? LIMITED_RESOURCE_ICONS[classId] : undefined;
+  if (!limited) return undefined;
+  const remaining = classId === 'sumo'
+    ? player.refundsRemaining ?? limited.uses
+    : limited.ability === 'steal' && player.abilityUses?.steal === undefined
+      ? player.stealUsed ? 0 : limited.uses
+      : limited.ability ? player.abilityUses?.[limited.ability] ?? limited.uses : limited.uses;
+  return { icon: limited.icon, remaining };
+}
+
 export function getAbmResultScene(projection: AbmProjection): { src: string; alt: string } | undefined {
   const matchComplete = projection.phase === 'match-complete';
   const winner = matchComplete ? projection.winner : projection.lastRoundWinner;
@@ -152,6 +184,7 @@ export function createAttackBlockManaPresentation(
         ...['Prev', 'next'].flatMap((name) => ['up', 'between', 'depressed'].map((state) => `${ABM_ROOT}/${name}-button-${state}-sheet.webp`)),
         ...Object.values(ABM_SELECT_ART), ...Object.values(CONTROL_ART).flatMap(Object.values),
         `${ABM_ROOT}/mana-icon-sheet.webp`, `${ABM_ROOT}/block-icon-sheet.webp`, `${ABM_ROOT}/block-icon-empty-sheet.webp`,
+        ...Object.values(LIMITED_RESOURCE_ICONS).map(({ icon }) => icon),
         '/visual-elements/arrows/arrow-blue-upright-sheet.webp', '/visual-elements/arrows/arrow-red-downright-sheet.webp', `${ABM_ROOT}/arrow-purp-left-sheet.webp`,
         ...Array.from({ length: 10 }, (_, index) => `/visual-elements/resource-counters/times${index}-sheet.webp`),
         ...Array.from({ length: 5 }, (_, index) => `/visual-elements/ready-waiting/countdown${index + 1}-sheet.webp`),
@@ -203,7 +236,8 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   const playedSoundIds = new Set<string>();
   let wipeRunning = false;
   let armedAbility: AbmAbilityId | undefined;
-  let usingAbilityControlLayout = false;
+  let usingClassResourceControls = false;
+  let playerHasLimitedResource: Record<'p1' | 'p2', boolean> = { p1: false, p2: false };
   const transitionAbort = new AbortController();
 
   const moveStatus = (player: 'p1' | 'p2') => {
@@ -217,6 +251,10 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   const classReadyOpponentTag = createBoilingSprite({ src: '/visual-elements/oppponent-tag-sheet.webp', clock, className: 'abm-class-ready__opponent-tag', alt: 'Opponent' });
   classReadyArt.element.hidden = true; classReadyOpponentTag.element.hidden = true; sprites.push(classReadyArt, classReadyOpponentTag);
   const p1Resources = resourceDisplay('P1', 'p1', clock, sprites); const p2Resources = resourceDisplay('P2', 'p2', clock, sprites);
+  const resourceBindingPlayers = new Map<string, 'p1' | 'p2'>([
+    ...p1Resources.bindings.map(([id]) => [id, 'p1'] as const),
+    ...p2Resources.bindings.map(([id]) => [id, 'p2'] as const),
+  ]);
 
   const controls = element('div', 'abm-controls');
   const arrows = ['arrow-attack-block', 'arrow-block-mana', 'arrow-mana-attack'].map((id) => {
@@ -416,8 +454,11 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     for (const [id, target] of bindings) {
       const definition = config(id);
       applyConfiguredElement(target, definition, orientation);
-      if (usingAbilityControlLayout && (id === 'ability' || ABILITY_MOVE_LAYOUT_IDS.has(id))) {
-        applyLayoutGeometry(target, getAbmAbilityControlGeometry(id, orientation, definition.layouts[orientation]));
+      const resourcePlayer = resourceBindingPlayers.get(id);
+      if (resourcePlayer) {
+        applyLayoutGeometry(target, getAbmPlayerResourceGeometry(definition, orientation, playerHasLimitedResource[resourcePlayer]));
+      } else if (usingClassResourceControls) {
+        applyLayoutGeometry(target, getAbmClassResourceGeometry(definition, orientation));
       }
     }
     for (const { player, badge, frame } of classBadges) {
@@ -433,8 +474,13 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     className.textContent = definition?.name ?? 'Locked'; description.textContent = definition?.description ?? `${entry.kind === 'locked' ? entry.count : 0} classes still locked!`;
     if (projection && (projection.phase === 'selecting-classes' || projection.phase === 'waiting-for-class' || projection.phase === 'counter-picking')) {
       const previewResources = startingResourcesForClass(definition?.id);
-      setResourceDisplay(p1Resources, previewResources);
-      setResourceDisplay(p2Resources, previewResources);
+      const hasLimitedResource = Boolean(definition && getAbmLimitedResource(projection.players.p1, definition.id));
+      if (playerHasLimitedResource.p1 !== hasLimitedResource || playerHasLimitedResource.p2 !== hasLimitedResource) {
+        playerHasLimitedResource = { p1: hasLimitedResource, p2: hasLimitedResource };
+        applyVariantLayout();
+      }
+      renderResources(p1Resources, projection, 'p1', previewResources, definition?.id ?? null);
+      renderResources(p2Resources, projection, 'p2', previewResources, definition?.id ?? null);
     }
     const canPick = Boolean(projection?.legalActions.includes('lock-class'));
     status.textContent = projection?.ownPendingClass ? 'LOCKED · WAITING' : projection?.phase === 'counter-picking' && projection.counterPicker !== projection.self ? 'WINNER STAYS' : definition?.implemented ? 'PLAYABLE' : 'LOCKED';
@@ -492,9 +538,23 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     previous.element.hidden = !picking; next.element.hidden = !picking;
     const ownPlayer = nextProjection.players[nextProjection.self];
     const ownAbility = ownPlayer.classId ? ABM_CLASS_BY_ID.get(ownPlayer.classId)?.ability : undefined;
-    const nextAbilityControlLayout = !picking && Boolean(ownAbility);
-    if (usingAbilityControlLayout !== nextAbilityControlLayout) {
-      usingAbilityControlLayout = nextAbilityControlLayout;
+    const nextClassResourceControls = !picking && Boolean(ownAbility);
+    const selectedEntry = pickerEntries[selected]!;
+    const previewClassId = selectedEntry.kind === 'class' ? selectedEntry.definition.id : undefined;
+    const nextPlayerHasLimitedResource = picking
+      ? {
+          p1: Boolean(previewClassId && getAbmLimitedResource(nextProjection.players.p1, previewClassId)),
+          p2: Boolean(previewClassId && getAbmLimitedResource(nextProjection.players.p2, previewClassId)),
+        }
+      : {
+          p1: Boolean(getAbmLimitedResource(nextProjection.players.p1)),
+          p2: Boolean(getAbmLimitedResource(nextProjection.players.p2)),
+        };
+    if (usingClassResourceControls !== nextClassResourceControls
+      || playerHasLimitedResource.p1 !== nextPlayerHasLimitedResource.p1
+      || playerHasLimitedResource.p2 !== nextPlayerHasLimitedResource.p2) {
+      usingClassResourceControls = nextClassResourceControls;
+      playerHasLimitedResource = nextPlayerHasLimitedResource;
       applyVariantLayout();
     }
     const abilityFeedback = thiefFeedback || Boolean(nextProjection.taxmanCollectPlayers?.length);
@@ -599,10 +659,9 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     thiefTransferMirror.element.hidden = Boolean(splitPlayer) || showingResult || !simultaneousSteals;
     thiefTransfer.element.classList.toggle('is-flipped', nextProjection.thiefTransferPlayer === 'p2');
     renderStatus(p1Status, nextProjection, 'p1', picking); renderStatus(p2Status, nextProjection, 'p2', picking);
-    const selectedEntry = pickerEntries[selected]!;
     const previewResources = startingResourcesForClass(selectedEntry.kind === 'class' ? selectedEntry.definition.id : undefined);
-    renderResources(p1Resources, nextProjection, 'p1', picking ? previewResources : undefined);
-    renderResources(p2Resources, nextProjection, 'p2', picking ? previewResources : undefined);
+    renderResources(p1Resources, nextProjection, 'p1', picking ? previewResources : undefined, picking ? previewClassId ?? null : undefined);
+    renderResources(p2Resources, nextProjection, 'p2', picking ? previewResources : undefined, picking ? previewClassId ?? null : undefined);
     const showWaiting = nextProjection.phase === 'waiting';
     const showClassReady = picking && nextProjection.classReadyPlayer !== undefined && nextProjection.classReadyAt !== undefined;
     waiting.hidden = !showWaiting;
@@ -712,11 +771,22 @@ function renderStatus(status: { output: HTMLElement; sprite: BoilingSprite; labe
     if (displayedMove && displayedMove !== 'skip') status.sprite.setSource(CONTROL_ART[displayedMove].depressed);
   }
 }
-interface ResourceDisplay { element: HTMLOutputElement; manaMultiplier: BoilingSprite; manaCountElement: HTMLElement; blocks: BoilingSprite[]; bindings: [string, HTMLElement][] }
+interface ResourceDisplay {
+  element: HTMLOutputElement;
+  manaMultiplier: BoilingSprite;
+  manaCountElement: HTMLElement;
+  blocks: BoilingSprite[];
+  limitedGroup: HTMLElement;
+  limitedIcon: BoilingSprite;
+  limitedMultiplier: BoilingSprite;
+  bindings: [string, HTMLElement][];
+}
 function resourceDisplay(label: string, player: 'p1' | 'p2', clock: BoilClock, sprites: BoilingSprite[]): ResourceDisplay {
   const output = element('output', 'abm-resources') as HTMLOutputElement; output.setAttribute('aria-label', `${label} resources`);
   const manaGroup = element('span', 'abm-resource-group abm-resource-group--mana');
-  const blockGroup = element('span', 'abm-resource-group abm-resource-group--blocks'); output.append(manaGroup, blockGroup);
+  const blockGroup = element('span', 'abm-resource-group abm-resource-group--blocks');
+  const limitedGroup = element('span', 'abm-resource-group abm-resource-group--limited');
+  output.append(manaGroup, blockGroup, limitedGroup);
   const make = (parent: HTMLElement, kind: string, src: string) => {
     const item = element('span', `abm-resource abm-resource--${kind}`);
     const sprite = createBoilingSprite({ src, clock, className: 'abm-resource__art', alt: '' }); sprites.push(sprite);
@@ -725,15 +795,27 @@ function resourceDisplay(label: string, player: 'p1' | 'p2', clock: BoilClock, s
   const mana = make(manaGroup, 'mana', `${ABM_ROOT}/mana-icon-sheet.webp`);
   const multiplier = make(manaGroup, 'mana-count', '/visual-elements/resource-counters/times1-sheet.webp');
   const blocks = Array.from({ length: 5 }, (_, index) => make(blockGroup, `block-${index + 1}`, `${ABM_ROOT}/block-icon-sheet.webp`));
-  return { element: output, manaMultiplier: multiplier.sprite, manaCountElement: multiplier.item, blocks: blocks.map(({ sprite }) => sprite), bindings: [
-    [`${player}-mana-group`, manaGroup], [`${player}-block-group`, blockGroup],
+  const limitedIcon = make(limitedGroup, 'limited-icon', `${ABM_ROOT}/steal-icon-sheet.webp`);
+  const limitedMultiplier = make(limitedGroup, 'limited-count', '/visual-elements/resource-counters/times1-sheet.webp');
+  limitedGroup.hidden = true;
+  return { element: output, manaMultiplier: multiplier.sprite, manaCountElement: multiplier.item, blocks: blocks.map(({ sprite }) => sprite),
+    limitedGroup, limitedIcon: limitedIcon.sprite, limitedMultiplier: limitedMultiplier.sprite, bindings: [
+    [`${player}-mana-group`, manaGroup], [`${player}-block-group`, blockGroup], [`${player}-limited-group`, limitedGroup],
     [`${player}-mana-icon`, mana.item], [`${player}-mana-count`, multiplier.item],
+    [`${player}-limited-icon`, limitedIcon.item], [`${player}-limited-count`, limitedMultiplier.item],
     ...blocks.map(({ item }, index) => [`${player}-block-${index + 1}`, item] as [string, HTMLElement]),
   ] };
 }
-function renderResources(target: ResourceDisplay, projection: AbmProjection, player: 'p1' | 'p2', override?: AbmStartingResources) {
+function renderResources(target: ResourceDisplay, projection: AbmProjection, player: 'p1' | 'p2', override?: AbmStartingResources, classOverride?: AbmClassId | null) {
   const state = projection.players[player];
   setResourceDisplay(target, override ?? { mana: state.mana, blocks: state.blocks }, !override && state.infiniteMana);
+  const classId = classOverride === undefined ? state.classId : classOverride ?? undefined;
+  const limited = getAbmLimitedResource(state, classId);
+  target.limitedGroup.hidden = !limited;
+  if (!limited) return;
+  target.limitedIcon.setSource(limited.icon);
+  target.limitedMultiplier.setSource(`/visual-elements/resource-counters/times${Math.max(0, Math.min(9, limited.remaining))}-sheet.webp`);
+  target.limitedGroup.setAttribute('aria-label', `${classId ? ABM_CLASS_BY_ID.get(classId)?.name ?? classId : 'Class'}: ${limited.remaining} uses remaining`);
 }
 function setResourceDisplay(target: ResourceDisplay, resources: AbmStartingResources, infiniteMana = false) {
   setManaDisplay(target, resources.mana, infiniteMana);

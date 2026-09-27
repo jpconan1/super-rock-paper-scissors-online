@@ -44,8 +44,9 @@ export function progressGainForLevel(level: number, outcome: ProgressOutcome): n
   return Math.round(levels * PROGRESS_UNITS_PER_LEVEL);
 }
 
-export function createProgressAward(totalProgressUnits: number, outcome: ProgressOutcome): ProgressAward {
+export function createProgressAward(totalProgressUnits: number, outcome: ProgressOutcome, paused = false): ProgressAward {
   const before = progressionForTotal(totalProgressUnits);
+  if (paused) return { outcome, gainedProgressUnits: 0, before, after: before, unlockedClassIds: [] };
   const available = MAX_PROGRESS_UNITS - before.totalProgressUnits;
   const gainedProgressUnits = Math.min(available, progressGainForLevel(before.level, outcome));
   const after = progressionForTotal(before.totalProgressUnits + gainedProgressUnits);

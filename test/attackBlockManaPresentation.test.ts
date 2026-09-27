@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { ABM_CLASSES, startingResourcesForClass } from '../src/variants/attackBlockMana/attackBlockManaCatalog';
-import { ABM_BACK_LOBBY_ART, ABM_LAYOUTS, ABM_RESULT_SCENES, ABM_SELECT_ART, ABM_TAG_CATEGORIES, ABM_TAG_ORDERS, abmTagSlotId, blockSegments, displayedAbmMove, getAbmAttackCostDisplay, getAbmClassBadgeGeometry, getAbmClassReadyFrame, getAbmResultScene, getAbmAbilityControlGeometry, getAbmWaitingVisual, initialManaForClass, latestClassPreview, reconcileAbmArmedAbility, sceneForMoves, shouldShowAbmContinuingRoundProcTags, shouldShowAbmYouTag, shouldShowClassBadge, shouldShowClassReadyOpponentTag } from '../src/variants/attackBlockMana/attackBlockManaPresentation';
+import { ABM_BACK_LOBBY_ART, ABM_LAYOUTS, ABM_RESULT_SCENES, ABM_SELECT_ART, ABM_TAG_CATEGORIES, ABM_TAG_ORDERS, abmTagSlotId, blockSegments, displayedAbmMove, getAbmAttackCostDisplay, getAbmClassBadgeGeometry, getAbmClassReadyFrame, getAbmClassResourceControlGeometry, getAbmClassResourceGeometry, getAbmLimitedResource, getAbmPlayerResourceGeometry, getAbmResultScene, getAbmWaitingVisual, initialManaForClass, latestClassPreview, reconcileAbmArmedAbility, sceneForMoves, shouldShowAbmContinuingRoundProcTags, shouldShowAbmYouTag, shouldShowClassBadge, shouldShowClassReadyOpponentTag } from '../src/variants/attackBlockMana/attackBlockManaPresentation';
 import type { AbmProjection } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 import { ABM_CLASS_IDS } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 import { ABM_SCENE_URLS, resolveAbmProcBackgrounds, resolveAbmScene, resolveAbmSplitScene, resolveAbmTags, resolveConjureScene, resolveJoeScene, resolveNullScene } from '../src/variants/attackBlockMana/attackBlockManaScenes';
@@ -81,6 +81,19 @@ describe('Attack Block Mana presentation data', () => {
     expect(latestClassPreview(events, 'p1')).toBeUndefined();
   });
 
+  test('maps limited-use classes to their remaining-use counters', () => {
+    const player = { mana: 1, blocks: 5, strikes: 0 };
+    expect(getAbmLimitedResource({ ...player, classId: 'thief', abilityUses: { steal: 0 } })).toEqual({ icon: '/variants/abm/steal-icon-sheet.webp', remaining: 0 });
+    expect(getAbmLimitedResource({ ...player, classId: 'sumo', refundsRemaining: 2 })).toEqual({ icon: '/variants/abm/sumo-refund-icon-sheet.webp', remaining: 2 });
+    expect(getAbmLimitedResource({ ...player, classId: 'taxman', abilityUses: { collect: 2 } })).toEqual({ icon: '/variants/abm/collect-icon-sheet.webp', remaining: 2 });
+    expect(getAbmLimitedResource({ ...player, classId: 'conjurer', abilityUses: { conjure: 1 } })).toEqual({ icon: '/variants/abm/conjure-icon-sheet.webp', remaining: 1 });
+    expect(getAbmLimitedResource({ ...player, classId: 'fireborne', abilityUses: { flame: 1 } })).toEqual({ icon: '/variants/abm/flame-icon-sheet.webp', remaining: 1 });
+    expect(getAbmLimitedResource({ ...player, classId: 'parrymaster', abilityUses: { parry: 1 } })).toEqual({ icon: '/variants/abm/parry-icon-sheet.webp', remaining: 1 });
+    expect(getAbmLimitedResource({ ...player, classId: 'cupid', abilityUses: { 'golden-arrow': 1 } })).toEqual({ icon: '/variants/abm/golden-arrow-icon-sheet.webp', remaining: 1 });
+    expect(getAbmLimitedResource({ ...player, classId: 'null', abilityUses: { reset: 1 } })).toEqual({ icon: '/variants/abm/reset-icon-sheet.webp', remaining: 1 });
+    expect(getAbmLimitedResource({ ...player, classId: 'lucky' })).toBeUndefined();
+  });
+
   test('keeps only the winner class badge during a counter-pick', () => {
     const counterPick = { phase: 'counter-picking' as const, counterPicker: 'p2' as const };
     expect(shouldShowClassBadge(counterPick, 'p1')).toBe(true);
@@ -89,12 +102,26 @@ describe('Attack Block Mana presentation data', () => {
     expect(shouldShowClassBadge({ phase: 'idle' }, 'p1')).toBe(true);
   });
 
-  test('keeps full-size controls and shifts activated-ability clusters right', () => {
+  test('uses separate three-button and class-resource control geometry', () => {
     const base = { x: 60, y: 95, width: 120, height: 60, aspectLock: true };
-    expect(getAbmAbilityControlGeometry('block', 'portrait', base)).toEqual({ ...base, x: 105 });
-    expect(getAbmAbilityControlGeometry('block', 'landscape', base)).toEqual({ ...base, x: 150 });
-    expect(getAbmAbilityControlGeometry('ability', 'portrait', base)).toEqual({ x: 8, y: 550, width: 100, height: 50, aspectLock: true });
-    expect(getAbmAbilityControlGeometry('ability', 'landscape', base)).toEqual({ x: 205, y: 412, width: 134, height: 67, aspectLock: true });
+    expect(getAbmClassResourceControlGeometry('block', 'portrait', base)).toEqual({ ...base, x: 105 });
+    expect(getAbmClassResourceControlGeometry('block', 'landscape', base)).toEqual({ ...base, x: 150 });
+    expect(getAbmClassResourceControlGeometry('ability', 'portrait', base)).toEqual(base);
+    expect(getAbmClassResourceGeometry({
+      id: 'block', type: 'button', layouts: { landscape: base, portrait: base },
+      alternateLayouts: { 'class-resource': { landscape: { ...base, x: 333 }, portrait: { ...base, x: 222 } } },
+    }, 'portrait').x).toBe(222);
+  });
+
+  test.each(['landscape', 'portrait'] as const)('selects each player resource layout independently in %s', (orientation) => {
+    const document = getLayoutDocument('variant-abm');
+    const p1Blocks = document.elements.find(({ id }) => id === 'p1-block-group')!;
+    const p2Blocks = document.elements.find(({ id }) => id === 'p2-block-group')!;
+
+    expect(getAbmPlayerResourceGeometry(p1Blocks, orientation, true)).toEqual(p1Blocks.alternateLayouts!['class-resource']![orientation]);
+    expect(getAbmPlayerResourceGeometry(p2Blocks, orientation, false)).toEqual(p2Blocks.layouts[orientation]);
+    expect(getAbmPlayerResourceGeometry(p1Blocks, orientation, false)).toEqual(p1Blocks.layouts[orientation]);
+    expect(getAbmPlayerResourceGeometry(p2Blocks, orientation, true)).toEqual(p2Blocks.alternateLayouts!['class-resource']![orientation]);
   });
 
   test('normalizes class badges by height and grows them inward', () => {
@@ -487,6 +514,7 @@ describe('Attack Block Mana presentation data', () => {
       'attack', 'block', 'mana', 'back-lobby', 'arrow-attack-block', 'arrow-block-mana', 'arrow-mana-attack', 'waiting-ready', 'waiting-dots',
       'p1-mana-group', 'p1-mana-icon', 'p1-mana-count', 'p1-block-group', 'p1-block-1', 'p1-block-5',
       'p2-mana-group', 'p2-mana-icon', 'p2-mana-count', 'p2-block-group', 'p2-block-1', 'p2-block-5',
+      'p1-limited-group', 'p1-limited-icon', 'p1-limited-count', 'p2-limited-group', 'p2-limited-icon', 'p2-limited-count',
     ]));
     expect(document.elements.some(({ id }) => id === 'activate')).toBe(false);
     for (const id of ['picker-prev', 'picker-next']) {
@@ -519,6 +547,8 @@ describe('Attack Block Mana presentation data', () => {
     expect(assets('p1-mana-icon')?.src).toBe('/variants/abm/mana-icon-sheet.webp');
     expect(assets('p1-mana-count')?.src).toBe('/visual-elements/resource-counters/times1-sheet.webp');
     expect(assets('p1-block-1')?.src).toBe('/variants/abm/block-icon-sheet.webp');
+    expect(assets('p1-limited-icon')?.src).toBe('/variants/abm/steal-icon-sheet.webp');
+    expect(assets('p1-limited-count')?.src).toBe('/visual-elements/resource-counters/times1-sheet.webp');
     expect(assets('p2-counterpick-tag')?.src).toBe('/variants/abm/counterpick-tag-sheet.webp');
     expect(assets('pick-class-header')?.src).toBe('/variants/abm/pick-class-sheet.webp');
     for (const element of document.elements) expect(Object.keys(element.layouts).sort()).toEqual(['landscape', 'portrait']);

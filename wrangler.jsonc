@@ -18,6 +18,7 @@
       "/online-status",
       "/guest-session",
       "/player-session",
+      "/player-progression",
       "/api/auth/*",
       "/matches",
       "/matches/*",

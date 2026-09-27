@@ -1,25 +1,44 @@
 import { describe, expect, test } from 'vitest';
-import { WHITEBOARD_ROTATION_FRAMES, whiteboardFlipFrames, whiteboardRotationProgress } from '../src/whiteboard/flipAnimation';
+import {
+  lobbyFaceTransition, PAPER_ROTATION_FRAMES, WHITEBOARD_ROTATION_FRAMES, type LobbyFace,
+} from '../src/whiteboard/flipAnimation';
 
-describe('whiteboard flip animation', () => {
-  test('opens edge-on to face-on in about half a second', () => {
-    const frames = whiteboardFlipFrames(true, false);
-    expect(frames.map((frame) => frame.value)).toEqual([...WHITEBOARD_ROTATION_FRAMES].reverse());
-    expect(frames.reduce((total, frame) => total + frame.durationMs, 0)).toBe(462);
+describe('lobby face flip animation', () => {
+  const route = (from: LobbyFace, to: LobbyFace) => lobbyFaceTransition(from, to, false)!;
+
+  test('uses the existing flip forward from whiteboard to either paper face', () => {
+    for (const to of ['progression', 'more-variants'] as const) {
+      const transition = route('whiteboard', to);
+      expect(transition.kind).toBe('whiteboard');
+      expect(transition.frames.map((frame) => frame.value.source)).toEqual(WHITEBOARD_ROTATION_FRAMES);
+    }
   });
 
-  test('closes face-on to edge-on', () => {
-    expect(whiteboardFlipFrames(false, false).map((frame) => frame.value)).toEqual(WHITEBOARD_ROTATION_FRAMES);
+  test('uses the existing flip backward from either paper face to whiteboard', () => {
+    for (const from of ['progression', 'more-variants'] as const) {
+      const transition = route(from, 'whiteboard');
+      expect(transition.kind).toBe('whiteboard');
+      expect(transition.frames.map((frame) => frame.value.source)).toEqual([...WHITEBOARD_ROTATION_FRAMES].reverse());
+    }
   });
 
-  test('skips transitional frames for reduced motion', () => {
-    expect(whiteboardFlipFrames(true, true)).toEqual([]);
-    expect(whiteboardFlipFrames(false, true)).toEqual([]);
+  test('always uses the new paper flip forward between paper faces', () => {
+    for (const [from, to] of [['progression', 'more-variants'], ['more-variants', 'progression']] as const) {
+      const transition = route(from, to);
+      expect(transition.kind).toBe('paper');
+      expect(transition.frames.map((frame) => frame.value.source)).toEqual(PAPER_ROTATION_FRAMES);
+    }
   });
 
-  test('reports exact angular progress for layout interpolation', () => {
-    expect(whiteboardRotationProgress(WHITEBOARD_ROTATION_FRAMES[0]!)).toBe(0);
-    expect(whiteboardRotationProgress(WHITEBOARD_ROTATION_FRAMES[2]!)).toBe(35 / 180);
-    expect(whiteboardRotationProgress(WHITEBOARD_ROTATION_FRAMES[10]!)).toBe(1);
+  test('same-face selection is a no-op and reduced motion skips frames', () => {
+    expect(lobbyFaceTransition('whiteboard', 'whiteboard', false)).toBeNull();
+    expect(lobbyFaceTransition('whiteboard', 'progression', true)?.frames).toEqual([]);
+  });
+
+  test('uses exact angular progress and approximately half-second timing', () => {
+    const transition = route('progression', 'more-variants');
+    expect(transition.frames[0]?.value.progress).toBe(18 / 180);
+    expect(transition.frames.at(-1)?.value.progress).toBe(1);
+    expect(transition.frames.reduce((total, frame) => total + frame.durationMs, 0)).toBe(420);
   });
 });

@@ -22,6 +22,7 @@ import { beats } from '../core/time';
 import { MusicDirector } from '../audio/musicDirector';
 import { destroySoundCatalog } from '../audio/soundCatalog';
 import { LocalAbmMatch } from './localAbmMatch';
+import { randomId } from '../core/randomId';
 import { hasSeenAbmNewsletter, mountAbmLetterModal } from './abmLetterModal';
 import { mountAccountScreen } from './accountScreen';
 import { mountProgressScreen } from './progressScreen';
@@ -63,7 +64,6 @@ export class AppController {
   private variantSelectScreen?: VariantSelectScreen;
   private matchFlowDirector?: MatchFlowDirector;
   private whiteboard: WhiteboardSnapshot = createEmptyWhiteboard();
-  private whiteboardVisible = false;
   private lobbyPlayers: LobbyPlayer[] = [];
   private lobbySelfId = '';
   private terminalCleanup?: () => void;
@@ -274,13 +274,11 @@ export class AppController {
         () => {},
         () => void this.navigate('scoreboard'),
         () => this.openUniversalMenu(),
-        () => void this.navigate('account'),
         (message) => options.session.sendWhiteboard(message),
         options.season.mode === 'multi-variant',
         account.level,
+        account.unlockedClassIds.length,
         account.level === 21 ? 10_000 : account.totalProgressUnits % 10_000,
-        this.whiteboardVisible,
-        (visible) => { this.whiteboardVisible = visible; },
       );
       lobby.receiveWhiteboard({ type: 'snapshot', board: this.whiteboard });
       lobby.updateRoster(this.lobbyPlayers, this.lobbySelfId);
@@ -416,7 +414,15 @@ export class AppController {
       ? scaleContent.firstElementChild
       : this.screenLayer.firstElementChild instanceof HTMLElement ? this.screenLayer.firstElementChild : this.screenLayer;
     this.universalMenu = mountUniversalMenu(scaleContent ?? this.screenLayer, background, this.options.clock,
-      () => void this.quitToTitle(), () => this.closeUniversalMenu(), this.options.session.accountState());
+      () => void this.quitToTitle(), () => this.closeUniversalMenu(), () => {
+        this.closeUniversalMenu();
+        this.setMatchmaking(false);
+        void this.navigate('account');
+      }, async (enabled) => {
+        await this.options.session.setUnlockAllClasses(enabled);
+        this.lobbyScreen?.setUnlockedClassCount(this.options.session.accountState().unlockedClassIds.length);
+      }, this.options.session.accountState(),
+      !this.matchProjection && !this.localMatch);
   }
 
   private openAbmLetter(trigger?: HTMLElement): void {
@@ -452,7 +458,7 @@ export class AppController {
     this.googleSignIn?.abort();
     const controller = new AbortController();
     this.googleSignIn = controller;
-    const nonce = crypto.randomUUID();
+    const nonce = randomId();
     const callbackURL = googlePopupCallbackUrl('success', nonce);
     const errorCallbackURL = googlePopupCallbackUrl('error', nonce);
     try {

@@ -27,4 +27,9 @@ describe('matchmaking queue heartbeat', () => {
     expect(result.ownedElsewhere).toBe(true);
     expect(result.queue).toEqual([original]);
   });
+
+  test('carries unlock-all mode into matchmaking', () => {
+    const result = refreshMatchmakingQueue([], 'self', 'attempt', 'Self', 1500, 4_000, 5_000, 12_000, true);
+    expect(result.queue[0]).toMatchObject({ totalProgressUnits: 12_000, unlockAllClasses: true });
+  });
 });

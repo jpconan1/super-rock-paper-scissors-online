@@ -23,6 +23,8 @@
     "back": "Back",
     "computer": "Play vs Computer",
     "tutorial": "Tutorial",
+    "moreVariants": "More Variants",
+    "progression": "Progression",
     "ready": "Ready to Play",
     "settings": "Settings",
     "scoreboard": "Scoreboard"
@@ -87,17 +89,17 @@
       },
       "layouts": {
         "landscape": {
-          "x": 730,
-          "y": 320,
-          "width": 128,
-          "height": 64,
+          "x": 95,
+          "y": 460,
+          "width": 145,
+          "height": 72.5,
           "aspectLock": true
         },
         "portrait": {
-          "x": 380,
-          "y": 765,
-          "width": 128,
-          "height": 64,
+          "x": 25,
+          "y": 875,
+          "width": 145,
+          "height": 72.5,
           "aspectLock": true
         }
       }
@@ -132,8 +134,8 @@
       "protected": true,
       "layouts": {
         "landscape": {
-          "x": 460,
-          "y": 300,
+          "x": 400,
+          "y": 280,
           "width": 145,
           "height": 40
         },
@@ -155,19 +157,20 @@
       },
       "layouts": {
         "landscape": {
-          "x": 145,
-          "y": 215,
+          "x": 84,
+          "y": 197.09375,
           "width": 72,
           "height": 101.8125,
           "aspectLock": true,
-          "rotation": -90
+          "rotation": -25.238731033098908
         },
         "portrait": {
-          "x": 75,
-          "y": 265,
-          "width": 82,
-          "height": 115.96875,
-          "aspectLock": true
+          "x": 28,
+          "y": 479.75,
+          "width": 64,
+          "height": 90.5,
+          "aspectLock": true,
+          "rotation": -62.90249561592472
         }
       }
     },
@@ -181,19 +184,20 @@
       },
       "layouts": {
         "landscape": {
-          "x": 165,
-          "y": 195,
+          "x": 119.93508389683873,
+          "y": 181.3638852412946,
           "width": 72,
           "height": 101.8125,
           "aspectLock": true,
-          "rotation": -85
+          "rotation": -22.738731033098908
         },
         "portrait": {
-          "x": 190,
-          "y": 265,
-          "width": 82,
-          "height": 115.96875,
-          "aspectLock": true
+          "x": 41.67255576639057,
+          "y": 453.53066326515983,
+          "width": 64,
+          "height": 90.5,
+          "aspectLock": true,
+          "rotation": -60.102495615924724
         }
       },
       "visible": true
@@ -208,19 +212,20 @@
       },
       "layouts": {
         "landscape": {
-          "x": 180,
-          "y": 170,
+          "x": 155.87700106769444,
+          "y": 167.27400624666345,
           "width": 72,
           "height": 101.8125,
           "aspectLock": true,
-          "rotation": -80
+          "rotation": -20.238731033098908
         },
         "portrait": {
-          "x": 305,
-          "y": 265,
-          "width": 82,
-          "height": 115.96875,
-          "aspectLock": true
+          "x": 56.16905303105581,
+          "y": 428.49230934451333,
+          "width": 64,
+          "height": 90.5,
+          "aspectLock": true,
+          "rotation": -57.30249561592473
         }
       }
     },
@@ -234,19 +239,20 @@
       },
       "layouts": {
         "landscape": {
-          "x": 200,
-          "y": 150,
+          "x": 191.8257515125671,
+          "y": 154.82411301610657,
           "width": 72,
           "height": 101.8125,
           "aspectLock": true,
-          "rotation": -75
+          "rotation": -17.738731033098908
         },
         "portrait": {
-          "x": 420,
-          "y": 265,
-          "width": 82,
-          "height": 115.96875,
-          "aspectLock": true
+          "x": 71.48949179399574,
+          "y": 404.63493823806056,
+          "width": 64,
+          "height": 90.5,
+          "aspectLock": true,
+          "rotation": -54.502495615924715
         }
       }
     },
@@ -260,19 +266,20 @@
       },
       "layouts": {
         "landscape": {
-          "x": 250,
-          "y": 130,
+          "x": 227.78133523145675,
+          "y": 144.0142055496239,
           "width": 72,
           "height": 101.8125,
           "aspectLock": true,
-          "rotation": -65
+          "rotation": -15.238731033098908
         },
         "portrait": {
-          "x": 75,
-          "y": 420,
-          "width": 82,
-          "height": 115.96875,
-          "aspectLock": true
+          "x": 87.63387205521033,
+          "y": 381.95854994580145,
+          "width": 64,
+          "height": 90.5,
+          "aspectLock": true,
+          "rotation": -51.70249561592472
         }
       }
     },
@@ -286,19 +293,20 @@
       },
       "layouts": {
         "landscape": {
-          "x": 225,
-          "y": 140,
+          "x": 263.7437522243634,
+          "y": 134.84428384721554,
           "width": 72,
           "height": 101.8125,
           "aspectLock": true,
-          "rotation": -70
+          "rotation": -12.738731033098908
         },
         "portrait": {
-          "x": 190,
-          "y": 420,
-          "width": 82,
-          "height": 115.96875,
-          "aspectLock": true
+          "x": 104.6021938146996,
+          "y": 360.46314446773613,
+          "width": 64,
+          "height": 90.5,
+          "aspectLock": true,
+          "rotation": -48.90249561592472
         }
       }
     },
@@ -312,19 +320,20 @@
       },
       "layouts": {
         "landscape": {
-          "x": 275,
-          "y": 120,
+          "x": 299.713002491287,
+          "y": 127.31434790888142,
           "width": 72,
           "height": 101.8125,
           "aspectLock": true,
-          "rotation": -60
+          "rotation": -10.238731033098908
         },
         "portrait": {
-          "x": 305,
-          "y": 420,
-          "width": 82,
-          "height": 115.96875,
-          "aspectLock": true
+          "x": 122.39445707246355,
+          "y": 340.1487218038644,
+          "width": 64,
+          "height": 90.5,
+          "aspectLock": true,
+          "rotation": -46.102495615924724
         }
       }
     },
@@ -338,18 +347,20 @@
       },
       "layouts": {
         "landscape": {
-          "x": 665,
-          "y": 165,
+          "x": 335.6890860322276,
+          "y": 121.4243977346215,
           "width": 72,
           "height": 101.8125,
-          "aspectLock": true
+          "aspectLock": true,
+          "rotation": -7.73873103309891
         },
         "portrait": {
-          "x": 420,
-          "y": 420,
-          "width": 82,
-          "height": 115.96875,
-          "aspectLock": true
+          "x": 141.01066182850218,
+          "y": 321.0152819541865,
+          "width": 64,
+          "height": 90.5,
+          "aspectLock": true,
+          "rotation": -43.30249561592473
         }
       }
     },
@@ -363,18 +374,20 @@
       },
       "layouts": {
         "landscape": {
-          "x": 630,
-          "y": 120,
+          "x": 371.6720028471851,
+          "y": 117.17443332443588,
           "width": 72,
           "height": 101.8125,
-          "aspectLock": true
+          "aspectLock": true,
+          "rotation": -5.238731033098908
         },
         "portrait": {
-          "x": 75,
-          "y": 480,
-          "width": 82,
-          "height": 115.96875,
-          "aspectLock": true
+          "x": 160.45080808281548,
+          "y": 303.06282491870223,
+          "width": 64,
+          "height": 90.5,
+          "aspectLock": true,
+          "rotation": -40.50249561592472
         }
       }
     },
@@ -388,18 +401,20 @@
       },
       "layouts": {
         "landscape": {
-          "x": 605,
-          "y": 105,
+          "x": 407.6617529361597,
+          "y": 114.56445467832452,
           "width": 72,
           "height": 101.8125,
-          "aspectLock": true
+          "aspectLock": true,
+          "rotation": -2.738731033098908
         },
         "portrait": {
-          "x": 105,
-          "y": 480,
-          "width": 82,
-          "height": 115.96875,
-          "aspectLock": true
+          "x": 180.71489583540347,
+          "y": 286.29135069741164,
+          "width": 64,
+          "height": 90.5,
+          "aspectLock": true,
+          "rotation": -37.70249561592472
         }
       }
     },
@@ -413,19 +428,20 @@
       },
       "layouts": {
         "landscape": {
-          "x": 530,
-          "y": 110,
+          "x": 443.6583362991512,
+          "y": 113.59446179628736,
           "width": 72,
           "height": 101.8125,
           "aspectLock": true,
-          "rotation": -5
+          "rotation": -0.23873103309890856
         },
         "portrait": {
-          "x": 135,
-          "y": 480,
-          "width": 82,
-          "height": 115.96875,
-          "aspectLock": true
+          "x": 201.80292508626616,
+          "y": 270.70085929031484,
+          "width": 64,
+          "height": 90.5,
+          "aspectLock": true,
+          "rotation": -34.90249561592472
         }
       }
     },
@@ -439,19 +455,20 @@
       },
       "layouts": {
         "landscape": {
-          "x": 515,
-          "y": 120,
+          "x": 479.6617529361597,
+          "y": 114.26445467832451,
           "width": 72,
           "height": 101.8125,
           "aspectLock": true,
-          "rotation": -10
+          "rotation": 2.2612689669010937
         },
         "portrait": {
-          "x": 165,
-          "y": 480,
-          "width": 82,
-          "height": 115.96875,
-          "aspectLock": true
+          "x": 223.71489583540347,
+          "y": 256.29135069741164,
+          "width": 64,
+          "height": 90.5,
+          "aspectLock": true,
+          "rotation": -32.10249561592472
         }
       }
     },
@@ -465,19 +482,20 @@
       },
       "layouts": {
         "landscape": {
-          "x": 490,
-          "y": 120,
+          "x": 515.6720028471851,
+          "y": 116.57443332443586,
           "width": 72,
           "height": 101.8125,
           "aspectLock": true,
-          "rotation": -15
+          "rotation": 4.76126896690109
         },
         "portrait": {
-          "x": 195,
-          "y": 480,
-          "width": 82,
-          "height": 115.96875,
-          "aspectLock": true
+          "x": 246.4508080828155,
+          "y": 243.06282491870223,
+          "width": 64,
+          "height": 90.5,
+          "aspectLock": true,
+          "rotation": -29.302495615924723
         }
       }
     },
@@ -491,19 +509,20 @@
       },
       "layouts": {
         "landscape": {
-          "x": 460,
-          "y": 130,
+          "x": 551.6890860322276,
+          "y": 120.52439773462152,
           "width": 72,
           "height": 101.8125,
           "aspectLock": true,
-          "rotation": -20
+          "rotation": 7.261268966901092
         },
         "portrait": {
-          "x": 225,
-          "y": 480,
-          "width": 82,
-          "height": 115.96875,
-          "aspectLock": true
+          "x": 270.0106618285022,
+          "y": 231.0152819541865,
+          "width": 64,
+          "height": 90.5,
+          "aspectLock": true,
+          "rotation": -26.50249561592472
         }
       }
     },
@@ -517,19 +536,20 @@
       },
       "layouts": {
         "landscape": {
-          "x": 435,
-          "y": 120,
+          "x": 587.713002491287,
+          "y": 126.1143479088814,
           "width": 72,
           "height": 101.8125,
           "aspectLock": true,
-          "rotation": -25
+          "rotation": 9.76126896690109
         },
         "portrait": {
-          "x": 255,
-          "y": 480,
-          "width": 82,
-          "height": 115.96875,
-          "aspectLock": true
+          "x": 294.3944570724636,
+          "y": 220.14872180386442,
+          "width": 64,
+          "height": 90.5,
+          "aspectLock": true,
+          "rotation": -23.702495615924725
         }
       }
     },
@@ -543,19 +563,20 @@
       },
       "layouts": {
         "landscape": {
-          "x": 390,
-          "y": 110,
+          "x": 623.7437522243634,
+          "y": 133.34428384721554,
           "width": 72,
           "height": 101.8125,
           "aspectLock": true,
-          "rotation": -35
+          "rotation": 12.261268966901092
         },
         "portrait": {
-          "x": 285,
-          "y": 480,
-          "width": 82,
-          "height": 115.96875,
-          "aspectLock": true
+          "x": 319.6021938146996,
+          "y": 210.4631444677361,
+          "width": 64,
+          "height": 90.5,
+          "aspectLock": true,
+          "rotation": -20.90249561592472
         }
       }
     },
@@ -569,19 +590,20 @@
       },
       "layouts": {
         "landscape": {
-          "x": 370,
-          "y": 110,
+          "x": 659.7813352314568,
+          "y": 142.21420554962393,
           "width": 72,
           "height": 101.8125,
           "aspectLock": true,
-          "rotation": -40
+          "rotation": 14.761268966901094
         },
         "portrait": {
-          "x": 315,
-          "y": 480,
-          "width": 82,
-          "height": 115.96875,
-          "aspectLock": true
+          "x": 345.63387205521036,
+          "y": 201.95854994580148,
+          "width": 64,
+          "height": 90.5,
+          "aspectLock": true,
+          "rotation": -18.102495615924717
         }
       }
     },
@@ -595,19 +617,20 @@
       },
       "layouts": {
         "landscape": {
-          "x": 350,
-          "y": 110,
+          "x": 695.8257515125671,
+          "y": 152.72411301610654,
           "width": 72,
           "height": 101.8125,
           "aspectLock": true,
-          "rotation": -45
+          "rotation": 17.261268966901092
         },
         "portrait": {
-          "x": 345,
-          "y": 480,
-          "width": 82,
-          "height": 115.96875,
-          "aspectLock": true
+          "x": 372.48949179399574,
+          "y": 194.63493823806056,
+          "width": 64,
+          "height": 90.5,
+          "aspectLock": true,
+          "rotation": -15.302495615924723
         }
       }
     },
@@ -621,19 +644,20 @@
       },
       "layouts": {
         "landscape": {
-          "x": 410,
-          "y": 115,
+          "x": 731.8770010676944,
+          "y": 164.87400624666347,
           "width": 72,
           "height": 101.8125,
           "aspectLock": true,
-          "rotation": -30
+          "rotation": 19.761268966901092
         },
         "portrait": {
-          "x": 375,
-          "y": 480,
-          "width": 82,
-          "height": 115.96875,
-          "aspectLock": true
+          "x": 400.1690530310558,
+          "y": 188.49230934451333,
+          "width": 64,
+          "height": 90.5,
+          "aspectLock": true,
+          "rotation": -12.502495615924719
         }
       }
     },
@@ -647,19 +671,20 @@
       },
       "layouts": {
         "landscape": {
-          "x": 325,
-          "y": 115,
+          "x": 767.9350838968387,
+          "y": 178.6638852412946,
           "width": 72,
           "height": 101.8125,
           "aspectLock": true,
-          "rotation": -50
+          "rotation": 22.26126896690109
         },
         "portrait": {
-          "x": 405,
-          "y": 480,
-          "width": 82,
-          "height": 115.96875,
-          "aspectLock": true
+          "x": 428.6725557663906,
+          "y": 183.5306632651598,
+          "width": 64,
+          "height": 90.5,
+          "aspectLock": true,
+          "rotation": -9.702495615924725
         }
       }
     },
@@ -673,19 +698,20 @@
       },
       "layouts": {
         "landscape": {
-          "x": 300,
-          "y": 115,
+          "x": 804,
+          "y": 194.09375,
           "width": 72,
           "height": 101.8125,
           "aspectLock": true,
-          "rotation": -55
+          "rotation": 24.761268966901092
         },
         "portrait": {
-          "x": 435,
-          "y": 480,
-          "width": 82,
-          "height": 115.96875,
-          "aspectLock": true
+          "x": 458,
+          "y": 179.75,
+          "width": 64,
+          "height": 90.5,
+          "aspectLock": true,
+          "rotation": -6.902495615924721
         }
       }
     },
@@ -720,7 +746,7 @@
       "layouts": {
         "landscape": {
           "x": 245,
-          "y": 305,
+          "y": 290,
           "width": 340,
           "height": 170,
           "aspectLock": true
@@ -979,14 +1005,14 @@
       "layouts": {
         "landscape": {
           "x": 715,
-          "y": 385,
+          "y": 380,
           "width": 165,
           "height": 82.5,
           "aspectLock": true
         },
         "portrait": {
-          "x": 365,
-          "y": 690,
+          "x": 360,
+          "y": 710,
           "width": 165,
           "height": 82.5,
           "aspectLock": true
@@ -1029,16 +1055,17 @@
       },
       "layouts": {
         "landscape": {
-          "x": 250,
+          "x": 565,
           "y": 460,
-          "width": 148,
-          "height": 74
+          "width": 145,
+          "height": 72.5,
+          "aspectLock": true
         },
         "portrait": {
-          "x": 50,
-          "y": 830,
-          "width": 210,
-          "height": 105,
+          "x": 25,
+          "y": 795,
+          "width": 145,
+          "height": 72.5,
           "aspectLock": true
         }
       }
@@ -1054,19 +1081,72 @@
       },
       "layouts": {
         "landscape": {
-          "x": 495,
+          "x": 255,
           "y": 460,
-          "width": 148,
-          "height": 74
+          "width": 145,
+          "height": 72.5,
+          "aspectLock": true
         },
         "portrait": {
-          "x": 275,
-          "y": 760,
-          "width": 148,
-          "height": 74
+          "x": 25,
+          "y": 715,
+          "width": 145,
+          "height": 72.5,
+          "aspectLock": true
         }
+      }
+    },
+    {
+      "id": "more-variants",
+      "type": "button",
+      "protected": true,
+      "assets": {
+        "up": "/interactive-elements/menu-buttons/more-variants-button-up-sheet.webp",
+        "between": "/interactive-elements/menu-buttons/more-variants-button-between-sheet.webp",
+        "depressed": "/interactive-elements/menu-buttons/more-variants-button-depressed-sheet.webp"
       },
-      "visible": false
+      "layouts": {
+        "landscape": {
+          "x": 95,
+          "y": 300,
+          "width": 145,
+          "height": 72.5,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 370,
+          "y": 880,
+          "width": 145,
+          "height": 72.5,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "progression",
+      "type": "button",
+      "protected": true,
+      "assets": {
+        "up": "/interactive-elements/menu-buttons/progression-button-up-sheet.webp",
+        "between": "/interactive-elements/menu-buttons/progression-button-between-sheet.webp",
+        "depressed": "/interactive-elements/menu-buttons/progression-button-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 95,
+          "y": 380,
+          "width": 145,
+          "height": 72.5,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 195,
+          "y": 880,
+          "width": 145,
+          "height": 72.5,
+          "aspectLock": true
+        }
+      }
     },
     {
       "id": "ready",
@@ -1079,16 +1159,17 @@
       },
       "layouts": {
         "landscape": {
-          "x": 405,
+          "x": 410,
           "y": 460,
-          "width": 148,
-          "height": 74
+          "width": 145,
+          "height": 72.5,
+          "aspectLock": true
         },
         "portrait": {
-          "x": 310,
-          "y": 830,
-          "width": 210,
-          "height": 105,
+          "x": 195,
+          "y": 795,
+          "width": 155,
+          "height": 77.5,
           "aspectLock": true
         }
       }
@@ -1104,41 +1185,18 @@
       },
       "layouts": {
         "landscape": {
-          "x": 555,
+          "x": 725,
           "y": 460,
-          "width": 148,
-          "height": 74
+          "width": 145,
+          "height": 72.5,
+          "aspectLock": true
         },
         "portrait": {
-          "x": 35,
-          "y": 700,
-          "width": 148,
-          "height": 74
-        }
-      }
-    },
-    {
-      "id": "account",
-      "type": "button",
-      "layer": 22,
-      "protected": true,
-      "assets": {
-        "up": "/account/account-button-up-sheet.webp",
-        "between": "/account/account-button-between-sheet.webp",
-        "depressed": "/account/account-button-depressed-sheet.webp"
-      },
-      "layouts": {
-        "landscape": {
-          "x": 715,
-          "y": 460,
-          "width": 148,
-          "height": 74
-        },
-        "portrait": {
-          "x": 196,
-          "y": 700,
-          "width": 148,
-          "height": 74
+          "x": 370,
+          "y": 795,
+          "width": 145,
+          "height": 72.5,
+          "aspectLock": true
         }
       }
     },
@@ -1149,14 +1207,14 @@
       "protected": true,
       "layouts": {
         "landscape": {
-          "x": 714,
-          "y": 92,
+          "x": 725,
+          "y": 85,
           "width": 230,
           "height": 372
         },
         "portrait": {
-          "x": 215,
-          "y": 230,
+          "x": 210,
+          "y": 320,
           "width": 290,
           "height": 460
         }

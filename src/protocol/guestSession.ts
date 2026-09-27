@@ -18,6 +18,7 @@ export interface GuestProfile extends PlayerProgression {
   playerId: string;
   displayName: string;
   rating: number;
+  unlockAllClasses: boolean;
 }
 
 export interface GuestSessionResponse extends GuestProfile {
@@ -34,15 +35,16 @@ export function isGuestSessionResponse(value: unknown): value is GuestSessionRes
     && ensureProgression(candidate);
 }
 
-export function guestProfile(playerId: string, displayName: string, rating: number, totalProgressUnits = 0): GuestProfile {
-  return { playerId, displayName, rating, ...progressionForTotal(totalProgressUnits) };
+export function guestProfile(playerId: string, displayName: string, rating: number, totalProgressUnits = 0, unlockAllClasses = false): GuestProfile {
+  return { playerId, displayName, rating, unlockAllClasses, ...progressionForTotal(totalProgressUnits) };
 }
 
 function ensureProgression(candidate: Partial<GuestProfile>): boolean {
   if (candidate.totalProgressUnits === undefined) Object.assign(candidate, progressionForTotal(0));
+  candidate.unlockAllClasses ??= false;
   if (!Number.isSafeInteger(candidate.totalProgressUnits) || (candidate.totalProgressUnits ?? -1) < 0) return false;
   const expected = progressionForTotal(candidate.totalProgressUnits!);
-  return candidate.level === expected.level && candidate.progressUnitsInLevel === expected.progressUnitsInLevel
+  return typeof candidate.unlockAllClasses === 'boolean' && candidate.level === expected.level && candidate.progressUnitsInLevel === expected.progressUnitsInLevel
     && candidate.nextUnlock === expected.nextUnlock && Array.isArray(candidate.unlockedClassIds)
     && candidate.unlockedClassIds.length === expected.unlockedClassIds.length
     && candidate.unlockedClassIds.every((id, index) => id === expected.unlockedClassIds[index]);

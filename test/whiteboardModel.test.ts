@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import { WhiteboardModel } from '../src/whiteboard/model';
-import { createEmptyWhiteboard, pruneWhiteboardOperationPrefix, type WhiteboardOperation } from '../src/whiteboard/protocol';
+import {
+  createEmptyWhiteboard, pruneWhiteboardOperationPrefix, shouldPruneWhiteboardOperations, type WhiteboardOperation,
+} from '../src/whiteboard/protocol';
 
 const stroke = (id: string, clientOperationId?: string): WhiteboardOperation => ({
   kind: 'stroke', id, sequence: 1, clientOperationId, color: 'red', width: 5,
@@ -8,6 +10,10 @@ const stroke = (id: string, clientOperationId?: string): WhiteboardOperation => 
 });
 
 describe('WhiteboardModel', () => {
+  test('creates a board with ten-times-deeper retained history', () => {
+    expect(createEmptyWhiteboard().maxHeight).toBe(15_750);
+  });
+
   test('models own independent operation arrays', () => {
     const first = new WhiteboardModel(); const second = new WhiteboardModel();
     first.append(stroke('one'));
@@ -48,15 +54,21 @@ describe('WhiteboardModel', () => {
     expect(model.snapshot().operations.map((operation) => operation.id)).toEqual(['new', 'local']);
   });
 
-  test('capacity pruning removes the oldest 200-operation batch without retaining old erasers', () => {
-    const operations = Array.from({ length: 800 }, (_, index): WhiteboardOperation => index === 199
-      ? { kind: 'erase', id: 'old-erase', sequence: 200, width: 120, points: [{ x: 1, y: 1 }, { x: 2, y: 2 }] }
+  test('capacity pruning removes the oldest 500-operation batch without retaining old erasers', () => {
+    const operations = Array.from({ length: 2_000 }, (_, index): WhiteboardOperation => index === 499
+      ? { kind: 'erase', id: 'old-erase', sequence: 500, width: 120, points: [{ x: 1, y: 1 }, { x: 2, y: 2 }] }
       : { ...stroke(`operation-${index + 1}`), sequence: index + 1 });
-    const result = pruneWhiteboardOperationPrefix(operations, 800, 200);
-    expect(result.throughSequence).toBe(200);
-    expect(result.removed).toHaveLength(200);
-    expect(result.retained).toHaveLength(600);
-    expect(result.retained[0]?.sequence).toBe(201);
+    const result = pruneWhiteboardOperationPrefix(operations, 2_000, 500);
+    expect(result.throughSequence).toBe(500);
+    expect(result.removed).toHaveLength(500);
+    expect(result.retained).toHaveLength(1_500);
+    expect(result.retained[0]?.sequence).toBe(501);
     expect(result.retained.some((operation) => operation.kind === 'erase')).toBe(false);
+  });
+
+  test('requests pruning before a new operation exceeds the snapshot byte budget', () => {
+    expect(shouldPruneWhiteboardOperations(300, 2_600_000, 30_000, 2_000, 2.5 * 1024 * 1024)).toBe(true);
+    expect(shouldPruneWhiteboardOperations(300, 2_000_000, 30_000, 2_000, 2.5 * 1024 * 1024)).toBe(false);
+    expect(shouldPruneWhiteboardOperations(2_000, 1_000, 1_000, 2_000, 2.5 * 1024 * 1024)).toBe(true);
   });
 });

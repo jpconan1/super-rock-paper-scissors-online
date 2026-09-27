@@ -19,8 +19,12 @@ import { ABM_CLASSES } from '../variants/attackBlockMana/attackBlockManaCatalog'
 import { ABM_CLASS_IDS, type AbmClassId } from '../variants/attackBlockMana/attackBlockManaTypes';
 import { AnimationPlayer } from '../animation/animationPlayer';
 import { assetLoader } from '../assets/assetLoader';
-import { WHITEBOARD_ROTATION_FRAMES, whiteboardFlipFrames, whiteboardRotationProgress } from '../whiteboard/flipAnimation';
+import {
+  lobbyFaceTransition, PAPER_ROTATION_FRAMES, WHITEBOARD_ROTATION_FRAMES,
+  type LobbyFace, type LobbyFlipFrame,
+} from '../whiteboard/flipAnimation';
 import { mountClassCardDrag, type ClassCardDragController } from '../lobby/classCardDrag';
+import { randomId } from '../core/randomId';
 
 export type ScreenCleanup = () => void;
 export type LobbyScreenMount = ScreenCleanup & {
@@ -28,6 +32,7 @@ export type LobbyScreenMount = ScreenCleanup & {
   setMatchmaking(active: boolean): void;
   receiveWhiteboard(message: WhiteboardServerMessage): void;
   updateRoster(players: LobbyPlayer[], selfId: string): void;
+  setUnlockedClassCount(count: number): void;
 };
 
 export interface LobbyClassCardDefinition {
@@ -102,14 +107,14 @@ export function mountLobbyScreen(
   onTutorial: () => void,
   onScoreboard: () => void,
   onSettings: () => void,
-  onAccount: () => void,
   sendWhiteboard: (message: WhiteboardClientMessage) => void,
   multiVariantFlow = true,
   playerLevel = 1,
+  unlockedClassCount = playerLevel,
   progressUnitsInLevel = 0,
-  whiteboardInitiallyVisible = false,
-  onWhiteboardVisibilityChange: (visible: boolean) => void = () => {},
+  faceOptions: { initialFace?: LobbyFace } = {},
 ): LobbyScreenMount {
+  const initialFace = faceOptions.initialFace ?? 'whiteboard';
   const layoutDocument = getLayoutDocument('lobby');
   let layoutName: 'landscape' | 'portrait' = 'landscape';
   let classCardDrag: ClassCardDragController | undefined;
@@ -123,6 +128,17 @@ export function mountLobbyScreen(
     classCardDrag?.reset();
   });
   const composition = canvas.composition;
+  const faceLayers = new Map<LobbyFace, HTMLDivElement>(
+    (['whiteboard', 'progression', 'more-variants'] as const).map((face) => {
+      const layer = document.createElement('div');
+      layer.className = 'lobby-screen__face';
+      layer.dataset.face = face;
+      layer.hidden = true;
+      return [face, layer];
+    }),
+  );
+  const whiteboardFace = faceLayers.get('whiteboard')!;
+  const progressionFace = faceLayers.get('progression')!;
   const sprites: ReturnType<typeof createBoilingSprite>[] = [];
   const gameButtons: GameButton[] = [];
   const gameButtonByElement = new Map<HTMLElement, GameButton>();
@@ -156,11 +172,14 @@ export function mountLobbyScreen(
   const progressCopy = document.createElement('span'); progressCopy.className = 'lobby-screen__progress-copy'; progressCopy.textContent = `${progressUnitsInLevel.toLocaleString()} / 10,000 XP`;
   const nextClass = ABM_CLASSES[playerLevel];
   const nextUnlock = document.createElement('small'); nextUnlock.className = 'lobby-screen__progress-next'; nextUnlock.textContent = nextClass ? `Next class: ${nextClass.name}` : 'All classes unlocked';
-  const classCards = lobbyClassCardDefinitions(playerLevel).map((definition) => {
+  const classCards = lobbyClassCardDefinitions(unlockedClassCount).map((definition) => {
     const item = lobbyElement(definition.id);
+    const cardSprite = createBoilingSprite({ src: definition.asset, className: 'lobby-screen__class-card', alt: item.label ?? '', clock });
+    sprites.push(cardSprite);
     return {
       id: definition.id,
-      element: sprite(definition.asset, 'lobby-screen__class-card', item.label ?? ''),
+      sprite: cardSprite,
+      element: cardSprite.element,
     };
   });
   const progressElements = [playerNameDisplay, playerLevelDisplay, progressBar, progressCopy, nextUnlock, ...classCards.map((item) => item.element)];
@@ -181,7 +200,11 @@ export function mountLobbyScreen(
   const flip = document.createElement('div');
   flip.className = 'lobby-screen__whiteboard-flip';
   flip.hidden = true;
-  flip.append(flipArt);
+  const paperFlip = createBoilingSprite({
+    src: PAPER_ROTATION_FRAMES[0]!, clock, className: 'lobby-screen__paper-flip-art', alt: '',
+  });
+  paperFlip.element.hidden = true;
+  flip.append(flipArt, paperFlip.element);
   const toolButtons = new Map<'black' | 'red' | 'blue' | 'purple' | 'green' | 'erase', HTMLButtonElement>();
   const tools = ['black-marker', 'red-marker', 'blue-marker', 'purple-marker', 'green-marker', 'eraser'].map((id) => {
     const name = (id === 'eraser' ? 'erase' : id.replace('-marker', '')) as 'black' | 'red' | 'blue' | 'purple' | 'green' | 'erase';
@@ -203,21 +226,31 @@ export function mountLobbyScreen(
   chatEntry.element.classList.add('lobby-screen__chat-input');
   const chatButton = menuButton('Chat', 'chat-button', 'lobby-screen__chat-button');
   chat.append(chatEntry.element, chatButton);
-  let revealWhiteboard!: GameButton;
-  revealWhiteboard = createGameButton({
-    label: 'Show whiteboard',
-    onActivate: () => { void setWhiteboardVisible(!whiteboardVisible); },
-    upSheet: '/lobby/whiteboard-button-up-sheet.webp',
-    betweenSheet: '/lobby/whiteboard-button-between-sheet.webp',
-    depressedSheet: '/lobby/whiteboard-button-depressed-sheet.webp',
-    lockedDepressed: whiteboardInitiallyVisible,
-    interactiveWhenLockedDepressed: true,
-    activateAtReleaseStart: true,
-    clock,
-  });
-  revealWhiteboard.element.classList.add('lobby-screen__whiteboard-button', 'game-button--baked-label');
-  gameButtons.push(revealWhiteboard);
-  gameButtonByElement.set(revealWhiteboard.element, revealWhiteboard);
+  const faceButtons = new Map<LobbyFace, GameButton>();
+  const faceButton = (face: LobbyFace, label: string, sheets: { up: string; between: string; depressed: string }, className: string) => {
+    const button = createGameButton({
+      label, onActivate: () => { void setLobbyFace(face); },
+      upSheet: sheets.up, betweenSheet: sheets.between, depressedSheet: sheets.depressed,
+      lockedDepressed: face === initialFace, activateAtReleaseStart: true, clock,
+    });
+    button.element.classList.add(className, 'game-button--baked-label');
+    gameButtons.push(button); gameButtonByElement.set(button.element, button); faceButtons.set(face, button);
+    return button;
+  };
+  const whiteboardFaceButton = faceButton('whiteboard', 'Whiteboard', {
+    up: '/lobby/whiteboard-button-up-sheet.webp', between: '/lobby/whiteboard-button-between-sheet.webp',
+    depressed: '/lobby/whiteboard-button-depressed-sheet.webp',
+  }, 'lobby-screen__whiteboard-button');
+  const progressionFaceButton = faceButton('progression', 'Progression', {
+    up: '/interactive-elements/menu-buttons/progression-button-up-sheet.webp',
+    between: '/interactive-elements/menu-buttons/progression-button-between-sheet.webp',
+    depressed: '/interactive-elements/menu-buttons/progression-button-depressed-sheet.webp',
+  }, 'lobby-screen__action');
+  const moreVariantsFaceButton = faceButton('more-variants', 'More Variants', {
+    up: '/interactive-elements/menu-buttons/more-variants-button-up-sheet.webp',
+    between: '/interactive-elements/menu-buttons/more-variants-button-between-sheet.webp',
+    depressed: '/interactive-elements/menu-buttons/more-variants-button-depressed-sheet.webp',
+  }, 'lobby-screen__action');
   const roster = document.createElement('aside');
   roster.className = 'textbox lobby-screen__roster';
   roster.hidden = true;
@@ -257,20 +290,20 @@ export function mountLobbyScreen(
     { id: 'tutorial', element: menuButton('Tutorial', 'tutorial-button', 'lobby-screen__action', leaveQueue(onTutorial)) },
     { id: 'ready', element: matchmakingToggle.element },
     { id: 'settings', element: menuButton('Settings', 'settings-button', 'lobby-screen__action', onSettings) },
-    { id: 'account', element: (() => {
-      const item = createGameButton({ label: 'Account settings', onActivate: leaveQueue(onAccount), upSheet: lobbyElement('account').assets!.up!, betweenSheet: lobbyElement('account').assets!.between!, depressedSheet: lobbyElement('account').assets!.depressed!, clock });
-      item.element.classList.add('lobby-screen__action', 'game-button--baked-label'); gameButtons.push(item); gameButtonByElement.set(item.element, item); return item.element;
-    })() },
   ];
   const scoreboard = multiVariantFlow ? action('Scoreboard', leaveQueue(onScoreboard)) : undefined;
   scoreboard?.classList.add('lobby-screen__scoreboard-preview');
-  composition.append(header, ...progressElements, whiteboard, flip, revealWhiteboard.element, ...tools.map((item) => item.element), chat,
+  progressionFace.append(...progressElements);
+  whiteboardFace.append(whiteboard, ...tools.map((item) => item.element), chat);
+  composition.append(header, ...faceLayers.values(), flip, whiteboardFaceButton.element,
+    progressionFaceButton.element, moreVariantsFaceButton.element,
     ...actions.map((item) => item.element), roster, ...(scoreboard ? [scoreboard] : []), curtainLeft, curtainRight);
   composition.append(rosterToggle.element);
   layoutBindings.push(
     { id: 'header', element: header }, { id: 'player-name', element: playerNameDisplay }, { id: 'player-level', element: playerLevelDisplay },
     { id: 'xp-bar', element: progressBar }, { id: 'xp-count', element: progressCopy }, { id: 'next-unlock', element: nextUnlock }, ...classCards, { id: 'whiteboard', element: whiteboard },
-    { id: 'whiteboard-blank-face', element: flip }, { id: 'whiteboard-button', element: revealWhiteboard.element }, ...tools,
+    { id: 'whiteboard-blank-face', element: flip }, { id: 'whiteboard-button', element: whiteboardFaceButton.element },
+    { id: 'progression', element: progressionFaceButton.element }, { id: 'more-variants', element: moreVariantsFaceButton.element }, ...tools,
     { id: 'chat-input', element: chatEntry.element }, { id: 'chat-button', element: chatButton },
     { id: 'roster-toggle', element: rosterToggle.element }, ...actions, { id: 'roster', element: roster },
     ...(scoreboard ? [{ id: 'scoreboard-preview', element: scoreboard }] : []), { id: 'curtain-left', element: curtainLeft },
@@ -280,13 +313,13 @@ export function mountLobbyScreen(
   classCardDrag = mountClassCardDrag(classCards.map((item) => ({
     element: item.element,
     geometry: () => lobbyElement(item.id).layouts[layoutName],
-  })), composition, () => layoutDocument.canvases[layoutName]);
+  })), progressionFace, () => layoutDocument.canvases[layoutName]);
   container.replaceChildren(screen);
   const whiteboardController = mountWhiteboard({
-    board: whiteboard, composition, toolButtons, clock,
+    board: whiteboard, composition: whiteboardFace, toolButtons, clock,
     isPortrait: () => layoutName === 'portrait', send: sendWhiteboard,
   });
-  const rotationLease = assetLoader.retainUrls(WHITEBOARD_ROTATION_FRAMES);
+  const rotationLease = assetLoader.retainUrls([...WHITEBOARD_ROTATION_FRAMES, ...PAPER_ROTATION_FRAMES]);
   const progressEmpty = new Image(); progressEmpty.src = '/visual-elements/progress-bar-empty-sheet.webp';
   const progressFull = new Image(); progressFull.src = '/visual-elements/progress-bar-full-sheet.webp';
   const drawProgress = (frame: 0 | 1 | 2) => {
@@ -300,11 +333,18 @@ export function mountLobbyScreen(
   };
   progressEmpty.addEventListener('load', () => drawProgress(0)); progressFull.addEventListener('load', () => drawProgress(0));
   const unsubscribeProgress = clock.subscribe(drawProgress);
-  const flipPlayer = new AnimationPlayer<string>({ commit: (source) => {
-    flipArt.src = source;
-    const progress = whiteboardRotationProgress(source);
+  let paperFlipSource = PAPER_ROTATION_FRAMES[0]!;
+  const flipPlayer = new AnimationPlayer<LobbyFlipFrame>({ commit: (frame) => {
+    const paper = frame.kind === 'paper';
+    flipArt.hidden = paper;
+    paperFlip.element.hidden = !paper;
+    if (paper) {
+      if (paperFlipSource !== frame.source) paperFlip.setSource(frame.source);
+      paperFlipSource = frame.source;
+    } else flipArt.src = frame.source;
     const face = lobbyElement('whiteboard').layouts[layoutName];
     const blank = lobbyElement('whiteboard-blank-face').layouts[layoutName];
+    const progress = paper ? 1 : frame.progress;
     applyLayoutGeometry(flip, {
       x: face.x + (blank.x - face.x) * progress,
       y: face.y + (blank.y - face.y) * progress,
@@ -314,50 +354,46 @@ export function mountLobbyScreen(
     });
   } });
   const reducedMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
-  let whiteboardVisible = whiteboardInitiallyVisible;
-  let animatingWhiteboard = false;
+  let activeFace: LobbyFace = initialFace;
+  let animatingFace = false;
   let connected = true;
   let destroyed = false;
 
-  function applyWhiteboardState(): void {
-    const showLiveBoard = whiteboardVisible && !animatingWhiteboard;
-    whiteboard.hidden = !showLiveBoard;
-    for (const item of tools) item.element.hidden = !showLiveBoard;
-    chatEntry.element.hidden = !showLiveBoard;
-    chatButton.hidden = !showLiveBoard;
-    revealWhiteboard.element.hidden = false;
-    revealWhiteboard.element.setAttribute('aria-label', whiteboardVisible ? 'Hide whiteboard' : 'Show whiteboard');
-    for (const element of progressElements) element.hidden = whiteboardVisible || animatingWhiteboard;
-    classCardDrag?.setEnabled(!whiteboardVisible && !animatingWhiteboard);
-    flip.hidden = !animatingWhiteboard;
+  function applyFaceState(): void {
+    const showLiveBoard = activeFace === 'whiteboard' && !animatingFace;
+    const showProgression = activeFace === 'progression' && !animatingFace;
+    for (const [face, layer] of faceLayers) layer.hidden = animatingFace || face !== activeFace;
+    classCardDrag?.setEnabled(showProgression);
+    flip.hidden = !animatingFace;
     whiteboardController.setEnabled(connected && showLiveBoard);
     chatEntry.input.disabled = !connected || !showLiveBoard;
     gameButtonByElement.get(chatButton)?.setDisabled(!connected || !showLiveBoard);
-    revealWhiteboard.setDisabled(!connected || animatingWhiteboard);
+    for (const [face, button] of faceButtons) button.setDisabled(!connected || animatingFace || face === activeFace);
   }
 
-  async function setWhiteboardVisible(visible: boolean): Promise<void> {
-    if (destroyed || animatingWhiteboard || visible === whiteboardVisible || !connected) return;
-    revealWhiteboard.setLockedDepressed(visible);
-    animatingWhiteboard = true;
-    applyWhiteboardState();
-    if (!reducedMotion) {
+  async function setLobbyFace(face: LobbyFace): Promise<void> {
+    if (destroyed || animatingFace || face === activeFace || !connected) return;
+    const transition = lobbyFaceTransition(activeFace, face, reducedMotion);
+    if (!transition) return;
+    for (const [name, button] of faceButtons) button.setLockedDepressed(name === face);
+    animatingFace = true;
+    applyFaceState();
+    if (transition.frames.length) {
       try { await rotationLease.ready; } catch (error) { console.error('Could not prepare whiteboard rotation.', error); }
       if (destroyed) return;
-      await flipPlayer.play(whiteboardFlipFrames(visible, false));
+      await flipPlayer.play(transition.frames);
       if (destroyed) return;
     }
-    whiteboardVisible = visible;
-    animatingWhiteboard = false;
-    applyWhiteboardState();
-    onWhiteboardVisibilityChange(visible);
+    activeFace = face;
+    animatingFace = false;
+    applyFaceState();
   }
-  applyWhiteboardState();
+  applyFaceState();
   const submitChat = (event: Event) => {
     event.preventDefault();
     const text = chatEntry.input.value.trim().replace(/\s+/g, ' ');
     if (!text) return;
-    sendWhiteboard({ type: 'chat', clientOperationId: crypto.randomUUID(), displayName: playerName, text, color: whiteboardController.color() });
+    sendWhiteboard({ type: 'chat', clientOperationId: randomId(), displayName: playerName, text, color: whiteboardController.color() });
     chatEntry.input.value = '';
   };
   chat.addEventListener('submit', submitChat);
@@ -366,6 +402,7 @@ export function mountLobbyScreen(
     destroyed = true;
     flipPlayer.cancel();
     rotationLease.release();
+    paperFlip.destroy();
     unsubscribeProgress();
     classCardDrag?.destroy();
     canvas.destroy();
@@ -383,16 +420,21 @@ export function mountLobbyScreen(
     const unavailable = state !== 'connected';
     connected = !unavailable;
     screen.dataset.connection = state;
-    chatEntry.input.disabled = unavailable || !whiteboardVisible || animatingWhiteboard;
-    gameButtonByElement.get(chatButton)?.setDisabled(unavailable || !whiteboardVisible || animatingWhiteboard);
+    const whiteboardActive = activeFace === 'whiteboard' && !animatingFace;
+    chatEntry.input.disabled = unavailable || !whiteboardActive;
+    gameButtonByElement.get(chatButton)?.setDisabled(unavailable || !whiteboardActive);
     rosterToggle.setDisabled(unavailable);
     matchmakingToggle.setDisabled(unavailable);
-    whiteboardController.setEnabled(!unavailable && whiteboardVisible && !animatingWhiteboard);
-    revealWhiteboard.setDisabled(unavailable || animatingWhiteboard);
+    whiteboardController.setEnabled(!unavailable && whiteboardActive);
+    for (const [face, button] of faceButtons) button.setDisabled(unavailable || animatingFace || face === activeFace);
   };
   cleanup.setMatchmaking = (active) => matchmakingToggle.setPressed(active);
   cleanup.receiveWhiteboard = (message) => whiteboardController.receive(message);
   cleanup.updateRoster = (players, selfId) => renderLobbyRoster(roster, players, selfId);
+  cleanup.setUnlockedClassCount = (count) => {
+    const definitions = lobbyClassCardDefinitions(count);
+    for (let index = 0; index < classCards.length; index++) classCards[index]!.sprite.setSource(definitions[index]!.asset);
+  };
   return cleanup;
 }
 

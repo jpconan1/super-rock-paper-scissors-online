@@ -26,4 +26,8 @@ describe('lobby class cards', () => {
     expect(cards.every(({ faceUp }) => faceUp)).toBe(true);
     expect(cards.at(-1)!.asset).toBe('/lobby/class-cards/joe-card-sheet.webp');
   });
+
+  it('shows every card face up when given the unlock-all class count', () => {
+    expect(lobbyClassCardDefinitions(ABM_CLASS_IDS.length).every(({ faceUp }) => faceUp)).toBe(true);
+  });
 });

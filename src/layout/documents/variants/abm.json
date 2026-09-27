@@ -52,6 +52,22 @@
           "width": 178,
           "height": 52
         }
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 20,
+            "y": 18,
+            "width": 220,
+            "height": 72
+          },
+          "portrait": {
+            "x": 10,
+            "y": 82,
+            "width": 178,
+            "height": 52
+          }
+        }
       }
     },
     {
@@ -77,6 +93,24 @@
           "height": 88,
           "aspectLock": true
         }
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 330,
+            "y": -10,
+            "width": 310,
+            "height": 155,
+            "aspectLock": true
+          },
+          "portrait": {
+            "x": 107,
+            "y": 0,
+            "width": 176,
+            "height": 88,
+            "aspectLock": true
+          }
+        }
       }
     },
     {
@@ -96,6 +130,22 @@
           "y": 82,
           "width": 178,
           "height": 52
+        }
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 720,
+            "y": 18,
+            "width": 220,
+            "height": 72
+          },
+          "portrait": {
+            "x": 202,
+            "y": 82,
+            "width": 178,
+            "height": 52
+          }
         }
       }
     },
@@ -121,6 +171,24 @@
           "height": 40,
           "aspectLock": true
         }
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 245,
+            "y": 0,
+            "width": 144,
+            "height": 72,
+            "aspectLock": true
+          },
+          "portrait": {
+            "x": 70,
+            "y": 0,
+            "width": 80,
+            "height": 40,
+            "aspectLock": true
+          }
+        }
       }
     },
     {
@@ -144,6 +212,24 @@
           "width": 80,
           "height": 40,
           "aspectLock": true
+        }
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 571,
+            "y": 0,
+            "width": 144,
+            "height": 72,
+            "aspectLock": true
+          },
+          "portrait": {
+            "x": 240,
+            "y": 0,
+            "width": 80,
+            "height": 40,
+            "aspectLock": true
+          }
         }
       }
     },
@@ -170,6 +256,24 @@
           "height": 48,
           "aspectLock": true
         }
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 286,
+            "y": 55,
+            "width": 64,
+            "height": 64,
+            "aspectLock": true
+          },
+          "portrait": {
+            "x": 90,
+            "y": 26,
+            "width": 48,
+            "height": 48,
+            "aspectLock": true
+          }
+        }
       }
     },
     {
@@ -195,6 +299,24 @@
           "height": 48,
           "aspectLock": true
         }
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 610,
+            "y": 55,
+            "width": 64,
+            "height": 64,
+            "aspectLock": true
+          },
+          "portrait": {
+            "x": 252,
+            "y": 26,
+            "width": 48,
+            "height": 48,
+            "aspectLock": true
+          }
+        }
       }
     },
     {
@@ -218,6 +340,24 @@
           "width": 96,
           "height": 48,
           "aspectLock": true
+        }
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 25,
+            "y": 130,
+            "width": 130,
+            "height": 65,
+            "aspectLock": true
+          },
+          "portrait": {
+            "x": 15,
+            "y": 150,
+            "width": 96,
+            "height": 48,
+            "aspectLock": true
+          }
         }
       }
     },
@@ -243,6 +383,24 @@
           "height": 47.78666666666667,
           "aspectLock": true
         }
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 790,
+            "y": 130,
+            "width": 150,
+            "height": 64,
+            "aspectLock": true
+          },
+          "portrait": {
+            "x": 270,
+            "y": 155,
+            "width": 112,
+            "height": 47.78666666666667,
+            "aspectLock": true
+          }
+        }
       }
     },
     {
@@ -264,6 +422,24 @@
           "width": 352,
           "height": 176,
           "aspectLock": true
+        }
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 288,
+            "y": 122,
+            "width": 384,
+            "height": 192,
+            "aspectLock": true
+          },
+          "portrait": {
+            "x": 19,
+            "y": 250,
+            "width": 352,
+            "height": 176,
+            "aspectLock": true
+          }
         }
       }
     },
@@ -318,6 +494,27 @@
           "width": 352,
           "height": 176,
           "aspectLock": true
+        }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 0,
+            "y": 0,
+            "width": 384,
+            "height": 192,
+            "aspectLock": true
+          },
+          "portrait": {
+            "x": 0,
+            "y": 0,
+            "width": 352,
+            "height": 176,
+            "aspectLock": true
+          }
         }
       }
     },
@@ -818,6 +1015,24 @@
           "height": 35.06849315068493,
           "aspectLock": true
         }
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 20,
+            "y": 92,
+            "width": 140,
+            "height": 34.52054794520548,
+            "aspectLock": true
+          },
+          "portrait": {
+            "x": 15,
+            "y": 130,
+            "width": 120,
+            "height": 35.06849315068493,
+            "aspectLock": true
+          }
+        }
       }
     },
     {
@@ -840,6 +1055,24 @@
           "width": 120,
           "height": 35.06849315068493,
           "aspectLock": true
+        }
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 800,
+            "y": 92,
+            "width": 140,
+            "height": 34.52054794520548,
+            "aspectLock": true
+          },
+          "portrait": {
+            "x": 265,
+            "y": 130,
+            "width": 120,
+            "height": 35.06849315068493,
+            "aspectLock": true
+          }
         }
       }
     },
@@ -955,6 +1188,22 @@
           "width": 120,
           "height": 60
         }
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 20,
+            "y": 182,
+            "width": 160,
+            "height": 80
+          },
+          "portrait": {
+            "x": 10,
+            "y": 180,
+            "width": 120,
+            "height": 60
+          }
+        }
       }
     },
     {
@@ -975,6 +1224,22 @@
           "width": 120,
           "height": 60
         }
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 780,
+            "y": 182,
+            "width": 160,
+            "height": 80
+          },
+          "portrait": {
+            "x": 260,
+            "y": 180,
+            "width": 120,
+            "height": 60
+          }
+        }
       }
     },
     {
@@ -987,16 +1252,32 @@
           "x": 25,
           "y": 294,
           "width": 160,
-          "height": 60
+          "height": 100
         },
         "portrait": {
           "x": 18,
           "y": 436,
           "width": 120,
-          "height": 47
+          "height": 75
         }
       },
-      "visible": true
+      "visible": true,
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 25,
+            "y": 294,
+            "width": 160,
+            "height": 100
+          },
+          "portrait": {
+            "x": 18,
+            "y": 436,
+            "width": 120,
+            "height": 75
+          }
+        }
+      }
     },
     {
       "id": "p1-mana-group",
@@ -1016,7 +1297,26 @@
           "height": 30
         }
       },
-      "visible": true
+      "visible": true,
+      "properties": {
+        "allowParentOverflow": true
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 0,
+            "y": 0,
+            "width": 160,
+            "height": 39
+          },
+          "portrait": {
+            "x": 0,
+            "y": 0,
+            "width": 120,
+            "height": 30
+          }
+        }
+      }
     },
     {
       "id": "p1-mana-icon",
@@ -1034,11 +1334,32 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 15,
-          "y": 0,
-          "width": 30,
-          "height": 30,
+          "x": 25,
+          "y": -10,
+          "width": 25,
+          "height": 25,
           "aspectLock": true
+        }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 25,
+            "y": 0,
+            "width": 35,
+            "height": 35,
+            "aspectLock": true
+          },
+          "portrait": {
+            "x": 25,
+            "y": -10,
+            "width": 25,
+            "height": 25,
+            "aspectLock": true
+          }
         }
       }
     },
@@ -1051,7 +1372,7 @@
       },
       "layouts": {
         "landscape": {
-          "x": 70,
+          "x": 65,
           "y": 0,
           "width": 64,
           "height": 32,
@@ -1059,10 +1380,31 @@
         },
         "portrait": {
           "x": 50,
-          "y": 0,
-          "width": 60,
-          "height": 30,
+          "y": -10,
+          "width": 45,
+          "height": 22.5,
           "aspectLock": true
+        }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 65,
+            "y": 0,
+            "width": 64,
+            "height": 32,
+            "aspectLock": true
+          },
+          "portrait": {
+            "x": 50,
+            "y": -10,
+            "width": 45,
+            "height": 22.5,
+            "aspectLock": true
+          }
         }
       }
     },
@@ -1072,19 +1414,38 @@
       "parent": "p1-resources",
       "layouts": {
         "landscape": {
-          "x": 0,
-          "y": 34,
-          "width": 160,
-          "height": 26
+          "x": 5,
+          "y": 40,
+          "width": 130,
+          "height": 60
         },
         "portrait": {
-          "x": 0,
-          "y": 27,
+          "x": 5,
+          "y": 15,
           "width": 120,
-          "height": 20
+          "height": 80
         }
       },
-      "visible": true
+      "visible": true,
+      "properties": {
+        "allowParentOverflow": true
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 5,
+            "y": 70,
+            "width": 130,
+            "height": 60
+          },
+          "portrait": {
+            "x": 5,
+            "y": 35,
+            "width": 120,
+            "height": 80
+          }
+        }
+      }
     },
     {
       "id": "p1-block-1",
@@ -1107,6 +1468,27 @@
           "width": 20,
           "height": 20,
           "aspectLock": true
+        }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 5,
+            "y": 0,
+            "width": 26,
+            "height": 26,
+            "aspectLock": true
+          },
+          "portrait": {
+            "x": 0,
+            "y": 0,
+            "width": 20,
+            "height": 20,
+            "aspectLock": true
+          }
         }
       }
     },
@@ -1132,6 +1514,27 @@
           "height": 20,
           "aspectLock": true
         }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 31,
+            "y": 0,
+            "width": 26,
+            "height": 26,
+            "aspectLock": true
+          },
+          "portrait": {
+            "x": 20,
+            "y": 0,
+            "width": 20,
+            "height": 20,
+            "aspectLock": true
+          }
+        }
       }
     },
     {
@@ -1155,6 +1558,27 @@
           "width": 20,
           "height": 20,
           "aspectLock": true
+        }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 57,
+            "y": 0,
+            "width": 26,
+            "height": 26,
+            "aspectLock": true
+          },
+          "portrait": {
+            "x": 40,
+            "y": 0,
+            "width": 20,
+            "height": 20,
+            "aspectLock": true
+          }
         }
       }
     },
@@ -1180,6 +1604,27 @@
           "height": 20,
           "aspectLock": true
         }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 83,
+            "y": 0,
+            "width": 26,
+            "height": 26,
+            "aspectLock": true
+          },
+          "portrait": {
+            "x": 60,
+            "y": 0,
+            "width": 20,
+            "height": 20,
+            "aspectLock": true
+          }
+        }
       }
     },
     {
@@ -1204,6 +1649,159 @@
           "height": 20,
           "aspectLock": true
         }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 109,
+            "y": 0,
+            "width": 26,
+            "height": 26,
+            "aspectLock": true
+          },
+          "portrait": {
+            "x": 80,
+            "y": 0,
+            "width": 20,
+            "height": 20,
+            "aspectLock": true
+          }
+        }
+      }
+    },
+    {
+      "id": "p1-limited-group",
+      "type": "group",
+      "protected": true,
+      "parent": "p1-resources",
+      "layouts": {
+        "landscape": {
+          "x": 25,
+          "y": 45,
+          "width": 110,
+          "height": 32
+        },
+        "portrait": {
+          "x": 15,
+          "y": 10,
+          "width": 90,
+          "height": 30
+        }
+      },
+      "visible": true,
+      "properties": {
+        "allowParentOverflow": true
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 25,
+            "y": 45,
+            "width": 110,
+            "height": 32
+          },
+          "portrait": {
+            "x": 15,
+            "y": 10,
+            "width": 90,
+            "height": 30
+          }
+        }
+      }
+    },
+    {
+      "id": "p1-limited-icon",
+      "type": "sprite",
+      "protected": true,
+      "parent": "p1-limited-group",
+      "assets": {
+        "src": "/variants/abm/steal-icon-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 0,
+          "y": -5,
+          "width": 32,
+          "height": 32,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 10,
+          "y": 0,
+          "width": 25,
+          "height": 25,
+          "aspectLock": true
+        }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 0,
+            "y": -5,
+            "width": 32,
+            "height": 32,
+            "aspectLock": true
+          },
+          "portrait": {
+            "x": 10,
+            "y": 0,
+            "width": 25,
+            "height": 25,
+            "aspectLock": true
+          }
+        }
+      }
+    },
+    {
+      "id": "p1-limited-count",
+      "type": "sprite",
+      "protected": true,
+      "parent": "p1-limited-group",
+      "assets": {
+        "src": "/visual-elements/resource-counters/times1-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 45,
+          "y": -5,
+          "width": 65,
+          "height": 32.5,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 35,
+          "y": 0,
+          "width": 45,
+          "height": 22.5,
+          "aspectLock": true
+        }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 40,
+            "y": -5,
+            "width": 65,
+            "height": 32.5,
+            "aspectLock": true
+          },
+          "portrait": {
+            "x": 35,
+            "y": 0,
+            "width": 45,
+            "height": 22.5,
+            "aspectLock": true
+          }
+        }
       }
     },
     {
@@ -1213,16 +1811,16 @@
       "binding": "p2-resources",
       "layouts": {
         "landscape": {
-          "x": 738,
+          "x": 775,
           "y": 294,
-          "width": 197,
-          "height": 60
+          "width": 160,
+          "height": 100
         },
         "portrait": {
-          "x": 194,
+          "x": 252,
           "y": 436,
-          "width": 178,
-          "height": 47
+          "width": 120,
+          "height": 75
         }
       },
       "visible": true,
@@ -1230,6 +1828,22 @@
         "class-select": false,
         "battle": true,
         "waiting": true
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 775,
+            "y": 294,
+            "width": 160,
+            "height": 100
+          },
+          "portrait": {
+            "x": 252,
+            "y": 436,
+            "width": 120,
+            "height": 75
+          }
+        }
       }
     },
     {
@@ -1240,14 +1854,33 @@
         "landscape": {
           "x": 0,
           "y": 0,
-          "width": 193,
+          "width": 160,
           "height": 39
         },
         "portrait": {
           "x": 0,
           "y": 0,
-          "width": 174,
+          "width": 120,
           "height": 30
+        }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 0,
+            "y": 0,
+            "width": 160,
+            "height": 39
+          },
+          "portrait": {
+            "x": 0,
+            "y": 0,
+            "width": 120,
+            "height": 30
+          }
         }
       }
     },
@@ -1260,18 +1893,39 @@
       },
       "layouts": {
         "landscape": {
-          "x": 95,
+          "x": 85,
           "y": 0,
           "width": 64,
           "height": 32,
           "aspectLock": true
         },
         "portrait": {
-          "x": 75,
-          "y": 0,
-          "width": 60,
-          "height": 30,
+          "x": 60,
+          "y": -10,
+          "width": 45,
+          "height": 22.5,
           "aspectLock": true
+        }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 85,
+            "y": 0,
+            "width": 64,
+            "height": 32,
+            "aspectLock": true
+          },
+          "portrait": {
+            "x": 60,
+            "y": -10,
+            "width": 45,
+            "height": 22.5,
+            "aspectLock": true
+          }
         }
       }
     },
@@ -1284,18 +1938,39 @@
       },
       "layouts": {
         "landscape": {
-          "x": 50,
+          "x": 45,
           "y": 0,
           "width": 35,
           "height": 35,
           "aspectLock": true
         },
         "portrait": {
-          "x": 40,
-          "y": 0,
-          "width": 30,
-          "height": 30,
+          "x": 35,
+          "y": -10,
+          "width": 25,
+          "height": 25,
           "aspectLock": true
+        }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 45,
+            "y": 0,
+            "width": 35,
+            "height": 35,
+            "aspectLock": true
+          },
+          "portrait": {
+            "x": 35,
+            "y": -10,
+            "width": 25,
+            "height": 25,
+            "aspectLock": true
+          }
         }
       }
     },
@@ -1305,16 +1980,35 @@
       "parent": "p2-resources",
       "layouts": {
         "landscape": {
-          "x": 0,
-          "y": 34,
-          "width": 160,
-          "height": 26
+          "x": 25,
+          "y": 40,
+          "width": 130,
+          "height": 60
         },
         "portrait": {
-          "x": 0,
-          "y": 27,
+          "x": -5,
+          "y": 15,
           "width": 120,
-          "height": 20
+          "height": 80
+        }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 25,
+            "y": 75,
+            "width": 130,
+            "height": 60
+          },
+          "portrait": {
+            "x": -5,
+            "y": 35,
+            "width": 120,
+            "height": 80
+          }
         }
       }
     },
@@ -1327,18 +2021,39 @@
       },
       "layouts": {
         "landscape": {
-          "x": 25,
+          "x": 99,
           "y": 0,
           "width": 26,
           "height": 26,
           "aspectLock": true
         },
         "portrait": {
-          "x": 20,
+          "x": 100,
           "y": 0,
           "width": 20,
           "height": 20,
           "aspectLock": true
+        }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 99,
+            "y": 0,
+            "width": 26,
+            "height": 26,
+            "aspectLock": true
+          },
+          "portrait": {
+            "x": 100,
+            "y": 0,
+            "width": 20,
+            "height": 20,
+            "aspectLock": true
+          }
         }
       }
     },
@@ -1351,55 +2066,7 @@
       },
       "layouts": {
         "landscape": {
-          "x": 51,
-          "y": 0,
-          "width": 26,
-          "height": 26,
-          "aspectLock": true
-        },
-        "portrait": {
-          "x": 40,
-          "y": 0,
-          "width": 20,
-          "height": 20,
-          "aspectLock": true
-        }
-      }
-    },
-    {
-      "id": "p2-block-3",
-      "type": "sprite",
-      "parent": "p2-block-group",
-      "assets": {
-        "src": "/variants/abm/block-icon-sheet.webp"
-      },
-      "layouts": {
-        "landscape": {
-          "x": 77,
-          "y": 0,
-          "width": 26,
-          "height": 26,
-          "aspectLock": true
-        },
-        "portrait": {
-          "x": 60,
-          "y": 0,
-          "width": 20,
-          "height": 20,
-          "aspectLock": true
-        }
-      }
-    },
-    {
-      "id": "p2-block-4",
-      "type": "sprite",
-      "parent": "p2-block-group",
-      "assets": {
-        "src": "/variants/abm/block-icon-sheet.webp"
-      },
-      "layouts": {
-        "landscape": {
-          "x": 103,
+          "x": 73,
           "y": 0,
           "width": 26,
           "height": 26,
@@ -1412,6 +2079,117 @@
           "height": 20,
           "aspectLock": true
         }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 73,
+            "y": 0,
+            "width": 26,
+            "height": 26,
+            "aspectLock": true
+          },
+          "portrait": {
+            "x": 80,
+            "y": 0,
+            "width": 20,
+            "height": 20,
+            "aspectLock": true
+          }
+        }
+      }
+    },
+    {
+      "id": "p2-block-3",
+      "type": "sprite",
+      "parent": "p2-block-group",
+      "assets": {
+        "src": "/variants/abm/block-icon-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 47,
+          "y": 0,
+          "width": 26,
+          "height": 26,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 60,
+          "y": 0,
+          "width": 20,
+          "height": 20,
+          "aspectLock": true
+        }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 47,
+            "y": 0,
+            "width": 26,
+            "height": 26,
+            "aspectLock": true
+          },
+          "portrait": {
+            "x": 60,
+            "y": 0,
+            "width": 20,
+            "height": 20,
+            "aspectLock": true
+          }
+        }
+      }
+    },
+    {
+      "id": "p2-block-4",
+      "type": "sprite",
+      "parent": "p2-block-group",
+      "assets": {
+        "src": "/variants/abm/block-icon-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 21,
+          "y": 0,
+          "width": 26,
+          "height": 26,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 40,
+          "y": 0,
+          "width": 20,
+          "height": 20,
+          "aspectLock": true
+        }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 21,
+            "y": 0,
+            "width": 26,
+            "height": 26,
+            "aspectLock": true
+          },
+          "portrait": {
+            "x": 40,
+            "y": 0,
+            "width": 20,
+            "height": 20,
+            "aspectLock": true
+          }
+        }
       }
     },
     {
@@ -1423,18 +2201,171 @@
       },
       "layouts": {
         "landscape": {
-          "x": 129,
+          "x": -5,
           "y": 0,
           "width": 26,
           "height": 26,
           "aspectLock": true
         },
         "portrait": {
-          "x": 100,
+          "x": 20,
           "y": 0,
           "width": 20,
           "height": 20,
           "aspectLock": true
+        }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": -5,
+            "y": 0,
+            "width": 26,
+            "height": 26,
+            "aspectLock": true
+          },
+          "portrait": {
+            "x": 20,
+            "y": 0,
+            "width": 20,
+            "height": 20,
+            "aspectLock": true
+          }
+        }
+      }
+    },
+    {
+      "id": "p2-limited-group",
+      "type": "group",
+      "protected": true,
+      "parent": "p2-resources",
+      "layouts": {
+        "landscape": {
+          "x": 25,
+          "y": 45,
+          "width": 110,
+          "height": 32
+        },
+        "portrait": {
+          "x": 15,
+          "y": 10,
+          "width": 90,
+          "height": 30
+        }
+      },
+      "visible": true,
+      "properties": {
+        "allowParentOverflow": true
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 25,
+            "y": 45,
+            "width": 110,
+            "height": 32
+          },
+          "portrait": {
+            "x": 15,
+            "y": 10,
+            "width": 90,
+            "height": 30
+          }
+        }
+      }
+    },
+    {
+      "id": "p2-limited-count",
+      "type": "sprite",
+      "protected": true,
+      "parent": "p2-limited-group",
+      "assets": {
+        "src": "/visual-elements/resource-counters/times1-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 0,
+          "y": -5,
+          "width": 65,
+          "height": 32.5,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 10,
+          "y": 0,
+          "width": 45,
+          "height": 22.5,
+          "aspectLock": true
+        }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 60,
+            "y": -5,
+            "width": 65,
+            "height": 32.5,
+            "aspectLock": true
+          },
+          "portrait": {
+            "x": 45,
+            "y": 0,
+            "width": 45,
+            "height": 22.5,
+            "aspectLock": true
+          }
+        }
+      }
+    },
+    {
+      "id": "p2-limited-icon",
+      "type": "sprite",
+      "protected": true,
+      "parent": "p2-limited-group",
+      "assets": {
+        "src": "/variants/abm/steal-icon-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 78,
+          "y": -5,
+          "width": 32,
+          "height": 32,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 55,
+          "y": 0,
+          "width": 25,
+          "height": 25,
+          "aspectLock": true
+        }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 20,
+            "y": -5,
+            "width": 32,
+            "height": 32,
+            "aspectLock": true
+          },
+          "portrait": {
+            "x": 20,
+            "y": 0,
+            "width": 25,
+            "height": 25,
+            "aspectLock": true
+          }
         }
       }
     },
@@ -1478,6 +2409,22 @@
           "y": 492,
           "width": 390,
           "height": 201
+        }
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 0,
+            "y": 327,
+            "width": 960,
+            "height": 202
+          },
+          "portrait": {
+            "x": 0,
+            "y": 492,
+            "width": 390,
+            "height": 201
+          }
         }
       }
     },
@@ -1587,6 +2534,27 @@
           "height": 64,
           "aspectLock": true
         }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 474,
+            "y": 0,
+            "width": 192,
+            "height": 102.4,
+            "aspectLock": true
+          },
+          "portrait": {
+            "x": 180,
+            "y": 10,
+            "width": 120,
+            "height": 64,
+            "aspectLock": true
+          }
+        }
       }
     },
     {
@@ -1613,6 +2581,27 @@
           "width": 120,
           "height": 60,
           "aspectLock": true
+        }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 336,
+            "y": 104,
+            "width": 192,
+            "height": 96,
+            "aspectLock": true
+          },
+          "portrait": {
+            "x": 105,
+            "y": 95,
+            "width": 120,
+            "height": 60,
+            "aspectLock": true
+          }
         }
       }
     },
@@ -1641,6 +2630,27 @@
           "height": 71.86764705882354,
           "aspectLock": true
         }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 624,
+            "y": 82,
+            "width": 180,
+            "height": 119.77941176470588,
+            "aspectLock": true
+          },
+          "portrait": {
+            "x": 260,
+            "y": 80,
+            "width": 108,
+            "height": 71.86764705882354,
+            "aspectLock": true
+          }
+        }
       }
     },
     {
@@ -1654,18 +2664,36 @@
       },
       "layouts": {
         "landscape": {
-          "x": 430,
-          "y": 286,
-          "width": 100,
-          "height": 50,
+          "x": 205,
+          "y": 412,
+          "width": 134,
+          "height": 67,
           "aspectLock": true
         },
         "portrait": {
-          "x": 145,
-          "y": 421,
+          "x": 8,
+          "y": 550,
           "width": 100,
           "height": 50,
           "aspectLock": true
+        }
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 205,
+            "y": 412,
+            "width": 134,
+            "height": 67,
+            "aspectLock": true
+          },
+          "portrait": {
+            "x": 8,
+            "y": 550,
+            "width": 100,
+            "height": 50,
+            "aspectLock": true
+          }
         }
       }
     },
@@ -1718,6 +2746,27 @@
           "height": 36.04615384615385,
           "aspectLock": true
         }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 415,
+            "y": 45,
+            "width": 50,
+            "height": 54.61538461538461,
+            "aspectLock": true
+          },
+          "portrait": {
+            "x": 145,
+            "y": 55,
+            "width": 33,
+            "height": 36.04615384615385,
+            "aspectLock": true
+          }
+        }
       }
     },
     {
@@ -1742,6 +2791,27 @@
           "height": 38.23076923076923,
           "aspectLock": true
         }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 670,
+            "y": 40,
+            "width": 50,
+            "height": 54.61538461538461,
+            "aspectLock": true
+          },
+          "portrait": {
+            "x": 300,
+            "y": 50,
+            "width": 35,
+            "height": 38.23076923076923,
+            "aspectLock": true
+          }
+        }
       }
     },
     {
@@ -1765,6 +2835,27 @@
           "width": 45,
           "height": 22.5,
           "aspectLock": true
+        }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 528,
+            "y": 132,
+            "width": 96,
+            "height": 48,
+            "aspectLock": true
+          },
+          "portrait": {
+            "x": 220,
+            "y": 105,
+            "width": 45,
+            "height": 22.5,
+            "aspectLock": true
+          }
         }
       }
     },
@@ -1793,6 +2884,24 @@
           "height": 64,
           "aspectLock": true
         }
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 12,
+            "y": 464,
+            "width": 64,
+            "height": 64,
+            "aspectLock": true
+          },
+          "portrait": {
+            "x": 5,
+            "y": 10,
+            "width": 64,
+            "height": 64,
+            "aspectLock": true
+          }
+        }
       }
     },
     {
@@ -1819,6 +2928,24 @@
           "width": 64,
           "height": 64,
           "aspectLock": true
+        }
+      },
+      "alternateLayouts": {
+        "class-resource": {
+          "landscape": {
+            "x": 884,
+            "y": 464,
+            "width": 64,
+            "height": 64,
+            "aspectLock": true
+          },
+          "portrait": {
+            "x": 320,
+            "y": 10,
+            "width": 64,
+            "height": 64,
+            "aspectLock": true
+          }
         }
       }
     }

@@ -18,13 +18,18 @@ describe('layout documents', () => {
     }
   });
 
-  it('places an account button in both lobby layouts', () => {
-    const account = layoutDocuments.get('lobby')!.elements.find((element) => element.id === 'account');
-    expect(account?.assets).toMatchObject({
-      up: '/account/account-button-up-sheet.webp', between: '/account/account-button-between-sheet.webp', depressed: '/account/account-button-depressed-sheet.webp',
+  it('keeps account settings out of the lobby layout', () => {
+    expect(layoutDocuments.get('lobby')!.elements.some((element) => element.id === 'account')).toBe(false);
+  });
+
+  it('ships the title Discord button with all three animation sheets', () => {
+    const discord = layoutDocuments.get('title')!.elements.find((element) => element.id === 'discord');
+    expect(discord?.behavior).toBe('discord');
+    expect(discord?.assets).toEqual({
+      up: '/title/discord/discord-button-up-sheet.webp',
+      between: '/title/discord/discord-button-between-sheet.webp',
+      depressed: '/title/discord/discord-button-depressed-sheet.webp',
     });
-    expect(account?.layouts.landscape).toMatchObject({ x: 715, y: 460, width: 148, height: 74 });
-    expect(account?.layouts.portrait).toMatchObject({ x: 196, y: 700, width: 148, height: 74 });
   });
 
   it('ships one closed-curtain composition for every variant', () => {

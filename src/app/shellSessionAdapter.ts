@@ -7,9 +7,11 @@ import { LOBBY_SOCKET_PROTOCOL, MATCH_SOCKET_PROTOCOL, WHITEBOARD_SOCKET_PROTOCO
 import { isGuestSessionResponse, type GuestProfile, type GuestSessionRequest, type GuestSessionResponse } from '../protocol/guestSession';
 import { createGameAuthClient, type GameAuthClient } from '../auth/authClient';
 import { progressionForTotal } from '../core/progression';
+import { ABM_CLASS_IDS } from '../variants/attackBlockMana/attackBlockManaTypes';
 import type { ProgressAward } from '../core/progression';
+import { randomId } from '../core/randomId';
 
-export interface AccountState { signedIn: boolean; isAnonymous: boolean; displayName: string; playerId: string; rating: number; totalProgressUnits: number; level: number; unlockedClassIds: readonly import('../variants/attackBlockMana/attackBlockManaTypes').AbmClassId[] }
+export interface AccountState { signedIn: boolean; isAnonymous: boolean; displayName: string; playerId: string; rating: number; totalProgressUnits: number; level: number; unlockedClassIds: readonly import('../variants/attackBlockMana/attackBlockManaTypes').AbmClassId[]; unlockAllClasses: boolean }
 
 export interface ShellSessionListener {
   connection(state: ConnectionState): void;
@@ -27,6 +29,7 @@ export interface ShellSessionAdapter {
   completeGoogleSignIn(): Promise<GuestProfile | null>;
   suggestedPlayerName(): string;
   accountState(): AccountState;
+  setUnlockAllClasses(enabled: boolean): Promise<void>;
   applyProgressAward(award: ProgressAward): void;
   requestGoogleSignInFromTitle(playerName: string, callbackURL: string, errorCallbackURL: string): Promise<string>;
   requestGuestClaimWithGoogle(callbackURL: string, errorCallbackURL: string): Promise<string>;
@@ -80,6 +83,7 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
   private playerId = '';
   private rating = 1500;
   private totalProgressUnits = 0;
+  private unlockAllClasses = false;
   private googleFlow?: 'title' | 'claim';
   private claimedGuestId?: string;
 
@@ -130,7 +134,14 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
   suggestedPlayerName(): string { return loadSavedGuestName(); }
   accountState(): AccountState {
     const progression = progressionForTotal(this.totalProgressUnits);
-    return { signedIn: !this.authIsAnonymous, isAnonymous: this.authIsAnonymous, displayName: this.playerName || loadSavedGuestName(), playerId: this.playerId || this.guestId, rating: this.rating, totalProgressUnits: this.totalProgressUnits, level: progression.level, unlockedClassIds: progression.unlockedClassIds };
+    return { signedIn: !this.authIsAnonymous, isAnonymous: this.authIsAnonymous, displayName: this.playerName || loadSavedGuestName(), playerId: this.playerId || this.guestId, rating: this.rating, totalProgressUnits: this.totalProgressUnits, level: progression.level, unlockedClassIds: this.unlockAllClasses ? ABM_CLASS_IDS : progression.unlockedClassIds, unlockAllClasses: this.unlockAllClasses };
+  }
+  async setUnlockAllClasses(enabled: boolean): Promise<void> {
+    const response = await fetch(`${this.baseUrl}/player-progression`, { method: 'PUT', credentials: 'include', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ unlockAllClasses: enabled }) });
+    if (!response.ok) throw new Error(`Progression update failed: ${response.status}`);
+    const player = await response.json() as GuestProfile;
+    if (player.unlockAllClasses !== enabled) throw new Error('Progression update returned invalid data.');
+    this.totalProgressUnits = player.totalProgressUnits; this.unlockAllClasses = player.unlockAllClasses;
   }
   applyProgressAward(award: ProgressAward): void { this.totalProgressUnits = award.after.totalProgressUnits; }
   async requestGoogleSignInFromTitle(playerName: string, callbackURL: string, errorCallbackURL: string): Promise<string> {
@@ -169,7 +180,7 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
     if (!response.ok) throw new Error(`Name update failed: ${response.status}`);
     const player = await response.json() as GuestProfile;
     if (!player.playerId || !player.displayName || !Number.isFinite(player.rating)) throw new Error('Name update returned invalid data.');
-    this.playerName = player.displayName; this.playerId = player.playerId; this.rating = player.rating; this.totalProgressUnits = player.totalProgressUnits ?? 0; saveGuestName(player.displayName);
+    this.playerName = player.displayName; this.playerId = player.playerId; this.rating = player.rating; this.totalProgressUnits = player.totalProgressUnits ?? 0; this.unlockAllClasses = player.unlockAllClasses ?? false; saveGuestName(player.displayName);
     return player;
   }
   async refreshOnlineIdentity(): Promise<void> {
@@ -206,7 +217,7 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
     this.guestId = session.playerId;
     this.guestSecret = session.guestSecret;
     this.playerName = session.displayName;
-    this.playerId = session.playerId; this.rating = session.rating; this.totalProgressUnits = session.totalProgressUnits;
+    this.playerId = session.playerId; this.rating = session.rating; this.totalProgressUnits = session.totalProgressUnits; this.unlockAllClasses = session.unlockAllClasses;
     saveGuestIdentity(session);
     await this.ensureAnonymousAssociation();
     await this.connectOnlineServices();
@@ -218,7 +229,7 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
     const health = await response.json() as { ok?: boolean };
     if (health.ok !== true) throw new Error('Server health check returned an invalid response.');
     this.listener?.connection('connected');
-    if (!this.whiteboardActive && !preserveVisit) this.lobbyVisitId = crypto.randomUUID();
+    if (!this.whiteboardActive && !preserveVisit) this.lobbyVisitId = randomId();
     this.onlineActive = true;
     this.connectLobbyPresence();
     this.setLobbyPresence('idle');
@@ -232,7 +243,7 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
       const player = await response.json() as GuestProfile & { isAnonymous?: boolean };
       if (!player.playerId || !player.displayName || !Number.isFinite(player.rating)) return null;
       this.playerName = player.displayName;
-      this.playerId = player.playerId; this.rating = player.rating; this.totalProgressUnits = player.totalProgressUnits ?? 0;
+      this.playerId = player.playerId; this.rating = player.rating; this.totalProgressUnits = player.totalProgressUnits ?? 0; this.unlockAllClasses = player.unlockAllClasses ?? false;
       this.authIsAnonymous = player.isAnonymous !== false;
       saveGuestName(player.displayName);
       return player;
@@ -256,7 +267,7 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
     if (!response.ok) throw new Error(`Could not link guest session: ${response.status}`);
     const player = await response.json() as GuestProfile & { isAnonymous?: boolean };
     this.playerName = player.displayName;
-    this.playerId = player.playerId; this.rating = player.rating; this.totalProgressUnits = player.totalProgressUnits ?? 0;
+    this.playerId = player.playerId; this.rating = player.rating; this.totalProgressUnits = player.totalProgressUnits ?? 0; this.unlockAllClasses = player.unlockAllClasses ?? false;
     this.authIsAnonymous = player.isAnonymous !== false;
     saveGuestName(player.displayName);
     return true;
@@ -281,6 +292,7 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
     this.playerId = '';
     this.rating = 1500;
     this.totalProgressUnits = 0;
+    this.unlockAllClasses = false;
     this.authIsAnonymous = true;
   }
   async getOnlinePlayerCount(): Promise<number | null> {
@@ -315,7 +327,7 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
   startMatchmaking(): void {
     if (!this.stopped) return;
     this.stopped = false;
-    this.matchmakingAttemptId = crypto.randomUUID();
+    this.matchmakingAttemptId = randomId();
     this.intentionallyClosed = false;
     const generation = ++this.matchmakingGeneration;
     void this.pollMatchmaking(generation, this.matchmakingAttemptId);
@@ -414,7 +426,7 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
       if (this.announcedMatchmakingAttemptId !== attemptId) {
         this.announcedMatchmakingAttemptId = attemptId;
         this.setLobbyPresence('ready');
-        this.sendWhiteboard({ type: 'status', clientOperationId: crypto.randomUUID(), displayName: this.playerName || 'Guest', status: 'ready' });
+        this.sendWhiteboard({ type: 'status', clientOperationId: randomId(), displayName: this.playerName || 'Guest', status: 'ready' });
       }
       if (result.status === 'matched') { this.stopped = true; this.connect(result.matchId, result.seat, result.token); return; }
       this.pollTimer = setTimeout(() => {
@@ -461,7 +473,7 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
   private sendPayload(payload: MatchCommandPayload): void {
     if (!this.latest || this.socket?.readyState !== WebSocket.OPEN) return;
     this.socket.send(JSON.stringify({
-      protocolVersion: PROTOCOL_VERSION, commandId: crypto.randomUUID(), matchId: this.latest.matchId,
+      protocolVersion: PROTOCOL_VERSION, commandId: randomId(), matchId: this.latest.matchId,
       expectedRevision: this.latest.revision, type: payload.type, payload,
     }));
   }
@@ -508,6 +520,7 @@ export class LocalShellSessionAdapter implements ShellSessionAdapter {
   private matchmakingTimer?: ReturnType<typeof setTimeout>;
   private revision = 0;
   private matchId = 'local-match';
+  private unlockAllClasses = false;
 
   subscribe(listener: ShellSessionListener): () => void {
     this.listener = listener;
@@ -519,19 +532,20 @@ export class LocalShellSessionAdapter implements ShellSessionAdapter {
   isGoogleSignInReturn(): boolean { return false; }
   async completeGoogleSignIn(): Promise<GuestProfile | null> { return null; }
   suggestedPlayerName(): string { return ''; }
-  accountState(): AccountState { const progress = progressionForTotal(0); return { signedIn: false, isAnonymous: true, displayName: '', playerId: 'local-player', rating: 1500, totalProgressUnits: 0, level: progress.level, unlockedClassIds: progress.unlockedClassIds }; }
+  accountState(): AccountState { const progress = progressionForTotal(0); return { signedIn: false, isAnonymous: true, displayName: '', playerId: 'local-player', rating: 1500, totalProgressUnits: 0, level: progress.level, unlockedClassIds: this.unlockAllClasses ? ABM_CLASS_IDS : progress.unlockedClassIds, unlockAllClasses: this.unlockAllClasses }; }
+  async setUnlockAllClasses(enabled: boolean): Promise<void> { this.unlockAllClasses = enabled; }
   applyProgressAward(_award: ProgressAward): void {}
   async requestGoogleSignInFromTitle(_playerName: string, _callbackURL: string, _errorCallbackURL: string): Promise<string> { return ''; }
   async requestGuestClaimWithGoogle(_callbackURL: string, _errorCallbackURL: string): Promise<string> { return ''; }
   async finishGoogleSignIn(): Promise<GuestProfile | null> { return null; }
   async signInWithGoogleFromTitle(_playerName: string): Promise<void> {}
   async claimGuestWithGoogle(): Promise<void> {}
-  async updateDisplayName(displayName: string): Promise<GuestProfile> { return { playerId: 'local-player', displayName, rating: 1500, ...progressionForTotal(0) }; }
+  async updateDisplayName(displayName: string): Promise<GuestProfile> { return { playerId: 'local-player', displayName, rating: 1500, unlockAllClasses: this.unlockAllClasses, ...progressionForTotal(0) }; }
   async refreshOnlineIdentity(): Promise<void> {}
   async signOut(): Promise<void> {}
   async enterLobby(playerName: string): Promise<GuestProfile> {
     this.listener?.connection('connected');
-    return { playerId: 'local-player', displayName: playerName, rating: 1500, ...progressionForTotal(0) };
+    return { playerId: 'local-player', displayName: playerName, rating: 1500, unlockAllClasses: this.unlockAllClasses, ...progressionForTotal(0) };
   }
   async getOnlinePlayerCount(): Promise<number | null> { return 1; }
   leaveLobby(): void {}

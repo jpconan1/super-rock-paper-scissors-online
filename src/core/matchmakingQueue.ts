@@ -1,7 +1,7 @@
-export interface MatchmakingQueueEntry { guestId: string; attemptId: string; name: string; rating: number; totalProgressUnits?: number; queuedAt: number }
+export interface MatchmakingQueueEntry { guestId: string; attemptId: string; name: string; rating: number; totalProgressUnits?: number; unlockAllClasses?: boolean; queuedAt: number }
 
 export function refreshMatchmakingQueue(
-  queue: MatchmakingQueueEntry[], guestId: string, attemptId: string, name: string, rating: number, now: number, ttlMs: number, totalProgressUnits = 0,
+  queue: MatchmakingQueueEntry[], guestId: string, attemptId: string, name: string, rating: number, now: number, ttlMs: number, totalProgressUnits = 0, unlockAllClasses = false,
 ): { queue: MatchmakingQueueEntry[]; opponent?: MatchmakingQueueEntry; ownedElsewhere?: boolean } {
   const active = queue.filter((entry) => now - entry.queuedAt < ttlMs);
   const existing = active.find((entry) => entry.guestId === guestId);
@@ -9,6 +9,6 @@ export function refreshMatchmakingQueue(
   const opponent = active.find((entry) => entry.guestId !== guestId);
   if (opponent) return { opponent, queue: active.filter((entry) => entry.guestId !== opponent.guestId && entry.guestId !== guestId) };
   return { queue: [...active.filter((entry) => entry.guestId !== guestId), {
-    guestId, attemptId, name, rating, ...(totalProgressUnits ? { totalProgressUnits } : {}), queuedAt: now,
+    guestId, attemptId, name, rating, ...(totalProgressUnits ? { totalProgressUnits } : {}), ...(unlockAllClasses ? { unlockAllClasses } : {}), queuedAt: now,
   }] };
 }

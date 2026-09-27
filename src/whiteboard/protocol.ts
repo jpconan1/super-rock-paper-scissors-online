@@ -1,5 +1,6 @@
 export const WHITEBOARD_COLORS = ['black', 'red', 'blue', 'purple', 'green'] as const;
 export type WhiteboardColor = typeof WHITEBOARD_COLORS[number];
+export const WHITEBOARD_MAX_HEIGHT = 15_750;
 
 export interface WhiteboardPoint { x: number; y: number }
 
@@ -31,7 +32,7 @@ export type WhiteboardOperation = WhiteboardStroke | WhiteboardText;
 export interface WhiteboardSnapshot {
   width: 760;
   viewHeight: 450;
-  maxHeight: 1575;
+  maxHeight: typeof WHITEBOARD_MAX_HEIGHT;
   rowHeight: 60;
   top: number;
   nextY: number;
@@ -54,7 +55,7 @@ export type WhiteboardServerMessage =
   | { type: 'error'; code: string; message: string; clientOperationId?: string };
 
 export function createEmptyWhiteboard(): WhiteboardSnapshot {
-  return { width: 760, viewHeight: 450, maxHeight: 1575, rowHeight: 60, top: 0, nextY: 68, sequence: 0, operations: [] };
+  return { width: 760, viewHeight: 450, maxHeight: WHITEBOARD_MAX_HEIGHT, rowHeight: 60, top: 0, nextY: 68, sequence: 0, operations: [] };
 }
 
 export function pruneWhiteboardOperationPrefix(operations: WhiteboardOperation[], maximum: number, count: number): {
@@ -63,6 +64,16 @@ export function pruneWhiteboardOperationPrefix(operations: WhiteboardOperation[]
   if (operations.length < maximum) return { retained: operations, removed: [] };
   const removed = operations.slice(0, count);
   return { retained: operations.slice(count), removed, throughSequence: removed.at(-1)?.sequence };
+}
+
+export function shouldPruneWhiteboardOperations(
+  operationCount: number,
+  operationBytes: number,
+  nextOperationBytes: number,
+  maximumOperations: number,
+  maximumBytes: number,
+): boolean {
+  return operationCount >= maximumOperations || operationBytes + nextOperationBytes > maximumBytes;
 }
 
 export function isWhiteboardServerMessage(value: unknown): value is WhiteboardServerMessage {

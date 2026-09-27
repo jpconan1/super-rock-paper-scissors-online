@@ -42,6 +42,7 @@ export interface LayoutElement {
   assets?: LayoutAssetSet;
   properties?: Record<string, string | number | boolean>;
   layouts: Record<LayoutOrientation, LayoutGeometry>;
+  alternateLayouts?: Record<string, Record<LayoutOrientation, LayoutGeometry>>;
 }
 
 export interface LayoutCanvas { width: number; height: number; minAspectRatio: number }
@@ -62,7 +63,7 @@ const ANCHORS = new Set<string>(['top-left', 'top-right', 'center', 'bottom-left
 const ASSET_PATH = /^\/[A-Za-z0-9][A-Za-z0-9._\-\/]*$/;
 const BEHAVIORS = new Set(['player-name', 'random-name', 'enter-lobby', 'toggle-sound', 'music-volume', 'sfx-volume',
   'toggle-animation', 'lobby-chat', 'toggle-roster', 'preview-scoreboard', 'select-variant', 'back', 'game-menu', 'google-sign-in',
-  'game-rules', 'fireball-war:fireball', 'fireball-war:block', 'fireball-war:charge']);
+  'discord', 'game-rules', 'fireball-war:fireball', 'fireball-war:block', 'fireball-war:charge']);
 const BINDINGS = new Set(['p1-info', 'p2-info', 'turn', 'p1-wins', 'p2-wins', 'scene', 'p1-move', 'p2-move',
   'p1-resources', 'p2-resources', 'controls', 'resource-count']);
 BINDINGS.add('selected-variant-button');
@@ -101,6 +102,17 @@ export function validateLayoutDocument(input: unknown): LayoutDocument {
       }
       if (geometry.anchor && !ANCHORS.has(geometry.anchor)) throw new Error(`Layout ${doc.id} element ${element.id} has invalid anchor.`);
       if (geometry.rotation !== undefined && !finite(geometry.rotation)) throw new Error(`Layout ${doc.id} element ${element.id} has invalid rotation.`);
+    }
+    for (const [mode, layouts] of Object.entries(element.alternateLayouts ?? {})) {
+      if (!isId(mode)) throw new Error(`Layout ${doc.id} element ${element.id} has invalid alternate layout mode.`);
+      for (const orientation of ['landscape', 'portrait'] as const) {
+        const geometry = layouts?.[orientation];
+        if (!geometry || ![geometry.x, geometry.y, geometry.width, geometry.height].every(finite) || geometry.width < 0 || geometry.height < 0) {
+          throw new Error(`Layout ${doc.id} element ${element.id} has invalid ${mode} ${orientation} geometry.`);
+        }
+        if (geometry.anchor && !ANCHORS.has(geometry.anchor)) throw new Error(`Layout ${doc.id} element ${element.id} has invalid alternate anchor.`);
+        if (geometry.rotation !== undefined && !finite(geometry.rotation)) throw new Error(`Layout ${doc.id} element ${element.id} has invalid alternate rotation.`);
+      }
     }
   }
   for (const element of doc.elements) if (element.parent && !ids.has(element.parent)) {

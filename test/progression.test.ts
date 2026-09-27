@@ -35,6 +35,11 @@ describe('progression', () => {
     expect(createProgressAward(MAX_PROGRESS_UNITS, 'loss').gainedProgressUnits).toBe(0);
   });
 
+  test('pauses awards without changing existing progression', () => {
+    const award = createProgressAward(24_000, 'win', true);
+    expect(award).toMatchObject({ gainedProgressUnits: 0, unlockedClassIds: [], before: { totalProgressUnits: 24_000 }, after: { totalProgressUnits: 24_000 } });
+  });
+
   test('class availability follows catalog order', () => {
     expect(isClassUnlocked(0, 'lucky')).toBe(true);
     expect(isClassUnlocked(0, 'advantaged')).toBe(false);

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { arrangeCardsInLine, cardStringEndpoints, clampCardPosition, logicalPointerDelta, mountClassCardDrag, type CardStringLayer } from '../src/lobby/classCardDrag';
+import { clampCardPosition, logicalPointerDelta, mountClassCardDrag, pyramidLayerOrder, type CardStringLayer } from '../src/lobby/classCardDrag';
 
 class FakeElement extends EventTarget {
   style = { left: '', top: '', transform: '', zIndex: '', display: '' };
@@ -29,6 +29,13 @@ function pointer(type: string, values: Partial<PointerEvent>): Event {
 }
 
 describe('lobby class card dragging', () => {
+  test('orders layers as a pyramid pointing at the most recently picked card', () => {
+    expect(pyramidLayerOrder(5)).toEqual([0, 1, 2, 3, 4]);
+    expect(pyramidLayerOrder(5, 2)).toEqual([0, 4, 1, 3, 2]);
+    expect(pyramidLayerOrder(5, 0)).toEqual([4, 3, 2, 1, 0]);
+    expect(pyramidLayerOrder(5, 4)).toEqual([0, 1, 2, 3, 4]);
+  });
+
   test('converts rendered pointer travel into logical canvas travel', () => {
     expect(logicalPointerDelta(48, 480, 960)).toBe(96);
     expect(logicalPointerDelta(-27, 270, 540)).toBe(-54);
@@ -43,36 +50,14 @@ describe('lobby class card dragging', () => {
     expect(clampCardPosition(200, 100, card, bounds)).toEqual({ x: 200, y: 100 });
   });
 
-  test('arranges card centers in a perfectly spaced horizontal line', () => {
-    const arranged = arrangeCardsInLine([
-      { x: 50, y: 20, width: 80, height: 100, rotation: -20 },
-      { x: 200, y: 80, width: 60, height: 120, rotation: 15 },
-      { x: 500, y: 140, width: 100, height: 80, rotation: 5 },
-    ], { width: 600, height: 400 });
-    expect(arranged.map((card) => card.x + card.width / 2)).toEqual([40, 295, 550]);
-    expect(arranged.map((card) => card.y + card.height / 2)).toEqual([130, 130, 130]);
-    expect(arranged.map((card) => card.rotation)).toEqual([0, 0, 0]);
-  });
-
-  test('spaces portrait cards evenly on the diagonal between the raised left pin and fixed right pin', () => {
-    const cards = Array.from({ length: 3 }, (_, index) => ({ x: index * 40, y: 400, width: 80, height: 100, rotation: 10 }));
-    const canvas = { width: 540, height: 960 };
-    const endpoints = cardStringEndpoints(cards, canvas);
-    const arranged = arrangeCardsInLine(cards, canvas);
-    expect(endpoints).toEqual({ left: { x: 48, y: 114 }, right: { x: 492, y: 498 } });
-    expect(arranged.map((card) => [card.x + card.width / 2, card.y + card.height / 2])).toEqual([
-      [159, 210], [270, 306], [381, 402],
-    ]);
-    expect(arranged.map((card) => card.rotation)).toEqual([0, 0, 0]);
-  });
-
-  test('connects center anchors, gives under tension, stays slack under compression, and layers by movement', () => {
+  test('uses authored pins, connects only card centers, and instantly returns under reduced motion', () => {
     const first = new FakeElement();
     const second = new FakeElement();
     const composition = new FakeElement();
     Object.assign(composition, { getBoundingClientRect: () => ({ width: 480, height: 270 }) });
-    const firstGeometry = () => ({ x: 100, y: 50, width: 72, height: 102, rotation: -5 });
-    const secondGeometry = () => ({ x: 200, y: 50, width: 72, height: 102, rotation: 5 });
+    let portrait = false;
+    const firstGeometry = () => portrait ? { x: 20, y: 300, width: 64, height: 90.5 } : { x: 100, y: 50, width: 72, height: 102, rotation: -5 };
+    const secondGeometry = () => portrait ? { x: 220, y: 500, width: 64, height: 90.5 } : { x: 240, y: 80, width: 72, height: 102, rotation: 5 };
     const shadows: FakeElement[] = [];
     const string = new FakeElement();
     let stringBounds = { width: 0, height: 0 };
@@ -93,33 +78,32 @@ describe('lobby class card dragging', () => {
       createStringLayer: () => stringLayer,
     });
     expect(stringBounds).toEqual({ width: 960, height: 540 });
-    expect(stringPoints).toEqual([{ x: 48, y: 149 }, { x: 36, y: 101 }, { x: 924, y: 101 }, { x: 912, y: 149 }]);
+    expect(first.style.left).toBe('100px'); expect(first.style.top).toBe('50px');
+    expect(second.style.left).toBe('240px'); expect(second.style.top).toBe('80px');
+    expect(first.style.transform).toContain('rotate(-5deg)');
+    expect(stringPoints).toEqual([{ x: 136, y: 101 }, { x: 276, y: 131 }]);
 
     first.dispatchEvent(pointer('pointerdown', { clientX: 10, clientY: 20 }));
     expect(first.style.zIndex).toBe('7');
     expect(first.classes.has('is-dragging')).toBe(true);
-    expect(first.style.transform).toContain('scale(2.5)');
+    expect(first.style.transform).toContain('scale(1.5)');
     expect(shadows).toHaveLength(1);
     first.dispatchEvent(pointer('pointermove', { clientX: 34, clientY: 32 }));
-    expect(first.style.left).toBe('48px');
+    expect(first.style.left).toBe('148px');
     expect(first.style.top).toBe('74px');
-    expect(second.style.left).toBe('888px');
-    expect(stringPoints[1]).toEqual({ x: 84, y: 125 });
+    expect(stringPoints).toHaveLength(2);
     first.dispatchEvent(pointer('pointerup', { clientX: 34, clientY: 32 }));
-    expect(first.style.left).toBe('48px');
+    expect(first.style.left).toBe('100px'); expect(first.style.top).toBe('50px');
+    expect(second.style.left).toBe('240px'); expect(second.style.top).toBe('80px');
     expect(first.style.transform).toContain('scale(1)');
+    expect(first.style.transform).toContain('rotate(-5deg)');
     expect(shadows[0]!.removed).toBe(true);
     expect(first.capturedPointer).toBeUndefined();
 
-    controller.reset();
-    first.dispatchEvent(pointer('pointerdown', { clientX: 100, clientY: 20 }));
-    first.dispatchEvent(pointer('pointermove', { clientX: 0, clientY: 20 }));
-    expect(first.style.left).toBe('-48px');
-    expect(Number.parseFloat(second.style.left)).toBeLessThan(888);
-    expect(stringPoints[2]!.x - stringPoints[1]!.x).toBeGreaterThan(888);
-    expect(first.style.zIndex).toBe('7');
-    expect(second.style.zIndex).toBe('5');
-    first.dispatchEvent(pointer('pointerup', { clientX: 0, clientY: 20 }));
+    portrait = true; controller.reset();
+    expect(first.style.left).toBe('20px'); expect(first.style.top).toBe('300px');
+    expect(second.style.left).toBe('220px'); expect(second.style.top).toBe('500px');
+    expect(stringPoints).toEqual([{ x: 52, y: 345.25 }, { x: 252, y: 545.25 }]);
 
     controller.setEnabled(false);
     expect(string.style.display).toBe('none');
@@ -141,5 +125,40 @@ describe('lobby class card dragging', () => {
     const layerAfterDestroy = second.style.zIndex;
     second.dispatchEvent(pointer('pointerdown', {}));
     expect(second.style.zIndex).toBe(layerAfterDestroy);
+  });
+
+  test('tensions neighboring cards and springs every card exactly back to its authored pin', () => {
+    const first = new FakeElement(); const second = new FakeElement(); const composition = new FakeElement();
+    Object.assign(composition, { getBoundingClientRect: () => ({ width: 960, height: 540 }) });
+    let scheduled: FrameRequestCallback | undefined; let handle = 0;
+    const controller = mountClassCardDrag([
+      { element: first as unknown as HTMLElement, geometry: () => ({ x: 100, y: 100, width: 72, height: 102 }) },
+      { element: second as unknown as HTMLElement, geometry: () => ({ x: 200, y: 100, width: 72, height: 102 }) },
+    ], composition as unknown as HTMLElement, () => ({ width: 960, height: 540 }), {
+      reducedMotion: false,
+      requestFrame: (callback) => { scheduled = callback; return ++handle; },
+      cancelFrame: () => { scheduled = undefined; },
+      createShadow: () => new FakeElement() as unknown as HTMLElement,
+      createStringLayer: () => ({ element: new FakeElement() as unknown as HTMLElement, setBounds: () => {}, setPoints: () => {} }),
+    });
+    expect(first.style.zIndex).toBe('5'); expect(second.style.zIndex).toBe('7');
+    first.dispatchEvent(pointer('pointerdown', { clientX: 0, clientY: 0 }));
+    expect(first.style.zIndex).toBe('7'); expect(second.style.zIndex).toBe('5');
+    first.dispatchEvent(pointer('pointermove', { clientX: 300, clientY: 0 }));
+    expect(Number.parseFloat(second.style.left)).toBeGreaterThan(200);
+    expect(first.style.zIndex).toBe('7'); expect(second.style.zIndex).toBe('5');
+    first.dispatchEvent(pointer('pointerup', { clientX: 300, clientY: 0 }));
+    for (let frame = 1; scheduled && frame < 600; frame++) { const callback = scheduled; scheduled = undefined; callback(frame * 16); }
+    expect(scheduled).toBeUndefined();
+    expect(first.style.left).toBe('100px'); expect(first.style.top).toBe('100px');
+    expect(second.style.left).toBe('200px'); expect(second.style.top).toBe('100px');
+    expect(first.style.zIndex).toBe('7'); expect(second.style.zIndex).toBe('5');
+
+    second.dispatchEvent(pointer('pointerdown', {}));
+    expect(first.style.zIndex).toBe('5'); expect(second.style.zIndex).toBe('7');
+    second.dispatchEvent(pointer('pointerup', {}));
+    controller.reset();
+    expect(first.style.zIndex).toBe('5'); expect(second.style.zIndex).toBe('7');
+    controller.destroy();
   });
 });

@@ -268,6 +268,30 @@ describe('matchmaking session adapters', () => {
     expect(adapter.accountState()).toMatchObject({ playerId: 'player-1', displayName: 'New Name', rating: 1550 });
   });
 
+  test('persists unlock-all mode and exposes every class without changing XP', async () => {
+    const player = { playerId: 'player-1', displayName: 'Player', rating: 1500, totalProgressUnits: 20_000, unlockAllClasses: true,
+      level: 3, progressUnitsInLevel: 0, nextUnlock: 'juggernaut', unlockedClassIds: ['lucky', 'advantaged', 'thief'] };
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(player), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const adapter = new WebSocketShellSessionAdapter('https://example.test');
+
+    await adapter.setUnlockAllClasses(true);
+
+    expect(fetchMock).toHaveBeenCalledWith('https://example.test/player-progression', expect.objectContaining({ method: 'PUT', credentials: 'include' }));
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ unlockAllClasses: true });
+    expect(adapter.accountState()).toMatchObject({ totalProgressUnits: 20_000, level: 3, unlockAllClasses: true });
+    expect(adapter.accountState().unlockedClassIds).toHaveLength(21);
+  });
+
+  test('local unlock-all mode can be enabled and resumed', async () => {
+    const adapter = new LocalShellSessionAdapter();
+    await adapter.setUnlockAllClasses(true);
+    expect(adapter.accountState()).toMatchObject({ unlockAllClasses: true });
+    expect(adapter.accountState().unlockedClassIds).toHaveLength(21);
+    await adapter.setUnlockAllClasses(false);
+    expect(adapter.accountState()).toMatchObject({ unlockAllClasses: false, unlockedClassIds: ['lucky'] });
+  });
+
   test('lobby and whiteboard authenticate without putting secrets in URLs', async () => {
     const socket = vi.fn((_url: string | URL, _protocols?: string | string[]) => ({ addEventListener: vi.fn(), close: vi.fn() }));
     vi.stubGlobal('WebSocket', socket);

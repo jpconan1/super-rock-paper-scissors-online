@@ -9,7 +9,8 @@ import {
 } from '../src/core/onlineMatch';
 import type { MatchCommandPayload, MatchPlayer } from '../src/protocol/protocol';
 import {
-  createEmptyWhiteboard, pruneWhiteboardOperationPrefix, WHITEBOARD_COLORS, type WhiteboardClientMessage, type WhiteboardColor,
+  createEmptyWhiteboard, pruneWhiteboardOperationPrefix, shouldPruneWhiteboardOperations, WHITEBOARD_COLORS, WHITEBOARD_MAX_HEIGHT,
+  type WhiteboardClientMessage, type WhiteboardColor,
   type WhiteboardOperation, type WhiteboardPoint, type WhiteboardServerMessage, type WhiteboardSnapshot,
 } from '../src/whiteboard/protocol';
 import { isLobbyPresence, type LobbyPlayer, type LobbyPresence, type LobbyServerMessage } from '../src/lobby/protocol';
@@ -51,6 +52,7 @@ interface MatchRecord extends OnlineMatchState {
   ratingsFinalized?: boolean;
   ratingRetryAt?: number;
   playerProgress?: Record<Seat, number>;
+  playerUnlockAll?: Record<Seat, boolean>;
   progressAwards?: Partial<Record<Seat, ProgressAward>>;
 }
 interface SocketAttachment { seat: Seat; messageTimes: number[] }
@@ -81,7 +83,7 @@ export class MatchObject extends DurableObject<Env> {
     });
   }
 
-  async initialize(matchId: string, players?: Record<Seat, MatchPlayer>, playerIds?: Record<Seat, string>, format: 'abm-only' | 'multi-slot' = 'multi-slot', playerProgress?: Record<Seat, number>): Promise<{ matchId: string; seats: Record<Seat, string> }> {
+  async initialize(matchId: string, players?: Record<Seat, MatchPlayer>, playerIds?: Record<Seat, string>, format: 'abm-only' | 'multi-slot' = 'multi-slot', playerProgress?: Record<Seat, number>, playerUnlockAll?: Record<Seat, boolean>): Promise<{ matchId: string; seats: Record<Seat, string> }> {
     if (!this.record) {
       const seed = crypto.getRandomValues(new Uint32Array(1))[0]!;
       this.record = Object.assign(createOnlineMatch(matchId, players ?? {
@@ -93,6 +95,7 @@ export class MatchObject extends DurableObject<Env> {
         connections: { p1: false, p2: false },
         ...(playerIds ? { playerIds } : {}),
         ...(playerProgress ? { playerProgress } : {}),
+        ...(playerUnlockAll ? { playerUnlockAll } : {}),
       });
       await this.ctx.storage.put('match', this.record);
       await this.scheduleAlarm();
@@ -249,7 +252,7 @@ export class MatchObject extends DurableObject<Env> {
     const awards: Partial<Record<Seat, ProgressAward>> = {};
     for (const seat of ['p1', 'p2'] as const) {
       if (record.completionReason === 'disconnect' && record.disconnectedPlayer === seat) continue;
-      awards[seat] = createProgressAward(record.playerProgress[seat], seat === record.winner ? 'win' : 'loss');
+      awards[seat] = createProgressAward(record.playerProgress[seat], seat === record.winner ? 'win' : 'loss', record.playerUnlockAll?.[seat]);
     }
     return awards;
   }
@@ -257,7 +260,7 @@ export class MatchObject extends DurableObject<Env> {
   private assertClassUnlocked(seat: Seat, payload: MatchCommandPayload): void {
     if (payload.type !== 'variant-command' || payload.slotId !== 'slot-1' || !this.record?.playerProgress) return;
     const command = payload.command as Partial<AbmCommand> | null;
-    if (command?.type === 'lock-class' && command.classId && !isClassUnlocked(this.record.playerProgress[seat], command.classId)) {
+    if (command?.type === 'lock-class' && command.classId && !this.record.playerUnlockAll?.[seat] && !isClassUnlocked(this.record.playerProgress[seat], command.classId)) {
       throw new Error('Class is locked.');
     }
   }
@@ -279,7 +282,7 @@ export class MatchmakerObject extends DurableObject<Env> {
       await this.ctx.storage.delete(ticketKey);
     }
     const queue = (await this.ctx.storage.get<MatchmakingQueueEntry[]>('queue')) ?? [];
-    const refreshed = refreshMatchmakingQueue(queue, guestId, attemptId, name, player.rating, now, MATCHMAKING_QUEUE_TTL_MS, player.totalProgressUnits);
+    const refreshed = refreshMatchmakingQueue(queue, guestId, attemptId, name, player.rating, now, MATCHMAKING_QUEUE_TTL_MS, player.totalProgressUnits, player.unlockAllClasses);
     if (refreshed.ownedElsewhere) return { status: 'owned-elsewhere' };
     const opponent = refreshed.opponent;
     if (!opponent) {
@@ -295,6 +298,8 @@ export class MatchmakerObject extends DurableObject<Env> {
       p2: { name, platform: 'Web', rating: player.rating },
     }, { p1: opponent.guestId, p2: guestId }, 'abm-only', {
       p1: opponent.totalProgressUnits ?? 0, p2: player.totalProgressUnits,
+    }, {
+      p1: opponent.unlockAllClasses ?? false, p2: player.unlockAllClasses,
     });
     const expiresAt = now + MATCH_TICKET_TTL_MS;
     const ticketRecords = createMatchTicketRecords(matchId, initialized.seats, {
@@ -444,12 +449,14 @@ export class LobbyObject extends DurableObject<Env> {
 
 interface WhiteboardAttachment { guestId: string; displayName: string; clientKey: string; messageTimes: number[] }
 interface WhiteboardPrune { throughSequence: number; removed: WhiteboardOperation[] }
-const WHITEBOARD_MAX_OPERATIONS = 800;
-const WHITEBOARD_PRUNE_OPERATIONS = 200;
+const WHITEBOARD_MAX_OPERATIONS = 2_000;
+const WHITEBOARD_PRUNE_OPERATIONS = 500;
 const WHITEBOARD_MAX_POINTS = 180;
+const WHITEBOARD_MAX_OPERATION_BYTES = 2.5 * 1024 * 1024;
 
 export class WhiteboardObject extends DurableObject<Env> {
   private board: WhiteboardSnapshot = createEmptyWhiteboard();
+  private operationBytes = 0;
   private readonly rateLimiter = new WhiteboardRateLimiter();
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -457,7 +464,20 @@ export class WhiteboardObject extends DurableObject<Env> {
     ctx.blockConcurrencyWhile(async () => {
       const meta = await ctx.storage.get<Omit<WhiteboardSnapshot, 'operations'>>('board:meta');
       const stored = await ctx.storage.list<WhiteboardOperation>({ prefix: 'board:operation:' });
-      if (meta) this.board = { ...meta, operations: [...stored.values()].sort((a, b) => a.sequence - b.sequence) };
+      if (meta) {
+        const normalized: Omit<WhiteboardSnapshot, 'operations'> = { ...meta, maxHeight: WHITEBOARD_MAX_HEIGHT };
+        this.board = { ...normalized, operations: [...stored.values()].sort((a, b) => a.sequence - b.sequence) };
+        this.operationBytes = this.board.operations.reduce((total, operation) => total + operationByteLength(operation), 0);
+        const removed: WhiteboardOperation[] = [];
+        while (this.board.operations.length > WHITEBOARD_MAX_OPERATIONS || this.operationBytes > WHITEBOARD_MAX_OPERATION_BYTES) {
+          const batch = this.board.operations.splice(0, WHITEBOARD_PRUNE_OPERATIONS);
+          if (batch.length === 0) break;
+          removed.push(...batch);
+          this.operationBytes -= batch.reduce((total, operation) => total + operationByteLength(operation), 0);
+        }
+        if (removed.length > 0) await ctx.storage.delete(removed.map((operation) => operationKey(operation.sequence)));
+        if (Number(meta.maxHeight) !== WHITEBOARD_MAX_HEIGHT) await ctx.storage.put('board:meta', normalized);
+      }
     });
   }
 
@@ -484,8 +504,9 @@ export class WhiteboardObject extends DurableObject<Env> {
     if (visit && validClientId(visit) && !this.board.operations.some((operation) => operation.clientOperationId === `join:${visit}`)) {
       if (this.rateLimiter.allow(guestId, 'text', Date.now())) {
         const operation = this.createSystemText(`${displayName} entered the lobby!`, `join:${visit}`);
-        const prune = this.pruneIfNeeded();
-        this.board.operations.push(operation); this.board.sequence = operation.sequence; this.board.nextY = operation.rowY + operation.rowSpan * this.board.rowHeight;
+        const prune = this.pruneIfNeeded(operation);
+        this.board.operations.push(operation); this.operationBytes += operationByteLength(operation);
+        this.board.sequence = operation.sequence; this.board.nextY = operation.rowY + operation.rowSpan * this.board.rowHeight;
         await this.persistOperation(operation, prune); this.broadcastPrune(prune);
         this.broadcast({ type: 'operation', operation }); await this.trimIfNeeded();
       }
@@ -508,8 +529,8 @@ export class WhiteboardObject extends DurableObject<Env> {
       if (!this.rateLimiter.allow(attachment.guestId, category, Date.now())) {
         this.error(socket, 'rate-limited', 'Too many whiteboard operations.', message.clientOperationId); return;
       }
-      const prune = this.pruneIfNeeded();
-      this.board.operations.push(operation); this.board.sequence = operation.sequence;
+      const prune = this.pruneIfNeeded(operation);
+      this.board.operations.push(operation); this.operationBytes += operationByteLength(operation); this.board.sequence = operation.sequence;
       if (operation.kind === 'text') this.board.nextY = operation.rowY + operation.rowSpan * this.board.rowHeight;
       await this.persistOperation(operation, prune);
       this.broadcastPrune(prune);
@@ -552,10 +573,14 @@ export class WhiteboardObject extends DurableObject<Env> {
     });
   }
 
-  private pruneIfNeeded(): WhiteboardPrune | undefined {
-    const result = pruneWhiteboardOperationPrefix(this.board.operations, WHITEBOARD_MAX_OPERATIONS, WHITEBOARD_PRUNE_OPERATIONS);
+  private pruneIfNeeded(nextOperation: WhiteboardOperation): WhiteboardPrune | undefined {
+    const nextBytes = operationByteLength(nextOperation);
+    if (!shouldPruneWhiteboardOperations(this.board.operations.length, this.operationBytes, nextBytes,
+      WHITEBOARD_MAX_OPERATIONS, WHITEBOARD_MAX_OPERATION_BYTES)) return;
+    const result = pruneWhiteboardOperationPrefix(this.board.operations, this.board.operations.length, WHITEBOARD_PRUNE_OPERATIONS);
     if (result.throughSequence === undefined) return;
     this.board.operations = result.retained;
+    this.operationBytes -= result.removed.reduce((total, operation) => total + operationByteLength(operation), 0);
     return { throughSequence: result.throughSequence, removed: result.removed };
   }
 
@@ -571,6 +596,7 @@ export class WhiteboardObject extends DurableObject<Env> {
       ? operation.rowY + operation.rowSpan * this.board.rowHeight > this.board.top
       : operation.points.some((point) => point.y >= this.board.top));
     const removed = old.filter((operation) => !this.board.operations.includes(operation));
+    this.operationBytes -= removed.reduce((total, operation) => total + operationByteLength(operation), 0);
     await this.ctx.storage.transaction(async (storage) => {
       await storage.delete(removed.map((operation) => operationKey(operation.sequence)));
       await storage.put('board:meta', boardMeta(this.board));
@@ -587,6 +613,7 @@ export class WhiteboardObject extends DurableObject<Env> {
 
 function boardMeta(board: WhiteboardSnapshot): Omit<WhiteboardSnapshot, 'operations'> { const { operations: _operations, ...meta } = board; return meta; }
 function operationKey(sequence: number): string { return `board:operation:${String(sequence).padStart(12, '0')}`; }
+function operationByteLength(operation: WhiteboardOperation): number { return new TextEncoder().encode(JSON.stringify(operation)).byteLength; }
 function validClientId(value: unknown): value is string { return typeof value === 'string' && value.length > 0 && value.length <= 100; }
 function normalizeColor(value: unknown): WhiteboardColor { return WHITEBOARD_COLORS.includes(value as WhiteboardColor) ? value as WhiteboardColor : 'black'; }
 function sanitizeText(value: unknown, max: number): string { return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ').slice(0, max) : ''; }
@@ -620,35 +647,35 @@ export async function finalizeMatch(db: D1Database, result: {
 
 class GuestAuthError extends Error {}
 
-interface AuthenticatedPlayer { playerId: string; displayName: string; rating: number; totalProgressUnits: number }
+interface AuthenticatedPlayer { playerId: string; displayName: string; rating: number; totalProgressUnits: number; unlockAllClasses: boolean }
 
-async function getPlayer(db: D1Database, playerId: string): Promise<{ displayName: string; rating: number; totalProgressUnits: number }> {
-  const player = await db.prepare('SELECT display_name, rating, total_progress_units FROM players WHERE player_id = ?').bind(playerId)
-    .first<{ display_name: string; rating: number; total_progress_units: number }>();
+async function getPlayer(db: D1Database, playerId: string): Promise<{ displayName: string; rating: number; totalProgressUnits: number; unlockAllClasses: boolean }> {
+  const player = await db.prepare('SELECT display_name, rating, total_progress_units, unlock_all_classes FROM players WHERE player_id = ?').bind(playerId)
+    .first<{ display_name: string; rating: number; total_progress_units: number; unlock_all_classes: number }>();
   if (!player) throw new GuestAuthError('Player not found.');
-  return { displayName: player.display_name, rating: player.rating, totalProgressUnits: player.total_progress_units };
+  return { displayName: player.display_name, rating: player.rating, totalProgressUnits: player.total_progress_units, unlockAllClasses: player.unlock_all_classes === 1 };
 }
 
 async function authenticateRequestPlayer(request: Request, env: Env, guestId?: string | null,
   guestSecret?: string | null): Promise<AuthenticatedPlayer> {
   const session = await createAuth(env).api.getSession({ headers: request.headers });
   if (session) {
-    const player = await env.DB.prepare('SELECT player_id, display_name, rating, total_progress_units FROM players WHERE auth_user_id = ?')
-      .bind(session.user.id).first<{ player_id: string; display_name: string; rating: number; total_progress_units: number }>();
-    if (player) return { playerId: player.player_id, displayName: player.display_name, rating: player.rating, totalProgressUnits: player.total_progress_units };
+    const player = await env.DB.prepare('SELECT player_id, display_name, rating, total_progress_units, unlock_all_classes FROM players WHERE auth_user_id = ?')
+      .bind(session.user.id).first<{ player_id: string; display_name: string; rating: number; total_progress_units: number; unlock_all_classes: number }>();
+    if (player) return { playerId: player.player_id, displayName: player.display_name, rating: player.rating, totalProgressUnits: player.total_progress_units, unlockAllClasses: player.unlock_all_classes === 1 };
   }
   if (!guestId || !guestSecret) throw new GuestAuthError('Authentication required.');
   const player = await authenticateExistingGuest(env.DB, guestId, guestSecret);
   return { playerId: guestId, ...player };
 }
 
-async function authenticateExistingGuest(db: D1Database, guestId: string, secret: string): Promise<{ displayName: string; rating: number; totalProgressUnits: number }> {
+async function authenticateExistingGuest(db: D1Database, guestId: string, secret: string): Promise<{ displayName: string; rating: number; totalProgressUnits: number; unlockAllClasses: boolean }> {
   if (!validClientId(guestId) || secret.length < 32 || secret.length > 256) throw new GuestAuthError('Invalid guest credentials.');
   const secretHash = await sha256(secret);
-  const player = await db.prepare('SELECT guest_secret_hash, display_name, rating, total_progress_units FROM players WHERE player_id = ?').bind(guestId)
-    .first<{ guest_secret_hash: string; display_name: string; rating: number; total_progress_units: number }>();
+  const player = await db.prepare('SELECT guest_secret_hash, display_name, rating, total_progress_units, unlock_all_classes FROM players WHERE player_id = ?').bind(guestId)
+    .first<{ guest_secret_hash: string; display_name: string; rating: number; total_progress_units: number; unlock_all_classes: number }>();
   if (!player || !constantTimeEqual(player.guest_secret_hash, secretHash)) throw new GuestAuthError('Invalid guest credentials.');
-  return { displayName: player.display_name, rating: player.rating, totalProgressUnits: player.total_progress_units };
+  return { displayName: player.display_name, rating: player.rating, totalProgressUnits: player.total_progress_units, unlockAllClasses: player.unlock_all_classes === 1 };
 }
 
 async function createGuestSession(db: D1Database, request: GuestSessionRequest): Promise<GuestSessionResponse> {
@@ -656,7 +683,7 @@ async function createGuestSession(db: D1Database, request: GuestSessionRequest):
     try {
       const current = await authenticateExistingGuest(db, request.guestId, request.guestSecret);
       if (request.displayName === undefined) {
-        return { ...guestProfile(request.guestId, current.displayName, current.rating, current.totalProgressUnits), guestSecret: request.guestSecret };
+        return { ...guestProfile(request.guestId, current.displayName, current.rating, current.totalProgressUnits, current.unlockAllClasses), guestSecret: request.guestSecret };
       }
       const displayName = normalizeGuestDisplayName(request.displayName);
       if (!displayName) throw new RequestBodyError(400, `Display name must be 1-${GUEST_NAME_MAX_LENGTH} characters.`);
@@ -664,7 +691,7 @@ async function createGuestSession(db: D1Database, request: GuestSessionRequest):
         await db.prepare('UPDATE players SET display_name = ?, updated_at = ? WHERE player_id = ?')
           .bind(displayName, Date.now(), request.guestId).run();
       }
-      return { ...guestProfile(request.guestId, displayName, current.rating, current.totalProgressUnits), guestSecret: request.guestSecret };
+      return { ...guestProfile(request.guestId, displayName, current.rating, current.totalProgressUnits, current.unlockAllClasses), guestSecret: request.guestSecret };
     } catch (error) {
       if (error instanceof RequestBodyError) throw error;
       if (!(error instanceof GuestAuthError)) throw error;
@@ -755,14 +782,31 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
           await env.DB.prepare('UPDATE players SET display_name = ?, updated_at = ? WHERE auth_user_id = ?')
             .bind(displayName, Date.now(), authSession.user.id).run();
         } else if (request.method !== 'GET') return json({ error: 'Method not allowed.' }, 405);
-        const player = await env.DB.prepare('SELECT player_id, display_name, rating, guest_secret_hash, total_progress_units FROM players WHERE auth_user_id = ?')
-          .bind(authSession.user.id).first<{ player_id: string; display_name: string; rating: number; guest_secret_hash: string; total_progress_units: number }>();
+        const player = await env.DB.prepare('SELECT player_id, display_name, rating, guest_secret_hash, total_progress_units, unlock_all_classes FROM players WHERE auth_user_id = ?')
+          .bind(authSession.user.id).first<{ player_id: string; display_name: string; rating: number; guest_secret_hash: string; total_progress_units: number; unlock_all_classes: number }>();
         if (!player) return json({ error: 'Player not found.' }, 404);
-        return json({ ...guestProfile(player.player_id, player.display_name, player.rating, player.total_progress_units),
+        return json({ ...guestProfile(player.player_id, player.display_name, player.rating, player.total_progress_units, player.unlock_all_classes === 1),
           isAnonymous: Boolean((authSession.user as { isAnonymous?: boolean }).isAnonymous) });
       } catch (error) {
         if (error instanceof RequestBodyError) return json({ error: error.message }, error.status);
         return json({ error: 'Player session failed.' }, 401);
+      }
+    }
+    if (url.pathname === '/player-progression' && request.method === 'PUT') {
+      try {
+        const authSession = await createAuth(env).api.getSession({ headers: request.headers });
+        if (!authSession) return json({ error: 'Authentication required.' }, 401);
+        const body = await readJsonBody<{ unlockAllClasses?: unknown }>(request, 1_000);
+        if (typeof body.unlockAllClasses !== 'boolean') return json({ error: 'unlockAllClasses must be a boolean.' }, 400);
+        await env.DB.prepare('UPDATE players SET unlock_all_classes = ?, updated_at = ? WHERE auth_user_id = ?')
+          .bind(body.unlockAllClasses ? 1 : 0, Date.now(), authSession.user.id).run();
+        const player = await env.DB.prepare('SELECT player_id, display_name, rating, total_progress_units, unlock_all_classes FROM players WHERE auth_user_id = ?')
+          .bind(authSession.user.id).first<{ player_id: string; display_name: string; rating: number; total_progress_units: number; unlock_all_classes: number }>();
+        if (!player) return json({ error: 'Player not found.' }, 404);
+        return json(guestProfile(player.player_id, player.display_name, player.rating, player.total_progress_units, player.unlock_all_classes === 1));
+      } catch (error) {
+        if (error instanceof RequestBodyError) return json({ error: error.message }, error.status);
+        return json({ error: 'Progression update failed.' }, 500);
       }
     }
     if (url.pathname === '/matchmaking' && request.method === 'POST') {

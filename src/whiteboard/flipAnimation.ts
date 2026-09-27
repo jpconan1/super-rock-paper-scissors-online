@@ -1,17 +1,43 @@
 import type { LogicalAnimationFrame } from '../animation/animationPlayer';
 
+export type LobbyFace = 'whiteboard' | 'progression' | 'more-variants';
+export type LobbyFlipKind = 'whiteboard' | 'paper';
+
+export interface LobbyFlipFrame {
+  kind: LobbyFlipKind;
+  source: string;
+  progress: number;
+}
+
+export interface LobbyFaceTransition {
+  kind: LobbyFlipKind;
+  frames: LogicalAnimationFrame<LobbyFlipFrame>[];
+}
+
 const ROTATION_ANGLES = [0, 18, 35, 53, 70, 88, 106, 125, 143, 162, 180] as const;
+const PAPER_ROTATION_ANGLES = ROTATION_ANGLES.slice(1);
 
 export const WHITEBOARD_ROTATION_FRAMES = ROTATION_ANGLES.map((angle, index) =>
   `/lobby/whiteboard-wall-rotation-${String(index + 1).padStart(2, '0')}-${angle}deg.webp`);
 
-export function whiteboardFlipFrames(opening: boolean, reducedMotion: boolean): LogicalAnimationFrame<string>[] {
-  if (reducedMotion) return [];
-  const sources = opening ? [...WHITEBOARD_ROTATION_FRAMES].reverse() : WHITEBOARD_ROTATION_FRAMES;
-  return sources.map((value) => ({ value, durationMs: 42 }));
-}
+export const PAPER_ROTATION_FRAMES = PAPER_ROTATION_ANGLES.map((angle, index) =>
+  `/lobby/paper-wall-rotation-${String(index + 2).padStart(2, '0')}-${angle}deg-sheet.webp`);
 
-export function whiteboardRotationProgress(source: string): number {
-  const index = WHITEBOARD_ROTATION_FRAMES.indexOf(source);
-  return index < 0 ? 0 : ROTATION_ANGLES[index]! / 180;
+export function lobbyFaceTransition(from: LobbyFace, to: LobbyFace, reducedMotion: boolean): LobbyFaceTransition | null {
+  if (from === to) return null;
+  const kind: LobbyFlipKind = from === 'whiteboard' || to === 'whiteboard' ? 'whiteboard' : 'paper';
+  if (reducedMotion) return { kind, frames: [] };
+  const sources = kind === 'paper'
+    ? PAPER_ROTATION_FRAMES
+    : to === 'whiteboard' ? [...WHITEBOARD_ROTATION_FRAMES].reverse() : WHITEBOARD_ROTATION_FRAMES;
+  const angles = kind === 'paper'
+    ? PAPER_ROTATION_ANGLES
+    : to === 'whiteboard' ? [...ROTATION_ANGLES].reverse() : ROTATION_ANGLES;
+  return {
+    kind,
+    frames: sources.map((source, index) => ({
+      value: { kind, source, progress: angles[index]! / 180 },
+      durationMs: 42,
+    })),
+  };
 }
