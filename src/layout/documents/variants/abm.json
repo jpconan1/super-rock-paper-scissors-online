@@ -951,6 +951,185 @@
       }
     },
     {
+      "id": "counterpick-cloud-big",
+      "type": "sprite",
+      "parent": "scene",
+      "protected": true,
+      "layer": 4,
+      "assets": {
+        "src": "/variants/abm/counterpick-cloud-big-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": -32,
+          "y": -16,
+          "width": 448,
+          "height": 224,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": -30,
+          "y": -15,
+          "width": 412,
+          "height": 206,
+          "aspectLock": true
+        }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      }
+    },
+    {
+      "id": "counterpick-cloud-p1-tiny",
+      "type": "sprite",
+      "protected": true,
+      "layer": 2,
+      "assets": {
+        "src": "/variants/abm/counterpick-cloud-tiny-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 180,
+          "y": 65,
+          "width": 24,
+          "height": 23.21311475409836,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 125,
+          "y": 175,
+          "width": 24,
+          "height": 23.21311475409836,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "counterpick-cloud-p1-small",
+      "type": "sprite",
+      "protected": true,
+      "layer": 2,
+      "assets": {
+        "src": "/variants/abm/counterpick-cloud-small-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 120,
+          "y": 120,
+          "width": 38,
+          "height": 41.54639175257732,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 150,
+          "y": 220,
+          "width": 38,
+          "height": 41.54639175257732,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "counterpick-cloud-p1-medium",
+      "type": "sprite",
+      "protected": true,
+      "layer": 2,
+      "assets": {
+        "src": "/variants/abm/counterpick-cloud-medium-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 185,
+          "y": 115,
+          "width": 58,
+          "height": 52.97109826589595,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 170,
+          "y": 285,
+          "width": 58,
+          "height": 52.97109826589595,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "counterpick-cloud-p2-tiny",
+      "type": "sprite",
+      "protected": true,
+      "layer": 2,
+      "assets": {
+        "src": "/variants/abm/counterpick-cloud-tiny-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 756,
+          "y": 65,
+          "width": 24,
+          "height": 23.21311475409836,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 391,
+          "y": 175,
+          "width": 24,
+          "height": 23.21311475409836,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "counterpick-cloud-p2-small",
+      "type": "sprite",
+      "protected": true,
+      "layer": 2,
+      "assets": {
+        "src": "/variants/abm/counterpick-cloud-small-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 802,
+          "y": 120,
+          "width": 38,
+          "height": 41.54639175257732,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 352,
+          "y": 220,
+          "width": 38,
+          "height": 41.54639175257732,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "counterpick-cloud-p2-medium",
+      "type": "sprite",
+      "protected": true,
+      "layer": 2,
+      "assets": {
+        "src": "/variants/abm/counterpick-cloud-medium-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 717,
+          "y": 115,
+          "width": 58,
+          "height": 52.97109826589595,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 312,
+          "y": 285,
+          "width": 58,
+          "height": 52.97109826589595,
+          "aspectLock": true
+        }
+      }
+    },
+    {
       "id": "picker-portrait",
       "type": "sprite",
       "parent": "scene",

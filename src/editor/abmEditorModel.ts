@@ -17,9 +17,20 @@ const MIRRORABLE_P1_IDS = new Set([
   'p1-limited-group', 'p1-limited-icon', 'p1-limited-count',
   'p1-waiting-ready', 'p1-waiting-dots',
 ]);
+const COUNTERPICK_THOUGHT_BUBBLE_CONTEXT_IDS = new Set([
+  'p1-info', 'p2-info', 'scene', 'counterpick-cloud-big', 'picker-portrait', 'picker-copy',
+]);
+
+export function isAbmCounterpickThoughtBubbleEditorElement(element: LayoutElement): boolean {
+  return /^counterpick-cloud-p[12]-(?:tiny|small|medium)$/.test(element.id);
+}
+
+export function isAbmCounterpickThoughtBubbleEditorContext(element: LayoutElement): boolean {
+  return COUNTERPICK_THOUGHT_BUBBLE_CONTEXT_IDS.has(element.id) || isAbmCounterpickThoughtBubbleEditorElement(element);
+}
 
 export function isAbmBattleEditorElement(element: LayoutElement): boolean {
-  if (EXCLUDED_IDS.has(element.id) || /-tag-[1-3]$/.test(element.id)) return false;
+  if (EXCLUDED_IDS.has(element.id) || element.id.startsWith('counterpick-cloud-') || /-tag-[1-3]$/.test(element.id)) return false;
   return element.stateVisibility?.battle !== false;
 }
 
@@ -89,9 +100,10 @@ export function getEditorMirrorUpdate(
   sourceId: string,
   orientation: LayoutOrientation,
 ): EditorMirrorUpdate | undefined {
-  if (!MIRRORABLE_P1_IDS.has(sourceId)) return undefined;
+  const counterpickCloud = /^counterpick-cloud-p1-(?:tiny|small|medium)$/.test(sourceId);
+  if (!MIRRORABLE_P1_IDS.has(sourceId) && !counterpickCloud) return undefined;
   const source = document.elements.find(({ id }) => id === sourceId);
-  const targetId = sourceId.replace(/^p1-/, 'p2-');
+  const targetId = counterpickCloud ? sourceId.replace('counterpick-cloud-p1-', 'counterpick-cloud-p2-') : sourceId.replace(/^p1-/, 'p2-');
   const target = document.elements.find(({ id }) => id === targetId);
   if (!source || !target || source.type !== target.type) return undefined;
   const expectedParent = source.parent?.replace(/^p1-/, 'p2-');

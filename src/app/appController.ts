@@ -21,7 +21,7 @@ import type { LobbyPlayer } from '../lobby/protocol';
 import { beats } from '../core/time';
 import { MusicDirector } from '../audio/musicDirector';
 import { destroySoundCatalog, playCatalogSound } from '../audio/soundCatalog';
-import { LocalAbmMatch } from './localAbmMatch';
+import { LocalAbmMatch, type TutorialEnding } from './localAbmMatch';
 import { randomId } from '../core/randomId';
 import { hasSeenAbmNewsletter, mountAbmLetterModal } from './abmLetterModal';
 import { mountAccountScreen } from './accountScreen';
@@ -29,7 +29,7 @@ import { mountProgressScreen } from './progressScreen';
 import { createNextLevelProgressAward, type ProgressAward } from '../core/progression';
 import { createClassRewardFlow, mountClassRewardScreen } from './classRewardScreen';
 import { AlertSystem } from '../ui/alertSystem';
-import { ABM_TUTORIAL_SLIDES, mountTutorialSlideshow, type TutorialSlideshow } from './tutorialSlideshow';
+import { ABM_TUTORIAL_SLIDES, mountTutorialSlideshow, tutorialEndingSlide, type TutorialSlideshow } from './tutorialSlideshow';
 
 export type ConnectionState = 'connected' | 'reconnecting' | 'offline';
 export type ShellDestination = 'title' | 'lobby' | 'account' | 'match-found' | 'slot-picker' | 'scoreboard' | 'gameplay' | 'progress' | 'reward';
@@ -186,7 +186,10 @@ export class AppController {
     this.activeSlot = slotId;
     if (descriptor?.variantId === 'attack-block-mana') this.music.enterAbm();
     const emit = send ?? ((command: unknown) => {
-      if (this.localMatch) this.localMatch.send(command);
+      if (this.localMatch) {
+        this.localMatch.send(command);
+        if (isTutorialMoveCommand(command)) this.tutorialSlideshow?.complete('move');
+      }
       else if (this.connectionState === 'connected') this.options.session.send(command);
     });
     presentation.mount({
@@ -603,7 +606,7 @@ export class AppController {
     this.localMatch = new LocalAbmMatch({
       playerName: this.playerName,
       startingClasses: { p1: 'lucky', p2: 'lucky' },
-      computerStartsPaused: true,
+      tutorial: { onEnding: (ending) => this.openTutorialEnding(ending) },
       publish: (snapshot) => this.receiveSnapshot(snapshot, true),
     });
     this.localMatch.start();
@@ -617,7 +620,15 @@ export class AppController {
       this.screenLayer,
       this.options.clock,
       ABM_TUTORIAL_SLIDES,
-      () => { this.tutorialSlideshow = undefined; this.localMatch?.resumeComputer(); },
+      () => { this.tutorialSlideshow = undefined; },
+    );
+  }
+
+  private openTutorialEnding(ending: TutorialEnding): void {
+    this.closeTutorialSlideshow();
+    this.tutorialSlideshow = mountTutorialSlideshow(
+      this.modalLayer, this.screenLayer, this.options.clock, [tutorialEndingSlide(ending)],
+      () => { this.tutorialSlideshow = undefined; void this.returnToLobbyFromMatch(); },
     );
   }
 
@@ -766,6 +777,10 @@ export class AppController {
 
 function isControllerOptions(value: AppControllerOptions | PresentationRegistry): value is AppControllerOptions {
   return 'clock' in value && 'season' in value && 'session' in value;
+}
+
+export function isTutorialMoveCommand(value: unknown): boolean {
+  return typeof value === 'object' && value !== null && (value as { type?: unknown }).type === 'choose-move';
 }
 
 function createLayers(container: HTMLElement): { screen: HTMLElement; modal: HTMLElement; transition: HTMLElement } {

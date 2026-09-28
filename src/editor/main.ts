@@ -1,24 +1,26 @@
 import './editor.css';
 import { BoilClock } from '../animation/boilClock';
 import { createProgressAward } from '../core/progression';
+import { ABM_TUTORIAL_SLIDES } from '../app/tutorialSlideshow';
 import { createXpProgressBar } from '../app/xpProgressBar';
 import { createGameButton } from '../input/gameButton';
 import { applyLayoutGeometry, validateLayoutDocument, type LayoutDocument, type LayoutElement, type LayoutOrientation } from '../layout/layoutDocument';
 import { getLayoutDocument } from '../layout/layoutDocuments';
 import { createBoilingSprite } from '../renderer/boilingSprite';
 import { curtainOpenAsset } from '../renderer/curtainWipe';
-import { abmEditorGeometry, getEditorMirrorUpdate, isAbmBattleEditorElement, isAbmPostMatchEditorElement, isAbmWaitingEditorElement, isEditorElementVisible, resizeEditorGeometry, setAbmEditorGeometry } from './abmEditorModel';
+import { applyAlertGeometry } from '../ui/fixedAlertCanvas';
+import { abmEditorGeometry, getEditorMirrorUpdate, isAbmBattleEditorElement, isAbmCounterpickThoughtBubbleEditorContext, isAbmCounterpickThoughtBubbleEditorElement, isAbmPostMatchEditorElement, isAbmWaitingEditorElement, isEditorElementVisible, resizeEditorGeometry, setAbmEditorGeometry } from './abmEditorModel';
 
 const hostElement = document.querySelector<HTMLElement>('#editor');
 if (!hostElement) throw new Error('Missing editor mount.');
 const host: HTMLElement = hostElement;
 const clock = new BoilClock(document, true);
-type EditorScreen = 'variant-abm' | 'class-reward';
+type EditorScreen = 'variant-abm' | 'class-reward' | 'tutorial-slide-one';
 type RewardState = 'unlocked' | 'next';
-type AbmState = 'battle' | 'waiting' | 'post-match';
+type AbmState = 'battle' | 'waiting' | 'counterpick-thought-bubble' | 'post-match';
 const drafts = new Map<EditorScreen, LayoutDocument>();
 const savedDocuments = new Map<EditorScreen, LayoutDocument>();
-for (const id of ['variant-abm', 'class-reward'] as const) {
+for (const id of ['variant-abm', 'class-reward', 'tutorial-slide-one'] as const) {
   drafts.set(id, clone(getLayoutDocument(id)));
   savedDocuments.set(id, clone(getLayoutDocument(id)));
 }
@@ -36,7 +38,7 @@ let cleanups: (() => void)[] = [];
 
 host.innerHTML = `<main class="abm-editor">
   <header class="abm-editor__toolbar"><strong data-title>Attack Block Mana · Game screen</strong>
-    <label>Screen <select data-screen><option value="variant-abm">ABM game</option><option value="class-reward">Class reward</option></select></label>
+    <label>Screen <select data-screen><option value="variant-abm">ABM game</option><option value="class-reward">Class reward</option><option value="tutorial-slide-one">Tutorial slide 1</option></select></label>
     <label data-state-label>State <select data-state></select></label>
     <label>View <select data-orientation><option value="landscape">Landscape</option><option value="portrait">Portrait</option></select></label>
     <span>Drag to move · bottom-right handle resizes</span><button data-undo disabled>Undo</button><button data-redo disabled>Redo</button><button data-reset disabled>Reset</button>
@@ -50,18 +52,27 @@ const $ = <T extends Element>(selector: string) => host.querySelector<T>(selecto
 const selected = () => working.elements.find(({ id }) => id === selectedId);
 const visibleElements = () => working.elements.filter((element) => screen === 'variant-abm'
   ? (abmState === 'post-match' ? isAbmPostMatchEditorElement(element)
-    : abmState === 'waiting' ? isAbmWaitingEditorElement(element) : isAbmBattleEditorElement(element))
-  : isEditorElementVisible(element, rewardState));
+    : abmState === 'waiting' ? isAbmWaitingEditorElement(element)
+      : abmState === 'counterpick-thought-bubble' ? isAbmCounterpickThoughtBubbleEditorContext(element)
+        : isAbmBattleEditorElement(element))
+  : screen === 'class-reward' ? isEditorElementVisible(element, rewardState) : true);
+const editableElements = () => visibleElements().filter((element) => screen !== 'variant-abm'
+  || abmState !== 'counterpick-thought-bubble' || isAbmCounterpickThoughtBubbleEditorElement(element));
 
 function render(): void {
   cleanups.forEach((cleanup) => cleanup()); cleanups = [];
   const canvas = $<HTMLElement>('[data-canvas]');
   const size = working.canvases[orientation];
   canvas.style.width = `${size.width}px`; canvas.style.height = `${size.height}px`; canvas.replaceChildren();
+  if (screen === 'tutorial-slide-one') renderTutorialBackdrop(canvas);
   const configs = [...visibleElements()].sort((a, b) => (a.layer ?? 0) - (b.layer ?? 0));
+  const editableIds = new Set(editableElements().map(({ id }) => id));
   const nodes = new Map<string, HTMLElement>();
   for (const config of configs) {
-    const node = makeNode(config); node.dataset.id = config.id; node.dataset.layoutElement = config.id; node.classList.toggle('is-selected', config.id === selectedId);
+    const node = makeNode(config); node.dataset.layoutElement = config.id;
+    if (editableIds.has(config.id)) node.dataset.id = config.id;
+    else node.classList.add('is-reference');
+    node.classList.toggle('is-selected', config.id === selectedId);
     if (configs.some(({ parent }) => parent === config.id)) { node.classList.add('is-structural'); node.textContent = ''; }
     applyLayoutGeometry(node, screen === 'variant-abm' ? abmEditorGeometry(config, orientation) : config.layouts[orientation]); node.style.zIndex = String(config.layer ?? 0); nodes.set(config.id, node);
   }
@@ -81,12 +92,25 @@ function render(): void {
   }
   renderList(); renderInspector(); updateToolbar(); applyZoom();
   $('[data-title]').textContent = screen === 'variant-abm'
-    ? `Attack Block Mana · ${abmState === 'battle' ? 'Game screen' : abmState === 'waiting' ? 'Waiting' : 'Post-match XP'}`
-    : `Class Reward · ${rewardState === 'unlocked' ? 'Class Unlocked' : 'Next Class'}`;
+    ? `Attack Block Mana · ${abmState === 'battle' ? 'Game screen' : abmState === 'waiting' ? 'Waiting' : abmState === 'counterpick-thought-bubble' ? 'Counterpick thought bubble' : 'Post-match XP'}`
+    : screen === 'class-reward' ? `Class Reward · ${rewardState === 'unlocked' ? 'Class Unlocked' : 'Next Class'}`
+      : 'Tutorial · Slide 1';
+}
+
+function renderTutorialBackdrop(canvas: HTMLElement): void {
+  const slide = ABM_TUTORIAL_SLIDES[0]!;
+  const shade = document.createElement('div'); shade.className = 'tutorial-slideshow__shade abm-editor__tutorial-shade';
+  const panel = document.createElement('section'); panel.className = 'textbox tutorial-slideshow__panel tutorial-slideshow__panel--layout abm-editor__tutorial-panel';
+  const copy = document.createElement('div'); copy.className = 'tutorial-slideshow__copy';
+  copy.replaceChildren(...slide.content.map((block) => {
+    const node = document.createElement(block.style === 'heading' ? 'h1' : block.style === 'subheading' ? 'h2' : 'p');
+    node.className = `tutorial-slideshow__text tutorial-slideshow__text--${block.style}`; node.textContent = block.text; return node;
+  }));
+  panel.append(copy); applyAlertGeometry(panel, slide.panel, orientation); canvas.append(shade, panel);
 }
 
 function makeNode(config: LayoutElement): HTMLElement {
-  const className = `abm-editor__node abm-editor__node--${config.type}`;
+  const className = `abm-editor__node abm-editor__node--${config.type}${config.className ? ` ${config.className}` : ''}`;
   if (config.id === 'next-progress-count' || config.id === 'match-progress-count') {
     const count = document.createElement('div'); count.className = `${className} xp-progress-bar__count`;
     const value = document.createElement('span'); value.className = 'xp-progress-bar__count-value'; value.textContent = '7,250 / 10,000 XP'; count.append(value);
@@ -113,7 +137,10 @@ function makeNode(config: LayoutElement): HTMLElement {
       upSheet: config.assets.up, betweenSheet: config.assets.between, depressedSheet: config.assets.depressed });
     button.element.className += ` ${className}`; button.element.tabIndex = -1; cleanups.push(() => button.destroy()); return button.element;
   }
-  const node = document.createElement('div'); node.className = className; node.textContent = previewText(config);
+  const node = document.createElement('div'); node.className = className;
+  if (config.className === 'tutorial-slide-one__comparison-copy') {
+    const text = document.createElement('span'); text.textContent = previewText(config); node.append(text);
+  } else node.textContent = previewText(config);
   cleanups.push(() => node.remove()); return node;
 }
 
@@ -127,7 +154,7 @@ function previewText(config: LayoutElement): string {
 
 function renderList(): void {
   const list = $('[data-list]'); list.replaceChildren();
-  for (const item of visibleElements()) {
+  for (const item of editableElements()) {
     const button = document.createElement('button'); button.textContent = item.label ?? name(item.id); button.classList.toggle('is-selected', item.id === selectedId);
     button.onclick = () => { selectedId = item.id; render(); }; list.append(button);
   }
@@ -231,9 +258,11 @@ $<HTMLSelectElement>('[data-state]').onchange = (event) => {
 };
 function syncStateOptions(): void {
   const select = $<HTMLSelectElement>('[data-state]');
+  $<HTMLElement>('[data-state-label]').hidden = screen === 'tutorial-slide-one';
+  if (screen === 'tutorial-slide-one') { select.replaceChildren(); return; }
   select.innerHTML = screen === 'class-reward'
     ? '<option value="unlocked">Class Unlocked</option><option value="next">Next Class</option>'
-    : '<option value="battle">Battle</option><option value="waiting">Waiting</option><option value="post-match">Post-match XP fill</option>';
+    : '<option value="battle">Battle</option><option value="waiting">Waiting</option><option value="counterpick-thought-bubble">Counterpick thought bubble</option><option value="post-match">Post-match XP fill</option>';
   select.value = screen === 'class-reward' ? rewardState : abmState;
 }
 $<HTMLSelectElement>('[data-orientation]').onchange = (event) => { orientation = (event.target as HTMLSelectElement).value as LayoutOrientation; selectedId = undefined; render(); fit(); };

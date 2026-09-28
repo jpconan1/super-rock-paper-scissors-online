@@ -26,6 +26,13 @@ const STUNNED_BUTTON_TAG = `${ABM_ROOT}/stunned-button-tag-sheet.webp`;
 const COUNTERPICK_TAG = `${ABM_ROOT}/counterpick-tag-sheet.webp`;
 const PICK_CLASS_HEADER = `${ABM_ROOT}/pick-class-sheet.webp`;
 const LOCKED_CLASS_ART = `${ABM_ROOT}/locked-sheet.webp`;
+const COUNTERPICK_CLOUD_ART = {
+  big: `${ABM_ROOT}/counterpick-cloud-big-sheet.webp`,
+  mask: `${ABM_ROOT}/counterpick-cloud-mask.webp`,
+  medium: `${ABM_ROOT}/counterpick-cloud-medium-sheet.webp`,
+  small: `${ABM_ROOT}/counterpick-cloud-small-sheet.webp`,
+  tiny: `${ABM_ROOT}/counterpick-cloud-tiny-sheet.webp`,
+} as const;
 const SYSTEM_SCENE_ROOT = '/visual-elements/system-scenes';
 export const ABM_RESULT_SCENES = {
   roundWon: `${SYSTEM_SCENE_ROOT}/round-won-sheet.webp`,
@@ -44,6 +51,55 @@ const CONTROL_ART: Record<AbmMove, { up: string; between: string; depressed: str
   mana: sheets(`${ABM_ROOT}/mana`),
 };
 const ABILITY_MOVE_LAYOUT_IDS = new Set(['attack', 'block', 'mana', 'arrow-attack-block', 'arrow-block-mana', 'arrow-mana-attack']);
+type AbmPickerEntry = { kind: 'class'; definition: typeof ABM_CLASSES[number] } | { kind: 'locked'; count: number };
+
+export function getAbmPickerEntries(unlockedClassIds: readonly AbmClassId[], observingOpponent = false): readonly AbmPickerEntry[] {
+  if (observingOpponent) return ABM_CLASSES.map((definition) => ({ kind: 'class' as const, definition }));
+  const unlocked = new Set(unlockedClassIds);
+  return [
+    ...ABM_CLASSES.filter(({ id }) => unlocked.has(id)).map((definition) => ({ kind: 'class' as const, definition })),
+    ...(unlocked.size < ABM_CLASSES.length ? [{ kind: 'locked' as const, count: ABM_CLASSES.length - unlocked.size }] : []),
+  ];
+}
+
+export function getAbmClassSelectChrome(projection: Pick<AbmProjection, 'phase' | 'counterPicker' | 'self'>): {
+  showPickClass: boolean; showCounterpickMessage: boolean;
+} {
+  const counterPicking = projection.phase === 'counter-picking';
+  const observingOpponent = counterPicking && projection.counterPicker !== projection.self;
+  return {
+    showPickClass: !observingOpponent && (counterPicking || projection.phase === 'selecting-classes' || projection.phase === 'waiting-for-class'),
+    showCounterpickMessage: observingOpponent,
+  };
+}
+
+export function getAbmCounterpickCloudPlayer(
+  projection: Pick<AbmProjection, 'phase' | 'counterPicker' | 'self'>,
+): 'p1' | 'p2' | undefined {
+  return projection.phase === 'counter-picking' && projection.counterPicker !== projection.self
+    ? projection.counterPicker : undefined;
+}
+
+export function getAbmObservedCounterpickClass(
+  projection: Pick<AbmProjection, 'phase' | 'counterPicker' | 'self'>
+    & { players: Readonly<Record<'p1' | 'p2', Pick<AbmPlayerState, 'classId'>>> },
+): AbmClassId | undefined {
+  const counterPicker = getAbmCounterpickCloudPlayer(projection);
+  return counterPicker ? projection.players[counterPicker].classId : undefined;
+}
+
+export function getAbmCounterpickEntranceVisibility(stage: number): {
+  tiny: boolean; small: boolean; medium: boolean; big: boolean; content: boolean;
+} {
+  return {
+    tiny: stage >= 1,
+    small: stage >= 2,
+    medium: stage >= 3,
+    big: stage >= 4,
+    content: stage >= 4,
+  };
+}
+export const ABM_COUNTERPICK_ENTRANCE_TICKS_PER_STAGE = 3;
 export const ABM_TAG_CATEGORIES = ['proc', 'impact', 'status'] as const satisfies readonly AbmTagCategory[];
 export const ABM_TAG_ORDERS = [1, 2, 3] as const;
 export function abmTagSlotId(player: 'p1' | 'p2', category: AbmTagCategory, order: typeof ABM_TAG_ORDERS[number]): string {
@@ -198,7 +254,7 @@ export function createAttackBlockManaPresentation(
         ...Array.from({ length: 10 }, (_, index) => `/visual-elements/resource-counters/times${index}-sheet.webp`),
         ...Array.from({ length: 5 }, (_, index) => `/visual-elements/ready-waiting/countdown${index + 1}-sheet.webp`),
         ...Object.values(ABM_RESULT_SCENES), '/visual-elements/progress-bar-empty-sheet.webp', '/visual-elements/progress-bar-full-sheet.webp',
-        STUNNED_BUTTON_TAG, COUNTERPICK_TAG, PICK_CLASS_HEADER, LOCKED_CLASS_ART, ...ABM_SCENE_URLS];
+        STUNNED_BUTTON_TAG, COUNTERPICK_TAG, PICK_CLASS_HEADER, LOCKED_CLASS_ART, ...Object.values(COUNTERPICK_CLOUD_ART), ...ABM_SCENE_URLS];
       const lease = assetLoader.retainUrls(urls); await lease.ready; return lease;
     },
     mount({ container, send, openMenu, matchProgressComplete, self, players, music, unlockedClassIds }) {
@@ -229,11 +285,10 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   const sprites: BoilingSprite[] = [];
   const buttons: GameButton[] = [];
   let selected = 0;
-  const unlocked = new Set(unlockedClassIds ?? ABM_CLASSES.map(({ id }) => id));
-  const pickerEntries: readonly ({ kind: 'class'; definition: typeof ABM_CLASSES[number] } | { kind: 'locked'; count: number })[] = [
-    ...ABM_CLASSES.filter(({ id }) => unlocked.has(id)).map((definition) => ({ kind: 'class' as const, definition })),
-    ...(unlocked.size < ABM_CLASSES.length ? [{ kind: 'locked' as const, count: ABM_CLASSES.length - unlocked.size }] : []),
-  ];
+  const ownPickerEntries = getAbmPickerEntries(unlockedClassIds ?? ABM_CLASSES.map(({ id }) => id));
+  const opponentPickerEntries = getAbmPickerEntries([], true);
+  const pickerEntries = () => projection?.phase === 'counter-picking' && projection.counterPicker !== projection.self
+    ? opponentPickerEntries : ownPickerEntries;
   let projection: AbmProjection | undefined;
   let orientation: LayoutOrientation = 'landscape';
   let revealTimer: ReturnType<typeof setTimeout> | undefined;
@@ -272,7 +327,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     sprites.push(arrow); controls.append(arrow.element); return [id, arrow.element] as [string, HTMLElement];
   });
   const lock = createGameButton({ label: 'Select', clock, onActivate: () => {
-    const choice = pickerEntries[selected]!; if (choice.kind === 'class' && choice.definition.implemented) send({ type: 'lock-class', classId: choice.definition.id });
+    const choice = pickerEntries()[selected]!; if (choice.kind === 'class' && choice.definition.implemented) send({ type: 'lock-class', classId: choice.definition.id });
   }, upSheet: ABM_SELECT_ART.up, betweenSheet: ABM_SELECT_ART.between, depressedSheet: ABM_SELECT_ART.depressed });
   lock.element.classList.add('abm-controls__lock', 'game-button--baked-label'); buttons.push(lock); controls.append(lock.element);
   const abilityButtons = ABM_CLASSES.flatMap(({ ability }) => ability ? [ability] : []).map((ability) => {
@@ -316,7 +371,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   let xpBar: XpProgressBar | undefined; let xpSequenceStarted = false;
 
   const picker = element('div', 'abm-picker');
-  const portrait = createBoilingSprite({ src: pickerAsset(pickerEntries[selected]!), clock, className: 'abm-picker__portrait' }); sprites.push(portrait);
+  const portrait = createBoilingSprite({ src: pickerAsset(pickerEntries()[selected]!), clock, className: 'abm-picker__portrait' }); sprites.push(portrait);
   const className = element('strong', 'abm-picker__name');
   const description = element('p', 'abm-picker__description'); const status = element('small', 'abm-picker__status');
   const copy = createTextbox({ className: 'abm-picker__copy', ariaLabel: 'Selected class details', content: [className, description, status] });
@@ -337,6 +392,14 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   let counterpickTag: BoilingSprite | undefined;
   const pickClassHeader = createBoilingSprite({ src: PICK_CLASS_HEADER, clock, className: 'abm-pick-class-header', alt: 'Pick class' });
   pickClassHeader.element.hidden = true; sprites.push(pickClassHeader);
+  const counterpickBigCloud = createBoilingSprite({ src: COUNTERPICK_CLOUD_ART.big, clock, className: 'abm-counterpick-cloud abm-counterpick-cloud--big', alt: '' });
+  counterpickBigCloud.element.hidden = true; sprites.push(counterpickBigCloud);
+  const counterpickTrailClouds = (['p1', 'p2'] as const).flatMap((player) =>
+    (['tiny', 'small', 'medium'] as const).map((size) => {
+      const cloud = createBoilingSprite({ src: COUNTERPICK_CLOUD_ART[size], clock,
+        className: `abm-counterpick-cloud abm-counterpick-cloud--trail abm-counterpick-cloud--${player}-${size}`, alt: '' });
+      cloud.element.hidden = true; sprites.push(cloud); return { player, size, cloud };
+    }));
   const tagSprites = new Map<string, BoilingSprite>();
   const tagItems = new Map<string, HTMLElement>();
   const tagAssets = new Map<string, string>();
@@ -357,6 +420,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     onMenu,
   });
   layout.slots.scene.append(picker, waiting, result.element);
+  layout.slots.scene.prepend(counterpickBigCloud.element);
   for (const player of ['p1', 'p2'] as const) for (const category of ABM_TAG_CATEGORIES) for (const order of ABM_TAG_ORDERS) {
     const slot = element('div', `abm-tag-slot abm-tag-slot--${category}`);
     const slotId = abmTagSlotId(player, category, order);
@@ -413,6 +477,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   layout.slots.scene.append(thiefTransfer.element, thiefTransferMirror.element);
   for (const [, button] of abilityButtons) layout.composition.append(button.element);
   layout.composition.append(classReadyArt.element, classReadyOpponentTag.element, pickClassHeader.element);
+  for (const { cloud } of counterpickTrailClouds) layout.composition.append(cloud.element);
   counterpickTag = createBoilingSprite({ src: COUNTERPICK_TAG, clock, className: 'abm-counterpick-tag', alt: 'Counterpick' });
   counterpickTag.element.hidden = true; sprites.push(counterpickTag); layout.composition.append(counterpickTag.element);
   sceneArtwork = layout.slots.scene.querySelector<HTMLElement>('.game-layout__scene')!;
@@ -432,13 +497,39 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     item.badge = badge;
     return item;
   });
+  let counterpickEntrancePlayer: 'p1' | 'p2' | undefined;
+  let counterpickEntranceStage = 0;
+  let counterpickEntranceTicks = 0;
+  const paintCounterpickEntrance = () => {
+    const visibility = getAbmCounterpickEntranceVisibility(counterpickEntranceStage);
+    counterpickBigCloud.element.hidden = !counterpickEntrancePlayer || !visibility.big;
+    for (const { player, size, cloud } of counterpickTrailClouds) {
+      cloud.element.hidden = player !== counterpickEntrancePlayer || !visibility[size];
+    }
+    layout.composition.classList.toggle('is-counterpick-content-pending', Boolean(counterpickEntrancePlayer) && !visibility.content);
+  };
+  const syncCounterpickEntrance = (player: 'p1' | 'p2' | undefined) => {
+    if (player === counterpickEntrancePlayer) return;
+    counterpickEntrancePlayer = player;
+    counterpickEntranceStage = player ? (clock.isEnabled() ? 1 : 4) : 0;
+    counterpickEntranceTicks = 0;
+    paintCounterpickEntrance();
+  };
+  const unsubscribeCounterpickEntrance = clock.subscribe(() => {
+    if (!counterpickEntrancePlayer || counterpickEntranceStage >= 4) return;
+    if (!clock.isEnabled()) counterpickEntranceStage = 4;
+    else if (++counterpickEntranceTicks < ABM_COUNTERPICK_ENTRANCE_TICKS_PER_STAGE) return;
+    else { counterpickEntranceTicks = 0; counterpickEntranceStage++; }
+    paintCounterpickEntrance();
+  });
   applyVariantLayout();
 
   function arrow(label: string, key: string, delta: number) {
     const button = createGameButton({ label, clock, onActivate: () => {
-      selected = (selected + delta + pickerEntries.length) % pickerEntries.length; updatePicker();
+      const entries = pickerEntries();
+      selected = (selected + delta + entries.length) % entries.length; updatePicker();
       if (projection?.phase === 'counter-picking' && projection.counterPicker === projection.self) {
-        const entry = pickerEntries[selected]!; if (entry.kind === 'class') send({ type: 'preview-class', classId: entry.definition.id });
+        const entry = entries[selected]!; if (entry.kind === 'class') send({ type: 'preview-class', classId: entry.definition.id });
       }
     },
       upSheet: `${ABM_ROOT}/${key}-button-up-sheet.webp`, betweenSheet: `${ABM_ROOT}/${key}-button-between-sheet.webp`, depressedSheet: `${ABM_ROOT}/${key}-button-depressed-sheet.webp` });
@@ -452,6 +543,8 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
       ...(xpBar ? [['match-progress-count', xpBar.countElement] as [string, HTMLElement]] : []),
       ['class-ready', classReadyArt.element], ['class-ready-opponent-tag', classReadyOpponentTag.element],
       ['pick-class-header', pickClassHeader.element],
+      ['counterpick-cloud-big', counterpickBigCloud.element],
+      ...counterpickTrailClouds.map(({ player, size, cloud }) => [`counterpick-cloud-${player}-${size}`, cloud.element] as [string, HTMLElement]),
       ...(counterpickTag ? [['p2-counterpick-tag', counterpickTag.element] as [string, HTMLElement]] : []),
       ...(sceneArtwork ? [['scene-art', sceneArtwork] as [string, HTMLElement]] : []),
       ['picker-portrait', portrait.element], ['picker-copy', copy.element],
@@ -481,7 +574,9 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   }
 
   function updatePicker() {
-    const entry = pickerEntries[selected]!;
+    const entries = pickerEntries();
+    selected = Math.min(selected, entries.length - 1);
+    const entry = entries[selected]!;
     const definition = entry.kind === 'class' ? entry.definition : undefined;
     portrait.setSource(pickerAsset(entry)); portrait.element.setAttribute('aria-label', definition?.name ?? 'Locked classes');
     className.textContent = definition?.name ?? 'Locked'; description.textContent = definition?.description ?? `${entry.kind === 'locked' ? entry.count : 0} classes still locked!`;
@@ -507,6 +602,9 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     const reveal = events.find((event) => isWipeCue(event.type)
       && event.startsAt <= serverTime && event.endsAt > serverTime && !playedTransitionIds.has(event.id));
     if (wipeRunning) return;
+    // Gameplay entry already arrives under the shell's starburst. Consume any
+    // active initial cue so the timeline cannot replay a second wipe afterward.
+    if (reveal && !shownProjection) playedTransitionIds.add(reveal.id);
     if ((reveal || forceWipe) && shownProjection) {
       if (reveal) playedTransitionIds.add(reveal.id);
       wipeRunning = true;
@@ -538,8 +636,12 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     }
     const picking = ['selecting-classes', 'waiting-for-class'].includes(nextProjection.phase)
       || (nextProjection.phase === 'counter-picking' && !counterLocked);
+    const classSelectChrome = getAbmClassSelectChrome(nextProjection);
+    const counterpickCloudPlayer = !counterLocked ? getAbmCounterpickCloudPlayer(nextProjection) : undefined;
     layout.composition.classList.toggle('is-class-picking', picking);
-    pickClassHeader.element.hidden = !picking;
+    layout.composition.classList.toggle('is-observing-counterpick', picking && counterpickCloudPlayer !== undefined);
+    pickClassHeader.element.hidden = !picking || !classSelectChrome.showPickClass;
+    syncCounterpickEntrance(picking ? counterpickCloudPlayer : undefined);
     layout.slots['p1-picked'].hidden = picking;
     layout.slots['p2-picked'].hidden = picking;
     layout.setYouTagVisible(shouldShowAbmYouTag(nextProjection.phase));
@@ -553,7 +655,9 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     const ownPlayer = nextProjection.players[nextProjection.self];
     const ownAbility = ownPlayer.classId ? ABM_CLASS_BY_ID.get(ownPlayer.classId)?.ability : undefined;
     const nextClassResourceControls = !picking && Boolean(ownAbility);
-    const selectedEntry = pickerEntries[selected]!;
+    const entries = pickerEntries();
+    selected = Math.min(selected, entries.length - 1);
+    const selectedEntry = entries[selected]!;
     const previewClassId = selectedEntry.kind === 'class' ? selectedEntry.definition.id : undefined;
     const nextPlayerHasLimitedResource = picking
       ? {
@@ -595,14 +699,14 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
       }
     }
     if (picking && nextProjection.phase === 'counter-picking' && nextProjection.counterPicker !== nextProjection.self) {
-      const ownClass = nextProjection.players[nextProjection.self].classId; const index = pickerEntries.findIndex((entry) => entry.kind === 'class' && entry.definition.id === ownClass); if (index >= 0) selected = index;
+      const counterpickerClass = getAbmObservedCounterpickClass(nextProjection);
+      const index = entries.findIndex((entry) => entry.kind === 'class' && entry.definition.id === counterpickerClass); if (index >= 0) selected = index;
     }
     const preview = latestClassPreview(events, nextProjection.counterPicker);
     if (picking && preview) {
-      const index = pickerEntries.findIndex((entry) => entry.kind === 'class' && entry.definition.id === preview); if (index >= 0) selected = index;
+      const index = entries.findIndex((entry) => entry.kind === 'class' && entry.definition.id === preview); if (index >= 0) selected = index;
     }
-    const showCounterpickTags = picking && nextProjection.phase === 'counter-picking';
-    if (counterpickTag) counterpickTag.element.hidden = !showCounterpickTags;
+    if (counterpickTag) counterpickTag.element.hidden = !picking || !classSelectChrome.showCounterpickMessage;
     layout.setArtwork('turn', turnArtwork(nextProjection.turn)); layout.setArtwork('p1Wins', winArtwork('p1', nextProjection.score.p1)); layout.setArtwork('p2Wins', winArtwork('p2', nextProjection.score.p2));
     const continuingRoundProc = shouldShowAbmContinuingRoundProcTags(nextProjection.phase);
     const advantagedProcPlayers = continuingRoundProc ? nextProjection.advantagedProcPlayers : undefined;
@@ -689,7 +793,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     for (const item of classBadges) {
       const classId = nextProjection.players[item.player].classId;
       const definition = ABM_CLASSES.find(({ id }) => id === classId);
-      item.badge.element.hidden = !definition || !shouldShowClassBadge(nextProjection, item.player);
+      item.badge.element.hidden = Boolean(nextProjection.hideClassBadges) || !definition || !shouldShowClassBadge(nextProjection, item.player);
       if (definition && item.asset !== definition.badgeAsset) {
         item.asset = definition.badgeAsset; item.badge.setSource(definition.badgeAsset); item.badge.element.setAttribute('aria-label', `${definition.name} badge`);
       }
@@ -714,7 +818,8 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     const early = nextProjection.earlyPlayer!; const late = nextProjection.latePlayer!;
     waiting.classList.toggle('is-early-p1', early === 'p1'); waiting.classList.toggle('is-early-p2', early === 'p2');
     waiting.classList.toggle('is-late-p1', late === 'p1'); waiting.classList.toggle('is-late-p2', late === 'p2');
-    const waitingStartsAt = nextProjection.waitingStartsAt!; const deadlineAt = nextProjection.waitingDeadlineAt!;
+    const waitingStartsAt = nextProjection.waitingStartsAt!;
+    const deadlineAt = nextProjection.noMoveDeadline ? Number.POSITIVE_INFINITY : nextProjection.waitingDeadlineAt!;
     const waitingLayouts = getAbmWaitingLayoutIds(early, late);
     applyConfiguredElement(readyArt.element, config(waitingLayouts.ready), orientation);
     applyConfiguredElement(dotsArt.element, config(waitingLayouts.dots), orientation);
@@ -747,7 +852,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   }
 
   applyVariantLayout(); updatePicker();
-  return { render, destroy() { transitionAbort.abort(); xpBar?.destroy(); tagEntrance.destroy(); if (revealTimer) clearTimeout(revealTimer); if (waitingTimer) clearTimeout(waitingTimer); layout.destroy(); copy.destroy(); for (const button of buttons) button.destroy(); for (const sprite of sprites) sprite.destroy(); } };
+  return { render, destroy() { transitionAbort.abort(); unsubscribeCounterpickEntrance(); xpBar?.destroy(); tagEntrance.destroy(); if (revealTimer) clearTimeout(revealTimer); if (waitingTimer) clearTimeout(waitingTimer); layout.destroy(); copy.destroy(); for (const button of buttons) button.destroy(); for (const sprite of sprites) sprite.destroy(); } };
 }
 
 export function soundForAbmMoves(moves: Readonly<Record<'p1' | 'p2', AbmMove>>): SoundId | undefined {
@@ -853,7 +958,7 @@ export function initialManaForClass(classId: AbmClassId): number {
   return startingResourcesForClass(classId).mana;
 }
 
-function pickerAsset(entry: { kind: 'class'; definition: typeof ABM_CLASSES[number] } | { kind: 'locked'; count: number }): string {
+function pickerAsset(entry: AbmPickerEntry): string {
   return entry.kind === 'class' ? entry.definition.asset : LOCKED_CLASS_ART;
 }
 export function shouldShowClassBadge(projection: Pick<AbmProjection, 'phase' | 'counterPicker'>, player: 'p1' | 'p2'): boolean {

@@ -44,6 +44,23 @@ describe('layout documents', () => {
     expect(reward.elements.find(({ id }) => id === 'card-flip')?.assets?.src).toBe('/rewards/card-back.webp');
   });
 
+  it('ships editable geometry for every tutorial slide-one visual', () => {
+    const tutorial = layoutDocuments.get('tutorial-slide-one')!;
+    expect(tutorial.elements.map(({ id }) => id)).toEqual([
+      'rps-rock', 'rps-paper', 'rps-scissors',
+      'rps-arrow-paper-rock', 'rps-arrow-rock-scissors', 'rps-arrow-scissors-paper',
+      'abm-attack', 'abm-block', 'abm-mana',
+      'abm-arrow-block-attack', 'abm-arrow-attack-mana', 'abm-arrow-mana-block',
+      'comparison-copy', 'next',
+    ]);
+    expect(tutorial.elements.find(({ id }) => id === 'comparison-copy')?.label).toBe('is like...');
+    expect(tutorial.elements.find(({ id }) => id === 'next')?.assets).toMatchObject({
+      up: '/variants/abm/next-button-up-sheet.webp',
+      between: '/variants/abm/next-button-between-sheet.webp',
+      depressed: '/variants/abm/next-button-depressed-sheet.webp',
+    });
+  });
+
   it('ships the title Discord button with all three animation sheets', () => {
     const discord = layoutDocuments.get('title')!.elements.find((element) => element.id === 'discord');
     expect(discord?.behavior).toBe('discord');

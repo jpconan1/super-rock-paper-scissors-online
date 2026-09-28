@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { abmEditorGeometry, getEditorMirrorUpdate, isAbmBattleEditorElement, isAbmPostMatchEditorElement, isAbmWaitingEditorElement, isEditorElementVisible, mirroredEditorGeometry, resizeEditorGeometry, setAbmEditorGeometry } from '../src/editor/abmEditorModel';
+import { abmEditorGeometry, getEditorMirrorUpdate, isAbmBattleEditorElement, isAbmCounterpickThoughtBubbleEditorContext, isAbmCounterpickThoughtBubbleEditorElement, isAbmPostMatchEditorElement, isAbmWaitingEditorElement, isEditorElementVisible, mirroredEditorGeometry, resizeEditorGeometry, setAbmEditorGeometry } from '../src/editor/abmEditorModel';
 import type { LayoutElement } from '../src/layout/layoutDocument';
 import { getLayoutDocument } from '../src/layout/layoutDocuments';
 
@@ -15,6 +15,7 @@ describe('ABM editor model', () => {
     expect(isAbmBattleEditorElement(element('attack', 'button'))).toBe(true);
     expect(isAbmBattleEditorElement(element('p1-limited-icon'))).toBe(true);
     expect(isAbmBattleEditorElement(element('picker-portrait'))).toBe(false);
+    expect(isAbmBattleEditorElement(element('counterpick-cloud-big'))).toBe(false);
     expect(isAbmBattleEditorElement(element('p1-waiting-ready'))).toBe(false);
     expect(isAbmBattleEditorElement(element('p2-proc-tag-2', 'collection'))).toBe(false);
     expect(isAbmBattleEditorElement({ ...element('pick-class-header'), stateVisibility: { battle: false } })).toBe(false);
@@ -59,11 +60,25 @@ describe('ABM editor model', () => {
     expect(isAbmWaitingEditorElement(element('attack', 'button'))).toBe(true);
   });
 
+  it('makes only the six counterpick trail clouds editable on the thought-bubble screen', () => {
+    const document = getLayoutDocument('variant-abm');
+    const editable = document.elements.filter(isAbmCounterpickThoughtBubbleEditorElement).map(({ id }) => id);
+    expect(editable).toEqual([
+      'counterpick-cloud-p1-tiny', 'counterpick-cloud-p1-small', 'counterpick-cloud-p1-medium',
+      'counterpick-cloud-p2-tiny', 'counterpick-cloud-p2-small', 'counterpick-cloud-p2-medium',
+    ]);
+    expect(isAbmCounterpickThoughtBubbleEditorContext(element('p1-info', 'dynamic-text'))).toBe(true);
+    expect(isAbmCounterpickThoughtBubbleEditorContext(element('counterpick-cloud-big'))).toBe(true);
+    expect(isAbmCounterpickThoughtBubbleEditorElement(element('counterpick-cloud-big'))).toBe(false);
+    expect(isAbmCounterpickThoughtBubbleEditorContext(element('attack', 'button'))).toBe(false);
+  });
+
   it('mirrors each supported P1 element into its exact P2 counterpart', () => {
     const document = structuredClone(getLayoutDocument('variant-abm'));
     const ids = ['info', 'picked', 'class-badge', 'wins-label', 'wins', 'mana-group', 'mana-icon', 'mana-count',
       'block-group', 'block-1', 'block-5', 'limited-group', 'limited-icon', 'limited-count', 'waiting-ready', 'waiting-dots'];
     for (const suffix of ids) expect(getEditorMirrorUpdate(document, `p1-${suffix}`, 'landscape')?.targetId).toBe(`p2-${suffix}`);
+    expect(getEditorMirrorUpdate(document, 'counterpick-cloud-p1-small', 'landscape')?.targetId).toBe('counterpick-cloud-p2-small');
     expect(getEditorMirrorUpdate(document, 'p2-info', 'landscape')).toBeUndefined();
     expect(getEditorMirrorUpdate(document, 'attack', 'landscape')).toBeUndefined();
   });

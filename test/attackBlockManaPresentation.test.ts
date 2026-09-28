@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { ABM_CLASSES, startingResourcesForClass } from '../src/variants/attackBlockMana/attackBlockManaCatalog';
-import { ABM_LAYOUTS, ABM_RESULT_SCENES, ABM_SELECT_ART, ABM_TAG_CATEGORIES, ABM_TAG_ORDERS, abmTagSlotId, blockSegments, displayedAbmMove, getAbmAttackCostDisplay, getAbmClassBadgeGeometry, getAbmClassReadyFrame, getAbmClassResourceControlGeometry, getAbmClassResourceGeometry, getAbmLimitedResource, getAbmPlayerResourceGeometry, getAbmResultScene, getAbmWaitingLayoutIds, getAbmWaitingVisual, initialManaForClass, latestClassPreview, reconcileAbmArmedAbility, sceneForMoves, shouldShowAbmContinuingRoundProcTags, shouldShowAbmYouTag, shouldShowClassBadge, shouldShowClassReadyOpponentTag, winArtwork } from '../src/variants/attackBlockMana/attackBlockManaPresentation';
+import { ABM_COUNTERPICK_ENTRANCE_TICKS_PER_STAGE, ABM_LAYOUTS, ABM_RESULT_SCENES, ABM_SELECT_ART, ABM_TAG_CATEGORIES, ABM_TAG_ORDERS, abmTagSlotId, blockSegments, displayedAbmMove, getAbmAttackCostDisplay, getAbmClassBadgeGeometry, getAbmClassReadyFrame, getAbmClassResourceControlGeometry, getAbmClassResourceGeometry, getAbmClassSelectChrome, getAbmCounterpickCloudPlayer, getAbmCounterpickEntranceVisibility, getAbmLimitedResource, getAbmObservedCounterpickClass, getAbmPickerEntries, getAbmPlayerResourceGeometry, getAbmResultScene, getAbmWaitingLayoutIds, getAbmWaitingVisual, initialManaForClass, latestClassPreview, reconcileAbmArmedAbility, sceneForMoves, shouldShowAbmContinuingRoundProcTags, shouldShowAbmYouTag, shouldShowClassBadge, shouldShowClassReadyOpponentTag, winArtwork } from '../src/variants/attackBlockMana/attackBlockManaPresentation';
 import type { AbmProjection } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 import { ABM_CLASS_IDS } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 import { ABM_SCENE_URLS, resolveAbmProcBackgrounds, resolveAbmScene, resolveAbmSplitScene, resolveAbmTags, resolveConjureScene, resolveJoeScene, resolveNullScene } from '../src/variants/attackBlockMana/attackBlockManaScenes';
@@ -68,6 +68,48 @@ describe('Attack Block Mana presentation data', () => {
 
   test('starts the class-select order with Lucky', () => {
     expect(ABM_CLASSES[0]?.id).toBe('lucky');
+  });
+
+  test('shows counterpick instructions for the correct viewer role', () => {
+    expect(getAbmClassSelectChrome({ phase: 'selecting-classes', self: 'p1' })).toEqual({
+      showPickClass: true, showCounterpickMessage: false,
+    });
+    expect(getAbmClassSelectChrome({ phase: 'counter-picking', self: 'p1', counterPicker: 'p1' })).toEqual({
+      showPickClass: true, showCounterpickMessage: false,
+    });
+    expect(getAbmClassSelectChrome({ phase: 'counter-picking', self: 'p1', counterPicker: 'p2' })).toEqual({
+      showPickClass: false, showCounterpickMessage: true,
+    });
+    expect(getAbmCounterpickCloudPlayer({ phase: 'counter-picking', self: 'p1', counterPicker: 'p2' })).toBe('p2');
+    expect(getAbmCounterpickCloudPlayer({ phase: 'counter-picking', self: 'p2', counterPicker: 'p1' })).toBe('p1');
+    expect(getAbmCounterpickCloudPlayer({ phase: 'counter-picking', self: 'p1', counterPicker: 'p1' })).toBeUndefined();
+    expect(getAbmCounterpickCloudPlayer({ phase: 'idle', self: 'p1' })).toBeUndefined();
+    expect(getAbmObservedCounterpickClass({
+      phase: 'counter-picking', self: 'p1', counterPicker: 'p2', players: { p1: { classId: 'lucky' }, p2: { classId: 'joe' } },
+    })).toBe('joe');
+  });
+
+  test('uses viewer unlocks while choosing but the full catalog while observing', () => {
+    const choosing = getAbmPickerEntries(['lucky']);
+    expect(choosing).toHaveLength(2);
+    expect(choosing[0]).toMatchObject({ kind: 'class', definition: { id: 'lucky' } });
+    expect(choosing[1]).toEqual({ kind: 'locked', count: ABM_CLASSES.length - 1 });
+
+    const observing = getAbmPickerEntries(['lucky'], true);
+    expect(observing).toHaveLength(ABM_CLASSES.length);
+    expect(observing.find((entry) => entry.kind === 'class' && entry.definition.id === 'joe')).toMatchObject({
+      kind: 'class', definition: { id: 'joe' },
+    });
+    expect(observing.some((entry) => entry.kind === 'locked')).toBe(false);
+  });
+
+  test('reveals counterpick clouds at the configured boil-tick cadence and content with the big cloud', () => {
+    expect(ABM_COUNTERPICK_ENTRANCE_TICKS_PER_STAGE).toBe(3);
+    expect(getAbmCounterpickEntranceVisibility(0)).toEqual({ tiny: false, small: false, medium: false, big: false, content: false });
+    expect(getAbmCounterpickEntranceVisibility(1)).toEqual({ tiny: true, small: false, medium: false, big: false, content: false });
+    expect(getAbmCounterpickEntranceVisibility(2)).toEqual({ tiny: true, small: true, medium: false, big: false, content: false });
+    expect(getAbmCounterpickEntranceVisibility(3)).toEqual({ tiny: true, small: true, medium: true, big: false, content: false });
+    expect(getAbmCounterpickEntranceVisibility(4)).toEqual({ tiny: true, small: true, medium: true, big: true, content: true });
   });
 
   test('releases submitted Conjure after Null clears it while preserving locally armed abilities', () => {
@@ -545,6 +587,8 @@ describe('Attack Block Mana presentation data', () => {
       'p1-info', 'p2-info', 'turn', 'scene', 'scene-art', 'menu', 'rules',
       'picker-portrait', 'picker-copy', 'picker-prev', 'picker-next', 'lock-class', 'p1-class-badge', 'p2-class-badge',
       'p2-counterpick-tag', 'pick-class-header',
+      'counterpick-cloud-big', 'counterpick-cloud-p1-tiny', 'counterpick-cloud-p1-small', 'counterpick-cloud-p1-medium',
+      'counterpick-cloud-p2-tiny', 'counterpick-cloud-p2-small', 'counterpick-cloud-p2-medium',
       'attack', 'block', 'mana', 'back-lobby', 'arrow-attack-block', 'arrow-block-mana', 'arrow-mana-attack',
       'p1-waiting-ready', 'p2-waiting-ready', 'p1-waiting-dots', 'p2-waiting-dots',
       'p1-mana-group', 'p1-mana-icon', 'p1-mana-count', 'p1-block-group', 'p1-block-1', 'p1-block-5',
@@ -586,6 +630,22 @@ describe('Attack Block Mana presentation data', () => {
     expect(assets('p1-limited-count')?.src).toBe('/visual-elements/resource-counters/times1-sheet.webp');
     expect(assets('p2-counterpick-tag')?.src).toBe('/variants/abm/counterpick-tag-sheet.webp');
     expect(assets('pick-class-header')?.src).toBe('/variants/abm/pick-class-sheet.webp');
+    expect(assets('counterpick-cloud-big')?.src).toBe('/variants/abm/counterpick-cloud-big-sheet.webp');
+    expect(assets('counterpick-cloud-p1-tiny')?.src).toBe('/variants/abm/counterpick-cloud-tiny-sheet.webp');
+    expect(assets('counterpick-cloud-p1-small')?.src).toBe('/variants/abm/counterpick-cloud-small-sheet.webp');
+    expect(assets('counterpick-cloud-p1-medium')?.src).toBe('/variants/abm/counterpick-cloud-medium-sheet.webp');
+    const cloud = (id: string) => document.elements.find((element) => element.id === id)!;
+    expect(cloud('counterpick-cloud-big')).toMatchObject({ parent: 'scene', layer: 4 });
+    expect(cloud('counterpick-cloud-big').layouts.landscape).toMatchObject({ x: -32, y: -16, width: 448, height: 224 });
+    for (const orientation of ['landscape', 'portrait'] as const) {
+      const width = document.canvases[orientation].width;
+      for (const size of ['tiny', 'small', 'medium']) {
+        const p1 = cloud(`counterpick-cloud-p1-${size}`).layouts[orientation];
+        const p2 = cloud(`counterpick-cloud-p2-${size}`).layouts[orientation];
+        expect(p2.x).toBeCloseTo(width - p1.x - p1.width);
+        expect(p2).toMatchObject({ y: p1.y, width: p1.width, height: p1.height });
+      }
+    }
     for (const element of document.elements) expect(Object.keys(element.layouts).sort()).toEqual(['landscape', 'portrait']);
   });
 

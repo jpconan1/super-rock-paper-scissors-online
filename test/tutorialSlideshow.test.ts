@@ -3,6 +3,11 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 class FakeClassList {
   constructor(private readonly element: FakeElement) {}
   add(...names: string[]) { this.element.className = [...new Set([...this.element.className.split(' ').filter(Boolean), ...names])].join(' '); }
+  toggle(name: string, force: boolean) {
+    const names = new Set(this.element.className.split(' ').filter(Boolean));
+    if (force) names.add(name); else names.delete(name);
+    this.element.className = [...names].join(' ');
+  }
 }
 
 class FakeStyle {
@@ -33,7 +38,7 @@ class FakeElement {
   replaceChildren(...children: FakeElement[]) { this.children = []; this.append(...children); }
   remove() { if (this.parent) this.parent.children = this.parent.children.filter((child) => child !== this); this.isConnected = false; }
   setAttribute(name: string, value: string) { this.attributes.set(name, value); }
-  addEventListener() {}
+  addEventListener(type: string, listener: () => void) { if (type === 'click') this.activate = listener; }
   removeEventListener() {}
   focus() { fakeDocument.activeElement = this; }
   querySelector(selector: string): FakeElement | null { return this.querySelectorAll(selector)[0] ?? null; }
@@ -51,6 +56,7 @@ const fakeDocument = {
 };
 
 const gameButtonOptions: Array<Record<string, unknown>> = [];
+const boilingSpriteOptions: Array<Record<string, unknown>> = [];
 vi.stubGlobal('HTMLElement', FakeElement);
 vi.stubGlobal('document', fakeDocument);
 vi.stubGlobal('queueMicrotask', (run: () => void) => run());
@@ -66,7 +72,11 @@ vi.mock('../src/input/gameButton', () => ({
 }));
 
 vi.mock('../src/renderer/boilingSprite', () => ({
-  createBoilingSprite: () => ({ element: new FakeElement(), destroy() {} }),
+  createBoilingSprite: (options: Record<string, unknown>) => {
+    boilingSpriteOptions.push(options);
+    const element = new FakeElement(); element.className = options.className as string ?? '';
+    return { element, destroy: () => element.remove() };
+  },
 }));
 
 vi.mock('../src/ui/fixedAlertCanvas', () => ({
@@ -82,10 +92,10 @@ vi.mock('../src/ui/fixedAlertCanvas', () => ({
   },
 }));
 
-import { ABM_TUTORIAL_SLIDES, mountTutorialSlideshow } from '../src/app/tutorialSlideshow';
+import { ABM_TUTORIAL_SLIDES, mountTutorialSlideshow, tutorialEndingSlide } from '../src/app/tutorialSlideshow';
 
 describe('tutorial slideshow', () => {
-  beforeEach(() => { gameButtonOptions.length = 0; fakeDocument.activeElement = undefined; });
+  beforeEach(() => { gameButtonOptions.length = 0; boilingSpriteOptions.length = 0; fakeDocument.activeElement = undefined; });
 
   test('renders the welcome copy as subheading, heading, and body blocks', () => {
     const container = new FakeElement(); const background = new FakeElement();
@@ -95,10 +105,37 @@ describe('tutorial slideshow', () => {
     expect(text.map((element) => [element.attributes.get('tag'), element.className, element.textContent])).toEqual([
       ['h2', 'tutorial-slideshow__text tutorial-slideshow__text--subheading', 'Welcome to'],
       ['h1', 'tutorial-slideshow__text tutorial-slideshow__text--heading', 'Super Attack Block Mana!'],
-      ['p', 'tutorial-slideshow__text tutorial-slideshow__text--body', 'Super ABM is a simultaneous reveal game like Rock Paper Scissors, but with resources and classes.'],
+      ['p', 'tutorial-slideshow__text tutorial-slideshow__text--body', 'Super ABM is a three-move simultaneous reveal game like Rock Paper Scissors, but with resources and classes.'],
     ]);
     const panel = (slideshow.element as unknown as FakeElement).querySelectorAll('*').find((element) => element.className.includes('tutorial-slideshow__panel'))!;
     expect(Object.fromEntries(panel.style.values)).toMatchObject({ left: '90px', top: '48px', width: '780px', height: '444px' });
+    slideshow.destroy();
+  });
+
+  test('renders the editor-backed comparison from depressed sheets with the intended arrows and copy', () => {
+    const container = new FakeElement(); const background = new FakeElement();
+    const slideshow = mountTutorialSlideshow(container as unknown as HTMLElement, background as unknown as HTMLElement, {} as never, ABM_TUTORIAL_SLIDES, () => {});
+    const elements = (slideshow.element as unknown as FakeElement).querySelectorAll('*');
+
+    expect(boilingSpriteOptions.filter((option) => option.alt).map((option) => option.src)).toEqual([
+      '/variants/rps/rock-button-depressed-sheet.webp',
+      '/variants/rps/paper-button-depressed-sheet.webp',
+      '/variants/rps/scissors-button-depressed-sheet.webp',
+      '/variants/abm/attack-button-depressed-sheet.webp',
+      '/variants/abm/block-button-depressed-sheet.webp',
+      '/variants/abm/mana-depressed-sheet.webp',
+    ]);
+    expect(boilingSpriteOptions.filter((option) => !option.alt).map((option) => option.src)).toEqual([
+      '/visual-elements/arrows/arrow-red-upright-sheet.webp',
+      '/visual-elements/arrows/arrow-red-downright-sheet.webp',
+      '/visual-elements/arrows/arrow-red-left-sheet.webp',
+      '/visual-elements/arrows/arrow-blue-upright-sheet.webp',
+      '/visual-elements/arrows/arrow-red-downright-sheet.webp',
+      '/variants/abm/arrow-purp-left-sheet.webp',
+    ]);
+    expect(elements.find((element) => element.dataset.layoutId === 'comparison-copy')?.children[0]?.textContent).toBe('is like...');
+    const next = elements.find((element) => element.dataset.layoutId === 'next')!;
+    expect(next.style).toMatchObject({ left: '806px', top: '238px', width: '128px', height: '64px' });
     slideshow.destroy();
   });
 
@@ -115,7 +152,37 @@ describe('tutorial slideshow', () => {
     const button = (slideshow.element as unknown as FakeElement).querySelector('button')!;
     expect(button.className).toContain('tutorial-slideshow__button--next');
     button.activate!();
+    expect(complete).not.toHaveBeenCalled();
+    expect(background.inert).toBe(false);
+    expect(slideshow.element.className).toContain('tutorial-slideshow--interactive');
+    expect((slideshow.element as unknown as FakeElement).querySelector('button')).toBeNull();
+    expect(slideshow.complete('not-a-trigger' as never)).toBe(false);
+    expect(slideshow.complete('move')).toBe(true);
     expect(complete).toHaveBeenCalledOnce();
     expect(background.inert).toBe(false);
+  });
+
+  test('shows only the Try It Out heading and highlights the move controls on slide two', () => {
+    const container = new FakeElement(); const background = new FakeElement();
+    const slideshow = mountTutorialSlideshow(container as unknown as HTMLElement, background as unknown as HTMLElement, {} as never, ABM_TUTORIAL_SLIDES, () => {});
+    (slideshow.element as unknown as FakeElement).querySelector('button')!.activate!();
+    const elements = (slideshow.element as unknown as FakeElement).querySelectorAll('*');
+    const text = elements.filter((element) => element.className.includes('tutorial-slideshow__text'));
+    const highlight = elements.find((element) => element.className.includes('tutorial-slideshow__highlight'))!;
+
+    expect(text.map((element) => [element.attributes.get('tag'), element.textContent])).toEqual([['h1', 'Try It Out!']]);
+    expect(Object.fromEntries(highlight.style.values)).toMatchObject({ left: '225px', top: '308px', width: '510px', height: '222px' });
+    expect(highlight.hidden).toBe(false);
+  });
+
+  test('renders placeholder endings with a Finish button', () => {
+    const complete = vi.fn(); const container = new FakeElement(); const background = new FakeElement();
+    const slideshow = mountTutorialSlideshow(container as unknown as HTMLElement, background as unknown as HTMLElement, {} as never, [tutorialEndingSlide('good')], complete);
+    const elements = (slideshow.element as unknown as FakeElement).querySelectorAll('*');
+    expect(elements.find((element) => element.className.includes('tutorial-slideshow__text'))?.textContent).toBe('Good Ending');
+    const finish = elements.find((element) => element.className.includes('tutorial-slideshow__button--finish'))!;
+    expect(finish.textContent).toBe('Finish');
+    finish.activate?.();
+    expect(complete).toHaveBeenCalledOnce();
   });
 });

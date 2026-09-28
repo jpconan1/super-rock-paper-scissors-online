@@ -1,0 +1,375 @@
+{
+  "schemaVersion": 1,
+  "id": "tutorial-slide-one",
+  "title": "Tutorial · Slide 1",
+  "kind": "screen",
+  "canvases": {
+    "landscape": {
+      "width": 960,
+      "height": 540,
+      "minAspectRatio": 1
+    },
+    "portrait": {
+      "width": 540,
+      "height": 960,
+      "minAspectRatio": 0
+    }
+  },
+  "elements": [
+    {
+      "id": "rps-rock",
+      "type": "sprite",
+      "layer": 3,
+      "label": "Rock",
+      "alt": "Rock",
+      "assets": {
+        "src": "/variants/rps/rock-button-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 210,
+          "y": 270,
+          "width": 155,
+          "height": 77.5,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 105,
+          "y": 480,
+          "width": 100,
+          "height": 50,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "rps-paper",
+      "type": "sprite",
+      "layer": 3,
+      "label": "Paper",
+      "alt": "Paper",
+      "assets": {
+        "src": "/variants/rps/paper-button-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 120,
+          "y": 385,
+          "width": 160,
+          "height": 80,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 45,
+          "y": 550,
+          "width": 110,
+          "height": 55,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "rps-scissors",
+      "type": "sprite",
+      "layer": 3,
+      "label": "Scissors",
+      "alt": "Scissors",
+      "assets": {
+        "src": "/variants/rps/scissors-button-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 310,
+          "y": 385,
+          "width": 118,
+          "height": 74.9,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 180,
+          "y": 555,
+          "width": 78.72696817420434,
+          "height": 50,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "rps-arrow-paper-rock",
+      "type": "decoration",
+      "layer": 2,
+      "label": "Paper beats Rock",
+      "assets": {
+        "src": "/visual-elements/arrows/arrow-red-upright-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 195,
+          "y": 355,
+          "width": 38,
+          "height": 41.5,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 105,
+          "y": 535,
+          "width": 20,
+          "height": 21.875,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "rps-arrow-rock-scissors",
+      "type": "decoration",
+      "layer": 2,
+      "label": "Rock beats Scissors",
+      "assets": {
+        "src": "/visual-elements/arrows/arrow-red-downright-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 325,
+          "y": 355,
+          "width": 38,
+          "height": 41.5,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 190,
+          "y": 535,
+          "width": 20,
+          "height": 21.875,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "rps-arrow-scissors-paper",
+      "type": "decoration",
+      "layer": 2,
+      "label": "Scissors beats Paper",
+      "assets": {
+        "src": "/visual-elements/arrows/arrow-red-left-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 240,
+          "y": 420,
+          "width": 64,
+          "height": 32,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 135,
+          "y": 570,
+          "width": 40,
+          "height": 20,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "abm-attack",
+      "type": "sprite",
+      "layer": 3,
+      "label": "Attack",
+      "alt": "Attack",
+      "assets": {
+        "src": "/variants/abm/attack-button-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 595,
+          "y": 280,
+          "width": 135,
+          "height": 71.96186440677967,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 345,
+          "y": 590,
+          "width": 93.81237524950099,
+          "height": 50,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "abm-block",
+      "type": "sprite",
+      "layer": 3,
+      "label": "Block",
+      "alt": "Block",
+      "assets": {
+        "src": "/variants/abm/block-button-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 500,
+          "y": 390,
+          "width": 130,
+          "height": 65,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 290,
+          "y": 660,
+          "width": 80,
+          "height": 40,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "abm-mana",
+      "type": "sprite",
+      "layer": 3,
+      "label": "Mana",
+      "alt": "Mana",
+      "assets": {
+        "src": "/variants/abm/mana-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 700,
+          "y": 380,
+          "width": 108,
+          "height": 71.9,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 415,
+          "y": 655,
+          "width": 67.57679180887372,
+          "height": 45,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "abm-arrow-block-attack",
+      "type": "decoration",
+      "layer": 2,
+      "label": "Block beats Attack",
+      "assets": {
+        "src": "/visual-elements/arrows/arrow-blue-upright-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 565,
+          "y": 360,
+          "width": 32.04819277108434,
+          "height": 35,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 330,
+          "y": 640,
+          "width": 20,
+          "height": 21.875,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "abm-arrow-attack-mana",
+      "type": "decoration",
+      "layer": 2,
+      "label": "Attack beats Mana",
+      "assets": {
+        "src": "/visual-elements/arrows/arrow-red-downright-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 715,
+          "y": 350,
+          "width": 38,
+          "height": 41.5,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 420,
+          "y": 640,
+          "width": 20,
+          "height": 21.875,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "abm-arrow-mana-block",
+      "type": "decoration",
+      "layer": 2,
+      "label": "Mana beats Block",
+      "assets": {
+        "src": "/variants/abm/arrow-purp-left-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 625,
+          "y": 410,
+          "width": 64,
+          "height": 32,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 370,
+          "y": 675,
+          "width": 40,
+          "height": 20,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "comparison-copy",
+      "type": "text",
+      "layer": 4,
+      "label": "is like...",
+      "className": "tutorial-slide-one__comparison-copy",
+      "layouts": {
+        "landscape": {
+          "x": 440,
+          "y": 350,
+          "width": 84,
+          "height": 34
+        },
+        "portrait": {
+          "x": 250,
+          "y": 610,
+          "width": 58,
+          "height": 30
+        }
+      }
+    },
+    {
+      "id": "next",
+      "type": "button",
+      "layer": 5,
+      "label": "Next",
+      "className": "game-button--baked-label",
+      "assets": {
+        "up": "/variants/abm/next-button-up-sheet.webp",
+        "between": "/variants/abm/next-button-between-sheet.webp",
+        "depressed": "/variants/abm/next-button-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 806,
+          "y": 238,
+          "width": 128,
+          "height": 64,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 410,
+          "y": 710,
+          "width": 128,
+          "height": 64,
+          "aspectLock": true
+        }
+      }
+    }
+  ]
+}

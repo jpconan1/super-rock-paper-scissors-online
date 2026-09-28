@@ -1,11 +1,17 @@
 import { describe, expect, test, vi } from 'vitest';
-import { AppController, GOOGLE_AUTH_POPUP_MESSAGE, googlePopupCallbackUrl, isGoogleAuthPopupMessage } from '../src/app/appController';
+import { AppController, GOOGLE_AUTH_POPUP_MESSAGE, googlePopupCallbackUrl, isGoogleAuthPopupMessage, isTutorialMoveCommand } from '../src/app/appController';
 import type { VariantPresentation } from '../src/core/variant';
 import { PROTOCOL_VERSION } from '../src/protocol/protocol';
 
 const lease = () => ({ ready: Promise.resolve(), release: vi.fn() });
 
 describe('AppController', () => {
+  test('recognizes only move choices as tutorial-completing commands', () => {
+    expect(isTutorialMoveCommand({ type: 'choose-move', move: 'attack' })).toBe(true);
+    expect(isTutorialMoveCommand({ type: 'activate-ability', ability: 'steal' })).toBe(false);
+    expect(isTutorialMoveCommand({ type: 'lock-class', classId: 'lucky' })).toBe(false);
+    expect(isTutorialMoveCommand(null)).toBe(false);
+  });
   test('builds same-origin popup callbacks and validates the complete handshake', () => {
     vi.stubGlobal('location', { origin: 'https://game.test' });
     const popup = {} as Window;

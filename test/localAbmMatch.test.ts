@@ -79,6 +79,68 @@ describe('LocalAbmMatch', () => {
     match.destroy();
   });
 
+  test('scripts the tutorial Attack branch, forced Mana reset, and disables Lucky and deadlines', () => {
+    const snapshots: ServerSnapshot[] = []; const ending = vi.fn();
+    const match = new LocalAbmMatch({
+      playerName: 'JP', publish: (snapshot) => snapshots.push(snapshot), random: () => 0,
+      startingClasses: { p1: 'lucky', p2: 'lucky' }, tutorial: { onEnding: ending },
+    });
+    match.start();
+    expect(variant(snapshots)).toMatchObject({ hideClassBadges: true, noMoveDeadline: true, players: { p1: { mana: 1 }, p2: { mana: 1 } } });
+    expect(latestSnapshot(snapshots).deadlineAt).toBeUndefined();
+
+    match.send({ type: 'choose-move', move: 'attack' });
+    vi.advanceTimersByTime(2_000);
+    expect(variant(snapshots)).toMatchObject({ players: { p1: { mana: 0 }, p2: { mana: 1 } } });
+    expect(variant(snapshots).opponentReady).toBe(true);
+    match.send({ type: 'choose-move', move: 'block' });
+    vi.advanceTimersByTime(1_000);
+    expect(variant(snapshots)).toMatchObject({ players: { p1: { mana: 0 }, p2: { mana: 0 } } });
+    match.send({ type: 'choose-move', move: 'mana' });
+    expect(variant(snapshots)).toMatchObject({ players: { p1: { mana: 1 }, p2: { mana: 1 } } });
+    expect(ending).not.toHaveBeenCalled();
+    match.destroy();
+  });
+
+  test('routes tutorial lethal branches to their endings without a Lucky survival', () => {
+    const bad = vi.fn(); const snapshots: ServerSnapshot[] = [];
+    const match = new LocalAbmMatch({
+      playerName: 'JP', publish: (snapshot) => snapshots.push(snapshot), random: () => 0,
+      startingClasses: { p1: 'lucky', p2: 'lucky' }, tutorial: { onEnding: bad },
+    });
+    match.start(); match.send({ type: 'choose-move', move: 'mana' }); vi.advanceTimersByTime(10_000);
+    expect(variant(snapshots).lastRoundWinner).toBe('p2');
+    expect(variant(snapshots).luckyProcPlayer).toBeUndefined();
+    expect(bad).toHaveBeenCalledWith('bad');
+    match.destroy();
+
+    const good = vi.fn(); const second: ServerSnapshot[] = [];
+    const winning = new LocalAbmMatch({
+      playerName: 'JP', publish: (snapshot) => second.push(snapshot), random: () => 0,
+      startingClasses: { p1: 'lucky', p2: 'lucky' }, tutorial: { onEnding: good },
+    });
+    winning.start(); winning.send({ type: 'choose-move', move: 'block' }); vi.advanceTimersByTime(2_000);
+    winning.send({ type: 'choose-move', move: 'attack' }); vi.advanceTimersByTime(10_000);
+    expect(variant(second).lastRoundWinner).toBe('p1');
+    expect(good).toHaveBeenCalledWith('good');
+    winning.destroy();
+  });
+
+  test('hands the tutorial to the ordinary computer after reaching 2-1 Mana', () => {
+    const snapshots: ServerSnapshot[] = []; const ending = vi.fn();
+    const match = new LocalAbmMatch({
+      playerName: 'JP', publish: (snapshot) => snapshots.push(snapshot), random: () => 0,
+      startingClasses: { p1: 'lucky', p2: 'lucky' }, tutorial: { onEnding: ending },
+    });
+    match.start(); match.send({ type: 'choose-move', move: 'block' }); vi.advanceTimersByTime(2_000);
+    match.send({ type: 'choose-move', move: 'mana' });
+    expect(variant(snapshots)).toMatchObject({ players: { p1: { mana: 2 }, p2: { mana: 1 } } });
+    vi.advanceTimersByTime(1_000);
+    expect(variant(snapshots).opponentReady).toBe(true);
+    expect(ending).not.toHaveBeenCalled();
+    match.destroy();
+  });
+
   test('advances local ABM deadlines when the human does not respond', () => {
     const snapshots: ServerSnapshot[] = [];
     const match = new LocalAbmMatch({ playerName: 'JP', publish: (snapshot) => snapshots.push(snapshot), random: () => 0 });

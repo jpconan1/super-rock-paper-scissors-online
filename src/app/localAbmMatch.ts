@@ -9,7 +9,10 @@ import type { PlayerId } from '../core/variant';
 import { randomId } from '../core/randomId';
 import { PROTOCOL_VERSION, type MatchPlayer, type ServerSnapshot } from '../protocol/protocol';
 import { ABM_CLASSES } from '../variants/attackBlockMana/attackBlockManaCatalog';
-import type { AbmClassId, AbmCommand, AbmMove, AbmProjection } from '../variants/attackBlockMana/attackBlockManaTypes';
+import type { AbmClassId, AbmCommand, AbmMove, AbmProjection, AbmState } from '../variants/attackBlockMana/attackBlockManaTypes';
+
+export type TutorialEnding = 'good' | 'bad';
+type TutorialStage = 'opening' | 'attack-followup' | 'forced-reset' | 'block-followup' | 'freeplay' | 'ended';
 
 interface LocalAbmMatchOptions {
   playerName: string;
@@ -21,6 +24,7 @@ interface LocalAbmMatchOptions {
   unlockedClassIds?: readonly import('../variants/attackBlockMana/attackBlockManaTypes').AbmClassId[];
   startingClasses?: Readonly<Record<PlayerId, AbmClassId>>;
   computerStartsPaused?: boolean;
+  tutorial?: { onEnding(ending: TutorialEnding): void };
 }
 
 const HUMAN: PlayerId = 'p1';
@@ -38,6 +42,9 @@ export class LocalAbmMatch {
   private stopped = false;
   private computerPaused: boolean;
   private commandSequence = 0;
+  private tutorialStage: TutorialStage = 'opening';
+  private tutorialEnding?: TutorialEnding;
+  private tutorialLastCompleteMoves?: Readonly<Record<PlayerId, AbmMove>>;
 
   constructor(private readonly options: LocalAbmMatchOptions) {
     this.now = options.now ?? Date.now;
@@ -55,6 +62,13 @@ export class LocalAbmMatch {
     if (options.startingClasses) {
       this.mutateWithoutPublishing(HUMAN, { type: 'lock-class', classId: options.startingClasses[HUMAN] });
       this.mutateWithoutPublishing(COMPUTER, { type: 'lock-class', classId: options.startingClasses[COMPUTER] });
+    }
+    if (options.tutorial) {
+      const game = this.state.gameState as AbmState;
+      game.tutorialDisableLucky = true;
+      game.tutorialHideClassBadges = true;
+      game.tutorialNoDeadline = true;
+      this.state.deadlineAt = undefined;
     }
   }
 
@@ -86,6 +100,7 @@ export class LocalAbmMatch {
 
   private mutate(player: PlayerId, command: AbmCommand): void {
     this.mutateWithoutPublishing(player, command);
+    this.advanceTutorialScript();
     this.publish();
     this.scheduleNextAction();
   }
@@ -115,8 +130,20 @@ export class LocalAbmMatch {
     this.timer = undefined;
     if (this.stopped || this.computerPaused || this.state.phase !== 'playing') return;
 
+    if (this.options.tutorial && this.tutorialStage === 'ended') {
+      if (!this.tutorialEnding) return;
+      const ending = this.tutorialEnding;
+      this.tutorialEnding = undefined;
+      const finalEventEnd = this.state.events.reduce((latest, event) => Math.max(latest, event.endsAt), this.now());
+      this.timer = this.setTimer(() => {
+        this.timer = undefined;
+        if (!this.stopped) this.options.tutorial?.onEnding(ending);
+      }, Math.max(0, finalEventEnd - this.now()));
+      return;
+    }
+
     const computer = projectOnlineMatch(this.state, COMPUTER).variant as AbmProjection;
-    const botCommand = chooseComputerCommand(computer, this.random);
+    const botCommand = this.options.tutorial ? this.chooseTutorialComputerCommand(computer) : chooseComputerCommand(computer, this.random);
     const deadline = this.state.deadlineAt;
     const naturalBotDelay = COMPUTER_THINK_MIN_MS
       + Math.floor(this.random() * (COMPUTER_THINK_MAX_MS - COMPUTER_THINK_MIN_MS + 1));
@@ -130,10 +157,58 @@ export class LocalAbmMatch {
     this.timer = this.setTimer(() => {
       this.timer = undefined;
       if (this.stopped) return;
-      if (botCommand && botDelay <= deadlineDelay) this.mutate(COMPUTER, botCommand);
-      else if (advanceMatchDeadline(this.state, this.now())) this.publish();
+      if (botCommand && botDelay <= deadlineDelay) { this.mutate(COMPUTER, botCommand); return; }
+      if (advanceMatchDeadline(this.state, this.now())) this.publish();
       this.scheduleNextAction();
     }, delay);
+  }
+
+  private chooseTutorialComputerCommand(projection: AbmProjection): AbmCommand | undefined {
+    if (this.tutorialStage === 'freeplay') return chooseComputerCommand(projection, this.random);
+    if (!projection.legalActions.some((action) => action === 'attack' || action === 'block' || action === 'mana')) return undefined;
+    const humanMove = (this.state.gameState as AbmState).pendingMoves.p1;
+    if (this.tutorialStage === 'opening') {
+      if (!humanMove) return undefined;
+      return { type: 'choose-move', move: humanMove === 'attack' ? 'block' : 'attack' };
+    }
+    if (this.tutorialStage === 'attack-followup') return { type: 'choose-move', move: 'attack' };
+    if (this.tutorialStage === 'forced-reset') return { type: 'choose-move', move: 'mana' };
+    if (this.tutorialStage === 'block-followup') return { type: 'choose-move', move: 'mana' };
+    return undefined;
+  }
+
+  private advanceTutorialScript(): void {
+    if (!this.options.tutorial) return;
+    const game = this.state.gameState as AbmState;
+    const moves = game.lastCompleteMoves;
+    if (!moves || moves === this.tutorialLastCompleteMoves) return;
+    this.tutorialLastCompleteMoves = moves;
+    switch (this.tutorialStage) {
+      case 'opening':
+        if (moves.p1 === 'attack') this.tutorialStage = 'attack-followup';
+        else if (moves.p1 === 'block') this.tutorialStage = 'block-followup';
+        else this.endTutorial('bad');
+        break;
+      case 'attack-followup':
+        if (moves.p1 === 'block') this.tutorialStage = 'forced-reset';
+        else this.endTutorial('bad');
+        break;
+      case 'forced-reset': this.tutorialStage = 'opening'; break;
+      case 'block-followup':
+        if (moves.p1 === 'block') this.tutorialStage = 'opening';
+        else if (moves.p1 === 'attack') this.endTutorial('good');
+        else this.tutorialStage = 'freeplay';
+        break;
+      case 'freeplay':
+        if (game.lastRoundWinner) this.endTutorial(game.lastRoundWinner === HUMAN ? 'good' : 'bad');
+        break;
+      case 'ended': break;
+    }
+  }
+
+  private endTutorial(ending: TutorialEnding): void {
+    this.tutorialStage = 'ended';
+    this.tutorialEnding = ending;
   }
 }
 

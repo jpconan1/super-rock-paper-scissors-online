@@ -11,6 +11,7 @@ const writableLayoutFiles = {
   lobby: 'src/layout/documents/lobby.json',
   'variant-abm': 'src/layout/documents/variants/abm.json',
   'class-reward': 'src/layout/documents/class-reward.json',
+  'tutorial-slide-one': 'src/layout/documents/tutorial-slide-one.json',
 };
 
 function listAssetPaths(directory, prefix = '') {

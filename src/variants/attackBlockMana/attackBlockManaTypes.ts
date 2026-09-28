@@ -52,6 +52,10 @@ export interface AbmPlayerState {
 }
 
 export interface AbmState {
+  /** Local tutorial-only modifiers. Never enabled for network matches. */
+  tutorialDisableLucky?: boolean;
+  tutorialHideClassBadges?: boolean;
+  tutorialNoDeadline?: boolean;
   phase: AbmPhase;
   turn: number;
   round: number;
@@ -109,6 +113,8 @@ export interface AbmState {
 export type AbmLegalAction = 'lock-class' | 'attack' | 'block' | 'mana' | AbmAbilityId;
 
 export interface AbmProjection {
+  hideClassBadges?: boolean;
+  noMoveDeadline?: boolean;
   self: PlayerId;
   phase: AbmPhase;
   turn: number;

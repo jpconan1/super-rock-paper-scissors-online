@@ -27,7 +27,7 @@ export const attackBlockManaRules: VariantRules<AbmState, AbmCommand, AbmProject
     if (command.type === 'choose-move') return chooseMove(state, player, command.move, command.ability, context);
     throw new Error('Unknown ABM command.');
   },
-  nextDeadline: (state) => state.phase === 'waiting' || state.phase === 'conjurer-choosing' ? state.waitingDeadlineAt : undefined,
+  nextDeadline: (state) => !state.tutorialNoDeadline && (state.phase === 'waiting' || state.phase === 'conjurer-choosing') ? state.waitingDeadlineAt : undefined,
   advanceDeadline(state, context) {
     if ((state.phase !== 'waiting' && state.phase !== 'conjurer-choosing') || state.waitingDeadlineAt === undefined || context.now < state.waitingDeadlineAt) return undefined;
     return resolveTimeout(state, context);
@@ -38,6 +38,8 @@ export const attackBlockManaRules: VariantRules<AbmState, AbmCommand, AbmProject
     const ownPendingMove = state.pendingMoves[viewer];
     const ownPendingAbility = state.pendingAbilities?.[viewer];
     return {
+      ...(state.tutorialHideClassBadges ? { hideClassBadges: true } : {}),
+      ...(state.tutorialNoDeadline ? { noMoveDeadline: true } : {}),
       self: viewer, phase: projectedPhase(state, viewer), turn: state.turn, round: state.round,
       score: { ...state.score }, players: clonePlayers(state.players),
       ...(ownPendingClass ? { ownPendingClass } : {}), ...(ownPendingMove ? { ownPendingMove } : {}),
@@ -297,7 +299,7 @@ function resolveTurn(state: AbmState, moves: Record<PlayerId, AbmMove>, context:
   const juggernautProcPlayers = (['p1', 'p2'] as const).filter((id) => didJuggernautProc(players[id], moves[id]));
   const stunnedPlayers = resolveStunnerMoves(players, moves);
   const investorBearPlayers = resolveInvestorTax(players, state.turn);
-  const luckyProcPlayer = loser && players[loser].classId === 'lucky' && context.random() < 0.25 ? loser : undefined;
+  const luckyProcPlayer = loser && !state.tutorialDisableLucky && players[loser].classId === 'lucky' && context.random() < 0.25 ? loser : undefined;
   const fireborneProcPlayer = loser && !luckyProcPlayer && fireShieldTurnsFor(players[loser]) > 0 ? loser : undefined;
   const defeatedPlayer = luckyProcPlayer || fireborneProcPlayer || (loser && players[loser].infiniteMana) ? undefined : loser;
   const abilityResult = defeatedPlayer ? emptyAbilityResult() : resolveActivatedAbilities(players, moves, state.pendingAbilities ?? {});
