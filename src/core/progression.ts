@@ -59,6 +59,16 @@ export function createProgressAward(totalProgressUnits: number, outcome: Progres
   };
 }
 
+export function createNextLevelProgressAward(totalProgressUnits: number): ProgressAward | undefined {
+  const before = progressionForTotal(totalProgressUnits);
+  if (!before.nextUnlock) return undefined;
+  const after = progressionForTotal(before.totalProgressUnits - before.progressUnitsInLevel + PROGRESS_UNITS_PER_LEVEL);
+  return {
+    outcome: 'win', gainedProgressUnits: after.totalProgressUnits - before.totalProgressUnits, before, after,
+    unlockedClassIds: after.unlockedClassIds.slice(before.unlockedClassIds.length),
+  };
+}
+
 export function isClassUnlocked(totalProgressUnits: number, classId: AbmClassId): boolean {
   return progressionForTotal(totalProgressUnits).unlockedClassIds.includes(classId);
 }

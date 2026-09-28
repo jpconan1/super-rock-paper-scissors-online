@@ -20,13 +20,13 @@ import { createEmptyWhiteboard, type WhiteboardServerMessage, type WhiteboardSna
 import type { LobbyPlayer } from '../lobby/protocol';
 import { beats } from '../core/time';
 import { MusicDirector } from '../audio/musicDirector';
-import { destroySoundCatalog } from '../audio/soundCatalog';
+import { destroySoundCatalog, playCatalogSound } from '../audio/soundCatalog';
 import { LocalAbmMatch } from './localAbmMatch';
 import { randomId } from '../core/randomId';
 import { hasSeenAbmNewsletter, mountAbmLetterModal } from './abmLetterModal';
 import { mountAccountScreen } from './accountScreen';
 import { mountProgressScreen } from './progressScreen';
-import type { ProgressAward } from '../core/progression';
+import { createNextLevelProgressAward, type ProgressAward } from '../core/progression';
 import { createClassRewardFlow, mountClassRewardScreen } from './classRewardScreen';
 import { AlertSystem } from '../ui/alertSystem';
 import { ABM_TUTORIAL_SLIDES, mountTutorialSlideshow, type TutorialSlideshow } from './tutorialSlideshow';
@@ -298,6 +298,8 @@ export class AppController {
         account.level,
         account.unlockedClassIds.length,
         account.level === 21 ? 10_000 : account.totalProgressUnits % 10_000,
+        {},
+        import.meta.env.DEV ? () => void this.startTestLevelUp() : undefined,
       );
       lobby.receiveWhiteboard({ type: 'snapshot', board: this.whiteboard });
       lobby.updateRoster(this.lobbyPlayers, this.lobbySelfId);
@@ -353,7 +355,7 @@ export class AppController {
       const award = this.pendingProgressAward;
       if (!award?.unlockedClassIds.length) throw new Error('Class reward is unavailable.');
       const flow = createClassRewardFlow(award);
-      const reward = mountClassRewardScreen(this.screenLayer, this.screenLayer, options.clock, flow.unlockedClassIds, flow.nextClassId, () => {
+      const reward = mountClassRewardScreen(this.screenLayer, this.screenLayer, options.clock, award, flow.unlockedClassIds, flow.nextClassId, () => {
         this.pendingProgressAward = undefined; this.progressAwardMatchId = undefined; this.rewardTransitionStarted = false; void this.navigate('lobby');
       });
       this.screenCleanup = () => reward.destroy();
@@ -695,13 +697,25 @@ export class AppController {
     if (!award) return;
     this.rewardTransitionStarted = true;
     if (!award.unlockedClassIds.length) { this.finishReturnToLobby(); return; }
+    await this.openClassRewards(true);
+  }
+
+  private async startTestLevelUp(): Promise<void> {
+    const award = createNextLevelProgressAward(this.options.session.accountState().totalProgressUnits);
+    if (!award) return;
+    this.options.session.applyProgressAward(award);
+    this.pendingProgressAward = award; this.rewardTransitionStarted = true;
+    await this.openClassRewards(false);
+  }
+
+  private async openClassRewards(releaseMatch: boolean): Promise<void> {
     const curtain = this.getCurtain(); const signal = this.lifecycle?.signal;
     try {
       await curtain.close(signal);
       if (signal?.aborted) return;
       await waitFor(beats(1), signal);
       if (signal?.aborted) return;
-      this.releaseCompletedMatch();
+      if (releaseMatch) this.releaseCompletedMatch();
       this.clearScreen();
       this.destination = 'reward';
       this.lifecycle = new AbortController();
@@ -709,6 +723,7 @@ export class AppController {
       curtain.setDecorationForeground(true);
       this.mountDestination('reward');
       await curtain.open(this.lifecycle.signal);
+      if (!this.lifecycle.signal.aborted) playCatalogSound('unlock-jingle');
     } catch (error) { if (!signal?.aborted) this.showError(error); }
   }
 

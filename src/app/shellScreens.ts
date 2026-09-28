@@ -113,6 +113,7 @@ export function mountLobbyScreen(
   unlockedClassCount = playerLevel,
   progressUnitsInLevel = 0,
   faceOptions: { initialFace?: LobbyFace } = {},
+  onTestLevelUp?: () => void,
 ): LobbyScreenMount {
   const initialFace = faceOptions.initialFace ?? 'whiteboard';
   const layoutDocument = getLayoutDocument('lobby');
@@ -293,11 +294,13 @@ export function mountLobbyScreen(
   ];
   const scoreboard = multiVariantFlow ? action('Scoreboard', leaveQueue(onScoreboard)) : undefined;
   scoreboard?.classList.add('lobby-screen__scoreboard-preview');
+  const testLevelUp = onTestLevelUp ? action('TEST: Level Up', onTestLevelUp) : undefined;
+  testLevelUp?.classList.add('lobby-screen__test-level-up');
   progressionFace.append(...progressElements);
   whiteboardFace.append(whiteboard, ...tools.map((item) => item.element), chat);
   composition.append(header, ...faceLayers.values(), flip, whiteboardFaceButton.element,
     progressionFaceButton.element, moreVariantsFaceButton.element,
-    ...actions.map((item) => item.element), roster, ...(scoreboard ? [scoreboard] : []), curtainLeft, curtainRight);
+    ...actions.map((item) => item.element), roster, ...(scoreboard ? [scoreboard] : []), ...(testLevelUp ? [testLevelUp] : []), curtainLeft, curtainRight);
   composition.append(rosterToggle.element);
   layoutBindings.push(
     { id: 'header', element: header }, { id: 'player-name', element: playerNameDisplay }, { id: 'player-level', element: playerLevelDisplay },

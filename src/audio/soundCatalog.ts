@@ -3,7 +3,7 @@ import { createSoundEffect, type SoundEffect } from './soundEffect';
 export type SoundId =
   | 'button-down' | 'button-up' | 'ready'
   | 'abm-charge' | 'abm-block' | 'abm-collision' | 'abm-lucky'
-  | 'win' | 'lose' | 'starburst' | 'curtain-close' | 'curtain-open';
+  | 'win' | 'lose' | 'starburst' | 'curtain-close' | 'curtain-open' | 'unlock-jingle';
 
 export const SOUND_CATALOG: Readonly<Record<SoundId, string>> = {
   'button-down': '/audio/button-released.mp3',
@@ -18,6 +18,7 @@ export const SOUND_CATALOG: Readonly<Record<SoundId, string>> = {
   starburst: '/audio/starburst.mp3',
   'curtain-close': '/audio/curtains-close.m4a',
   'curtain-open': '/audio/curtains-open.m4a',
+  'unlock-jingle': '/audio/unlock-jingle.mp3',
 };
 
 const effects = new Map<SoundId, SoundEffect>();

@@ -1,0 +1,312 @@
+{
+  "schemaVersion": 1,
+  "id": "class-reward",
+  "title": "Class Reward",
+  "kind": "screen",
+  "canvases": {
+    "landscape": {
+      "width": 960,
+      "height": 540,
+      "minAspectRatio": 1
+    },
+    "portrait": {
+      "width": 540,
+      "height": 960,
+      "minAspectRatio": 0
+    }
+  },
+  "elements": [
+    {
+      "id": "unlock-animation",
+      "type": "sprite",
+      "layer": 4,
+      "stateVisibility": {
+        "unlocked": false,
+        "next": false
+      },
+      "assets": {
+        "src": "/rewards/unlock-animation/frame-1-sheet.webp"
+      },
+      "alt": "Class unlock animation",
+      "layouts": {
+        "landscape": {
+          "x": 120,
+          "y": 129,
+          "width": 720,
+          "height": 282,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 10,
+          "y": 378,
+          "width": 520,
+          "height": 204,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "unlocked-header",
+      "type": "sprite",
+      "layer": 3,
+      "stateVisibility": {
+        "unlocked": true,
+        "next": false
+      },
+      "assets": {
+        "src": "/rewards/headers/class-unlocked-sheet.webp"
+      },
+      "alt": "Class Unlocked",
+      "layouts": {
+        "landscape": {
+          "x": 260,
+          "y": 25,
+          "width": 440.28776978417267,
+          "height": 172.45,
+          "rotation": -1,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 25,
+          "y": 140,
+          "width": 508,
+          "height": 198.97,
+          "rotation": -1,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "class-art",
+      "type": "sprite",
+      "layer": 2,
+      "stateVisibility": {
+        "unlocked": true,
+        "next": false
+      },
+      "assets": {
+        "src": "/variants/abm/lucky-sheet.webp"
+      },
+      "alt": "Class art",
+      "layouts": {
+        "landscape": {
+          "x": 255,
+          "y": 190,
+          "width": 170,
+          "height": 170,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 145,
+          "y": 325,
+          "width": 256,
+          "height": 256,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "unlocked-copy",
+      "type": "text",
+      "layer": 2,
+      "label": "Class name and description",
+      "stateVisibility": {
+        "unlocked": true,
+        "next": false
+      },
+      "layouts": {
+        "landscape": {
+          "x": 515,
+          "y": 165,
+          "width": 305,
+          "height": 220
+        },
+        "portrait": {
+          "x": 55,
+          "y": 590,
+          "width": 430,
+          "height": 220
+        }
+      }
+    },
+    {
+      "id": "unlocked-button",
+      "type": "button",
+      "layer": 3,
+      "label": "Next",
+      "stateVisibility": {
+        "unlocked": true,
+        "next": false
+      },
+      "assets": {
+        "up": "/variants/abm/next-button-up-sheet.webp",
+        "between": "/variants/abm/next-button-between-sheet.webp",
+        "depressed": "/variants/abm/next-button-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 620,
+          "y": 418,
+          "width": 160,
+          "height": 80,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 190,
+          "y": 818,
+          "width": 160,
+          "height": 80,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "next-header",
+      "type": "sprite",
+      "layer": 3,
+      "stateVisibility": {
+        "unlocked": false,
+        "next": true
+      },
+      "assets": {
+        "src": "/rewards/headers/next-class-sheet.webp"
+      },
+      "alt": "Next Unlock",
+      "layouts": {
+        "landscape": {
+          "x": 250,
+          "y": 50,
+          "width": 474.0671641791045,
+          "height": 75,
+          "rotation": -1,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 25,
+          "y": 145,
+          "width": 508,
+          "height": 80.4,
+          "rotation": -1,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "card-flip",
+      "type": "decoration",
+      "layer": 2,
+      "stateVisibility": {
+        "unlocked": false,
+        "next": true
+      },
+      "assets": {
+        "src": "/rewards/card-back.webp"
+      },
+      "alt": "Card flip animation",
+      "layouts": {
+        "landscape": {
+          "x": 215,
+          "y": 155,
+          "width": 256,
+          "height": 362,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 140,
+          "y": 265,
+          "width": 256,
+          "height": 362,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "next-progress",
+      "type": "decoration",
+      "layer": 2,
+      "label": "XP progress bar",
+      "assets": {
+        "src": "/visual-elements/progress-bar-full-sheet.webp"
+      },
+      "stateVisibility": {
+        "unlocked": false,
+        "next": true
+      },
+      "layouts": {
+        "landscape": {
+          "x": 530,
+          "y": 210,
+          "width": 340,
+          "height": 170,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 15,
+          "y": 595,
+          "width": 512,
+          "height": 256,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "next-progress-count",
+      "type": "dynamic-text",
+      "parent": "next-progress",
+      "layer": 3,
+      "label": "XP numbers",
+      "properties": {
+        "allowParentOverflow": true
+      },
+      "stateVisibility": {
+        "unlocked": false,
+        "next": true
+      },
+      "layouts": {
+        "landscape": {
+          "x": 0,
+          "y": -30,
+          "width": 340,
+          "height": 26
+        },
+        "portrait": {
+          "x": -5,
+          "y": 50,
+          "width": 512,
+          "height": 30
+        }
+      }
+    },
+    {
+      "id": "next-button",
+      "type": "button",
+      "layer": 3,
+      "label": "Continue",
+      "stateVisibility": {
+        "unlocked": false,
+        "next": true
+      },
+      "assets": {
+        "up": "/new-buttons/continue-button-w-up-sheet.webp",
+        "between": "/new-buttons/continue-button-w-between-sheet.webp",
+        "depressed": "/new-buttons/continue-button-w-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 620,
+          "y": 418,
+          "width": 160,
+          "height": 80,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 155,
+          "y": 800,
+          "width": 220,
+          "height": 110,
+          "aspectLock": true
+        }
+      }
+    }
+  ]
+}

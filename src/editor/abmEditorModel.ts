@@ -10,6 +10,16 @@ export function isAbmBattleEditorElement(element: LayoutElement): boolean {
   return element.stateVisibility?.battle !== false;
 }
 
+export function isAbmPostMatchEditorElement(element: LayoutElement): boolean {
+  if (element.id === 'back-lobby' || element.id === 'match-progress-count') return true;
+  if (['attack', 'block', 'mana', 'ability'].includes(element.id)) return false;
+  return isAbmBattleEditorElement(element);
+}
+
+export function isEditorElementVisible(element: LayoutElement, state: string): boolean {
+  return element.stateVisibility?.[state] !== false;
+}
+
 export function resizeEditorGeometry(
   element: LayoutElement,
   orientation: LayoutOrientation,

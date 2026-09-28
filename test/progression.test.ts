@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'vitest';
 import {
-  createProgressAward, isClassUnlocked, MAX_PROGRESS_UNITS, progressGainForLevel, progressionForTotal,
+  createNextLevelProgressAward, createProgressAward, isClassUnlocked, MAX_PROGRESS_UNITS, progressGainForLevel, progressionForTotal,
 } from '../src/core/progression';
 import { ABM_CLASS_IDS } from '../src/variants/attackBlockMana/attackBlockManaTypes';
+import { xpAnimationStops } from '../src/app/xpProgressBar';
 
 describe('progression', () => {
   test('starts at level one with Lucky and ends at level 21 with Joe', () => {
@@ -45,5 +46,15 @@ describe('progression', () => {
     expect(isClassUnlocked(0, 'advantaged')).toBe(false);
     expect(isClassUnlocked(10_000, 'advantaged')).toBe(true);
     expect(isClassUnlocked(MAX_PROGRESS_UNITS, 'joe')).toBe(true);
+  });
+
+  test('creates an exact one-level test award without discarding current progress', () => {
+    expect(createNextLevelProgressAward(2_500)).toMatchObject({ gainedProgressUnits: 7_500, unlockedClassIds: ['advantaged'], after: { totalProgressUnits: 10_000 } });
+    expect(createNextLevelProgressAward(MAX_PROGRESS_UNITS)).toBeUndefined();
+  });
+
+  test('splits XP animation at every filled level bar', () => {
+    expect(xpAnimationStops(9_000, 24_000)).toEqual([10_000, 20_000, 24_000]);
+    expect(xpAnimationStops(2_000, 9_500)).toEqual([9_500]);
   });
 });

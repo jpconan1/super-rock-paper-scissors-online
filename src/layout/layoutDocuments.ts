@@ -4,6 +4,7 @@ import accountSource from './documents/account.json';
 import variantSelectSource from './documents/variant-select.json';
 import scoreboardSource from './documents/scoreboard.json';
 import gameParentSource from './documents/game-parent.json';
+import classRewardSource from './documents/class-reward.json';
 import fireballWarSource from './documents/variants/fireball-war.json';
 import abmSource from './documents/variants/abm.json';
 import dragonSpearSource from './documents/variants/dragon-spear.json';
@@ -24,7 +25,7 @@ import rpsPokerDetailSource from './documents/variant-details/rps-poker.json';
 import tapTapShootDetailSource from './documents/variant-details/tap-tap-shoot.json';
 import { validateLayoutDocument, type LayoutDocument } from './layoutDocument';
 
-const sources: unknown[] = [titleSource, lobbySource, accountSource, variantSelectSource, scoreboardSource, gameParentSource,
+const sources: unknown[] = [titleSource, lobbySource, accountSource, variantSelectSource, scoreboardSource, gameParentSource, classRewardSource,
   fireballWarSource, abmSource, dragonSpearSource, pickTwoSource, gunKnifeFistSource, kitchenSinkSource,
   rpsRpgSource, rpsPokerSource, tapTapShootSource];
 sources.push(rpsDetailSource, dragonSpearDetailSource, pickTwoDetailSource, gunKnifeFistDetailSource,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isAbmBattleEditorElement, mirroredEditorGeometry, resizeEditorGeometry } from '../src/editor/abmEditorModel';
+import { isAbmBattleEditorElement, isAbmPostMatchEditorElement, isEditorElementVisible, mirroredEditorGeometry, resizeEditorGeometry } from '../src/editor/abmEditorModel';
 import type { LayoutElement } from '../src/layout/layoutDocument';
 
 function element(id: string, type: LayoutElement['type'] = 'sprite'): LayoutElement {
@@ -33,5 +33,19 @@ describe('ABM editor model', () => {
 
   it('mirrors resource geometry inside its matching parent', () => {
     expect(mirroredEditorGeometry({ x: 15, y: 8, width: 30, height: 20 }, 120)).toEqual({ x: 75, y: 8, width: 30, height: 20 });
+  });
+});
+
+describe('stateful editor elements', () => {
+  it('shows reward elements only in their configured state', () => {
+    const unlocked = { ...element('unlocked-header', 'sprite'), stateVisibility: { unlocked: true, next: false } };
+    expect(isEditorElementVisible(unlocked, 'unlocked')).toBe(true);
+    expect(isEditorElementVisible(unlocked, 'next')).toBe(false);
+  });
+
+  it('shows XP layout pieces and hides move buttons after a match', () => {
+    expect(isAbmPostMatchEditorElement(element('back-lobby', 'decoration'))).toBe(true);
+    expect(isAbmPostMatchEditorElement(element('match-progress-count', 'dynamic-text'))).toBe(true);
+    expect(isAbmPostMatchEditorElement(element('attack', 'button'))).toBe(false);
   });
 });

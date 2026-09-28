@@ -10,6 +10,7 @@ const writableLayoutFiles = {
   title: 'src/layout/documents/title.json',
   lobby: 'src/layout/documents/lobby.json',
   'variant-abm': 'src/layout/documents/variants/abm.json',
+  'class-reward': 'src/layout/documents/class-reward.json',
 };
 
 function listAssetPaths(directory, prefix = '') {

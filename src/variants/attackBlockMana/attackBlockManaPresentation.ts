@@ -438,6 +438,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     const bindings: readonly [string, HTMLElement][] = [['picker-prev', previous.element], ['picker-next', next.element], ['lock-class', lock.element],
       ...abilityButtons.map(([, button]) => ['ability', button.element] as [string, HTMLElement]),
       ['back-lobby', matchProgress],
+      ...(xpBar ? [['match-progress-count', xpBar.countElement] as [string, HTMLElement]] : []),
       ['class-ready', classReadyArt.element], ['class-ready-opponent-tag', classReadyOpponentTag.element],
       ['pick-class-header', pickClassHeader.element],
       ...(counterpickTag ? [['p2-counterpick-tag', counterpickTag.element] as [string, HTMLElement]] : []),
@@ -566,6 +567,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     matchProgress.hidden = !complete || !showingResult || !progressAward;
     if (complete && showingResult && progressAward && !xpSequenceStarted) {
       xpSequenceStarted = true; xpBar = createXpProgressBar(clock, progressAward); matchProgress.replaceChildren(xpBar.element);
+      applyVariantLayout();
       void xpBar.finished.then(() => new Promise<void>((resolve) => setTimeout(resolve, beats(2))))
         .then(() => { if (!transitionAbort.signal.aborted) matchProgressComplete?.(); });
     }
@@ -698,9 +700,15 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     waiting.classList.toggle('is-early-p1', early === 'p1'); waiting.classList.toggle('is-early-p2', early === 'p2');
     waiting.classList.toggle('is-late-p1', late === 'p1'); waiting.classList.toggle('is-late-p2', late === 'p2');
     const waitingStartsAt = nextProjection.waitingStartsAt!; const deadlineAt = nextProjection.waitingDeadlineAt!;
-    readyArt.element.style.left = `${early === 'p1' ? 28 : 204}px`;
+    const readyLeft = orientation === 'portrait'
+      ? (early === 'p1' ? -19 : 221)
+      : (early === 'p1' ? -69 : 153);
+    readyArt.element.style.left = `${readyLeft}px`;
     dotsArt.element.style.left = `${late === 'p1' ? 75 : 227}px`;
-    countdownArt.element.style.left = `${late === 'p1' ? 28 : 204}px`;
+    const countdownLeft = orientation === 'portrait'
+      ? (late === 'p1' ? -19 : 221)
+      : (late === 'p1' ? -69 : 153);
+    countdownArt.element.style.left = `${countdownLeft}px`;
     const visual = getAbmWaitingVisual(serverTime, waitingStartsAt, deadlineAt);
     sceneArtwork.hidden = visual.countdown !== undefined;
     readyArt.setSource(`/visual-elements/ready-waiting/${visual.readyFrame}_sheet.webp`);

@@ -10,7 +10,7 @@ describe('layout documents', () => {
   });
 
   it('ships every requested shared document and nine variants', () => {
-    expect([...layoutDocuments.keys()]).toEqual(expect.arrayContaining(['title', 'lobby', 'account', 'variant-select', 'scoreboard', 'game-parent']));
+    expect([...layoutDocuments.keys()]).toEqual(expect.arrayContaining(['title', 'lobby', 'account', 'variant-select', 'scoreboard', 'game-parent', 'class-reward']));
     expect(variantLayoutDocuments).toHaveLength(9);
     for (const variant of variantLayoutDocuments) {
       expect(variant.rules?.lead).toBeTruthy();
@@ -20,6 +20,16 @@ describe('layout documents', () => {
 
   it('keeps account settings out of the lobby layout', () => {
     expect(layoutDocuments.get('lobby')!.elements.some((element) => element.id === 'account')).toBe(false);
+  });
+
+  it('defines separate reward states with one card-flip box', () => {
+    const reward = layoutDocuments.get('class-reward')!;
+    const unlocked = reward.elements.filter((element) => element.stateVisibility?.unlocked !== false);
+    const next = reward.elements.filter((element) => element.stateVisibility?.next !== false);
+    expect(unlocked.map(({ id }) => id)).toEqual(['unlocked-header', 'class-art', 'unlocked-copy', 'unlocked-button']);
+    expect(next.map(({ id }) => id)).toEqual(['next-header', 'card-flip', 'next-progress', 'next-progress-count', 'next-button']);
+    expect(reward.elements.filter(({ id }) => id === 'card-flip')).toHaveLength(1);
+    expect(reward.elements.find(({ id }) => id === 'card-flip')?.assets?.src).toBe('/rewards/card-back.webp');
   });
 
   it('ships the title Discord button with all three animation sheets', () => {

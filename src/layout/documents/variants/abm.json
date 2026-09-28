@@ -1083,19 +1083,22 @@
       "assets": {
         "src": "/visual-elements/ready-waiting/rdy_sheet.webp"
       },
+      "properties": {
+        "allowParentOverflow": true
+      },
       "layouts": {
         "landscape": {
-          "x": 116,
-          "y": 28,
-          "width": 120,
-          "height": 102.4,
+          "x": -69,
+          "y": -34,
+          "width": 300,
+          "height": 256,
           "aspectLock": true
         },
         "portrait": {
-          "x": 116,
-          "y": 28,
-          "width": 120,
-          "height": 102.4,
+          "x": -19,
+          "y": -60,
+          "width": 300,
+          "height": 256,
           "aspectLock": true
         }
       }
@@ -2705,6 +2708,10 @@
       "assets": {
         "src": "/visual-elements/progress-bar-full-sheet.webp"
       },
+      "stateVisibility": {
+        "battle": false,
+        "post-match": true
+      },
       "layouts": {
         "landscape": {
           "x": 352,
@@ -2720,6 +2727,22 @@
           "height": 128,
           "aspectLock": true
         }
+      }
+    },
+    {
+      "id": "match-progress-count",
+      "type": "dynamic-text",
+      "parent": "back-lobby",
+      "layer": 3,
+      "label": "XP numbers",
+      "properties": { "allowParentOverflow": true },
+      "stateVisibility": {
+        "battle": false,
+        "post-match": true
+      },
+      "layouts": {
+        "landscape": { "x": 0, "y": -26, "width": 256, "height": 24 },
+        "portrait": { "x": 0, "y": -26, "width": 256, "height": 24 }
       }
     },
     {
