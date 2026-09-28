@@ -29,9 +29,9 @@ export function createClientSeasonManifest(
   const abmSlot = { slotId: 'slot-1' as const, variant: {
     ...abm,
     variantId: 'attack-block-mana',
-    rulesVersion: 1,
+    rulesVersion: 2,
     title: 'Attack Block Mana',
-    rulesCopy: ['Attack costs 1 Mana and defeats Mana.', 'Block stops Attack. Mana gains Mana.', 'First to three rounds wins.'],
+    rulesCopy: ['Attack costs 1 Mana and defeats Mana.', 'Block stops Attack. Mana gains Mana.', 'First to two rounds wins.'],
     assetBundleId: 'variant:abm' as const,
     thumbnail: '/variants/abm/advantaged-sheet.webp',
     loadPresentation: async () => {

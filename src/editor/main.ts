@@ -4,12 +4,13 @@ import { createGameButton } from '../input/gameButton';
 import { applyLayoutGeometry, validateLayoutDocument, type LayoutDocument, type LayoutElement, type LayoutOrientation } from '../layout/layoutDocument';
 import { getLayoutDocument } from '../layout/layoutDocuments';
 import { createBoilingSprite } from '../renderer/boilingSprite';
+import { isAbmBattleEditorElement, resizeEditorGeometry } from './abmEditorModel';
 
 const hostElement = document.querySelector<HTMLElement>('#editor');
 if (!hostElement) throw new Error('Missing editor mount.');
 const host: HTMLElement = hostElement;
 const clock = new BoilClock(document, true);
-let working = clone(getLayoutDocument('title'));
+let working = clone(getLayoutDocument('variant-abm'));
 let saved = clone(working);
 let orientation: LayoutOrientation = 'landscape';
 let selectedId: string | undefined;
@@ -19,26 +20,36 @@ let future: LayoutDocument[] = [];
 let cleanups: (() => void)[] = [];
 
 host.innerHTML = `<main class="abm-editor">
-  <header class="abm-editor__toolbar"><strong>Title screen</strong>
+  <header class="abm-editor__toolbar"><strong>Attack Block Mana · Game screen</strong>
     <label>View <select data-orientation><option value="landscape">Landscape</option><option value="portrait">Portrait</option></select></label>
     <span>Drag to move · bottom-right handle resizes</span><button data-undo disabled>Undo</button><button data-redo disabled>Redo</button><button data-reset disabled>Reset</button>
     <button class="abm-editor__save" data-save disabled>Save</button><span data-dirty></span><span data-status></span></header>
-  <aside class="abm-editor__list"><h2>Title elements</h2><div data-list></div></aside>
+  <aside class="abm-editor__list"><h2>Game elements</h2><div data-list></div></aside>
   <section class="abm-editor__stage"><div class="abm-editor__zoom"><button data-fit>Fit</button><input data-zoom type="range" min="20" max="150" value="100"><output data-zoom-output>100%</output></div>
     <div class="abm-editor__canvas-shell"><div class="abm-editor__canvas" data-canvas></div></div></section>
   <aside class="abm-editor__inspector" data-inspector></aside></main>`;
 
 const $ = <T extends Element>(selector: string) => host.querySelector<T>(selector)!;
 const selected = () => working.elements.find(({ id }) => id === selectedId);
+const visibleElements = () => working.elements.filter(isAbmBattleEditorElement);
 
 function render(): void {
   cleanups.forEach((cleanup) => cleanup()); cleanups = [];
   const canvas = $<HTMLElement>('[data-canvas]');
   const size = working.canvases[orientation];
   canvas.style.width = `${size.width}px`; canvas.style.height = `${size.height}px`; canvas.replaceChildren();
-  for (const config of [...working.elements].sort((a, b) => (a.layer ?? 0) - (b.layer ?? 0))) {
+  const configs = [...visibleElements()].sort((a, b) => (a.layer ?? 0) - (b.layer ?? 0));
+  const nodes = new Map<string, HTMLElement>();
+  for (const config of configs) {
     const node = makeNode(config); node.dataset.id = config.id; node.classList.toggle('is-selected', config.id === selectedId);
-    applyLayoutGeometry(node, config.layouts[orientation]); node.style.zIndex = String(config.layer ?? 0); canvas.append(node);
+    if (configs.some(({ parent }) => parent === config.id)) { node.classList.add('is-structural'); node.textContent = ''; }
+    applyLayoutGeometry(node, config.layouts[orientation]); node.style.zIndex = String(config.layer ?? 0); nodes.set(config.id, node);
+  }
+  for (const config of configs) {
+    const node = nodes.get(config.id)!;
+    const parent = config.parent ? nodes.get(config.parent) : undefined;
+    if (parent) parent.append(node);
+    else canvas.append(node);
   }
   const grid = document.createElement('div'); grid.className = 'abm-editor__grid'; canvas.append(grid);
   renderList(); renderInspector(); updateToolbar(); applyZoom();
@@ -67,7 +78,7 @@ function previewText(config: LayoutElement): string {
 
 function renderList(): void {
   const list = $('[data-list]'); list.replaceChildren();
-  for (const item of working.elements) {
+  for (const item of visibleElements()) {
     const button = document.createElement('button'); button.textContent = name(item.id); button.classList.toggle('is-selected', item.id === selectedId);
     button.onclick = () => { selectedId = item.id; render(); }; list.append(button);
   }
@@ -80,7 +91,9 @@ function renderInspector(): void {
   panel.innerHTML = `<h2>${name(item.id)}</h2><p class="abm-editor__id">${item.id}</p><div class="abm-editor__fields">${fields}</div>`;
   panel.querySelectorAll<HTMLInputElement>('[data-geometry]').forEach((input) => { input.onchange = () => change(() => {
     const key = input.dataset.geometry as 'x' | 'y' | 'width' | 'height'; const value = Number(input.value);
-    if (Number.isFinite(value)) item.layouts[orientation] = { ...geometry, [key]: key === 'width' || key === 'height' ? Math.max(5, value) : value };
+    if (!Number.isFinite(value)) return;
+    if (key === 'width' || key === 'height') item.layouts[orientation] = resizeEditorGeometry(item, orientation, key, Math.max(5, value));
+    else item.layouts[orientation] = { ...geometry, [key]: value };
   }); });
 }
 
@@ -94,9 +107,14 @@ function beginPieceDrag(event: PointerEvent, id: string, target: HTMLElement): v
   const move = (next: PointerEvent) => {
     if (next.pointerId !== event.pointerId) return;
     const dx = (next.clientX - origin.x) / zoom; const dy = (next.clientY - origin.y) / zoom;
-    item.layouts[orientation] = resize
-      ? { ...original, width: Math.max(5, snap(original.width + dx)), height: Math.max(5, snap(original.height + dy)) }
-      : { ...original, x: snap(original.x + dx), y: snap(original.y + dy) };
+    if (resize) {
+      const width = Math.max(5, snap(original.width + dx)); const height = Math.max(5, snap(original.height + dy));
+      const artwork = ['sprite', 'decoration', 'button', 'control'].includes(item.type);
+      if (artwork) {
+        const dimension = Math.abs(dx / original.width) >= Math.abs(dy / original.height) ? 'width' : 'height';
+        item.layouts[orientation] = resizeEditorGeometry(item, orientation, dimension, dimension === 'width' ? width : height, undefined, original);
+      } else item.layouts[orientation] = { ...original, width, height };
+    } else item.layouts[orientation] = { ...original, x: snap(original.x + dx), y: snap(original.y + dy) };
     applyLayoutGeometry(target, item.layouts[orientation]); renderInspector(); updateToolbar();
   };
   const end = (next: PointerEvent) => {

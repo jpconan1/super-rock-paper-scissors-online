@@ -32,8 +32,8 @@ export function mountDummyScreen(container: HTMLElement, clock: BoilClock, advan
     },
     artwork: {
       turn: { src: '/visual-elements/time-counters/turn1-sheet.webp', alt: 'Turn 1' },
-      p1Wins: { src: '/visual-elements/win-couters/ft3-win-counter-0-sheet.webp', alt: 'P1 wins: 0' },
-      p2Wins: { src: '/visual-elements/win-couters/ft3-win-counter-0-sheet.webp', alt: 'P2 wins: 0' },
+      p1Wins: { src: '/visual-elements/win-couters/ft2-win-counter-empty-sheet.webp', alt: 'P1 wins: 0' },
+      p2Wins: { src: '/visual-elements/win-couters/ft2-win-counter-empty-sheet.webp', alt: 'P2 wins: 0' },
       scene: { src: '/variants/dummy/scenes/dummy-scene.webp', alt: '', boiling: false },
     },
     variantContent: {

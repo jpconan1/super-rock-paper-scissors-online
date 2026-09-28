@@ -15,7 +15,7 @@ import type { ShellSessionAdapter } from './shellSessionAdapter';
 import { mountDisconnectResult, mountErrorScreen, mountLobbyScreen, mountMatchFoundScreen, showConnectionModal, type LobbyScreenMount } from './shellScreens';
 import { MatchFlowDirector, statesForMatch } from './matchFlowDirector';
 import type { VariantSelectScreen } from '../variantSelect/variantSelectScreen';
-import { mountUniversalMenu, type UniversalMenu } from './universalMenu';
+import { mountUniversalMenu, selectUniversalMenuMode, type UniversalMenu, type UniversalMenuOptions } from './universalMenu';
 import { createEmptyWhiteboard, type WhiteboardServerMessage, type WhiteboardSnapshot } from '../whiteboard/protocol';
 import type { LobbyPlayer } from '../lobby/protocol';
 import { beats } from '../core/time';
@@ -26,6 +26,9 @@ import { randomId } from '../core/randomId';
 import { hasSeenAbmNewsletter, mountAbmLetterModal } from './abmLetterModal';
 import { mountAccountScreen } from './accountScreen';
 import { mountProgressScreen } from './progressScreen';
+import type { ProgressAward } from '../core/progression';
+import { AlertSystem } from '../ui/alertSystem';
+import { ABM_TUTORIAL_SLIDES, mountTutorialSlideshow, type TutorialSlideshow } from './tutorialSlideshow';
 
 export type ConnectionState = 'connected' | 'reconnecting' | 'offline';
 export type ShellDestination = 'title' | 'lobby' | 'account' | 'match-found' | 'slot-picker' | 'scoreboard' | 'gameplay' | 'progress';
@@ -40,6 +43,7 @@ export class AppController {
   private readonly screenLayer: HTMLElement;
   private readonly modalLayer: HTMLElement;
   private readonly transitionLayer: HTMLElement;
+  private readonly alertSystem?: AlertSystem;
   private readonly variants: ReadonlyMap<SlotId, ClientVariantDescriptor>;
   private readonly legacyPresentations?: PresentationRegistry;
   private mounted?: VariantPresentation<unknown, unknown>;
@@ -68,11 +72,16 @@ export class AppController {
   private lobbySelfId = '';
   private terminalCleanup?: () => void;
   private localMatch?: LocalAbmMatch;
+  private localMatchAwardsProgress = false;
+  private pendingProgressAward?: ProgressAward;
+  private tutorialPending = false;
+  private tutorialSlideshow?: TutorialSlideshow;
   private googleSignIn?: AbortController;
   private readonly music = new MusicDirector();
   private readonly onGlobalKeyDown = (event: KeyboardEvent) => {
     if (event.key !== 'Escape' || event.repeat || this.destination === 'title') return;
     event.preventDefault();
+    if (this.alertSystem?.hasOpenAlert) { this.alertSystem.closeTop(); return; }
     this.universalMenu ? this.closeUniversalMenu() : this.openUniversalMenu();
   };
 
@@ -88,6 +97,7 @@ export class AppController {
       this.screenLayer = layers.screen;
       this.modalLayer = layers.modal;
       this.transitionLayer = layers.transition;
+      this.alertSystem = new AlertSystem(this.modalLayer, this.screenLayer, optionsOrRegistry.clock);
       this.variants = validateClientSeason(optionsOrRegistry.season);
       this.matchFlowDirector = new MatchFlowDirector({
         slots: [...this.variants.keys()],
@@ -130,6 +140,7 @@ export class AppController {
   }
 
   async navigate(destination: ShellDestination, animated = true): Promise<void> {
+    this.alertSystem?.closeAll();
     if (this.destination === 'lobby' && destination !== 'lobby') {
       this.setMatchmaking(false);
       this.options.session.leaveLobby();
@@ -204,6 +215,7 @@ export class AppController {
   setConnectionState(state: ConnectionState): void {
     this.connectionState = state;
     if (state !== 'connected') this.closeUniversalMenu();
+    if (state !== 'connected') this.alertSystem?.closeAll();
     this.modalCleanup?.();
     this.modalCleanup = undefined;
     this.terminalCleanup?.();
@@ -221,6 +233,7 @@ export class AppController {
     this.loadRevision++;
     globalThis.removeEventListener?.('keydown', this.onGlobalKeyDown as EventListener);
     this.closeUniversalMenu();
+    this.alertSystem?.destroy();
     this.lifecycle?.abort();
     this.lifecycle = undefined;
     this.googleSignIn?.abort();
@@ -271,7 +284,7 @@ export class AppController {
         this.matchmakingActive,
         (active) => this.setMatchmaking(active),
         () => this.startPractice(),
-        () => {},
+        () => this.startTutorial(),
         () => void this.navigate('scoreboard'),
         () => this.openUniversalMenu(),
         (message) => options.session.sendWhiteboard(message),
@@ -326,7 +339,7 @@ export class AppController {
         variants: this.variants,
       });
     } else if (destination === 'progress') {
-      const award = this.matchProjection?.progressAward;
+      const award = this.pendingProgressAward ?? this.matchProjection?.progressAward;
       if (!award) throw new Error('Progress award is unavailable.');
       const progress = mountProgressScreen(this.screenLayer, options.clock, award, () => this.finishReturnToLobby());
       this.screenCleanup = () => progress.destroy();
@@ -367,6 +380,7 @@ export class AppController {
         await this.loadSlot(slot);
         if (revision + 1 !== this.loadRevision || signal.aborted) return;
         if (this.latestSnapshot) this.receiveSnapshot(this.latestSnapshot, Boolean(this.localMatch));
+        if (this.tutorialPending) this.openTutorialSlideshow();
       }, signal);
     } catch (error) { if (!signal.aborted) this.showError(error); }
   }
@@ -382,6 +396,8 @@ export class AppController {
   }
 
   private clearScreen(): void {
+    this.closeTutorialSlideshow();
+    this.alertSystem?.closeAll();
     this.closeAbmLetter();
     this.screenCleanup?.();
     this.screenCleanup = undefined;
@@ -408,21 +424,24 @@ export class AppController {
   }
 
   private openUniversalMenu(): void {
-    if (this.destination === 'title' || this.universalMenu) return;
+    if (this.destination === 'title' || this.universalMenu || !this.alertSystem) return;
     const scaleContent = this.screenLayer.querySelector<HTMLElement>('.scale-box__content');
     const background = scaleContent?.firstElementChild instanceof HTMLElement
       ? scaleContent.firstElementChild
       : this.screenLayer.firstElementChild instanceof HTMLElement ? this.screenLayer.firstElementChild : this.screenLayer;
-    this.universalMenu = mountUniversalMenu(scaleContent ?? this.screenLayer, background, this.options.clock,
-      () => void this.quitToTitle(), () => this.closeUniversalMenu(), () => {
+    const mode = selectUniversalMenuMode(Boolean(this.localMatch), Boolean(this.matchProjection));
+    const common = { onQuit: () => mode === 'game' ? this.quitToLobby() : void this.quitToTitle(), onClose: () => this.closeUniversalMenu(), alerts: this.alertSystem };
+    const menuOptions: UniversalMenuOptions = mode === 'game' ? { mode, ...common } : {
+      mode, ...common, account: this.options.session.accountState(), onAccount: () => {
         this.closeUniversalMenu();
         this.setMatchmaking(false);
         void this.navigate('account');
-      }, async (enabled) => {
+      }, onSetUnlockAll: async (enabled) => {
         await this.options.session.setUnlockAllClasses(enabled);
         this.lobbyScreen?.setUnlockedClassCount(this.options.session.accountState().unlockedClassIds.length);
-      }, this.options.session.accountState(),
-      !this.matchProjection && !this.localMatch);
+      },
+    };
+    this.universalMenu = mountUniversalMenu(scaleContent ?? this.screenLayer, background, this.options.clock, menuOptions);
   }
 
   private openAbmLetter(trigger?: HTMLElement): void {
@@ -497,6 +516,11 @@ export class AppController {
     void this.navigate('title');
   }
 
+  private quitToLobby(): void {
+    this.closeUniversalMenu();
+    this.finishReturnToLobby();
+  }
+
   private async logOutToTitle(): Promise<void> {
     try { await this.options.session.signOut(); }
     catch (error) { this.showError(error); return; }
@@ -532,6 +556,10 @@ export class AppController {
   }
 
   private startPractice(): void {
+    this.localMatchAwardsProgress = true;
+    this.pendingProgressAward = undefined;
+    this.tutorialPending = false;
+    this.closeTutorialSlideshow();
     this.setMatchmaking(false);
     this.latestSnapshot = undefined;
     this.matchFlowDirector?.cancel();
@@ -543,6 +571,42 @@ export class AppController {
       publish: (snapshot) => this.receiveSnapshot(snapshot, true),
     });
     this.localMatch.start();
+  }
+
+  private startTutorial(): void {
+    this.localMatchAwardsProgress = false;
+    this.pendingProgressAward = undefined;
+    this.setMatchmaking(false);
+    this.latestSnapshot = undefined;
+    this.matchFlowDirector?.cancel();
+    this.options.session.setLobbyPresence('playing-computer');
+    this.localMatch?.destroy();
+    this.tutorialPending = true;
+    this.localMatch = new LocalAbmMatch({
+      playerName: this.playerName,
+      startingClasses: { p1: 'lucky', p2: 'lucky' },
+      computerStartsPaused: true,
+      publish: (snapshot) => this.receiveSnapshot(snapshot, true),
+    });
+    this.localMatch.start();
+  }
+
+  private openTutorialSlideshow(): void {
+    if (!this.tutorialPending || this.tutorialSlideshow) return;
+    this.tutorialPending = false;
+    this.tutorialSlideshow = mountTutorialSlideshow(
+      this.modalLayer,
+      this.screenLayer,
+      this.options.clock,
+      ABM_TUTORIAL_SLIDES,
+      () => { this.tutorialSlideshow = undefined; this.localMatch?.resumeComputer(); },
+    );
+  }
+
+  private closeTutorialSlideshow(): void {
+    const slideshow = this.tutorialSlideshow;
+    this.tutorialSlideshow = undefined;
+    slideshow?.destroy();
   }
 
   private async syncMatchScreen(projection: MatchProjection): Promise<void> {
@@ -588,12 +652,21 @@ export class AppController {
     }
   }
 
-  private returnToLobbyFromMatch(): void {
+  private async returnToLobbyFromMatch(): Promise<void> {
     this.terminalCleanup?.();
     this.terminalCleanup = undefined;
-    const award = this.matchProjection?.progressAward;
-    if (award && award.gainedProgressUnits > 0 && !this.localMatch) {
+    let award = this.matchProjection?.progressAward;
+    if (this.localMatch && this.localMatchAwardsProgress && this.matchProjection?.phase === 'complete') {
+      try {
+        award = await this.options.session.awardComputerMatch(
+          this.latestSnapshot!.matchId,
+          this.matchProjection.winner === this.matchProjection.self ? 'win' : 'loss',
+        );
+      } catch (error) { this.showError(error); return; }
+    }
+    if (award && award.gainedProgressUnits > 0) {
       this.options.session.applyProgressAward(award);
+      this.pendingProgressAward = award;
       void this.navigate('progress');
       return;
     }
@@ -604,9 +677,11 @@ export class AppController {
     if (this.localMatch) {
       this.localMatch.destroy();
       this.localMatch = undefined;
+      this.localMatchAwardsProgress = false;
       this.options.session.setLobbyPresence('idle');
     } else this.options.session.leaveMatch();
     this.latestSnapshot = undefined;
+    this.pendingProgressAward = undefined;
     this.matchFlowDirector?.cancel();
     this.music.enterMenu(true);
     void this.navigate('lobby');

@@ -95,6 +95,69 @@ body::before {
   pointer-events: auto;
 }
 .shell-modal__message { padding: 24px 32px; }
+.alert-system {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  padding: clamp(12px, 3vw, 28px);
+  place-items: center;
+  background: rgba(29, 27, 24, .68);
+  pointer-events: auto;
+}
+.alert-system__box {
+  display: grid;
+  width: min(520px, 100%);
+  padding: clamp(24px, 6vw, 48px);
+  place-items: center;
+  gap: 28px;
+}
+.alert-system__content { color: #ac3235; font-size: clamp(32px, 8vw, 52px); font-weight: 900; text-align: center; }
+.alert-system__content > :first-child { margin-top: 0; }
+.alert-system__content > :last-child { margin-bottom: 0; }
+.alert-system__error { margin: 0; color: #ac3235; font-size: clamp(16px, 3vw, 22px); font-weight: 900; text-align: center; }
+.alert-system__actions { display: flex; width: 100%; flex-wrap: wrap; align-items: center; justify-content: center; gap: 24px; }
+.game-button.alert-system__action { width: min(10rem, 42vw); }
+.tutorial-slideshow {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  pointer-events: auto;
+}
+.tutorial-slideshow__shade { position: absolute; inset: 0; background: rgba(29, 27, 24, .68); }
+.tutorial-slideshow__highlight {
+  position: absolute;
+  z-index: 1;
+  border: 5px solid #fff;
+  border-radius: 12px;
+  box-shadow: 0 0 0 200vmax rgba(29, 27, 24, .68);
+  pointer-events: none;
+}
+.tutorial-slideshow__panel {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  width: min(720px, calc(100% - 32px));
+  min-height: 250px;
+  padding: clamp(26px, 5vw, 48px);
+  place-items: center;
+  gap: 24px;
+  color: #ac3235;
+  text-align: center;
+}
+.tutorial-slideshow__copy { margin: 0; font-size: clamp(24px, 4.8vw, 44px); font-weight: 500; line-height: 1.18; }
+.tutorial-slideshow__copy strong { font-weight: 950; }
+.tutorial-slideshow__actions { display: flex; width: 100%; align-items: center; justify-content: center; gap: 24px; }
+.tutorial-slideshow__button {
+  width: 128px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.tutorial-slideshow__button .boiling-sprite { width: 100%; }
+.tutorial-slideshow__button:focus-visible { outline: 4px solid #ac3235; outline-offset: 4px; }
 .disconnect-result__textbox { display: grid; width: min(560px, calc(100% - 32px)); place-items: center; gap: 20px; text-align: center; }
 .disconnect-result__message { margin: 0; }
 .disconnect-result__back { width: min(260px, 80vw); }
@@ -219,12 +282,17 @@ body::before {
 .game-button.universal-menu__continue, .game-button.universal-menu__quit { grid-row: 4; width: min(10rem, 100%); }
 .game-button.universal-menu__continue { grid-column: 2; }
 .game-button.universal-menu__quit { grid-column: 3; }
-.universal-menu__confirmation { display: grid; width: min(520px, 100%); padding: clamp(24px, 6vw, 48px); place-items: center; gap: 28px; }
-.universal-menu__confirmation[hidden] { display: none; }
-.universal-menu__question { margin: 0; color: #ac3235; font-size: clamp(32px, 8vw, 52px); font-weight: 900; text-align: center; }
-.universal-menu__confirmation-actions { display: flex; width: 100%; flex-wrap: wrap; align-items: center; justify-content: center; gap: 24px; }
-.universal-menu__confirmation-actions .game-button { flex: 0 0 190px; width: 190px; min-width: 190px; }
-@media (max-width: 480px) { .universal-menu__controls { gap: 22px 28px; } .universal-menu__confirmation-actions { flex-direction: column; gap: 12px; } }
+.universal-menu__box--game { width: min(470px, 100%); min-height: 0; padding: clamp(18px, 4vw, 28px); }
+.universal-menu__controls--game { grid-template-columns: repeat(2, minmax(0, 170px)); justify-content: center; gap: 16px 20px; }
+.universal-menu__controls--game .universal-menu__slider:first-child,
+.universal-menu__controls--game .universal-menu__toggle:nth-child(3),
+.universal-menu__controls--game .universal-menu__continue { grid-column: 1; }
+.universal-menu__controls--game .universal-menu__slider:nth-child(2),
+.universal-menu__controls--game .universal-menu__toggle:nth-child(4),
+.universal-menu__controls--game .universal-menu__quit { grid-column: 2; }
+.universal-menu__controls--game .universal-menu__continue,
+.universal-menu__controls--game .universal-menu__quit { grid-row: 3; }
+@media (max-width: 480px) { .universal-menu__controls { gap: 22px 28px; } }
 
 .unlock-controller { position: absolute; z-index: 2; top: -4px; left: -4px; width: 190px; aspect-ratio: 250 / 176; transform: rotate(-2deg); transform-origin: top left; }
 .unlock-controller__art, .unlock-controller__art > .boiling-sprite__canvas { width: 100%; height: 100%; }
@@ -246,6 +314,10 @@ body::before {
   .game-button.universal-menu__quit { grid-column: 2; }
   .unlock-controller { width: 240px; }
   .game-button.universal-menu__resume-progression { width: 220px; }
+  .universal-menu__box--game { min-height: 0; }
+  .universal-menu__controls--game { grid-template-columns: repeat(2, minmax(0, 1fr)); padding-top: 0; gap: 14px 12px; }
+  .universal-menu__controls--game .universal-menu__continue,
+  .universal-menu__controls--game .universal-menu__quit { grid-row: 3; }
 }
 
 .variant-select-foreground { position: absolute; inset: 0; }
@@ -1123,14 +1195,15 @@ input {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: min(720px, 88%);
-  min-height: 330px;
-  padding: 34px;
+  box-sizing: border-box;
+  width: min(650px, 86%);
+  max-height: calc(100% - 48px);
+  padding: 22px 28px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 8px;
   text-align: center;
   transform: translate(-50%, -50%) rotate(-.25deg);
 }
@@ -1138,10 +1211,10 @@ input {
 .progress-screen__panel h1,
 .progress-screen__panel p { margin: 0; }
 .progress-screen__gain { font-size: 24px; font-weight: 900; }
-.progress-screen__bar { width: min(560px, 92%); height: auto; aspect-ratio: 2; }
+.progress-screen__bar { width: min(480px, 88%); height: auto; aspect-ratio: 2; }
 .progress-screen__unlocks { min-height: 1.4em; font-size: 20px; }
-.progress-screen__continue { width: 190px; height: 95px; }
+.progress-screen__continue { width: 165px; height: 82px; }
 
 @media (orientation: portrait) {
-  .progress-screen__panel { width: 86%; min-height: 420px; padding: 24px 18px; }
+  .progress-screen__panel { width: 84%; max-height: calc(100% - 40px); padding: 20px 16px; }
 }

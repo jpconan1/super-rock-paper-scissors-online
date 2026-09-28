@@ -30,7 +30,7 @@
   "rules": {
     "lead": "Attack costs Mana, Block stops Attack, and Mana builds your next Attack.",
     "paragraphs": [
-      "Choose a class, then win three rounds."
+      "Choose a class, then win two rounds."
     ]
   },
   "elements": [
@@ -239,21 +239,21 @@
       "protected": true,
       "binding": "p1-wins",
       "assets": {
-        "src": "/visual-elements/win-couters/ft3-win-counter-0-sheet.webp"
+        "src": "/visual-elements/win-couters/ft2-win-counter-empty-sheet.webp"
       },
       "layouts": {
         "landscape": {
           "x": 286,
           "y": 55,
           "width": 64,
-          "height": 64,
+          "height": 32,
           "aspectLock": true
         },
         "portrait": {
           "x": 90,
           "y": 26,
           "width": 48,
-          "height": 48,
+          "height": 24,
           "aspectLock": true
         }
       },
@@ -263,14 +263,14 @@
             "x": 286,
             "y": 55,
             "width": 64,
-            "height": 64,
+            "height": 32,
             "aspectLock": true
           },
           "portrait": {
             "x": 90,
             "y": 26,
             "width": 48,
-            "height": 48,
+            "height": 24,
             "aspectLock": true
           }
         }
@@ -282,21 +282,21 @@
       "protected": true,
       "binding": "p2-wins",
       "assets": {
-        "src": "/visual-elements/win-couters/ft3-win-counter-0-sheet.webp"
+        "src": "/visual-elements/win-couters/ft2-win-counter-empty-sheet.webp"
       },
       "layouts": {
         "landscape": {
           "x": 610,
           "y": 55,
           "width": 64,
-          "height": 64,
+          "height": 32,
           "aspectLock": true
         },
         "portrait": {
           "x": 252,
           "y": 26,
           "width": 48,
-          "height": 48,
+          "height": 24,
           "aspectLock": true
         }
       },
@@ -306,14 +306,14 @@
             "x": 610,
             "y": 55,
             "width": 64,
-            "height": 64,
+            "height": 32,
             "aspectLock": true
           },
           "portrait": {
             "x": 252,
             "y": 26,
             "width": 48,
-            "height": 48,
+            "height": 24,
             "aspectLock": true
           }
         }

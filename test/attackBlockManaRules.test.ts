@@ -224,11 +224,11 @@ describe('Attack Block Mana rules', () => {
     expect(timeout.defenderProcPlayers).toBeUndefined();
   });
 
-  test('locks winner, allows only loser counter-pick, and reports a 3-N result', () => {
+  test('continues after one win, then locks winner and reports a 2-N result', () => {
     let state = startedWith('advantaged', 'advantaged');
-    for (let round = 1; round <= 3; round++) {
+    for (let round = 1; round <= 2; round++) {
       state = playTurn(state, 'attack', 'mana');
-      if (round < 3) {
+      if (round < 2) {
         expect(state.counterPicker).toBe('p2');
         expect(state.players.p1.classId).toBe('advantaged');
         expect(state.players.p2.classId).toBe(round === 1 ? 'advantaged' : 'thief');
@@ -240,8 +240,8 @@ describe('Attack Block Mana rules', () => {
       }
     }
     expect(state.winner).toBe('p1');
-    expect(state.score).toEqual({ p1: 3, p2: 0 });
-    expect(attackBlockManaRules.result(state)).toEqual({ winner: 'p1', scores: { p1: 3, p2: 0 } });
+    expect(state.score).toEqual({ p1: 2, p2: 0 });
+    expect(attackBlockManaRules.result(state)).toEqual({ winner: 'p1', scores: { p1: 2, p2: 0 } });
   });
 
   test('resets both players to 1 Mana while the loser counter-picks', () => {

@@ -6,7 +6,7 @@ import { isLobbyServerMessage, type LobbyPlayer, type LobbyPresence } from '../l
 import { LOBBY_SOCKET_PROTOCOL, MATCH_SOCKET_PROTOCOL, WHITEBOARD_SOCKET_PROTOCOL } from '../protocol/webSocketAuth';
 import { isGuestSessionResponse, type GuestProfile, type GuestSessionRequest, type GuestSessionResponse } from '../protocol/guestSession';
 import { createGameAuthClient, type GameAuthClient } from '../auth/authClient';
-import { progressionForTotal } from '../core/progression';
+import { createProgressAward, progressionForTotal } from '../core/progression';
 import { ABM_CLASS_IDS } from '../variants/attackBlockMana/attackBlockManaTypes';
 import type { ProgressAward } from '../core/progression';
 import { randomId } from '../core/randomId';
@@ -30,6 +30,7 @@ export interface ShellSessionAdapter {
   suggestedPlayerName(): string;
   accountState(): AccountState;
   setUnlockAllClasses(enabled: boolean): Promise<void>;
+  awardComputerMatch(resultId: string, outcome: 'win' | 'loss'): Promise<ProgressAward>;
   applyProgressAward(award: ProgressAward): void;
   requestGoogleSignInFromTitle(playerName: string, callbackURL: string, errorCallbackURL: string): Promise<string>;
   requestGuestClaimWithGoogle(callbackURL: string, errorCallbackURL: string): Promise<string>;
@@ -142,6 +143,9 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
     const player = await response.json() as GuestProfile;
     if (player.unlockAllClasses !== enabled) throw new Error('Progression update returned invalid data.');
     this.totalProgressUnits = player.totalProgressUnits; this.unlockAllClasses = player.unlockAllClasses;
+  }
+  async awardComputerMatch(_resultId: string, outcome: 'win' | 'loss'): Promise<ProgressAward> {
+    return createProgressAward(this.totalProgressUnits, outcome, this.unlockAllClasses);
   }
   applyProgressAward(award: ProgressAward): void { this.totalProgressUnits = award.after.totalProgressUnits; }
   async requestGoogleSignInFromTitle(playerName: string, callbackURL: string, errorCallbackURL: string): Promise<string> {
@@ -534,6 +538,7 @@ export class LocalShellSessionAdapter implements ShellSessionAdapter {
   suggestedPlayerName(): string { return ''; }
   accountState(): AccountState { const progress = progressionForTotal(0); return { signedIn: false, isAnonymous: true, displayName: '', playerId: 'local-player', rating: 1500, totalProgressUnits: 0, level: progress.level, unlockedClassIds: this.unlockAllClasses ? ABM_CLASS_IDS : progress.unlockedClassIds, unlockAllClasses: this.unlockAllClasses }; }
   async setUnlockAllClasses(enabled: boolean): Promise<void> { this.unlockAllClasses = enabled; }
+  async awardComputerMatch(_resultId: string, outcome: 'win' | 'loss'): Promise<ProgressAward> { return createProgressAward(0, outcome, this.unlockAllClasses); }
   applyProgressAward(_award: ProgressAward): void {}
   async requestGoogleSignInFromTitle(_playerName: string, _callbackURL: string, _errorCallbackURL: string): Promise<string> { return ''; }
   async requestGuestClaimWithGoogle(_callbackURL: string, _errorCallbackURL: string): Promise<string> { return ''; }

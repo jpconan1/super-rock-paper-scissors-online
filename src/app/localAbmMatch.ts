@@ -9,7 +9,7 @@ import type { PlayerId } from '../core/variant';
 import { randomId } from '../core/randomId';
 import { PROTOCOL_VERSION, type MatchPlayer, type ServerSnapshot } from '../protocol/protocol';
 import { ABM_CLASSES } from '../variants/attackBlockMana/attackBlockManaCatalog';
-import type { AbmCommand, AbmMove, AbmProjection } from '../variants/attackBlockMana/attackBlockManaTypes';
+import type { AbmClassId, AbmCommand, AbmMove, AbmProjection } from '../variants/attackBlockMana/attackBlockManaTypes';
 
 interface LocalAbmMatchOptions {
   playerName: string;
@@ -19,6 +19,8 @@ interface LocalAbmMatchOptions {
   setTimer?: (run: () => void, delay: number) => ReturnType<typeof setTimeout>;
   clearTimer?: (timer: ReturnType<typeof setTimeout>) => void;
   unlockedClassIds?: readonly import('../variants/attackBlockMana/attackBlockManaTypes').AbmClassId[];
+  startingClasses?: Readonly<Record<PlayerId, AbmClassId>>;
+  computerStartsPaused?: boolean;
 }
 
 const HUMAN: PlayerId = 'p1';
@@ -34,6 +36,7 @@ export class LocalAbmMatch {
   private readonly clearTimer: (timer: ReturnType<typeof setTimeout>) => void;
   private timer?: ReturnType<typeof setTimeout>;
   private stopped = false;
+  private computerPaused: boolean;
   private commandSequence = 0;
 
   constructor(private readonly options: LocalAbmMatchOptions) {
@@ -41,6 +44,7 @@ export class LocalAbmMatch {
     this.random = options.random ?? Math.random;
     this.setTimer = options.setTimer ?? ((run, delay) => setTimeout(run, delay));
     this.clearTimer = options.clearTimer ?? ((timer) => globalThis.clearTimeout(timer));
+    this.computerPaused = options.computerStartsPaused ?? false;
     const players: Record<PlayerId, MatchPlayer> = {
       p1: { name: options.playerName, platform: 'Local', rating: 0 },
       p2: { name: 'Computer', platform: 'CPU', rating: 0 },
@@ -48,6 +52,10 @@ export class LocalAbmMatch {
     const now = this.now();
     this.state = createOnlineMatch(`practice-${randomId()}`, players, Math.floor(this.random() * 0x7fffffff), now, 'abm-only');
     advanceMatchDeadline(this.state, this.state.deadlineAt!);
+    if (options.startingClasses) {
+      this.mutateWithoutPublishing(HUMAN, { type: 'lock-class', classId: options.startingClasses[HUMAN] });
+      this.mutateWithoutPublishing(COMPUTER, { type: 'lock-class', classId: options.startingClasses[COMPUTER] });
+    }
   }
 
   start(): void {
@@ -70,14 +78,24 @@ export class LocalAbmMatch {
     this.timer = undefined;
   }
 
+  resumeComputer(): void {
+    if (this.stopped || !this.computerPaused) return;
+    this.computerPaused = false;
+    this.scheduleNextAction();
+  }
+
   private mutate(player: PlayerId, command: AbmCommand): void {
+    this.mutateWithoutPublishing(player, command);
+    this.publish();
+    this.scheduleNextAction();
+  }
+
+  private mutateWithoutPublishing(player: PlayerId, command: AbmCommand): void {
     acceptMatchCommand(this.state, player, {
       commandId: `local-${++this.commandSequence}`,
       expectedRevision: this.state.revision,
       payload: { type: 'variant-command', slotId: 'slot-1', command },
     }, this.now());
-    this.publish();
-    this.scheduleNextAction();
   }
 
   private publish(): void {
@@ -95,7 +113,7 @@ export class LocalAbmMatch {
   private scheduleNextAction(): void {
     if (this.timer !== undefined) this.clearTimer(this.timer);
     this.timer = undefined;
-    if (this.stopped || this.state.phase !== 'playing') return;
+    if (this.stopped || this.computerPaused || this.state.phase !== 'playing') return;
 
     const computer = projectOnlineMatch(this.state, COMPUTER).variant as AbmProjection;
     const botCommand = chooseComputerCommand(computer, this.random);

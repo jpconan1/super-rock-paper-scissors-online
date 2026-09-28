@@ -43,6 +43,42 @@ describe('LocalAbmMatch', () => {
     match.destroy();
   });
 
+  test('can start with fixed classes before publishing the first snapshot', () => {
+    const snapshots: ServerSnapshot[] = [];
+    const match = new LocalAbmMatch({
+      playerName: 'JP',
+      publish: (snapshot) => snapshots.push(snapshot),
+      random: () => 0,
+      startingClasses: { p1: 'lucky', p2: 'lucky' },
+    });
+    match.start();
+
+    expect(snapshots).toHaveLength(1);
+    expect(variant(snapshots).phase).toBe('idle');
+    expect(variant(snapshots).turn).toBe(1);
+    expect(variant(snapshots).players.p1.classId).toBe('lucky');
+    expect(variant(snapshots).players.p2.classId).toBe('lucky');
+    expect(variant(snapshots).legalActions).not.toContain('lock-class');
+    match.destroy();
+  });
+
+  test('can hold computer actions until a tutorial slide is dismissed', () => {
+    const snapshots: ServerSnapshot[] = [];
+    const match = new LocalAbmMatch({
+      playerName: 'JP', publish: (snapshot) => snapshots.push(snapshot), random: () => 0,
+      startingClasses: { p1: 'lucky', p2: 'lucky' }, computerStartsPaused: true,
+    });
+    match.start();
+    vi.advanceTimersByTime(3_000);
+    expect(snapshots).toHaveLength(1);
+
+    match.resumeComputer();
+    vi.advanceTimersByTime(1_000);
+    expect(variant(snapshots).phase).toBe('waiting');
+    expect(variant(snapshots).opponentReady).toBe(true);
+    match.destroy();
+  });
+
   test('advances local ABM deadlines when the human does not respond', () => {
     const snapshots: ServerSnapshot[] = [];
     const match = new LocalAbmMatch({ playerName: 'JP', publish: (snapshot) => snapshots.push(snapshot), random: () => 0 });

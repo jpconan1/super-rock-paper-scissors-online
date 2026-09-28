@@ -33,10 +33,10 @@ describe('MusicDirector', () => {
 
   it('maps match point and double match point scores', () => {
     expect(topperForScore({ p1: 0, p2: 0 })).toBe('none');
-    expect(topperForScore({ p1: 2, p2: 0 })).toBe('match-point');
-    expect(topperForScore({ p1: 0, p2: 2 })).toBe('match-point');
-    expect(topperForScore({ p1: 2, p2: 2 })).toBe('double-match-point');
-    expect(topperForScore({ p1: 2, p2: 2 }, true)).toBe('none');
+    expect(topperForScore({ p1: 1, p2: 0 })).toBe('match-point');
+    expect(topperForScore({ p1: 0, p2: 1 })).toBe('match-point');
+    expect(topperForScore({ p1: 1, p2: 1 })).toBe('double-match-point');
+    expect(topperForScore({ p1: 1, p2: 1 }, true)).toBe('none');
   });
 
   it('plays perspective round stings, resumes non-final music, and leaves final music silent', () => {
@@ -49,7 +49,7 @@ describe('MusicDirector', () => {
     director.updateAbm(projection({ phase: 'counter-picking', score: { p1: 1, p2: 1 }, lastRoundWinner: 'p2' }));
     expect(audio.playMusicInterrupt).toHaveBeenLastCalledWith('lose', true);
     expect(audio.queueMusicBaseOnce).toHaveBeenCalledOnce();
-    const final = projection({ phase: 'match-complete', score: { p1: 3, p2: 1 }, winner: 'p1', lastRoundWinner: 'p1' });
+    const final = projection({ phase: 'match-complete', score: { p1: 2, p2: 1 }, winner: 'p1', lastRoundWinner: 'p1' });
     director.updateAbm(final); director.updateAbm(final);
     expect(audio.playMusicInterrupt).toHaveBeenCalledTimes(3);
     expect(audio.playMusicInterrupt).toHaveBeenCalledWith('win', false);

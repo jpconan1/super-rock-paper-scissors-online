@@ -622,7 +622,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
       ...nextProjection, advantagedProcPlayers, juggernautProcPlayers, stunnedPlayers, investorBullPlayers, investorBearPlayers, duplicatorProcPlayers, copywriterProcPlayers,
       sumoProcRemaining, cheaterProcPlayers, cupidAttackProcPlayers, cupidManaProcPlayers, cupidBlockImpactPlayers, defenderProcPlayers, lastDitchBonusMana, retiredProcPlayers, gamblerOutcomes,
       pendingGoldenArrowPlayer: nextProjection.ownPendingAbility === 'golden-arrow' ? nextProjection.self : undefined,
-    }, splitPlayer) : [];
+    }) : [];
     const tagOccurrences = new Map<string, number>();
     const keyedTags = visibleTags.map((tag) => {
       const base = `${tag.player}:${tag.kind}`;
@@ -647,13 +647,10 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
       !wipeRunning,
       keyedTags.map(({ key, src }) => `${key}:${src}`).join('|'),
     );
-    const visibleBackgrounds = !picking && !showingResult ? resolveAbmProcBackgrounds({ investorBullPlayers, investorBearPlayers }, splitPlayer) : [];
+    const visibleBackgrounds = !picking && !showingResult ? resolveAbmProcBackgrounds({ investorBullPlayers, investorBearPlayers }) : [];
     const visibleBackgroundKeys = new Set(visibleBackgrounds.map(({ player, kind }) => `${player}:${kind}`));
     for (const [key, background] of procBackgroundSprites) background.element.hidden = !visibleBackgroundKeys.has(key);
-    const countdownActive = nextProjection.phase === 'waiting'
-      && nextProjection.waitingStartsAt !== undefined && nextProjection.waitingDeadlineAt !== undefined
-      && getAbmWaitingVisual(serverTime, nextProjection.waitingStartsAt, nextProjection.waitingDeadlineAt).countdown !== undefined;
-    for (const slot of tagSlots.values()) slot.hidden = picking || showingResult || countdownActive;
+    for (const slot of tagSlots.values()) slot.hidden = picking || showingResult;
     const simultaneousSteals = nextProjection.thiefAttemptPlayers?.length === 2;
     thiefTransfer.element.hidden = Boolean(splitPlayer) || showingResult || (!nextProjection.thiefTransferPlayer && !simultaneousSteals);
     thiefTransferMirror.element.hidden = Boolean(splitPlayer) || showingResult || !simultaneousSteals;
@@ -857,7 +854,10 @@ function isWipeCue(type: TimedSemanticEvent['type']) {
   return ['class-reveal', 'move-reveal', 'move-timeout', 'forced-mana', 'round-result', 'conjure-reveal', 'conjure-stalemate', 'null-reset'].includes(type);
 }
 function turnArtwork(turn: number) { const value = Math.min(21, Math.max(0, turn)); return { src: `/visual-elements/time-counters/turn${value}-sheet.webp`, alt: `Turn ${turn}` }; }
-function winArtwork(player: string, wins: number) { const value = Math.min(3, Math.max(0, wins)); return { src: `/visual-elements/win-couters/ft3-win-counter-${value}-sheet.webp`, alt: `${player} wins: ${wins}` }; }
+export function winArtwork(player: 'p1' | 'p2', wins: number) {
+  const state = wins <= 0 ? 'empty' : wins >= 2 ? 'filled' : player === 'p1' ? 'right-filled' : 'left-filled';
+  return { src: `/visual-elements/win-couters/ft2-win-counter-${state}-sheet.webp`, alt: `${player} wins: ${wins}` };
+}
 function sheets(root: string) { return { up: `${root}-up-sheet.webp`, between: `${root}-between-sheet.webp`, depressed: `${root}-depressed-sheet.webp` }; }
 function playerDisplay(fallback: string, player?: { name: string; platform: string; rating: number }) {
   return { heading: player?.name ?? fallback, rating: player ? `Elo ${player.rating}` : '', platform: player?.platform ?? '' };

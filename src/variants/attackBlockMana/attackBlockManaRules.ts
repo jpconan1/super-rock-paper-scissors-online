@@ -12,7 +12,7 @@ export const ABM_LETHAL_TO_RESULT_MS = STARBURST_WIPE_MS + beats(1);
 export const ABM_RESULT_TO_COUNTER_PICK_MS = STARBURST_WIPE_MS + beats(2);
 
 export const attackBlockManaRules: VariantRules<AbmState, AbmCommand, AbmProjection, AbmResult> = {
-  variantId: 'attack-block-mana', rulesVersion: 1,
+  variantId: 'attack-block-mana', rulesVersion: 2,
   initialize: () => ({
     phase: 'selecting-classes', turn: 0, round: 1, score: { p1: 0, p2: 0 },
     players: { p1: freshPlayer(), p2: freshPlayer() }, pendingClasses: {}, pendingMoves: {}, pendingAbilities: {}, zeroManaTurns: 0,
@@ -428,7 +428,7 @@ function resolveDoubleConjureTimeout(state: AbmState, context: DeterministicCont
 function finishRound(state: AbmState, winner: PlayerId, events: ReturnType<typeof cue>[], startsAt: number): VariantResolution<AbmState> {
   const score = { ...state.score, [winner]: state.score[winner] + 1 };
   events.push(cue('round-result', startsAt, ABM_RESULT_TO_COUNTER_PICK_MS, { winner, score, round: state.round }));
-  if (score[winner] >= 3) return { state: { ...state, phase: 'match-complete', score, winner, lastRoundWinner: winner, resultRevealAt: startsAt }, events };
+  if (score[winner] >= 2) return { state: { ...state, phase: 'match-complete', score, winner, lastRoundWinner: winner, resultRevealAt: startsAt }, events };
   const loser = OTHER[winner];
   const players = clonePlayers(state.players);
   for (const id of ['p1', 'p2'] as const) {

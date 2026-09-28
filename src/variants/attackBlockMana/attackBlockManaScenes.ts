@@ -79,10 +79,10 @@ export function resolveAbmSplitScene(
   return { src: `${SPLIT_ROOT}/base/${full.name}-${readyRole}-ready-sheet.webp`, flip: full.flip };
 }
 
-export function resolveAbmTags(state: TagState, hiddenPlayer?: PlayerId): AbmTag[] {
+export function resolveAbmTags(state: TagState): AbmTag[] {
   const tags: AbmTag[] = [];
   const add = (category: AbmTagCategory, kind: AbmTagKind, players: readonly PlayerId[] | undefined) => {
-    for (const player of players ?? []) if (player !== hiddenPlayer) {
+    for (const player of players ?? []) {
       tags.push({ category, kind, player, src: tagSource(category, kind, player) });
     }
   };
@@ -105,13 +105,12 @@ export function resolveAbmTags(state: TagState, hiddenPlayer?: PlayerId): AbmTag
   add('proc', 'null-reset', state.nullResetPlayer ? [state.nullResetPlayer] : undefined);
   const joeProcs = new Set(state.joeProcPlayers ?? []);
   for (const player of ['p1', 'p2'] as const) {
-    if (player === hiddenPlayer) continue;
     if (joeProcs.has(player)) tags.push({ category: 'proc', kind: 'joe-proc', player, src: tagSource('proc', 'joe-proc', player) });
     if (state.players?.[player].infiniteMana) tags.push({ category: 'status', kind: 'joe-infinite', player, src: tagSource('status', 'joe-infinite', player) });
   }
   for (const player of ['p1', 'p2'] as const) {
     const bonus = state.lastDitchBonusMana?.[player];
-    if (bonus !== undefined && player !== hiddenPlayer) tags.push({
+    if (bonus !== undefined) tags.push({
       category: 'proc', kind: 'last-ditch', player, src: `${TAG_ROOT}/last-ditch-tag-${bonus}-sheet.webp`,
     });
   }
@@ -120,7 +119,7 @@ export function resolveAbmTags(state: TagState, hiddenPlayer?: PlayerId): AbmTag
   }
   for (const player of ['p1', 'p2'] as const) {
     const remaining = state.players?.[player].fireShieldTurns ?? 0;
-    if (remaining > 0 && player !== hiddenPlayer) tags.push({
+    if (remaining > 0) tags.push({
       category: 'status', kind: 'fireborne-shield', player,
       src: `${TAG_ROOT}/fireborne-cloud-${remaining}-sheet.webp`,
     });
@@ -128,30 +127,30 @@ export function resolveAbmTags(state: TagState, hiddenPlayer?: PlayerId): AbmTag
   for (const player of ['p1', 'p2'] as const) {
     const pending = state.pendingGoldenArrowPlayer === player;
     const remaining = pending ? 5 : state.players?.[player].goldenArrowTurns ?? 0;
-    if (remaining > 0 && (pending || player !== hiddenPlayer)) tags.push({
+    if (remaining > 0) tags.push({
       category: 'status', kind: 'cupid-arrow', player,
       src: `${TAG_ROOT}/golden-arrow-${remaining}-sheet.webp`,
     });
   }
   for (const player of ['p1', 'p2'] as const) {
     const outcome = state.gamblerOutcomes?.[player];
-    if (outcome && outcome !== 'nothing' && player !== hiddenPlayer) {
+    if (outcome && outcome !== 'nothing') {
       tags.push({ category: 'proc', kind: 'gambler', player, src: `${TAG_ROOT}/gambler-${outcome}-sheet.webp` });
     }
   }
   for (const player of ['p1', 'p2'] as const) {
     const remaining = state.sumoProcRemaining?.[player];
-    if (remaining !== undefined && player !== hiddenPlayer) tags.push({ category: 'proc', kind: 'sumo', player, src: `${TAG_ROOT}/sumo-${remaining}-left-sheet.webp` });
+    if (remaining !== undefined) tags.push({ category: 'proc', kind: 'sumo', player, src: `${TAG_ROOT}/sumo-${remaining}-left-sheet.webp` });
   }
   return tags;
 }
 
-export function resolveAbmProcBackgrounds(state: TagState, hiddenPlayer?: PlayerId): AbmProcBackground[] {
+export function resolveAbmProcBackgrounds(state: TagState): AbmProcBackground[] {
   const bull = new Set(state.investorBullPlayers ?? []);
   const bear = new Set(state.investorBearPlayers ?? []);
   const backgrounds: AbmProcBackground[] = [];
   for (const player of ['p1', 'p2'] as const) {
-    if (player === hiddenPlayer || (bull.has(player) && bear.has(player))) continue;
+    if (bull.has(player) && bear.has(player)) continue;
     const kind: AbmProcBackgroundKind | undefined = bull.has(player) ? 'bull' : bear.has(player) ? 'bear' : undefined;
     if (kind) backgrounds.push({ kind, player, src: `${BACKGROUND_ROOT}/${kind}-sheet.webp` });
   }

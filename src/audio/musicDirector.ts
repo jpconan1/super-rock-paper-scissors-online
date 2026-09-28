@@ -58,7 +58,7 @@ export class MusicDirector {
 
 export function topperForScore(score: Readonly<Record<'p1' | 'p2', number>>, complete = false) {
   if (complete) return 'none' as const;
-  if (score.p1 === 2 && score.p2 === 2) return 'double-match-point' as const;
-  if (score.p1 === 2 || score.p2 === 2) return 'match-point' as const;
+  if (score.p1 === 1 && score.p2 === 1) return 'double-match-point' as const;
+  if (score.p1 === 1 || score.p2 === 1) return 'match-point' as const;
   return 'none' as const;
 }

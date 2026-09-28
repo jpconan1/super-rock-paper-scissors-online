@@ -27,10 +27,10 @@ describe('online match', () => {
     expect(state.activeSlot).toBe('slot-1');
     send(state, 'p1', { type: 'variant-command', slotId: 'slot-1', command: { type: 'lock-class', classId: 'advantaged' } });
     send(state, 'p2', { type: 'variant-command', slotId: 'slot-1', command: { type: 'lock-class', classId: 'advantaged' } });
-    for (let round = 0; round < 3; round++) {
+    for (let round = 0; round < 2; round++) {
       send(state, 'p1', { type: 'variant-command', slotId: 'slot-1', command: { type: 'choose-move', move: 'attack' } });
       send(state, 'p2', { type: 'variant-command', slotId: 'slot-1', command: { type: 'choose-move', move: 'mana' } });
-      if (round < 2) send(state, 'p2', { type: 'variant-command', slotId: 'slot-1', command: { type: 'lock-class', classId: 'advantaged' } });
+      if (round < 1) send(state, 'p2', { type: 'variant-command', slotId: 'slot-1', command: { type: 'lock-class', classId: 'advantaged' } });
     }
     expect(state.games).toHaveLength(1);
     expect(state.winner).toBe('p1');
@@ -40,7 +40,7 @@ describe('online match', () => {
     expect(state.completionReason).toBe('played');
     expect(advanceMatchDeadline(state, Number.MAX_SAFE_INTEGER)).toBe(false);
     expect(state.phase).toBe('complete');
-    expect(state.gameState).toMatchObject({ phase: 'match-complete', winner: 'p1', score: { p1: 3, p2: 0 } });
+    expect(state.gameState).toMatchObject({ phase: 'match-complete', winner: 'p1', score: { p1: 2, p2: 0 } });
   });
 
   test('schedules and resolves the late ABM player deadline', () => {
