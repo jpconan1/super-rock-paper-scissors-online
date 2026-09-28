@@ -3,6 +3,7 @@ import type { MatchPlayer, TimedSemanticEvent } from '../protocol/protocol';
 import type { AssetBundleId } from '../assets/assetBundleTypes';
 import type { MusicDirector } from '../audio/musicDirector';
 import type { AbmClassId } from '../variants/attackBlockMana/attackBlockManaTypes';
+import type { ProgressAward } from './progression';
 
 export type PlayerId = 'p1' | 'p2';
 
@@ -43,6 +44,7 @@ export interface VariantPresentationContext<TCommand> {
   send(command: TCommand): void;
   openMenu(): void;
   backToLobby?(): void;
+  matchProgressComplete?(): void;
   self?: PlayerId;
   players?: Readonly<Record<PlayerId, MatchPlayer>>;
   music?: MusicDirector;
@@ -57,7 +59,7 @@ export interface PresentationAssetLease {
 export interface VariantPresentation<TProjection, TCommand> {
   preload(): Promise<PresentationAssetLease>;
   mount(context: VariantPresentationContext<TCommand>): void;
-  render(projection: TProjection, events: readonly TimedSemanticEvent[], serverTime: number): void;
+  render(projection: TProjection, events: readonly TimedSemanticEvent[], serverTime: number, progressAward?: ProgressAward): void;
   unmount(): void;
 }
 

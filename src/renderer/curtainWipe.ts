@@ -71,6 +71,7 @@ export class CurtainWipe implements WipeTransition {
   private layout: CurtainLayout;
   private state: CurtainWipeState = 'open';
   private decorateWhenOpen = false;
+  private decorationForeground = false;
   private destroyed = false;
 
   constructor(private readonly host: HTMLElement, clock: BoilClock, options: CurtainWipeOptions = {}) {
@@ -128,6 +129,11 @@ export class CurtainWipe implements WipeTransition {
 
   setOpenDecoration(enabled: boolean): void {
     this.decorateWhenOpen = enabled;
+    this.syncLayer();
+  }
+
+  setDecorationForeground(enabled: boolean): void {
+    this.decorationForeground = enabled;
     this.syncLayer();
   }
 
@@ -248,6 +254,7 @@ export class CurtainWipe implements WipeTransition {
     this.layer.dataset.state = this.state;
     this.layer.dataset.layout = this.layout;
     this.layer.classList.toggle('curtain-wipe--decorative', decoratedOpen);
+    this.layer.classList.toggle('curtain-wipe--decoration-foreground', decoratedOpen && this.decorationForeground);
   }
 }
 

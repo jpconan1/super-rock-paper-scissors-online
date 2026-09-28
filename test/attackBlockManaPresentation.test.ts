@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { ABM_CLASSES, startingResourcesForClass } from '../src/variants/attackBlockMana/attackBlockManaCatalog';
-import { ABM_BACK_LOBBY_ART, ABM_LAYOUTS, ABM_RESULT_SCENES, ABM_SELECT_ART, ABM_TAG_CATEGORIES, ABM_TAG_ORDERS, abmTagSlotId, blockSegments, displayedAbmMove, getAbmAttackCostDisplay, getAbmClassBadgeGeometry, getAbmClassReadyFrame, getAbmClassResourceControlGeometry, getAbmClassResourceGeometry, getAbmLimitedResource, getAbmPlayerResourceGeometry, getAbmResultScene, getAbmWaitingVisual, initialManaForClass, latestClassPreview, reconcileAbmArmedAbility, sceneForMoves, shouldShowAbmContinuingRoundProcTags, shouldShowAbmYouTag, shouldShowClassBadge, shouldShowClassReadyOpponentTag, winArtwork } from '../src/variants/attackBlockMana/attackBlockManaPresentation';
+import { ABM_LAYOUTS, ABM_RESULT_SCENES, ABM_SELECT_ART, ABM_TAG_CATEGORIES, ABM_TAG_ORDERS, abmTagSlotId, blockSegments, displayedAbmMove, getAbmAttackCostDisplay, getAbmClassBadgeGeometry, getAbmClassReadyFrame, getAbmClassResourceControlGeometry, getAbmClassResourceGeometry, getAbmLimitedResource, getAbmPlayerResourceGeometry, getAbmResultScene, getAbmWaitingVisual, initialManaForClass, latestClassPreview, reconcileAbmArmedAbility, sceneForMoves, shouldShowAbmContinuingRoundProcTags, shouldShowAbmYouTag, shouldShowClassBadge, shouldShowClassReadyOpponentTag, winArtwork } from '../src/variants/attackBlockMana/attackBlockManaPresentation';
 import type { AbmProjection } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 import { ABM_CLASS_IDS } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 import { ABM_SCENE_URLS, resolveAbmProcBackgrounds, resolveAbmScene, resolveAbmSplitScene, resolveAbmTags, resolveConjureScene, resolveJoeScene, resolveNullScene } from '../src/variants/attackBlockMana/attackBlockManaScenes';
@@ -579,13 +579,10 @@ describe('Attack Block Mana presentation data', () => {
     });
   });
 
-  test('uses the authored Back to Lobby button triplet', () => {
-    expect(ABM_BACK_LOBBY_ART).toEqual({
-      up: '/visual-elements/system-scenes/back-lobby-button-up-sheet.webp',
-      between: '/visual-elements/system-scenes/back-lobby-button-between-sheet.webp',
-      depressed: '/visual-elements/system-scenes/back-lobby-button-depressed-sheet.webp',
+  test('uses the former Back to Lobby slot for the XP bar', () => {
+    expect(getLayoutDocument('variant-abm').elements.find(({ id }) => id === 'back-lobby')).toMatchObject({
+      type: 'decoration', label: 'XP Bar', assets: { src: '/visual-elements/progress-bar-full-sheet.webp' },
     });
-    expect(getLayoutDocument('variant-abm').elements.find(({ id }) => id === 'back-lobby')?.assets).toEqual(ABM_BACK_LOBBY_ART);
   });
 
   test('builds READY, waiting dots, and the final five-second countdown from server time', () => {

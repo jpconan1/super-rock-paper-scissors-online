@@ -2699,13 +2699,11 @@
     },
     {
       "id": "back-lobby",
-      "type": "button",
+      "type": "decoration",
       "parent": "controls",
-      "label": "Back to Lobby",
+      "label": "XP Bar",
       "assets": {
-        "up": "/visual-elements/system-scenes/back-lobby-button-up-sheet.webp",
-        "between": "/visual-elements/system-scenes/back-lobby-button-between-sheet.webp",
-        "depressed": "/visual-elements/system-scenes/back-lobby-button-depressed-sheet.webp"
+        "src": "/visual-elements/progress-bar-full-sheet.webp"
       },
       "layouts": {
         "landscape": {

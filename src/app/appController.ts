@@ -27,11 +27,12 @@ import { hasSeenAbmNewsletter, mountAbmLetterModal } from './abmLetterModal';
 import { mountAccountScreen } from './accountScreen';
 import { mountProgressScreen } from './progressScreen';
 import type { ProgressAward } from '../core/progression';
+import { createClassRewardFlow, mountClassRewardScreen } from './classRewardScreen';
 import { AlertSystem } from '../ui/alertSystem';
 import { ABM_TUTORIAL_SLIDES, mountTutorialSlideshow, type TutorialSlideshow } from './tutorialSlideshow';
 
 export type ConnectionState = 'connected' | 'reconnecting' | 'offline';
-export type ShellDestination = 'title' | 'lobby' | 'account' | 'match-found' | 'slot-picker' | 'scoreboard' | 'gameplay' | 'progress';
+export type ShellDestination = 'title' | 'lobby' | 'account' | 'match-found' | 'slot-picker' | 'scoreboard' | 'gameplay' | 'progress' | 'reward';
 
 export interface AppControllerOptions {
   readonly clock: BoilClock;
@@ -74,6 +75,8 @@ export class AppController {
   private localMatch?: LocalAbmMatch;
   private localMatchAwardsProgress = false;
   private pendingProgressAward?: ProgressAward;
+  private progressAwardMatchId?: string;
+  private rewardTransitionStarted = false;
   private tutorialPending = false;
   private tutorialSlideshow?: TutorialSlideshow;
   private googleSignIn?: AbortController;
@@ -161,6 +164,7 @@ export class AppController {
     if (!animated) { commit(); return; }
     try {
       const curtain = this.getCurtain();
+      curtain.setDecorationForeground(destination === 'reward');
       curtain.setOpenDecoration(destination === 'lobby' || destination === 'account' || destination === 'slot-picker' || destination === 'scoreboard');
       await curtain.transition(commit, signal);
     }
@@ -188,13 +192,14 @@ export class AppController {
     presentation.mount({
       container: this.screenLayer, signal: this.lifecycle.signal, send: emit,
       openMenu: () => this.openUniversalMenu(), backToLobby: () => this.returnToLobbyFromMatch(),
+      matchProgressComplete: () => void this.completeMatchProgressFlow(),
       self: this.matchProjection?.self ?? 'p1', players: this.matchProjection?.players,
       music: this.music, ...(isControllerOptions(this.optionsOrRegistry)
         ? { unlockedClassIds: this.optionsOrRegistry.session.accountState().unlockedClassIds } : {}),
     });
     this.timeline = new AnimationTimeline(({ event, serverTime }) => {
       if (this.latestSnapshot) {
-        presentation.render(variantProjection(this.latestSnapshot.projection), [event], serverTime);
+        presentation.render(variantProjection(this.latestSnapshot.projection), [event], serverTime, this.pendingProgressAward);
       }
     });
   }
@@ -203,9 +208,10 @@ export class AppController {
     if (isControllerOptions(this.optionsOrRegistry) && (local ? !this.localMatch : this.connectionState !== 'connected' || Boolean(this.localMatch))) return;
     if (this.latestSnapshot?.matchId === snapshot.matchId && snapshot.revision < this.latestSnapshot.revision) return;
     this.latestSnapshot = snapshot;
+    this.prepareProgressAward(snapshot, local);
     if (isMatchProjection(snapshot.projection)) this.matchFlowDirector?.receiveSnapshot(snapshot as ServerSnapshot<MatchProjection>);
     if (this.mounted) {
-      this.mounted.render(variantProjection(snapshot.projection), snapshot.events, snapshot.serverTime);
+      this.mounted.render(variantProjection(snapshot.projection), snapshot.events, snapshot.serverTime, this.pendingProgressAward);
       this.timeline?.schedule(snapshot.events, snapshot.serverTime);
     }
   }
@@ -343,6 +349,14 @@ export class AppController {
       if (!award) throw new Error('Progress award is unavailable.');
       const progress = mountProgressScreen(this.screenLayer, options.clock, award, () => this.finishReturnToLobby());
       this.screenCleanup = () => progress.destroy();
+    } else if (destination === 'reward') {
+      const award = this.pendingProgressAward;
+      if (!award?.unlockedClassIds.length) throw new Error('Class reward is unavailable.');
+      const flow = createClassRewardFlow(award);
+      const reward = mountClassRewardScreen(this.screenLayer, this.screenLayer, options.clock, flow.unlockedClassIds, flow.nextClassId, () => {
+        this.pendingProgressAward = undefined; this.progressAwardMatchId = undefined; this.rewardTransitionStarted = false; void this.navigate('lobby');
+      });
+      this.screenCleanup = () => reward.destroy();
     } else if (destination === 'gameplay') {
       throw new Error('Gameplay requires a selected slot.');
     }
@@ -558,6 +572,7 @@ export class AppController {
   private startPractice(): void {
     this.localMatchAwardsProgress = true;
     this.pendingProgressAward = undefined;
+    this.progressAwardMatchId = undefined; this.rewardTransitionStarted = false;
     this.tutorialPending = false;
     this.closeTutorialSlideshow();
     this.setMatchmaking(false);
@@ -576,6 +591,7 @@ export class AppController {
   private startTutorial(): void {
     this.localMatchAwardsProgress = false;
     this.pendingProgressAward = undefined;
+    this.progressAwardMatchId = undefined; this.rewardTransitionStarted = false;
     this.setMatchmaking(false);
     this.latestSnapshot = undefined;
     this.matchFlowDirector?.cancel();
@@ -652,6 +668,58 @@ export class AppController {
     }
   }
 
+  private prepareProgressAward(snapshot: ServerSnapshot, local: boolean): void {
+    const projection = isMatchProjection(snapshot.projection) ? snapshot.projection : undefined;
+    if (!projection || projection.phase !== 'complete' || projection.completionReason === 'disconnect') return;
+    if (this.progressAwardMatchId === snapshot.matchId) return;
+    if (local && (!this.localMatchAwardsProgress || !this.localMatch)) return;
+    this.progressAwardMatchId = snapshot.matchId;
+    if (projection.progressAward) { this.installProgressAward(snapshot, projection.progressAward); return; }
+    if (!local) return;
+    void this.options.session.awardComputerMatch(snapshot.matchId, projection.winner === projection.self ? 'win' : 'loss')
+      .then((award) => { if (this.latestSnapshot?.matchId === snapshot.matchId) this.installProgressAward(snapshot, award); })
+      .catch((error) => this.showError(error));
+  }
+
+  private installProgressAward(snapshot: ServerSnapshot, award: ProgressAward): void {
+    this.pendingProgressAward = award;
+    this.options.session.applyProgressAward(award);
+    if (this.mounted && this.latestSnapshot?.matchId === snapshot.matchId) {
+      this.mounted.render(variantProjection(snapshot.projection), snapshot.events, snapshot.serverTime, award);
+    }
+  }
+
+  private async completeMatchProgressFlow(): Promise<void> {
+    if (this.rewardTransitionStarted) return;
+    const award = this.pendingProgressAward;
+    if (!award) return;
+    this.rewardTransitionStarted = true;
+    if (!award.unlockedClassIds.length) { this.finishReturnToLobby(); return; }
+    const curtain = this.getCurtain(); const signal = this.lifecycle?.signal;
+    try {
+      await curtain.close(signal);
+      if (signal?.aborted) return;
+      await waitFor(beats(1), signal);
+      if (signal?.aborted) return;
+      this.releaseCompletedMatch();
+      this.clearScreen();
+      this.destination = 'reward';
+      this.lifecycle = new AbortController();
+      curtain.setOpenDecoration(true);
+      curtain.setDecorationForeground(true);
+      this.mountDestination('reward');
+      await curtain.open(this.lifecycle.signal);
+    } catch (error) { if (!signal?.aborted) this.showError(error); }
+  }
+
+  private releaseCompletedMatch(): void {
+    if (this.localMatch) {
+      this.localMatch.destroy(); this.localMatch = undefined; this.localMatchAwardsProgress = false;
+      this.options.session.setLobbyPresence('idle');
+    } else this.options.session.leaveMatch();
+    this.latestSnapshot = undefined; this.matchFlowDirector?.cancel(); this.music.enterMenu(true);
+  }
+
   private async returnToLobbyFromMatch(): Promise<void> {
     this.terminalCleanup?.();
     this.terminalCleanup = undefined;
@@ -674,16 +742,9 @@ export class AppController {
   }
 
   private finishReturnToLobby(): void {
-    if (this.localMatch) {
-      this.localMatch.destroy();
-      this.localMatch = undefined;
-      this.localMatchAwardsProgress = false;
-      this.options.session.setLobbyPresence('idle');
-    } else this.options.session.leaveMatch();
-    this.latestSnapshot = undefined;
+    this.releaseCompletedMatch();
     this.pendingProgressAward = undefined;
-    this.matchFlowDirector?.cancel();
-    this.music.enterMenu(true);
+    this.progressAwardMatchId = undefined; this.rewardTransitionStarted = false;
     void this.navigate('lobby');
   }
 }

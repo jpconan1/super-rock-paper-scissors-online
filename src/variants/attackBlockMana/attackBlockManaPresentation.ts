@@ -17,6 +17,9 @@ import type { AbmAbilityId, AbmClassId, AbmCommand, AbmMove, AbmPlayerState, Abm
 import { playCatalogSound, type SoundId } from '../../audio/soundCatalog';
 import type { MusicDirector } from '../../audio/musicDirector';
 import { AbmTagEntranceSequence } from './abmTagEntrance';
+import { createXpProgressBar, type XpProgressBar } from '../../app/xpProgressBar';
+import { beats } from '../../core/time';
+import type { ProgressAward } from '../../core/progression';
 
 const ABM_ROOT = '/variants/abm';
 const STUNNED_BUTTON_TAG = `${ABM_ROOT}/stunned-button-tag-sheet.webp`;
@@ -29,11 +32,6 @@ export const ABM_RESULT_SCENES = {
   roundLost: `${SYSTEM_SCENE_ROOT}/round-lost-sheet.webp`,
   gameWon: `${SYSTEM_SCENE_ROOT}/game-won-sheet.webp`,
   gameLost: `${SYSTEM_SCENE_ROOT}/game-lost-sheet.webp`,
-} as const;
-export const ABM_BACK_LOBBY_ART = {
-  up: `${SYSTEM_SCENE_ROOT}/back-lobby-button-up-sheet.webp`,
-  between: `${SYSTEM_SCENE_ROOT}/back-lobby-button-between-sheet.webp`,
-  depressed: `${SYSTEM_SCENE_ROOT}/back-lobby-button-depressed-sheet.webp`,
 } as const;
 export const ABM_SELECT_ART = {
   up: '/new-buttons/select-button-up-sheet.webp',
@@ -188,14 +186,14 @@ export function createAttackBlockManaPresentation(
         '/visual-elements/arrows/arrow-blue-upright-sheet.webp', '/visual-elements/arrows/arrow-red-downright-sheet.webp', `${ABM_ROOT}/arrow-purp-left-sheet.webp`,
         ...Array.from({ length: 10 }, (_, index) => `/visual-elements/resource-counters/times${index}-sheet.webp`),
         ...Array.from({ length: 5 }, (_, index) => `/visual-elements/ready-waiting/countdown${index + 1}-sheet.webp`),
-        ...Object.values(ABM_RESULT_SCENES), ...Object.values(ABM_BACK_LOBBY_ART),
+        ...Object.values(ABM_RESULT_SCENES), '/visual-elements/progress-bar-empty-sheet.webp', '/visual-elements/progress-bar-full-sheet.webp',
         STUNNED_BUTTON_TAG, COUNTERPICK_TAG, PICK_CLASS_HEADER, LOCKED_CLASS_ART, ...ABM_SCENE_URLS];
       const lease = assetLoader.retainUrls(urls); await lease.ready; return lease;
     },
-    mount({ container, send, openMenu, backToLobby, self, players, music, unlockedClassIds }) {
-      screen = mountAttackBlockManaScreen(container, clock, send, openMenu, backToLobby, self ?? 'p1', players, options, music, unlockedClassIds);
+    mount({ container, send, openMenu, matchProgressComplete, self, players, music, unlockedClassIds }) {
+      screen = mountAttackBlockManaScreen(container, clock, send, openMenu, matchProgressComplete, self ?? 'p1', players, options, music, unlockedClassIds);
     },
-    render(projection, events, serverTime) { if (projection) screen?.render(projection, events, serverTime); },
+    render(projection, events, serverTime, progressAward) { if (projection) screen?.render(projection, events, serverTime, false, progressAward); },
     unmount() { screen?.destroy(); screen = undefined; },
   };
 }
@@ -210,7 +208,7 @@ export function blockSegments(player: 'p1' | 'p2', blocks: number): boolean[] {
 }
 
 function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, send: (command: AbmCommand) => void, onMenu: () => void,
-  backToLobby: (() => void) | undefined, viewer: 'p1' | 'p2',
+  matchProgressComplete: (() => void) | undefined, viewer: 'p1' | 'p2',
   players: Readonly<Record<'p1' | 'p2', { name: string; platform: string; rating: number }>> | undefined,
   options: AttackBlockManaPresentationOptions, music?: MusicDirector, unlockedClassIds?: readonly AbmClassId[]) {
   const layoutDocument = options.layoutDocument ?? getLayoutDocument('variant-abm');
@@ -232,6 +230,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   let shownProjection: AbmProjection | undefined;
   let newestProjection: AbmProjection | undefined;
   let newestEvents: readonly TimedSemanticEvent[] = [];
+  let newestProgressAward: ProgressAward | undefined;
   const playedTransitionIds = new Set<string>();
   const playedSoundIds = new Set<string>();
   let wipeRunning = false;
@@ -302,10 +301,8 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   const stunnedCostArt = createBoilingSprite({ src: STUNNED_BUTTON_TAG, clock, className: 'abm-stunned-cost__art', alt: '' });
   const stunnedCostValue = element('span', 'abm-stunned-cost__value');
   stunnedCost.hidden = true; stunnedCost.append(stunnedCostArt.element, stunnedCostValue); attackButton.element.append(stunnedCost); sprites.push(stunnedCostArt);
-  const lobby = createGameButton({ label: 'Back to Lobby', clock, onActivate: () => backToLobby?.(),
-    upSheet: ABM_BACK_LOBBY_ART.up, betweenSheet: ABM_BACK_LOBBY_ART.between, depressedSheet: ABM_BACK_LOBBY_ART.depressed });
-  lobby.element.classList.add('abm-controls__back-lobby', 'game-button--baked-label'); lobby.element.hidden = true;
-  buttons.push(lobby); controls.append(lobby.element);
+  const matchProgress = element('div', 'abm-controls__match-progress'); matchProgress.hidden = true; controls.append(matchProgress);
+  let xpBar: XpProgressBar | undefined; let xpSequenceStarted = false;
 
   const picker = element('div', 'abm-picker');
   const portrait = createBoilingSprite({ src: pickerAsset(pickerEntries[selected]!), clock, className: 'abm-picker__portrait' }); sprites.push(portrait);
@@ -440,7 +437,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   function applyVariantLayout() {
     const bindings: readonly [string, HTMLElement][] = [['picker-prev', previous.element], ['picker-next', next.element], ['lock-class', lock.element],
       ...abilityButtons.map(([, button]) => ['ability', button.element] as [string, HTMLElement]),
-      ['back-lobby', lobby.element],
+      ['back-lobby', matchProgress],
       ['class-ready', classReadyArt.element], ['class-ready-opponent-tag', classReadyOpponentTag.element],
       ['pick-class-header', pickClassHeader.element],
       ...(counterpickTag ? [['p2-counterpick-tag', counterpickTag.element] as [string, HTMLElement]] : []),
@@ -487,23 +484,24 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     lock.setDisabled(!definition?.implemented || !canPick); previous.setDisabled(!canPick); next.setDisabled(!canPick);
   }
 
-  function render(nextProjection: AbmProjection, events: readonly TimedSemanticEvent[] = [], serverTime = Date.now(), forceWipe = false) {
+  function render(nextProjection: AbmProjection, events: readonly TimedSemanticEvent[] = [], serverTime = Date.now(), forceWipe = false, progressAward?: ProgressAward) {
     newestProjection = nextProjection;
     newestEvents = events;
+    if (progressAward) newestProgressAward = progressAward;
     const reveal = events.find((event) => isWipeCue(event.type)
       && event.startsAt <= serverTime && event.endsAt > serverTime && !playedTransitionIds.has(event.id));
     if (wipeRunning) return;
     if ((reveal || forceWipe) && shownProjection) {
       if (reveal) playedTransitionIds.add(reveal.id);
       wipeRunning = true;
-      void playStarburstWipe(container, clock, () => paint(newestProjection!, now(), newestEvents), transitionAbort.signal)
-        .then(() => { wipeRunning = false; if (newestProjection) paint(newestProjection, now(), newestEvents); });
+      void playStarburstWipe(container, clock, () => paint(newestProjection!, now(), newestEvents, newestProgressAward), transitionAbort.signal)
+        .then(() => { wipeRunning = false; if (newestProjection) paint(newestProjection, now(), newestEvents, newestProgressAward); });
       return;
     }
-    paint(nextProjection, serverTime, events);
+    paint(nextProjection, serverTime, events, newestProgressAward);
   }
 
-  function paint(nextProjection: AbmProjection, serverTime: number, events: readonly TimedSemanticEvent[] = []) {
+  function paint(nextProjection: AbmProjection, serverTime: number, events: readonly TimedSemanticEvent[] = [], progressAward?: ProgressAward) {
     projection = shownProjection = nextProjection;
     playAbmEventSounds(events, serverTime, playedSoundIds);
     if (revealTimer) { clearTimeout(revealTimer); revealTimer = undefined; }
@@ -520,7 +518,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     if (scheduleTimers && nextBoundary !== undefined) {
       const boundaryNeedsWipe = nextBoundary === nextProjection.resultRevealAt
         || nextBoundary === nextProjection.counterPickAvailableAt;
-      revealTimer = setTimeout(() => render(nextProjection, events, nextBoundary, boundaryNeedsWipe), nextBoundary - serverTime);
+      revealTimer = setTimeout(() => render(nextProjection, events, nextBoundary, boundaryNeedsWipe, newestProgressAward), nextBoundary - serverTime);
     }
     const picking = ['selecting-classes', 'waiting-for-class'].includes(nextProjection.phase)
       || (nextProjection.phase === 'counter-picking' && !counterLocked);
@@ -565,7 +563,12 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
       button.setDisabled(!nextProjection.legalActions.includes(abilityId));
       button.setLockedDepressed(armedAbility === abilityId);
     }
-    lobby.element.hidden = !complete || !showingResult;
+    matchProgress.hidden = !complete || !showingResult || !progressAward;
+    if (complete && showingResult && progressAward && !xpSequenceStarted) {
+      xpSequenceStarted = true; xpBar = createXpProgressBar(clock, progressAward); matchProgress.replaceChildren(xpBar.element);
+      void xpBar.finished.then(() => new Promise<void>((resolve) => setTimeout(resolve, beats(2))))
+        .then(() => { if (!transitionAbort.signal.aborted) matchProgressComplete?.(); });
+    }
     result.element.hidden = !showingResult;
     if (showingResult) {
       const scene = getAbmResultScene(nextProjection);
@@ -726,7 +729,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   }
 
   applyVariantLayout(); updatePicker();
-  return { render, destroy() { transitionAbort.abort(); tagEntrance.destroy(); if (revealTimer) clearTimeout(revealTimer); if (waitingTimer) clearTimeout(waitingTimer); layout.destroy(); copy.destroy(); for (const button of buttons) button.destroy(); for (const sprite of sprites) sprite.destroy(); } };
+  return { render, destroy() { transitionAbort.abort(); xpBar?.destroy(); tagEntrance.destroy(); if (revealTimer) clearTimeout(revealTimer); if (waitingTimer) clearTimeout(waitingTimer); layout.destroy(); copy.destroy(); for (const button of buttons) button.destroy(); for (const sprite of sprites) sprite.destroy(); } };
 }
 
 export function soundForAbmMoves(moves: Readonly<Record<'p1' | 'p2', AbmMove>>): SoundId | undefined {
