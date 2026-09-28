@@ -7,7 +7,7 @@ import { applyLayoutGeometry, validateLayoutDocument, type LayoutDocument, type 
 import { getLayoutDocument } from '../layout/layoutDocuments';
 import { createBoilingSprite } from '../renderer/boilingSprite';
 import { curtainOpenAsset } from '../renderer/curtainWipe';
-import { isAbmBattleEditorElement, isAbmPostMatchEditorElement, isEditorElementVisible, resizeEditorGeometry } from './abmEditorModel';
+import { abmEditorGeometry, getEditorMirrorUpdate, isAbmBattleEditorElement, isAbmPostMatchEditorElement, isAbmWaitingEditorElement, isEditorElementVisible, resizeEditorGeometry, setAbmEditorGeometry } from './abmEditorModel';
 
 const hostElement = document.querySelector<HTMLElement>('#editor');
 if (!hostElement) throw new Error('Missing editor mount.');
@@ -15,7 +15,7 @@ const host: HTMLElement = hostElement;
 const clock = new BoilClock(document, true);
 type EditorScreen = 'variant-abm' | 'class-reward';
 type RewardState = 'unlocked' | 'next';
-type AbmState = 'battle' | 'post-match';
+type AbmState = 'battle' | 'waiting' | 'post-match';
 const drafts = new Map<EditorScreen, LayoutDocument>();
 const savedDocuments = new Map<EditorScreen, LayoutDocument>();
 for (const id of ['variant-abm', 'class-reward'] as const) {
@@ -49,7 +49,8 @@ host.innerHTML = `<main class="abm-editor">
 const $ = <T extends Element>(selector: string) => host.querySelector<T>(selector)!;
 const selected = () => working.elements.find(({ id }) => id === selectedId);
 const visibleElements = () => working.elements.filter((element) => screen === 'variant-abm'
-  ? (abmState === 'post-match' ? isAbmPostMatchEditorElement(element) : isAbmBattleEditorElement(element))
+  ? (abmState === 'post-match' ? isAbmPostMatchEditorElement(element)
+    : abmState === 'waiting' ? isAbmWaitingEditorElement(element) : isAbmBattleEditorElement(element))
   : isEditorElementVisible(element, rewardState));
 
 function render(): void {
@@ -62,7 +63,7 @@ function render(): void {
   for (const config of configs) {
     const node = makeNode(config); node.dataset.id = config.id; node.dataset.layoutElement = config.id; node.classList.toggle('is-selected', config.id === selectedId);
     if (configs.some(({ parent }) => parent === config.id)) { node.classList.add('is-structural'); node.textContent = ''; }
-    applyLayoutGeometry(node, config.layouts[orientation]); node.style.zIndex = String(config.layer ?? 0); nodes.set(config.id, node);
+    applyLayoutGeometry(node, screen === 'variant-abm' ? abmEditorGeometry(config, orientation) : config.layouts[orientation]); node.style.zIndex = String(config.layer ?? 0); nodes.set(config.id, node);
   }
   for (const config of configs) {
     const node = nodes.get(config.id)!;
@@ -80,7 +81,7 @@ function render(): void {
   }
   renderList(); renderInspector(); updateToolbar(); applyZoom();
   $('[data-title]').textContent = screen === 'variant-abm'
-    ? `Attack Block Mana · ${abmState === 'battle' ? 'Game screen' : 'Post-match XP'}`
+    ? `Attack Block Mana · ${abmState === 'battle' ? 'Game screen' : abmState === 'waiting' ? 'Waiting' : 'Post-match XP'}`
     : `Class Reward · ${rewardState === 'unlocked' ? 'Class Unlocked' : 'Next Class'}`;
 }
 
@@ -133,23 +134,32 @@ function renderList(): void {
 }
 
 function renderInspector(): void {
-  const panel = $<HTMLElement>('[data-inspector]'); const item = selected(); const geometry = item?.layouts[orientation];
+  const panel = $<HTMLElement>('[data-inspector]'); const item = selected();
+  const geometry = item ? (screen === 'variant-abm' ? abmEditorGeometry(item, orientation) : item.layouts[orientation]) : undefined;
   if (!item || !geometry) { panel.innerHTML = '<h2>Element</h2><p>Select an element to edit its geometry.</p>'; return; }
   const fields = (['x', 'y', 'width', 'height'] as const).map((key) => `<label>${key}<input type="number" step="5" data-geometry="${key}" value="${round(geometry[key])}"></label>`).join('');
-  panel.innerHTML = `<h2>${item.label ?? name(item.id)}</h2><p class="abm-editor__id">${item.id}</p><div class="abm-editor__fields">${fields}</div>`;
+  const mirror = screen === 'variant-abm' ? getEditorMirrorUpdate(working, item.id, orientation) : undefined;
+  panel.innerHTML = `<h2>${item.label ?? name(item.id)}</h2><p class="abm-editor__id">${item.id}</p><div class="abm-editor__fields">${fields}</div><button data-mirror${mirror ? '' : ' disabled'}>Mirror to P2</button>`;
   panel.querySelectorAll<HTMLInputElement>('[data-geometry]').forEach((input) => { input.onchange = () => change(() => {
     const key = input.dataset.geometry as 'x' | 'y' | 'width' | 'height'; const value = Number(input.value);
     if (!Number.isFinite(value)) return;
-    if (key === 'width' || key === 'height') item.layouts[orientation] = resizeEditorGeometry(item, orientation, key, Math.max(5, value));
-    else item.layouts[orientation] = { ...geometry, [key]: value };
+    const next = key === 'width' || key === 'height'
+      ? resizeEditorGeometry(item, orientation, key, Math.max(5, value), undefined, geometry)
+      : { ...geometry, [key]: value };
+    if (screen === 'variant-abm') setAbmEditorGeometry(item, orientation, next); else item.layouts[orientation] = next;
   }); });
+  panel.querySelector<HTMLButtonElement>('[data-mirror]')!.onclick = () => change(() => {
+    const update = getEditorMirrorUpdate(working, item.id, orientation); if (!update) return;
+    const target = working.elements.find(({ id }) => id === update.targetId); if (target) target.layouts[orientation] = update.geometry;
+  });
 }
 
 function beginPieceDrag(event: PointerEvent, id: string, target: HTMLElement): void {
   if (event.button !== 0) return;
   if (selectedId !== id) { selectedId = id; render(); target = $<HTMLElement>(`[data-id="${id}"]`); }
   const item = selected(); if (!item) return;
-  const original = { ...item.layouts[orientation] }; const before = clone(working); const origin = { x: event.clientX, y: event.clientY };
+  const original = { ...(screen === 'variant-abm' ? abmEditorGeometry(item, orientation) : item.layouts[orientation]) };
+  const before = clone(working); const origin = { x: event.clientX, y: event.clientY };
   const bounds = target.getBoundingClientRect(); const resize = event.clientX >= bounds.right - 14 && event.clientY >= bounds.bottom - 14;
   const canvas = $<HTMLElement>('[data-canvas]'); canvas.setPointerCapture(event.pointerId);
   const move = (next: PointerEvent) => {
@@ -160,10 +170,17 @@ function beginPieceDrag(event: PointerEvent, id: string, target: HTMLElement): v
       const artwork = ['sprite', 'decoration', 'button', 'control'].includes(item.type);
       if (artwork) {
         const dimension = Math.abs(dx / original.width) >= Math.abs(dy / original.height) ? 'width' : 'height';
-        item.layouts[orientation] = resizeEditorGeometry(item, orientation, dimension, dimension === 'width' ? width : height, undefined, original);
-      } else item.layouts[orientation] = { ...original, width, height };
-    } else item.layouts[orientation] = { ...original, x: snap(original.x + dx), y: snap(original.y + dy) };
-    applyLayoutGeometry(target, item.layouts[orientation]); renderInspector(); updateToolbar();
+        const geometry = resizeEditorGeometry(item, orientation, dimension, dimension === 'width' ? width : height, undefined, original);
+        if (screen === 'variant-abm') setAbmEditorGeometry(item, orientation, geometry); else item.layouts[orientation] = geometry;
+      } else {
+        const geometry = { ...original, width, height };
+        if (screen === 'variant-abm') setAbmEditorGeometry(item, orientation, geometry); else item.layouts[orientation] = geometry;
+      }
+    } else {
+      const geometry = { ...original, x: snap(original.x + dx), y: snap(original.y + dy) };
+      if (screen === 'variant-abm') setAbmEditorGeometry(item, orientation, geometry); else item.layouts[orientation] = geometry;
+    }
+    applyLayoutGeometry(target, screen === 'variant-abm' ? abmEditorGeometry(item, orientation) : item.layouts[orientation]); renderInspector(); updateToolbar();
   };
   const end = (next: PointerEvent) => {
     if (next.pointerId !== event.pointerId) return;
@@ -216,7 +233,7 @@ function syncStateOptions(): void {
   const select = $<HTMLSelectElement>('[data-state]');
   select.innerHTML = screen === 'class-reward'
     ? '<option value="unlocked">Class Unlocked</option><option value="next">Next Class</option>'
-    : '<option value="battle">Battle</option><option value="post-match">Post-match XP fill</option>';
+    : '<option value="battle">Battle</option><option value="waiting">Waiting</option><option value="post-match">Post-match XP fill</option>';
   select.value = screen === 'class-reward' ? rewardState : abmState;
 }
 $<HTMLSelectElement>('[data-orientation]').onchange = (event) => { orientation = (event.target as HTMLSelectElement).value as LayoutOrientation; selectedId = undefined; render(); fit(); };

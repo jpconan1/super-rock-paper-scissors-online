@@ -10,8 +10,8 @@
       "minAspectRatio": 1
     },
     "portrait": {
-      "width": 390,
-      "height": 705,
+      "width": 540,
+      "height": 960,
       "minAspectRatio": 0
     }
   },

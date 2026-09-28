@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { ABM_CLASSES, startingResourcesForClass } from '../src/variants/attackBlockMana/attackBlockManaCatalog';
-import { ABM_LAYOUTS, ABM_RESULT_SCENES, ABM_SELECT_ART, ABM_TAG_CATEGORIES, ABM_TAG_ORDERS, abmTagSlotId, blockSegments, displayedAbmMove, getAbmAttackCostDisplay, getAbmClassBadgeGeometry, getAbmClassReadyFrame, getAbmClassResourceControlGeometry, getAbmClassResourceGeometry, getAbmLimitedResource, getAbmPlayerResourceGeometry, getAbmResultScene, getAbmWaitingVisual, initialManaForClass, latestClassPreview, reconcileAbmArmedAbility, sceneForMoves, shouldShowAbmContinuingRoundProcTags, shouldShowAbmYouTag, shouldShowClassBadge, shouldShowClassReadyOpponentTag, winArtwork } from '../src/variants/attackBlockMana/attackBlockManaPresentation';
+import { ABM_LAYOUTS, ABM_RESULT_SCENES, ABM_SELECT_ART, ABM_TAG_CATEGORIES, ABM_TAG_ORDERS, abmTagSlotId, blockSegments, displayedAbmMove, getAbmAttackCostDisplay, getAbmClassBadgeGeometry, getAbmClassReadyFrame, getAbmClassResourceControlGeometry, getAbmClassResourceGeometry, getAbmLimitedResource, getAbmPlayerResourceGeometry, getAbmResultScene, getAbmWaitingLayoutIds, getAbmWaitingVisual, initialManaForClass, latestClassPreview, reconcileAbmArmedAbility, sceneForMoves, shouldShowAbmContinuingRoundProcTags, shouldShowAbmYouTag, shouldShowClassBadge, shouldShowClassReadyOpponentTag, winArtwork } from '../src/variants/attackBlockMana/attackBlockManaPresentation';
 import type { AbmProjection } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 import { ABM_CLASS_IDS } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 import { ABM_SCENE_URLS, resolveAbmProcBackgrounds, resolveAbmScene, resolveAbmSplitScene, resolveAbmTags, resolveConjureScene, resolveJoeScene, resolveNullScene } from '../src/variants/attackBlockMana/attackBlockManaScenes';
@@ -9,6 +9,11 @@ import { validateLayoutDocument } from '../src/layout/layoutDocument';
 import { ABM_TAG_ENTRANCE_SOURCES } from '../src/variants/attackBlockMana/abmTagEntrance';
 
 describe('Attack Block Mana presentation data', () => {
+  test('selects authored waiting geometry for the early and late players', () => {
+    expect(getAbmWaitingLayoutIds('p1', 'p2')).toEqual({ ready: 'p1-waiting-ready', countdown: 'p2-waiting-ready', dots: 'p2-waiting-dots' });
+    expect(getAbmWaitingLayoutIds('p2', 'p1')).toEqual({ ready: 'p2-waiting-ready', countdown: 'p1-waiting-ready', dots: 'p1-waiting-dots' });
+  });
+
   test('mirrors first-win counters toward the center', () => {
     expect(winArtwork('p1', 0).src).toBe('/visual-elements/win-couters/ft2-win-counter-empty-sheet.webp');
     expect(winArtwork('p1', 1).src).toBe('/visual-elements/win-couters/ft2-win-counter-right-filled-sheet.webp');
@@ -120,15 +125,35 @@ describe('Attack Block Mana presentation data', () => {
     }, 'portrait').x).toBe(222);
   });
 
-  test.each(['landscape', 'portrait'] as const)('selects each player resource layout independently in %s', (orientation) => {
+  test.each(['landscape', 'portrait'] as const)('moves only the block group up when a player has no class resource in %s', (orientation) => {
     const document = getLayoutDocument('variant-abm');
     const p1Blocks = document.elements.find(({ id }) => id === 'p1-block-group')!;
     const p2Blocks = document.elements.find(({ id }) => id === 'p2-block-group')!;
+    const p1Limited = document.elements.find(({ id }) => id === 'p1-limited-group')!;
+    const p2Limited = document.elements.find(({ id }) => id === 'p2-limited-group')!;
+    const p1Mana = document.elements.find(({ id }) => id === 'p1-mana-icon')!;
 
-    expect(getAbmPlayerResourceGeometry(p1Blocks, orientation, true)).toEqual(p1Blocks.alternateLayouts!['class-resource']![orientation]);
-    expect(getAbmPlayerResourceGeometry(p2Blocks, orientation, false)).toEqual(p2Blocks.layouts[orientation]);
-    expect(getAbmPlayerResourceGeometry(p1Blocks, orientation, false)).toEqual(p1Blocks.layouts[orientation]);
-    expect(getAbmPlayerResourceGeometry(p2Blocks, orientation, true)).toEqual(p2Blocks.alternateLayouts!['class-resource']![orientation]);
+    expect(getAbmPlayerResourceGeometry(p1Blocks, orientation, true, p1Limited)).toEqual(p1Blocks.layouts[orientation]);
+    expect(getAbmPlayerResourceGeometry(p2Blocks, orientation, true, p2Limited)).toEqual(p2Blocks.layouts[orientation]);
+    expect(p1Blocks.layouts[orientation].y).toBeGreaterThan(p1Limited.layouts[orientation].y);
+    expect(p2Blocks.layouts[orientation].y).toBeGreaterThan(p2Limited.layouts[orientation].y);
+    expect(getAbmPlayerResourceGeometry(p1Blocks, orientation, false, p1Limited)).toEqual({
+      ...p1Blocks.layouts[orientation], y: p1Limited.layouts[orientation].y,
+    });
+    expect(getAbmPlayerResourceGeometry(p2Blocks, orientation, false, p2Limited)).toEqual({
+      ...p2Blocks.layouts[orientation], y: p2Limited.layouts[orientation].y,
+    });
+    expect(getAbmPlayerResourceGeometry(p1Mana, orientation, false, p1Limited)).toEqual(p1Mana.layouts[orientation]);
+  });
+
+  test.each(['p1', 'p2'] as const)('authors normalized %s class-resource artwork at its group origin', (player) => {
+    const document = getLayoutDocument('variant-abm');
+    for (const orientation of ['landscape', 'portrait'] as const) {
+      const icon = document.elements.find(({ id }) => id === `${player}-limited-icon`)!;
+      const count = document.elements.find(({ id }) => id === `${player}-limited-count`)!;
+      expect(icon.layouts[orientation].y).toBe(0);
+      expect(count.layouts[orientation].y).toBe(0);
+    }
   });
 
   test('normalizes class badges by height and grows them inward', () => {
@@ -513,14 +538,15 @@ describe('Attack Block Mana presentation data', () => {
   test('uses the shared authored landscape and portrait compositions', () => {
     expect(ABM_LAYOUTS).toEqual([
       { name: 'landscape', width: 960, height: 540, minAspectRatio: 1 },
-      { name: 'portrait', width: 390, height: 705, minAspectRatio: 0 },
+      { name: 'portrait', width: 540, height: 960, minAspectRatio: 0 },
     ]);
     const document = getLayoutDocument('variant-abm');
     expect(document.elements.map(({ id }) => id)).toEqual(expect.arrayContaining([
       'p1-info', 'p2-info', 'turn', 'scene', 'scene-art', 'menu', 'rules',
       'picker-portrait', 'picker-copy', 'picker-prev', 'picker-next', 'lock-class', 'p1-class-badge', 'p2-class-badge',
       'p2-counterpick-tag', 'pick-class-header',
-      'attack', 'block', 'mana', 'back-lobby', 'arrow-attack-block', 'arrow-block-mana', 'arrow-mana-attack', 'waiting-ready', 'waiting-dots',
+      'attack', 'block', 'mana', 'back-lobby', 'arrow-attack-block', 'arrow-block-mana', 'arrow-mana-attack',
+      'p1-waiting-ready', 'p2-waiting-ready', 'p1-waiting-dots', 'p2-waiting-dots',
       'p1-mana-group', 'p1-mana-icon', 'p1-mana-count', 'p1-block-group', 'p1-block-1', 'p1-block-5',
       'p2-mana-group', 'p2-mana-icon', 'p2-mana-count', 'p2-block-group', 'p2-block-1', 'p2-block-5',
       'p1-limited-group', 'p1-limited-icon', 'p1-limited-count', 'p2-limited-group', 'p2-limited-icon', 'p2-limited-count',

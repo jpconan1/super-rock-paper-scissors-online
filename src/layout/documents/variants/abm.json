@@ -10,8 +10,8 @@
       "minAspectRatio": 1
     },
     "portrait": {
-      "width": 390,
-      "height": 705,
+      "width": 540,
+      "height": 960,
       "minAspectRatio": 0
     }
   },
@@ -47,8 +47,8 @@
           "height": 72
         },
         "portrait": {
-          "x": 10,
-          "y": 82,
+          "x": 40,
+          "y": 115,
           "width": 178,
           "height": 52
         }
@@ -62,8 +62,8 @@
             "height": 72
           },
           "portrait": {
-            "x": 10,
-            "y": 82,
+            "x": 85,
+            "y": 209.5,
             "width": 178,
             "height": 52
           }
@@ -87,8 +87,8 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 107,
-          "y": 0,
+          "x": 180,
+          "y": 30,
           "width": 176,
           "height": 88,
           "aspectLock": true
@@ -104,8 +104,8 @@
             "aspectLock": true
           },
           "portrait": {
-            "x": 107,
-            "y": 0,
+            "x": 182,
+            "y": 127.5,
             "width": 176,
             "height": 88,
             "aspectLock": true
@@ -126,8 +126,8 @@
           "height": 72
         },
         "portrait": {
-          "x": 202,
-          "y": 82,
+          "x": 330,
+          "y": 115,
           "width": 178,
           "height": 52
         }
@@ -141,8 +141,8 @@
             "height": 72
           },
           "portrait": {
-            "x": 202,
-            "y": 82,
+            "x": 277,
+            "y": 209.5,
             "width": 178,
             "height": 52
           }
@@ -165,8 +165,8 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 70,
-          "y": 0,
+          "x": 130,
+          "y": 30,
           "width": 80,
           "height": 40,
           "aspectLock": true
@@ -182,8 +182,8 @@
             "aspectLock": true
           },
           "portrait": {
-            "x": 70,
-            "y": 0,
+            "x": 145,
+            "y": 127.5,
             "width": 80,
             "height": 40,
             "aspectLock": true
@@ -207,8 +207,8 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 240,
-          "y": 0,
+          "x": 330,
+          "y": 30,
           "width": 80,
           "height": 40,
           "aspectLock": true
@@ -224,8 +224,8 @@
             "aspectLock": true
           },
           "portrait": {
-            "x": 240,
-            "y": 0,
+            "x": 315,
+            "y": 127.5,
             "width": 80,
             "height": 40,
             "aspectLock": true
@@ -250,8 +250,8 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 90,
-          "y": 26,
+          "x": 145,
+          "y": 75,
           "width": 48,
           "height": 24,
           "aspectLock": true
@@ -267,8 +267,8 @@
             "aspectLock": true
           },
           "portrait": {
-            "x": 90,
-            "y": 26,
+            "x": 165,
+            "y": 153.5,
             "width": 48,
             "height": 24,
             "aspectLock": true
@@ -293,8 +293,8 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 252,
-          "y": 26,
+          "x": 347,
+          "y": 75,
           "width": 48,
           "height": 24,
           "aspectLock": true
@@ -310,8 +310,8 @@
             "aspectLock": true
           },
           "portrait": {
-            "x": 252,
-            "y": 26,
+            "x": 327,
+            "y": 153.5,
             "width": 48,
             "height": 24,
             "aspectLock": true
@@ -335,8 +335,8 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 15,
-          "y": 150,
+          "x": 45,
+          "y": 215,
           "width": 96,
           "height": 48,
           "aspectLock": true
@@ -352,8 +352,8 @@
             "aspectLock": true
           },
           "portrait": {
-            "x": 15,
-            "y": 150,
+            "x": 90,
+            "y": 277.5,
             "width": 96,
             "height": 48,
             "aspectLock": true
@@ -377,10 +377,10 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 270,
-          "y": 155,
-          "width": 112,
-          "height": 47.78666666666667,
+          "x": 399,
+          "y": 215,
+          "width": 96,
+          "height": 48,
           "aspectLock": true
         }
       },
@@ -394,8 +394,8 @@
             "aspectLock": true
           },
           "portrait": {
-            "x": 270,
-            "y": 155,
+            "x": 345,
+            "y": 282.5,
             "width": 112,
             "height": 47.78666666666667,
             "aspectLock": true
@@ -417,8 +417,8 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 19,
-          "y": 250,
+          "x": 94,
+          "y": 377.5,
           "width": 352,
           "height": 176,
           "aspectLock": true
@@ -434,8 +434,8 @@
             "aspectLock": true
           },
           "portrait": {
-            "x": 19,
-            "y": 250,
+            "x": 94,
+            "y": 377.5,
             "width": 352,
             "height": 176,
             "aspectLock": true
@@ -465,8 +465,8 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 76,
-          "y": 137,
+          "x": 151,
+          "y": 264.5,
           "width": 238,
           "height": 111,
           "aspectLock": true
@@ -489,10 +489,10 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 0,
-          "y": 0,
-          "width": 352,
-          "height": 176,
+          "x": -45,
+          "y": -50,
+          "width": 460,
+          "height": 230,
           "aspectLock": true
         }
       },
@@ -509,10 +509,10 @@
             "aspectLock": true
           },
           "portrait": {
-            "x": 0,
-            "y": 0,
-            "width": 352,
-            "height": 176,
+            "x": -45,
+            "y": -50,
+            "width": 460,
+            "height": 230,
             "aspectLock": true
           }
         }
@@ -1009,8 +1009,8 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 15,
-          "y": 130,
+          "x": 40,
+          "y": 185,
           "width": 120,
           "height": 35.06849315068493,
           "aspectLock": true
@@ -1026,8 +1026,8 @@
             "aspectLock": true
           },
           "portrait": {
-            "x": 15,
-            "y": 130,
+            "x": 90,
+            "y": 257.5,
             "width": 120,
             "height": 35.06849315068493,
             "aspectLock": true
@@ -1050,8 +1050,8 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 265,
-          "y": 130,
+          "x": 380,
+          "y": 185,
           "width": 120,
           "height": 35.06849315068493,
           "aspectLock": true
@@ -1067,8 +1067,8 @@
             "aspectLock": true
           },
           "portrait": {
-            "x": 265,
-            "y": 130,
+            "x": 340,
+            "y": 257.5,
             "width": 120,
             "height": 35.06849315068493,
             "aspectLock": true
@@ -1077,7 +1077,7 @@
       }
     },
     {
-      "id": "waiting-ready",
+      "id": "p1-waiting-ready",
       "type": "sprite",
       "parent": "scene",
       "assets": {
@@ -1095,12 +1095,93 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": -19,
-          "y": -60,
+          "x": -75,
+          "y": -30,
+          "width": 245,
+          "height": 209.06666666666666,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "p2-waiting-ready",
+      "type": "sprite",
+      "parent": "scene",
+      "assets": {
+        "src": "/visual-elements/ready-waiting/rdy_sheet.webp"
+      },
+      "properties": {
+        "allowParentOverflow": true
+      },
+      "layouts": {
+        "landscape": {
+          "x": 121,
+          "y": -34,
           "width": 300,
           "height": 256,
           "aspectLock": true
+        },
+        "portrait": {
+          "x": 182,
+          "y": -30,
+          "width": 245,
+          "height": 209.06666666666666,
+          "aspectLock": true
         }
+      }
+    },
+    {
+      "id": "p1-waiting-dots",
+      "type": "sprite",
+      "parent": "scene",
+      "assets": {
+        "src": "/visual-elements/ready-waiting/waiting1_sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 75,
+          "y": 0,
+          "width": 50,
+          "height": 20.37037037037037,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 5,
+          "y": -80,
+          "width": 98.18181818181819,
+          "height": 40,
+          "aspectLock": true
+        }
+      },
+      "properties": {
+        "allowParentOverflow": true
+      }
+    },
+    {
+      "id": "p2-waiting-dots",
+      "type": "sprite",
+      "parent": "scene",
+      "assets": {
+        "src": "/visual-elements/ready-waiting/waiting1_sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 227,
+          "y": 0,
+          "width": 50,
+          "height": 20.37037037037037,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 248.8181818181818,
+          "y": -80,
+          "width": 98.18181818181819,
+          "height": 40,
+          "aspectLock": true
+        }
+      },
+      "properties": {
+        "allowParentOverflow": true
       }
     },
     {
@@ -1118,8 +1199,8 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 155,
-          "y": 452,
+          "x": 230,
+          "y": 579.5,
           "width": 80,
           "height": 40,
           "aspectLock": true
@@ -1141,34 +1222,10 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 155,
-          "y": 480,
+          "x": 230,
+          "y": 607.5,
           "width": 80,
           "height": 68.26666666666667,
-          "aspectLock": true
-        }
-      }
-    },
-    {
-      "id": "waiting-dots",
-      "type": "sprite",
-      "parent": "scene",
-      "assets": {
-        "src": "/visual-elements/ready-waiting/waiting1_sheet.webp"
-      },
-      "layouts": {
-        "landscape": {
-          "x": 151,
-          "y": 0,
-          "width": 50,
-          "height": 20.37037037037037,
-          "aspectLock": true
-        },
-        "portrait": {
-          "x": 151,
-          "y": 0,
-          "width": 50,
-          "height": 20.37037037037037,
           "aspectLock": true
         }
       }
@@ -1186,8 +1243,8 @@
           "height": 80
         },
         "portrait": {
-          "x": 10,
-          "y": 180,
+          "x": 45,
+          "y": 260,
           "width": 120,
           "height": 60
         }
@@ -1201,8 +1258,8 @@
             "height": 80
           },
           "portrait": {
-            "x": 10,
-            "y": 180,
+            "x": 85,
+            "y": 307.5,
             "width": 120,
             "height": 60
           }
@@ -1222,8 +1279,8 @@
           "height": 80
         },
         "portrait": {
-          "x": 260,
-          "y": 180,
+          "x": 385,
+          "y": 260,
           "width": 120,
           "height": 60
         }
@@ -1237,8 +1294,8 @@
             "height": 80
           },
           "portrait": {
-            "x": 260,
-            "y": 180,
+            "x": 335,
+            "y": 307.5,
             "width": 120,
             "height": 60
           }
@@ -1258,29 +1315,13 @@
           "height": 100
         },
         "portrait": {
-          "x": 18,
-          "y": 436,
+          "x": 93,
+          "y": 563.5,
           "width": 120,
           "height": 75
         }
       },
-      "visible": true,
-      "alternateLayouts": {
-        "class-resource": {
-          "landscape": {
-            "x": 25,
-            "y": 294,
-            "width": 160,
-            "height": 100
-          },
-          "portrait": {
-            "x": 18,
-            "y": 436,
-            "width": 120,
-            "height": 75
-          }
-        }
-      }
+      "visible": true
     },
     {
       "id": "p1-mana-group",
@@ -1303,22 +1344,6 @@
       "visible": true,
       "properties": {
         "allowParentOverflow": true
-      },
-      "alternateLayouts": {
-        "class-resource": {
-          "landscape": {
-            "x": 0,
-            "y": 0,
-            "width": 160,
-            "height": 39
-          },
-          "portrait": {
-            "x": 0,
-            "y": 0,
-            "width": 120,
-            "height": 30
-          }
-        }
       }
     },
     {
@@ -1337,33 +1362,15 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 25,
-          "y": -10,
-          "width": 25,
-          "height": 25,
+          "x": 0,
+          "y": 5,
+          "width": 35,
+          "height": 35,
           "aspectLock": true
         }
       },
       "properties": {
         "allowParentOverflow": true
-      },
-      "alternateLayouts": {
-        "class-resource": {
-          "landscape": {
-            "x": 25,
-            "y": 0,
-            "width": 35,
-            "height": 35,
-            "aspectLock": true
-          },
-          "portrait": {
-            "x": 25,
-            "y": -10,
-            "width": 25,
-            "height": 25,
-            "aspectLock": true
-          }
-        }
       }
     },
     {
@@ -1382,8 +1389,8 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 50,
-          "y": -10,
+          "x": 40,
+          "y": 10,
           "width": 45,
           "height": 22.5,
           "aspectLock": true
@@ -1391,24 +1398,6 @@
       },
       "properties": {
         "allowParentOverflow": true
-      },
-      "alternateLayouts": {
-        "class-resource": {
-          "landscape": {
-            "x": 65,
-            "y": 0,
-            "width": 64,
-            "height": 32,
-            "aspectLock": true
-          },
-          "portrait": {
-            "x": 50,
-            "y": -10,
-            "width": 45,
-            "height": 22.5,
-            "aspectLock": true
-          }
-        }
       }
     },
     {
@@ -1418,36 +1407,20 @@
       "layouts": {
         "landscape": {
           "x": 5,
-          "y": 40,
+          "y": 80,
           "width": 130,
           "height": 60
         },
         "portrait": {
-          "x": 5,
-          "y": 15,
-          "width": 120,
+          "x": -20,
+          "y": 70,
+          "width": 130,
           "height": 80
         }
       },
       "visible": true,
       "properties": {
         "allowParentOverflow": true
-      },
-      "alternateLayouts": {
-        "class-resource": {
-          "landscape": {
-            "x": 5,
-            "y": 70,
-            "width": 130,
-            "height": 60
-          },
-          "portrait": {
-            "x": 5,
-            "y": 35,
-            "width": 120,
-            "height": 80
-          }
-        }
       }
     },
     {
@@ -1466,33 +1439,15 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 0,
+          "x": -15,
           "y": 0,
-          "width": 20,
-          "height": 20,
+          "width": 30,
+          "height": 30,
           "aspectLock": true
         }
       },
       "properties": {
         "allowParentOverflow": true
-      },
-      "alternateLayouts": {
-        "class-resource": {
-          "landscape": {
-            "x": 5,
-            "y": 0,
-            "width": 26,
-            "height": 26,
-            "aspectLock": true
-          },
-          "portrait": {
-            "x": 0,
-            "y": 0,
-            "width": 20,
-            "height": 20,
-            "aspectLock": true
-          }
-        }
       }
     },
     {
@@ -1511,33 +1466,15 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 20,
+          "x": 10,
           "y": 0,
-          "width": 20,
-          "height": 20,
+          "width": 30,
+          "height": 30,
           "aspectLock": true
         }
       },
       "properties": {
         "allowParentOverflow": true
-      },
-      "alternateLayouts": {
-        "class-resource": {
-          "landscape": {
-            "x": 31,
-            "y": 0,
-            "width": 26,
-            "height": 26,
-            "aspectLock": true
-          },
-          "portrait": {
-            "x": 20,
-            "y": 0,
-            "width": 20,
-            "height": 20,
-            "aspectLock": true
-          }
-        }
       }
     },
     {
@@ -1556,33 +1493,15 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 40,
+          "x": 35,
           "y": 0,
-          "width": 20,
-          "height": 20,
+          "width": 30,
+          "height": 30,
           "aspectLock": true
         }
       },
       "properties": {
         "allowParentOverflow": true
-      },
-      "alternateLayouts": {
-        "class-resource": {
-          "landscape": {
-            "x": 57,
-            "y": 0,
-            "width": 26,
-            "height": 26,
-            "aspectLock": true
-          },
-          "portrait": {
-            "x": 40,
-            "y": 0,
-            "width": 20,
-            "height": 20,
-            "aspectLock": true
-          }
-        }
       }
     },
     {
@@ -1603,31 +1522,13 @@
         "portrait": {
           "x": 60,
           "y": 0,
-          "width": 20,
-          "height": 20,
+          "width": 30,
+          "height": 30,
           "aspectLock": true
         }
       },
       "properties": {
         "allowParentOverflow": true
-      },
-      "alternateLayouts": {
-        "class-resource": {
-          "landscape": {
-            "x": 83,
-            "y": 0,
-            "width": 26,
-            "height": 26,
-            "aspectLock": true
-          },
-          "portrait": {
-            "x": 60,
-            "y": 0,
-            "width": 20,
-            "height": 20,
-            "aspectLock": true
-          }
-        }
       }
     },
     {
@@ -1646,33 +1547,15 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 80,
+          "x": 85,
           "y": 0,
-          "width": 20,
-          "height": 20,
+          "width": 30,
+          "height": 30,
           "aspectLock": true
         }
       },
       "properties": {
         "allowParentOverflow": true
-      },
-      "alternateLayouts": {
-        "class-resource": {
-          "landscape": {
-            "x": 109,
-            "y": 0,
-            "width": 26,
-            "height": 26,
-            "aspectLock": true
-          },
-          "portrait": {
-            "x": 80,
-            "y": 0,
-            "width": 20,
-            "height": 20,
-            "aspectLock": true
-          }
-        }
       }
     },
     {
@@ -1683,13 +1566,13 @@
       "layouts": {
         "landscape": {
           "x": 25,
-          "y": 45,
+          "y": 40,
           "width": 110,
           "height": 32
         },
         "portrait": {
           "x": 15,
-          "y": 10,
+          "y": 35,
           "width": 90,
           "height": 30
         }
@@ -1697,22 +1580,6 @@
       "visible": true,
       "properties": {
         "allowParentOverflow": true
-      },
-      "alternateLayouts": {
-        "class-resource": {
-          "landscape": {
-            "x": 25,
-            "y": 45,
-            "width": 110,
-            "height": 32
-          },
-          "portrait": {
-            "x": 15,
-            "y": 10,
-            "width": 90,
-            "height": 30
-          }
-        }
       }
     },
     {
@@ -1726,39 +1593,21 @@
       "layouts": {
         "landscape": {
           "x": 0,
-          "y": -5,
+          "y": 0,
           "width": 32,
           "height": 32,
           "aspectLock": true
         },
         "portrait": {
-          "x": 10,
+          "x": -20,
           "y": 0,
-          "width": 25,
-          "height": 25,
+          "width": 35,
+          "height": 35,
           "aspectLock": true
         }
       },
       "properties": {
         "allowParentOverflow": true
-      },
-      "alternateLayouts": {
-        "class-resource": {
-          "landscape": {
-            "x": 0,
-            "y": -5,
-            "width": 32,
-            "height": 32,
-            "aspectLock": true
-          },
-          "portrait": {
-            "x": 10,
-            "y": 0,
-            "width": 25,
-            "height": 25,
-            "aspectLock": true
-          }
-        }
       }
     },
     {
@@ -1772,13 +1621,13 @@
       "layouts": {
         "landscape": {
           "x": 45,
-          "y": -5,
+          "y": 0,
           "width": 65,
           "height": 32.5,
           "aspectLock": true
         },
         "portrait": {
-          "x": 35,
+          "x": 25,
           "y": 0,
           "width": 45,
           "height": 22.5,
@@ -1787,24 +1636,6 @@
       },
       "properties": {
         "allowParentOverflow": true
-      },
-      "alternateLayouts": {
-        "class-resource": {
-          "landscape": {
-            "x": 40,
-            "y": -5,
-            "width": 65,
-            "height": 32.5,
-            "aspectLock": true
-          },
-          "portrait": {
-            "x": 35,
-            "y": 0,
-            "width": 45,
-            "height": 22.5,
-            "aspectLock": true
-          }
-        }
       }
     },
     {
@@ -1820,8 +1651,8 @@
           "height": 100
         },
         "portrait": {
-          "x": 252,
-          "y": 436,
+          "x": 327,
+          "y": 563.5,
           "width": 120,
           "height": 75
         }
@@ -1831,22 +1662,6 @@
         "class-select": false,
         "battle": true,
         "waiting": true
-      },
-      "alternateLayouts": {
-        "class-resource": {
-          "landscape": {
-            "x": 775,
-            "y": 294,
-            "width": 160,
-            "height": 100
-          },
-          "portrait": {
-            "x": 252,
-            "y": 436,
-            "width": 120,
-            "height": 75
-          }
-        }
       }
     },
     {
@@ -1869,22 +1684,6 @@
       },
       "properties": {
         "allowParentOverflow": true
-      },
-      "alternateLayouts": {
-        "class-resource": {
-          "landscape": {
-            "x": 0,
-            "y": 0,
-            "width": 160,
-            "height": 39
-          },
-          "portrait": {
-            "x": 0,
-            "y": 0,
-            "width": 120,
-            "height": 30
-          }
-        }
       }
     },
     {
@@ -1903,8 +1702,8 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 60,
-          "y": -10,
+          "x": 75,
+          "y": 10,
           "width": 45,
           "height": 22.5,
           "aspectLock": true
@@ -1912,24 +1711,6 @@
       },
       "properties": {
         "allowParentOverflow": true
-      },
-      "alternateLayouts": {
-        "class-resource": {
-          "landscape": {
-            "x": 85,
-            "y": 0,
-            "width": 64,
-            "height": 32,
-            "aspectLock": true
-          },
-          "portrait": {
-            "x": 60,
-            "y": -10,
-            "width": 45,
-            "height": 22.5,
-            "aspectLock": true
-          }
-        }
       }
     },
     {
@@ -1949,32 +1730,14 @@
         },
         "portrait": {
           "x": 35,
-          "y": -10,
-          "width": 25,
-          "height": 25,
+          "y": 5,
+          "width": 35,
+          "height": 35,
           "aspectLock": true
         }
       },
       "properties": {
         "allowParentOverflow": true
-      },
-      "alternateLayouts": {
-        "class-resource": {
-          "landscape": {
-            "x": 45,
-            "y": 0,
-            "width": 35,
-            "height": 35,
-            "aspectLock": true
-          },
-          "portrait": {
-            "x": 35,
-            "y": -10,
-            "width": 25,
-            "height": 25,
-            "aspectLock": true
-          }
-        }
       }
     },
     {
@@ -1984,35 +1747,19 @@
       "layouts": {
         "landscape": {
           "x": 25,
-          "y": 40,
+          "y": 80,
           "width": 130,
           "height": 60
         },
         "portrait": {
-          "x": -5,
-          "y": 15,
-          "width": 120,
+          "x": 10,
+          "y": 70,
+          "width": 130,
           "height": 80
         }
       },
       "properties": {
         "allowParentOverflow": true
-      },
-      "alternateLayouts": {
-        "class-resource": {
-          "landscape": {
-            "x": 25,
-            "y": 75,
-            "width": 130,
-            "height": 60
-          },
-          "portrait": {
-            "x": -5,
-            "y": 35,
-            "width": 120,
-            "height": 80
-          }
-        }
       }
     },
     {
@@ -2031,33 +1778,15 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 100,
+          "x": 95,
           "y": 0,
-          "width": 20,
-          "height": 20,
+          "width": 30,
+          "height": 30,
           "aspectLock": true
         }
       },
       "properties": {
         "allowParentOverflow": true
-      },
-      "alternateLayouts": {
-        "class-resource": {
-          "landscape": {
-            "x": 99,
-            "y": 0,
-            "width": 26,
-            "height": 26,
-            "aspectLock": true
-          },
-          "portrait": {
-            "x": 100,
-            "y": 0,
-            "width": 20,
-            "height": 20,
-            "aspectLock": true
-          }
-        }
       }
     },
     {
@@ -2076,33 +1805,15 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 80,
+          "x": 70,
           "y": 0,
-          "width": 20,
-          "height": 20,
+          "width": 30,
+          "height": 30,
           "aspectLock": true
         }
       },
       "properties": {
         "allowParentOverflow": true
-      },
-      "alternateLayouts": {
-        "class-resource": {
-          "landscape": {
-            "x": 73,
-            "y": 0,
-            "width": 26,
-            "height": 26,
-            "aspectLock": true
-          },
-          "portrait": {
-            "x": 80,
-            "y": 0,
-            "width": 20,
-            "height": 20,
-            "aspectLock": true
-          }
-        }
       }
     },
     {
@@ -2121,33 +1832,15 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 60,
+          "x": 45,
           "y": 0,
-          "width": 20,
-          "height": 20,
+          "width": 30,
+          "height": 30,
           "aspectLock": true
         }
       },
       "properties": {
         "allowParentOverflow": true
-      },
-      "alternateLayouts": {
-        "class-resource": {
-          "landscape": {
-            "x": 47,
-            "y": 0,
-            "width": 26,
-            "height": 26,
-            "aspectLock": true
-          },
-          "portrait": {
-            "x": 60,
-            "y": 0,
-            "width": 20,
-            "height": 20,
-            "aspectLock": true
-          }
-        }
       }
     },
     {
@@ -2166,33 +1859,15 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 40,
+          "x": 20,
           "y": 0,
-          "width": 20,
-          "height": 20,
+          "width": 30,
+          "height": 30,
           "aspectLock": true
         }
       },
       "properties": {
         "allowParentOverflow": true
-      },
-      "alternateLayouts": {
-        "class-resource": {
-          "landscape": {
-            "x": 21,
-            "y": 0,
-            "width": 26,
-            "height": 26,
-            "aspectLock": true
-          },
-          "portrait": {
-            "x": 40,
-            "y": 0,
-            "width": 20,
-            "height": 20,
-            "aspectLock": true
-          }
-        }
       }
     },
     {
@@ -2211,33 +1886,15 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 20,
+          "x": -5,
           "y": 0,
-          "width": 20,
-          "height": 20,
+          "width": 30,
+          "height": 30,
           "aspectLock": true
         }
       },
       "properties": {
         "allowParentOverflow": true
-      },
-      "alternateLayouts": {
-        "class-resource": {
-          "landscape": {
-            "x": -5,
-            "y": 0,
-            "width": 26,
-            "height": 26,
-            "aspectLock": true
-          },
-          "portrait": {
-            "x": 20,
-            "y": 0,
-            "width": 20,
-            "height": 20,
-            "aspectLock": true
-          }
-        }
       }
     },
     {
@@ -2248,36 +1905,20 @@
       "layouts": {
         "landscape": {
           "x": 25,
-          "y": 45,
+          "y": 40,
           "width": 110,
           "height": 32
         },
         "portrait": {
-          "x": 15,
-          "y": 10,
-          "width": 90,
+          "x": 5,
+          "y": 35,
+          "width": 60,
           "height": 30
         }
       },
       "visible": true,
       "properties": {
         "allowParentOverflow": true
-      },
-      "alternateLayouts": {
-        "class-resource": {
-          "landscape": {
-            "x": 25,
-            "y": 45,
-            "width": 110,
-            "height": 32
-          },
-          "portrait": {
-            "x": 15,
-            "y": 10,
-            "width": 90,
-            "height": 30
-          }
-        }
       }
     },
     {
@@ -2290,14 +1931,14 @@
       },
       "layouts": {
         "landscape": {
-          "x": 0,
-          "y": -5,
+          "x": 65,
+          "y": 0,
           "width": 65,
           "height": 32.5,
           "aspectLock": true
         },
         "portrait": {
-          "x": 10,
+          "x": 70,
           "y": 0,
           "width": 45,
           "height": 22.5,
@@ -2306,24 +1947,6 @@
       },
       "properties": {
         "allowParentOverflow": true
-      },
-      "alternateLayouts": {
-        "class-resource": {
-          "landscape": {
-            "x": 60,
-            "y": -5,
-            "width": 65,
-            "height": 32.5,
-            "aspectLock": true
-          },
-          "portrait": {
-            "x": 45,
-            "y": 0,
-            "width": 45,
-            "height": 22.5,
-            "aspectLock": true
-          }
-        }
       }
     },
     {
@@ -2336,40 +1959,22 @@
       },
       "layouts": {
         "landscape": {
-          "x": 78,
-          "y": -5,
+          "x": 20,
+          "y": 0,
           "width": 32,
           "height": 32,
           "aspectLock": true
         },
         "portrait": {
-          "x": 55,
+          "x": 30,
           "y": 0,
-          "width": 25,
-          "height": 25,
+          "width": 35,
+          "height": 35,
           "aspectLock": true
         }
       },
       "properties": {
         "allowParentOverflow": true
-      },
-      "alternateLayouts": {
-        "class-resource": {
-          "landscape": {
-            "x": 20,
-            "y": -5,
-            "width": 32,
-            "height": 32,
-            "aspectLock": true
-          },
-          "portrait": {
-            "x": 20,
-            "y": 0,
-            "width": 25,
-            "height": 25,
-            "aspectLock": true
-          }
-        }
       }
     },
     {
@@ -2387,8 +1992,8 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 125,
-          "y": 485,
+          "x": 200,
+          "y": 612.5,
           "width": 140,
           "height": 52.132132132132135,
           "aspectLock": true
@@ -2408,8 +2013,8 @@
           "height": 202
         },
         "portrait": {
-          "x": 0,
-          "y": 492,
+          "x": 75,
+          "y": 619.5,
           "width": 390,
           "height": 201
         }
@@ -2423,8 +2028,8 @@
             "height": 202
           },
           "portrait": {
-            "x": 0,
-            "y": 492,
+            "x": 75,
+            "y": 619.5,
             "width": 390,
             "height": 201
           }
@@ -2531,10 +2136,10 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 135,
-          "y": 10,
-          "width": 120,
-          "height": 64,
+          "x": 120,
+          "y": 65,
+          "width": 150,
+          "height": 80,
           "aspectLock": true
         }
       },
@@ -2551,10 +2156,10 @@
             "aspectLock": true
           },
           "portrait": {
-            "x": 180,
-            "y": 10,
-            "width": 120,
-            "height": 64,
+            "x": 120,
+            "y": 65,
+            "width": 150,
+            "height": 80,
             "aspectLock": true
           }
         }
@@ -2579,10 +2184,10 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 60,
-          "y": 95,
-          "width": 120,
-          "height": 60,
+          "x": 5,
+          "y": 205,
+          "width": 150,
+          "height": 75,
           "aspectLock": true
         }
       },
@@ -2599,10 +2204,10 @@
             "aspectLock": true
           },
           "portrait": {
-            "x": 105,
-            "y": 95,
-            "width": 120,
-            "height": 60,
+            "x": 5,
+            "y": 205,
+            "width": 150,
+            "height": 75,
             "aspectLock": true
           }
         }
@@ -2627,10 +2232,10 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 215,
-          "y": 80,
-          "width": 108,
-          "height": 71.86764705882354,
+          "x": 235,
+          "y": 190,
+          "width": 135.24861878453038,
+          "height": 90,
           "aspectLock": true
         }
       },
@@ -2647,10 +2252,10 @@
             "aspectLock": true
           },
           "portrait": {
-            "x": 260,
-            "y": 80,
-            "width": 108,
-            "height": 71.86764705882354,
+            "x": 235,
+            "y": 190,
+            "width": 135.24861878453038,
+            "height": 90,
             "aspectLock": true
           }
         }
@@ -2674,10 +2279,10 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 8,
-          "y": 550,
-          "width": 100,
-          "height": 50,
+          "x": 10,
+          "y": 725,
+          "width": 120,
+          "height": 60,
           "aspectLock": true
         }
       },
@@ -2691,10 +2296,10 @@
             "aspectLock": true
           },
           "portrait": {
-            "x": 8,
-            "y": 550,
-            "width": 100,
-            "height": 50,
+            "x": 10,
+            "y": 725,
+            "width": 120,
+            "height": 60,
             "aspectLock": true
           }
         }
@@ -2735,14 +2340,26 @@
       "parent": "back-lobby",
       "layer": 3,
       "label": "XP numbers",
-      "properties": { "allowParentOverflow": true },
+      "properties": {
+        "allowParentOverflow": true
+      },
       "stateVisibility": {
         "battle": false,
         "post-match": true
       },
       "layouts": {
-        "landscape": { "x": 0, "y": -26, "width": 256, "height": 24 },
-        "portrait": { "x": 0, "y": -26, "width": 256, "height": 24 }
+        "landscape": {
+          "x": 0,
+          "y": -26,
+          "width": 256,
+          "height": 24
+        },
+        "portrait": {
+          "x": 0,
+          "y": -26,
+          "width": 256,
+          "height": 24
+        }
       }
     },
     {
@@ -2761,10 +2378,10 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 100,
-          "y": 55,
-          "width": 33,
-          "height": 36.04615384615385,
+          "x": 90,
+          "y": 145,
+          "width": 50,
+          "height": 54.61538461538462,
           "aspectLock": true
         }
       },
@@ -2781,10 +2398,10 @@
             "aspectLock": true
           },
           "portrait": {
-            "x": 145,
-            "y": 55,
-            "width": 33,
-            "height": 36.04615384615385,
+            "x": 90,
+            "y": 145,
+            "width": 50,
+            "height": 54.61538461538462,
             "aspectLock": true
           }
         }
@@ -2806,10 +2423,10 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 255,
-          "y": 50,
-          "width": 35,
-          "height": 38.23076923076923,
+          "x": 260,
+          "y": 135,
+          "width": 50,
+          "height": 54.61538461538462,
           "aspectLock": true
         }
       },
@@ -2826,10 +2443,10 @@
             "aspectLock": true
           },
           "portrait": {
-            "x": 300,
-            "y": 50,
-            "width": 35,
-            "height": 38.23076923076923,
+            "x": 260,
+            "y": 135,
+            "width": 50,
+            "height": 54.61538461538462,
             "aspectLock": true
           }
         }
@@ -2851,10 +2468,10 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 175,
-          "y": 105,
-          "width": 45,
-          "height": 22.5,
+          "x": 145,
+          "y": 225,
+          "width": 90,
+          "height": 45,
           "aspectLock": true
         }
       },
@@ -2871,10 +2488,10 @@
             "aspectLock": true
           },
           "portrait": {
-            "x": 220,
-            "y": 105,
-            "width": 45,
-            "height": 22.5,
+            "x": 145,
+            "y": 225,
+            "width": 90,
+            "height": 45,
             "aspectLock": true
           }
         }
@@ -2899,8 +2516,8 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 5,
-          "y": 10,
+          "x": 35,
+          "y": 35,
           "width": 64,
           "height": 64,
           "aspectLock": true
@@ -2916,8 +2533,8 @@
             "aspectLock": true
           },
           "portrait": {
-            "x": 5,
-            "y": 10,
+            "x": 80,
+            "y": 137.5,
             "width": 64,
             "height": 64,
             "aspectLock": true
@@ -2944,8 +2561,8 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 320,
-          "y": 10,
+          "x": 440,
+          "y": 40,
           "width": 64,
           "height": 64,
           "aspectLock": true
@@ -2961,8 +2578,8 @@
             "aspectLock": true
           },
           "portrait": {
-            "x": 320,
-            "y": 10,
+            "x": 395,
+            "y": 137.5,
             "width": 64,
             "height": 64,
             "aspectLock": true

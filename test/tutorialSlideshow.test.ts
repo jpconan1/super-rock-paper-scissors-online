@@ -69,6 +69,19 @@ vi.mock('../src/renderer/boilingSprite', () => ({
   createBoilingSprite: () => ({ element: new FakeElement(), destroy() {} }),
 }));
 
+vi.mock('../src/ui/fixedAlertCanvas', () => ({
+  applyAlertGeometry: (element: FakeElement, geometry: Record<string, { x: number; y: number; width: number; height: number }>, orientation: string) => {
+    const rect = geometry[orientation]!;
+    element.style.setProperty('left', `${rect.x}px`); element.style.setProperty('top', `${rect.y}px`);
+    element.style.setProperty('width', `${rect.width}px`); element.style.setProperty('height', `${rect.height}px`);
+  },
+  createFixedAlertCanvas: (container: FakeElement, className: string, onLayoutChange: (orientation: string) => void) => {
+    const element = fakeDocument.createElement('div'); const content = fakeDocument.createElement('div');
+    element.className = className; element.append(content); container.append(element); onLayoutChange('landscape');
+    return { element, content, orientation: 'landscape', destroy: () => element.remove() };
+  },
+}));
+
 import { ABM_TUTORIAL_SLIDES, mountTutorialSlideshow } from '../src/app/tutorialSlideshow';
 
 describe('tutorial slideshow', () => {
@@ -84,6 +97,8 @@ describe('tutorial slideshow', () => {
       ['h1', 'tutorial-slideshow__text tutorial-slideshow__text--heading', 'Super Attack Block Mana!'],
       ['p', 'tutorial-slideshow__text tutorial-slideshow__text--body', 'Super ABM is a simultaneous reveal game like Rock Paper Scissors, but with resources and classes.'],
     ]);
+    const panel = (slideshow.element as unknown as FakeElement).querySelectorAll('*').find((element) => element.className.includes('tutorial-slideshow__panel'))!;
+    expect(Object.fromEntries(panel.style.values)).toMatchObject({ left: '90px', top: '48px', width: '780px', height: '444px' });
     slideshow.destroy();
   });
 

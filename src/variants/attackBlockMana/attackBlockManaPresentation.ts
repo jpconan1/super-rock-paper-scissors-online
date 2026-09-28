@@ -63,8 +63,11 @@ export function getAbmPlayerResourceGeometry(
   element: LayoutElement,
   orientation: LayoutOrientation,
   hasLimitedResource: boolean,
+  limitedResourceGroup: LayoutElement,
 ): LayoutGeometry {
-  return hasLimitedResource ? getAbmClassResourceGeometry(element, orientation) : element.layouts[orientation];
+  const geometry = element.layouts[orientation];
+  if (hasLimitedResource || !element.id.endsWith('-block-group')) return geometry;
+  return { ...geometry, y: limitedResourceGroup.layouts[orientation].y };
 }
 
 export function getAbmClassBadgeGeometry(
@@ -78,10 +81,18 @@ export function getAbmClassBadgeGeometry(
 
 export const ABM_LAYOUTS: readonly ResponsiveScaleBoxLayout<LayoutOrientation>[] = [
   { name: 'landscape', width: 960, height: 540, minAspectRatio: 1 },
-  { name: 'portrait', width: 390, height: 705, minAspectRatio: 0 },
+  { name: 'portrait', width: 540, height: 960, minAspectRatio: 0 },
 ];
 
 export interface AbmWaitingVisual { readyFrame: string; split: boolean; dots?: 1 | 2 | 3; countdown?: 1 | 2 | 3 | 4 | 5 }
+export function getAbmWaitingLayoutIds(early: 'p1' | 'p2', late: 'p1' | 'p2') {
+  return {
+    ready: `${early}-waiting-ready`,
+    countdown: `${late}-waiting-ready`,
+    dots: `${late}-waiting-dots`,
+  } as const;
+}
+
 export function getAbmWaitingVisual(serverTime: number, waitingStartsAt: number, deadlineAt: number): AbmWaitingVisual {
   const readyFrames = ['1', '2', '3', '4', '5', '6', 'rdy'] as const;
   const readyStartedAt = waitingStartsAt - 3 * 58;
@@ -443,8 +454,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
       ['pick-class-header', pickClassHeader.element],
       ...(counterpickTag ? [['p2-counterpick-tag', counterpickTag.element] as [string, HTMLElement]] : []),
       ...(sceneArtwork ? [['scene-art', sceneArtwork] as [string, HTMLElement]] : []),
-      ['picker-portrait', portrait.element], ['picker-copy', copy.element], ['waiting-ready', readyArt.element], ['waiting-dots', dotsArt.element],
-      ['waiting-ready', countdownArt.element],
+      ['picker-portrait', portrait.element], ['picker-copy', copy.element],
       ...p1Resources.bindings, ...p2Resources.bindings,
       ...tagSlots,
       ...arrows,
@@ -454,7 +464,12 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
       applyConfiguredElement(target, definition, orientation);
       const resourcePlayer = resourceBindingPlayers.get(id);
       if (resourcePlayer) {
-        applyLayoutGeometry(target, getAbmPlayerResourceGeometry(definition, orientation, playerHasLimitedResource[resourcePlayer]));
+        applyLayoutGeometry(target, getAbmPlayerResourceGeometry(
+          definition,
+          orientation,
+          playerHasLimitedResource[resourcePlayer],
+          config(`${resourcePlayer}-limited-group`),
+        ));
       } else if (usingClassResourceControls) {
         applyLayoutGeometry(target, getAbmClassResourceGeometry(definition, orientation));
       }
@@ -700,15 +715,10 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     waiting.classList.toggle('is-early-p1', early === 'p1'); waiting.classList.toggle('is-early-p2', early === 'p2');
     waiting.classList.toggle('is-late-p1', late === 'p1'); waiting.classList.toggle('is-late-p2', late === 'p2');
     const waitingStartsAt = nextProjection.waitingStartsAt!; const deadlineAt = nextProjection.waitingDeadlineAt!;
-    const readyLeft = orientation === 'portrait'
-      ? (early === 'p1' ? -19 : 221)
-      : (early === 'p1' ? -69 : 153);
-    readyArt.element.style.left = `${readyLeft}px`;
-    dotsArt.element.style.left = `${late === 'p1' ? 75 : 227}px`;
-    const countdownLeft = orientation === 'portrait'
-      ? (late === 'p1' ? -19 : 221)
-      : (late === 'p1' ? -69 : 153);
-    countdownArt.element.style.left = `${countdownLeft}px`;
+    const waitingLayouts = getAbmWaitingLayoutIds(early, late);
+    applyConfiguredElement(readyArt.element, config(waitingLayouts.ready), orientation);
+    applyConfiguredElement(dotsArt.element, config(waitingLayouts.dots), orientation);
+    applyConfiguredElement(countdownArt.element, config(waitingLayouts.countdown), orientation);
     const visual = getAbmWaitingVisual(serverTime, waitingStartsAt, deadlineAt);
     sceneArtwork.hidden = visual.countdown !== undefined;
     readyArt.setSource(`/visual-elements/ready-waiting/${visual.readyFrame}_sheet.webp`);

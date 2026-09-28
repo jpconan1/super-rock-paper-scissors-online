@@ -16,7 +16,7 @@ type FireballWarLayoutName = 'landscape' | 'portrait';
 
 export const FIREBALL_WAR_LAYOUTS: readonly ResponsiveScaleBoxLayout<FireballWarLayoutName>[] = [
   { name: 'landscape', width: 960, height: 540, minAspectRatio: 1 },
-  { name: 'portrait', width: 390, height: 705, minAspectRatio: 0 },
+  { name: 'portrait', width: 540, height: 960, minAspectRatio: 0 },
 ];
 
 export const FIREBALL_WAR_MOVE_ART: Record<FireballWarMove, { up: string; between: string; depressed: string }> = {

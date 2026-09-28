@@ -237,7 +237,7 @@ describe('Fireball War layout contract', () => {
   test('uses the approved authored composition sizes', () => {
     expect(FIREBALL_WAR_LAYOUTS).toEqual([
       { name: 'landscape', width: 960, height: 540, minAspectRatio: 1 },
-      { name: 'portrait', width: 390, height: 705, minAspectRatio: 0 },
+      { name: 'portrait', width: 540, height: 960, minAspectRatio: 0 },
     ]);
   });
 

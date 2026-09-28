@@ -41,7 +41,13 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
 
   let layoutName: 'landscape' | 'portrait' = 'landscape';
   const bindings: { id: string; element: HTMLElement }[] = [];
-  const applyLayout = () => applyDocumentLayout(TITLE_LAYOUT, layoutName, bindings);
+  let landscapeDiscordElement: HTMLElement | undefined;
+  let portraitDiscordElement: HTMLElement | undefined;
+  const applyLayout = () => {
+    applyDocumentLayout(TITLE_LAYOUT, layoutName, bindings);
+    if (landscapeDiscordElement) landscapeDiscordElement.hidden = layoutName === 'portrait';
+    if (portraitDiscordElement) portraitDiscordElement.hidden = layoutName !== 'portrait';
+  };
   const canvas = createMenuCanvas(screen, 'title-screen', (name) => { layoutName = name; applyLayout(); });
   const composition = canvas.composition;
 
@@ -159,6 +165,17 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
     clock,
   });
   discord.element.classList.add('title-screen__discord', 'game-button--baked-label');
+  const discordPortrait = createGameButton({
+    label: 'Join the ABM Community Discord',
+    onActivate: () => openDiscordInvite(),
+    upSheet: titleElement('discord-portrait').assets!.up!,
+    betweenSheet: titleElement('discord-portrait').assets!.between!,
+    depressedSheet: titleElement('discord-portrait').assets!.depressed!,
+    clock,
+  });
+  discordPortrait.element.classList.add('title-screen__discord', 'title-screen__discord--portrait', 'game-button--baked-label');
+  landscapeDiscordElement = discord.element;
+  portraitDiscordElement = discordPortrait.element;
 
   const onNameKeyDown = (event: KeyboardEvent) => {
     if (event.key !== 'Enter' || event.isComposing) return;
@@ -167,13 +184,14 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
   };
   nameEntry.input.addEventListener('keydown', onNameKeyDown);
 
-  composition.append(logo.element, randomName.element, enterLobby.element, nameEntry.element, googleElement, discord.element,
+  composition.append(logo.element, randomName.element, enterLobby.element, nameEntry.element, googleElement, discord.element, discordPortrait.element,
     soundToggle.element, musicVolume.element, sfxVolume.element, boilToggle.element, onlineCount);
   bindings.push(
     { id: 'logo', element: logo.element }, { id: 'random-name', element: randomName.element },
     { id: 'enter-lobby', element: enterLobby.element }, { id: 'name-entry', element: nameEntry.element },
     { id: 'google-sign-in', element: googleElement },
     { id: 'discord', element: discord.element },
+    { id: 'discord-portrait', element: discordPortrait.element },
     { id: 'sound-toggle', element: soundToggle.element }, { id: 'music-slider', element: musicVolume.element },
     { id: 'sfx-slider', element: sfxVolume.element }, { id: 'boil-toggle', element: boilToggle.element },
     { id: 'online-count', element: onlineCount },
@@ -196,6 +214,7 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
     enterLobby.destroy();
     google?.destroy();
     discord.destroy();
+    discordPortrait.destroy();
     countStopped = true; window.clearInterval(countTimer);
     screen.remove();
   }) as TitleScreenMount;

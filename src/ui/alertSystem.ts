@@ -1,6 +1,14 @@
 import type { BoilClock } from '../animation/boilClock';
 import { createGameButton, type GameButton } from '../input/gameButton';
 import { createTextbox } from './textbox';
+import {
+  applyAlertGeometry,
+  createFixedAlertCanvas,
+  type ResponsiveAlertGeometry,
+} from './fixedAlertCanvas';
+
+export { STANDARD_CONFIRMATION_GEOMETRY } from './fixedAlertCanvas';
+export type { AlertRect, ResponsiveAlertGeometry } from './fixedAlertCanvas';
 
 export interface AlertButtonSheets {
   up: string;
@@ -18,6 +26,7 @@ export interface AlertAction<T> {
 
 export interface AlertOptions<T> {
   ariaLabel: string;
+  geometry: ResponsiveAlertGeometry;
   content: string | Node;
   actions: readonly AlertAction<T>[];
   role?: 'dialog' | 'alertdialog';
@@ -60,8 +69,11 @@ export class AlertSystem {
   show<T>(options: AlertOptions<T>): AlertHandle<T> {
     if (this.destroyed) throw new Error('Alert system has been destroyed.');
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
-    const backdrop = document.createElement('div');
-    backdrop.className = 'alert-system';
+    let textboxElement: HTMLElement | undefined;
+    const canvas = createFixedAlertCanvas(this.container, 'alert-system', (orientation) => {
+      if (textboxElement) applyAlertGeometry(textboxElement, options.geometry, orientation);
+    });
+    const backdrop = canvas.element;
     backdrop.dataset.dismissible = String(options.dismissible !== false);
     const content = typeof options.content === 'string' ? document.createTextNode(options.content) : options.content;
     const message = document.createElement('div');
@@ -79,9 +91,11 @@ export class AlertSystem {
       ariaLabel: options.ariaLabel,
       content: [message, error, actions],
     });
+    textboxElement = textbox.element;
+    applyAlertGeometry(textbox.element, options.geometry, canvas.orientation);
     textbox.element.setAttribute('aria-modal', 'true');
     textbox.element.tabIndex = -1;
-    backdrop.append(textbox.element);
+    canvas.content.append(textbox.element);
 
     let closed = false;
     let busy = false;
@@ -99,7 +113,7 @@ export class AlertSystem {
       if (index >= 0) this.stack.splice(index, 1);
       buttons.forEach((button) => button.destroy());
       textbox.destroy();
-      backdrop.remove();
+      canvas.destroy();
       resolveResult(value);
       this.syncStack();
       if (previousFocus?.isConnected) previousFocus.focus();
@@ -140,7 +154,6 @@ export class AlertSystem {
 
     if (!this.hasOpenAlert) this.backgroundWasInert = this.background.inert;
     this.stack.push({ handle, previousFocus, buttons, dismissible: options.dismissible !== false, dismissValue: options.dismissValue, close });
-    this.container.append(backdrop);
     this.syncStack();
     queueMicrotask(() => textbox.element.focus());
     void Promise.all(buttons.map((button) => button.ready)).then(() => {

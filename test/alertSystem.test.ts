@@ -74,9 +74,20 @@ vi.mock('../src/ui/textbox', () => ({
   },
 }));
 
+vi.mock('../src/ui/fixedAlertCanvas', () => ({
+  STANDARD_CONFIRMATION_GEOMETRY: { landscape: { x: 0, y: 0, width: 1, height: 1 }, portrait: { x: 0, y: 0, width: 1, height: 1 } },
+  applyAlertGeometry() {},
+  createFixedAlertCanvas: (container: FakeElement, className: string, onLayoutChange: (orientation: string) => void) => {
+    const element = fakeDocument.createElement('div'); const content = fakeDocument.createElement('div');
+    element.className = className; element.append(content); container.append(element); onLayoutChange('landscape');
+    return { element, content, orientation: 'landscape', destroy: () => element.remove() };
+  },
+}));
+
 import { AlertSystem, type AlertButtonSheets } from '../src/ui/alertSystem';
 
 const sheets: AlertButtonSheets = { up: '/up', between: '/between', depressed: '/down' };
+const geometry = { landscape: { x: 1, y: 2, width: 3, height: 4 }, portrait: { x: 5, y: 6, width: 7, height: 8 } };
 const key = (value: string, shift = false) => {
   const event = new FakeKeyboardEvent(value, shift);
   for (const listener of [...listeners]) listener(event);
@@ -89,10 +100,10 @@ describe('AlertSystem', () => {
 
   test('confirm resolves button results and Escape resolves false', async () => {
     const system = new AlertSystem(new FakeElement() as unknown as HTMLElement, new FakeElement() as unknown as HTMLElement, {} as never);
-    const accepted = system.confirm({ ariaLabel: 'Confirm', content: 'Continue?', cancel: { label: 'Back', sheets }, confirm: { label: 'Continue', sheets } });
+    const accepted = system.confirm({ ariaLabel: 'Confirm', geometry, content: 'Continue?', cancel: { label: 'Back', sheets }, confirm: { label: 'Continue', sheets } });
     buttons((system as unknown as { stack: Array<{ handle: { element: HTMLElement } }> }).stack[0]!.handle.element)[1]!.activate!();
     await expect(accepted).resolves.toBe(true);
-    const dismissed = system.confirm({ ariaLabel: 'Confirm', content: 'Continue?', cancel: { label: 'Back', sheets }, confirm: { label: 'Continue', sheets } });
+    const dismissed = system.confirm({ ariaLabel: 'Confirm', geometry, content: 'Continue?', cancel: { label: 'Back', sheets }, confirm: { label: 'Continue', sheets } });
     key('Escape');
     await expect(dismissed).resolves.toBe(false);
   });
@@ -100,9 +111,9 @@ describe('AlertSystem', () => {
   test('Escape closes only the top alert and restores its prior focus', async () => {
     const container = new FakeElement(); const background = new FakeElement(); const origin = new FakeElement(); origin.focus();
     const system = new AlertSystem(container as unknown as HTMLElement, background as unknown as HTMLElement, {} as never);
-    const lower = system.show({ ariaLabel: 'Lower', content: 'Lower', actions: [{ label: 'OK', value: 'lower', sheets }] });
+    const lower = system.show({ ariaLabel: 'Lower', geometry, content: 'Lower', actions: [{ label: 'OK', value: 'lower', sheets }] });
     const lowerButton = buttons(lower.element)[0]!; lowerButton.focus();
-    const upper = system.show({ ariaLabel: 'Upper', content: 'Upper', actions: [{ label: 'OK', value: 'upper', sheets }] });
+    const upper = system.show({ ariaLabel: 'Upper', geometry, content: 'Upper', actions: [{ label: 'OK', value: 'upper', sheets }] });
     key('Escape');
     await expect(upper.result).resolves.toBeUndefined();
     expect(system.hasOpenAlert).toBe(true);
@@ -113,7 +124,7 @@ describe('AlertSystem', () => {
 
   test('Tab wraps inside the top alert', () => {
     const system = new AlertSystem(new FakeElement() as unknown as HTMLElement, new FakeElement() as unknown as HTMLElement, {} as never);
-    const handle = system.show({ ariaLabel: 'Alert', content: 'Alert', actions: [
+    const handle = system.show({ ariaLabel: 'Alert', geometry, content: 'Alert', actions: [
       { label: 'One', value: 1, sheets }, { label: 'Two', value: 2, sheets },
     ] });
     const [first, last] = buttons(handle.element); last!.focus();
@@ -125,13 +136,13 @@ describe('AlertSystem', () => {
     const system = new AlertSystem(new FakeElement() as unknown as HTMLElement, new FakeElement() as unknown as HTMLElement, {} as never);
     let reject!: (error: Error) => void;
     const action = vi.fn(() => new Promise<void>((_resolve, rejectPromise) => { reject = rejectPromise; }));
-    const handle = system.show({ ariaLabel: 'Async', content: 'Async', actions: [{ label: 'Go', value: true, sheets, onActivate: action }] });
+    const handle = system.show({ ariaLabel: 'Async', geometry, content: 'Async', actions: [{ label: 'Go', value: true, sheets, onActivate: action }] });
     const button = (handle.element as unknown as FakeElement).querySelectorAll<FakeElement>('button')[0]!;
     button.activate!(); button.activate!();
     expect(action).toHaveBeenCalledOnce(); expect(button.disabled).toBe(true);
     reject(new Error('Nope')); await Promise.resolve(); await Promise.resolve();
     expect(button.disabled).toBe(false);
-    expect((handle.element as unknown as FakeElement).children[0]!.children[1]!.textContent).toBe('Nope');
+    expect((handle.element as unknown as FakeElement).children[0]!.children[0]!.children[1]!.textContent).toBe('Nope');
     handle.close(); handle.close();
     await expect(handle.result).resolves.toBeUndefined();
   });
@@ -139,8 +150,8 @@ describe('AlertSystem', () => {
   test('closeAll and destroy are idempotent and restore background inertness', async () => {
     const container = new FakeElement(); const background = new FakeElement();
     const system = new AlertSystem(container as unknown as HTMLElement, background as unknown as HTMLElement, {} as never);
-    const first = system.show({ ariaLabel: 'One', content: 'One', actions: [{ label: 'OK', value: true, sheets }] });
-    const second = system.show({ ariaLabel: 'Two', content: 'Two', actions: [{ label: 'OK', value: true, sheets }] });
+    const first = system.show({ ariaLabel: 'One', geometry, content: 'One', actions: [{ label: 'OK', value: true, sheets }] });
+    const second = system.show({ ariaLabel: 'Two', geometry, content: 'Two', actions: [{ label: 'OK', value: true, sheets }] });
     expect(background.inert).toBe(true);
     system.closeAll(); system.closeAll(); system.destroy(); system.destroy();
     expect(background.inert).toBe(false);

@@ -100,24 +100,25 @@ body::before {
   position: absolute;
   inset: 0;
   display: grid;
-  padding: clamp(12px, 3vw, 28px);
   place-items: center;
   background: rgba(29, 27, 24, .68);
   pointer-events: auto;
 }
+.fixed-alert-canvas__scale-box,
+.fixed-alert-canvas__content { overflow: visible; }
+.fixed-alert-canvas__content { position: relative; width: 100%; height: 100%; }
 .alert-system__box {
   display: grid;
-  width: min(520px, 100%);
-  padding: clamp(24px, 6vw, 48px);
+  padding: 28px;
   place-items: center;
   gap: 28px;
 }
-.alert-system__content { color: #ac3235; font-size: clamp(32px, 8vw, 52px); font-weight: 900; text-align: center; }
+.alert-system__content { color: #ac3235; font-size: 32px; font-weight: 900; text-align: center; }
 .alert-system__content > :first-child { margin-top: 0; }
 .alert-system__content > :last-child { margin-bottom: 0; }
-.alert-system__error { margin: 0; color: #ac3235; font-size: clamp(16px, 3vw, 22px); font-weight: 900; text-align: center; }
+.alert-system__error { margin: 0; color: #ac3235; font-size: 18px; font-weight: 900; text-align: center; }
 .alert-system__actions { display: flex; width: 100%; flex-wrap: wrap; align-items: center; justify-content: center; gap: 24px; }
-.game-button.alert-system__action { width: min(10rem, 42vw); }
+.game-button.alert-system__action { width: 160px; }
 .tutorial-slideshow {
   position: absolute;
   inset: 0;
@@ -136,12 +137,9 @@ body::before {
   pointer-events: none;
 }
 .tutorial-slideshow__panel {
-  position: relative;
   z-index: 2;
   display: grid;
-  width: min(720px, calc(100% - 32px));
-  min-height: 250px;
-  padding: clamp(26px, 5vw, 48px);
+  padding: 48px;
   place-items: center;
   gap: 24px;
   color: #ac3235;
@@ -149,11 +147,12 @@ body::before {
 }
 .tutorial-slideshow__copy { display: grid; width: 100%; place-items: center; gap: 14px; }
 .tutorial-slideshow__text { margin: 0; }
-.tutorial-slideshow__text--heading { color: #ac3235; font-size: clamp(28px, 5vw, 44px); font-weight: 950; line-height: 1; }
-.tutorial-slideshow__text--subheading { color: #1d1b18; font-size: clamp(20px, 3.6vw, 28px); font-weight: 800; line-height: 1.05; }
-.tutorial-slideshow__text--body { color: #1d1b18; font-size: clamp(17px, 2.8vw, 22px); font-weight: 700; line-height: 1.15; }
+.tutorial-slideshow__text--heading { color: #ac3235; font-size: 32px; font-weight: 950; line-height: 1; }
+.tutorial-slideshow__text--subheading { color: #1d1b18; font-size: 23px; font-weight: 800; line-height: 1.05; }
+.tutorial-slideshow__text--body { color: #1d1b18; font-size: 17px; font-weight: 700; line-height: 1.15; }
 .tutorial-slideshow__actions { position: absolute; inset: 0; pointer-events: none; }
-.tutorial-slideshow__button {
+.tutorial-slideshow__button,
+.game-button.tutorial-slideshow__button {
   position: absolute;
   top: 50%;
   width: 128px;

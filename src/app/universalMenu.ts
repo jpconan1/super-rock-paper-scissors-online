@@ -5,7 +5,7 @@ import { createGameButton } from '../input/gameButton';
 import { createSoundToggle } from '../input/soundToggle';
 import { createVolumeSlider } from '../title/volumeSlider';
 import { createTextbox } from '../ui/textbox';
-import type { AlertButtonSheets, AlertSystem } from '../ui/alertSystem';
+import { STANDARD_CONFIRMATION_GEOMETRY, type AlertButtonSheets, type AlertSystem } from '../ui/alertSystem';
 import { createUnlockController } from './unlockController';
 
 export interface UniversalMenu { element: HTMLElement; destroy(): void; }
@@ -60,6 +60,7 @@ export function mountUniversalMenu(container: HTMLElement, background: HTMLEleme
   const showConfirmation = () => {
     void options.alerts.confirm({
       ariaLabel: 'Are you sure?',
+      geometry: STANDARD_CONFIRMATION_GEOMETRY,
       content: options.mode === 'game' ? GAME_QUIT_CONFIRMATION_COPY : QUIT_CONFIRMATION_COPY,
       dismissible: true,
       cancel: { label: 'Back', sheets: ALERT_BUTTON_SHEETS.back },
@@ -97,6 +98,7 @@ export function mountUniversalMenu(container: HTMLElement, background: HTMLEleme
     const showUnlockConfirmation = () => {
       void options.alerts.confirm({
         ariaLabel: UNLOCK_CONFIRMATION_COPY,
+        geometry: STANDARD_CONFIRMATION_GEOMETRY,
         content: UNLOCK_CONFIRMATION_COPY,
         dismissible: true,
         cancel: { label: 'Dismiss', sheets: ALERT_BUTTON_SHEETS.dismiss },

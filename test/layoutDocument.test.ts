@@ -9,6 +9,18 @@ describe('layout documents', () => {
     for (const document of layoutDocuments.values()) expect(validateLayoutDocument(document)).toBe(document);
   });
 
+  it('uses one canonical landscape and portrait canvas everywhere', () => {
+    for (const document of layoutDocuments.values()) {
+      expect(document.canvases.landscape, document.id).toMatchObject({ width: 960, height: 540 });
+      expect(document.canvases.portrait, document.id).toMatchObject({ width: 540, height: 960 });
+    }
+  });
+
+  it('keeps the shared gameplay parent centered in the canonical portrait canvas', () => {
+    const parent = layoutDocuments.get('game-parent')!;
+    expect(parent.elements.find(({ id }) => id === 'p1-info')!.layouts.portrait).toMatchObject({ x: 87, y: 225.5, width: 180, height: 52 });
+  });
+
   it('ships every requested shared document and nine variants', () => {
     expect([...layoutDocuments.keys()]).toEqual(expect.arrayContaining(['title', 'lobby', 'account', 'variant-select', 'scoreboard', 'game-parent', 'class-reward']));
     expect(variantLayoutDocuments).toHaveLength(9);
@@ -39,6 +51,16 @@ describe('layout documents', () => {
       up: '/title/discord/discord-button-up-sheet.webp',
       between: '/title/discord/discord-button-between-sheet.webp',
       depressed: '/title/discord/discord-button-depressed-sheet.webp',
+    });
+    expect(discord?.layouts.portrait).toMatchObject({ x: 245, y: 20, width: 270, height: 51.041095890375 });
+    const portraitDiscord = layoutDocuments.get('title')!.elements.find((element) => element.id === 'discord-portrait');
+    expect(portraitDiscord?.assets).toEqual({
+      up: '/title/discord/discord-button-portrait-up-sheet.webp',
+      between: '/title/discord/discord-button-portrait-between-sheet.webp',
+      depressed: '/title/discord/discord-button-portrait-depressed-sheet.webp',
+    });
+    expect(portraitDiscord?.layouts.portrait).toMatchObject({
+      x: 450.8356164384, y: 20, width: 69.1643835616, height: 244.1095890411,
     });
   });
 
@@ -89,5 +111,15 @@ describe('layout documents', () => {
     expect(() => validateLayoutDocument(document)).toThrow(/exceeds parent/i);
     tag.properties = { ...(tag.properties ?? {}), allowParentOverflow: true };
     expect(validateLayoutDocument(document)).toBe(document);
+  });
+
+  it('allows waiting art outside the scene and keeps one authored player-resource layout', () => {
+    const document = layoutDocuments.get('variant-abm')!;
+    for (const id of ['p1-waiting-ready', 'p2-waiting-ready', 'p1-waiting-dots', 'p2-waiting-dots']) {
+      expect(document.elements.find((element) => element.id === id)?.properties?.allowParentOverflow, id).toBe(true);
+    }
+    for (const element of document.elements.filter(({ id }) => /^p[12]-(?:resources|mana-|block-|limited-)/.test(id))) {
+      expect(element.alternateLayouts, element.id).toBeUndefined();
+    }
   });
 });
