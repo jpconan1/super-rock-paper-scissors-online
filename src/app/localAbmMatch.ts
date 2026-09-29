@@ -7,6 +7,7 @@ import {
 } from '../core/onlineMatch';
 import type { PlayerId } from '../core/variant';
 import { randomId } from '../core/randomId';
+import { beats } from '../core/time';
 import { PROTOCOL_VERSION, type MatchPlayer, type ServerSnapshot } from '../protocol/protocol';
 import { ABM_CLASSES } from '../variants/attackBlockMana/attackBlockManaCatalog';
 import type { AbmClassId, AbmCommand, AbmMove, AbmProjection, AbmState } from '../variants/attackBlockMana/attackBlockManaTypes';
@@ -24,7 +25,7 @@ interface LocalAbmMatchOptions {
   unlockedClassIds?: readonly import('../variants/attackBlockMana/attackBlockManaTypes').AbmClassId[];
   startingClasses?: Readonly<Record<PlayerId, AbmClassId>>;
   computerStartsPaused?: boolean;
-  tutorial?: { onEnding(ending: TutorialEnding): void };
+  tutorial?: { onEnding(ending: TutorialEnding, omitIntro: boolean): void };
 }
 
 const HUMAN: PlayerId = 'p1';
@@ -44,6 +45,8 @@ export class LocalAbmMatch {
   private commandSequence = 0;
   private tutorialStage: TutorialStage = 'opening';
   private tutorialEnding?: TutorialEnding;
+  private tutorialEndingOmitsIntro = false;
+  private completedTutorialEnding?: TutorialEnding;
   private tutorialLastCompleteMoves?: Readonly<Record<PlayerId, AbmMove>>;
 
   constructor(private readonly options: LocalAbmMatchOptions) {
@@ -68,6 +71,7 @@ export class LocalAbmMatch {
       game.tutorialDisableLucky = true;
       game.tutorialHideClassBadges = true;
       game.tutorialNoDeadline = true;
+      game.tutorialShowBlockTag = true;
       this.state.deadlineAt = undefined;
     }
   }
@@ -96,6 +100,42 @@ export class LocalAbmMatch {
     if (this.stopped || !this.computerPaused) return;
     this.computerPaused = false;
     this.scheduleNextAction();
+  }
+
+  continueAfterTutorialEnding(ending: TutorialEnding): void {
+    if (this.stopped || this.tutorialStage !== 'ended' || this.completedTutorialEnding !== ending) return;
+    const game = this.state.gameState as AbmState;
+    game.tutorialDisableLucky = undefined;
+    game.tutorialHideClassBadges = undefined;
+    game.tutorialNoDeadline = undefined;
+    this.tutorialStage = 'freeplay';
+    this.completedTutorialEnding = undefined;
+    this.publish();
+    if (ending === 'bad') { this.scheduleNextAction(); return; }
+
+    this.computerPaused = true;
+    const previews: readonly AbmClassId[] = ['advantaged', 'thief', 'juggernaut'];
+    let previewIndex = 0;
+    const previewNext = () => {
+      if (this.stopped) return;
+      const classId = previews[previewIndex++]!;
+      this.mutateWithoutPublishing(COMPUTER, { type: 'preview-class', classId });
+      this.publish();
+      if (previewIndex < previews.length) {
+        this.timer = this.setTimer(previewNext, beats(.5));
+        return;
+      }
+      this.timer = this.setTimer(() => {
+        this.timer = undefined;
+        if (this.stopped) return;
+        this.computerPaused = false;
+        this.mutate(COMPUTER, { type: 'lock-class', classId: 'juggernaut' });
+      }, beats(2));
+    };
+    this.timer = this.setTimer(() => {
+      this.timer = undefined;
+      previewNext();
+    }, beats(3));
   }
 
   private mutate(player: PlayerId, command: AbmCommand): void {
@@ -133,11 +173,12 @@ export class LocalAbmMatch {
     if (this.options.tutorial && this.tutorialStage === 'ended') {
       if (!this.tutorialEnding) return;
       const ending = this.tutorialEnding;
+      const omitIntro = this.tutorialEndingOmitsIntro;
       this.tutorialEnding = undefined;
       const finalEventEnd = this.state.events.reduce((latest, event) => Math.max(latest, event.endsAt), this.now());
       this.timer = this.setTimer(() => {
         this.timer = undefined;
-        if (!this.stopped) this.options.tutorial?.onEnding(ending);
+        if (!this.stopped) this.options.tutorial?.onEnding(ending, omitIntro);
       }, Math.max(0, finalEventEnd - this.now()));
       return;
     }
@@ -200,15 +241,19 @@ export class LocalAbmMatch {
         else this.tutorialStage = 'freeplay';
         break;
       case 'freeplay':
-        if (game.lastRoundWinner) this.endTutorial(game.lastRoundWinner === HUMAN ? 'good' : 'bad');
+        if ((game.phase === 'counter-picking' || game.phase === 'match-complete') && game.lastRoundWinner) {
+          this.endTutorial(game.lastRoundWinner === HUMAN ? 'good' : 'bad', game.round >= 3);
+        }
         break;
       case 'ended': break;
     }
   }
 
-  private endTutorial(ending: TutorialEnding): void {
+  private endTutorial(ending: TutorialEnding, omitIntro = false): void {
     this.tutorialStage = 'ended';
     this.tutorialEnding = ending;
+    this.tutorialEndingOmitsIntro = omitIntro;
+    this.completedTutorialEnding = ending;
   }
 }
 

@@ -74,6 +74,7 @@ export interface GameLayoutOptions<TLayoutName extends string> {
     scene: GameLayoutArtwork;
   }>;
   variantContent: GameLayoutVariantContent;
+  onRules?: () => void;
   onMenu?: () => void;
   onLayoutChange?(layout: ResponsiveScaleBoxLayout<TLayoutName>): void;
 }
@@ -83,6 +84,7 @@ export interface GameLayout {
   composition: HTMLDivElement;
   slots: Readonly<Record<GameLayoutSlotName, HTMLDivElement>>;
   setArtwork(slot: 'turn' | 'p1Wins' | 'p2Wins' | 'scene', artwork: GameLayoutArtwork): void;
+  setRulesVisible(visible: boolean): void;
   setYouTagVisible(visible: boolean): void;
   destroy(): void;
 }
@@ -215,7 +217,7 @@ export function createGameLayout<TLayoutName extends string>(
     toolsByAsset.set(assetName, button.element);
     rail.append(button.element);
   };
-  createTool(layoutDocument.copy!.rules!, 'rulebook-button');
+  createTool(layoutDocument.copy!.rules!, 'rulebook-button', options.onRules);
   createTool(layoutDocument.copy!.menu!, 'burger-button', options.onMenu);
   composition.append(rail);
 
@@ -245,6 +247,7 @@ export function createGameLayout<TLayoutName extends string>(
       sprite.setSource(artwork.src);
       sprite.element.setAttribute('aria-label', artwork.alt);
     },
+    setRulesVisible(visible) { toolsByAsset.get('rulebook-button')!.hidden = !visible; },
     setYouTagVisible(visible) { youTag.element.hidden = !visible; },
     destroy() {
       stopLayout();

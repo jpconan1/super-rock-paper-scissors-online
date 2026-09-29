@@ -18,12 +18,14 @@ export function resolveConjureScene(move: AbmDisplayMove | 'conjure', conjurer: 
   return { src: `${ROOT}/conjure/conjure-${move}-sheet.webp`, flip: conjurer === 'p2' };
 }
 export type AbmTagCategory = 'proc' | 'impact' | 'status';
-export type AbmTagKind = 'advantaged' | 'bear' | 'bull' | 'cheater' | 'copywriter' | 'cupid-arrow' | 'cupid-attack' | 'cupid-block' | 'cupid-mana' | 'defender' | 'duplicator' | 'fireborne-shield' | 'gambler' | 'joe-infinite' | 'joe-proc' | 'juggernaut' | 'last-ditch' | 'lucky' | 'null-reset' | 'parried' | 'retired' | 'stunned' | 'sumo' | 'taxed' | 'thief';
+export type AbmTagKind = 'advantaged' | 'bear' | 'bull' | 'cheater' | 'copywriter' | 'cupid-arrow' | 'cupid-attack' | 'cupid-block' | 'cupid-mana' | 'defender' | 'duplicator' | 'fireborne-shield' | 'gambler' | 'joe-infinite' | 'joe-proc' | 'juggernaut' | 'last-ditch' | 'lucky' | 'null-reset' | 'parried' | 'retired' | 'stunned' | 'sumo' | 'taxed' | 'thief' | 'tutorial-block';
 export interface AbmTag { kind: AbmTagKind; category: AbmTagCategory; player: PlayerId; src: string }
 export type AbmProcBackgroundKind = 'bear' | 'bull';
 export interface AbmProcBackground { kind: AbmProcBackgroundKind; player: PlayerId; src: string }
 
 interface TagState {
+  tutorialShowBlockTag?: boolean;
+  lastCompleteMoves?: Readonly<Record<PlayerId, AbmMove>>;
   luckyProcPlayer?: PlayerId;
   advantagedProcPlayers?: readonly PlayerId[];
   thiefTransferPlayer?: PlayerId;
@@ -87,6 +89,12 @@ export function resolveAbmTags(state: TagState): AbmTag[] {
     }
   };
   add('proc', 'lucky', state.luckyProcPlayer ? [state.luckyProcPlayer] : undefined);
+  if (state.tutorialShowBlockTag && state.lastCompleteMoves) {
+    for (const player of ['p1', 'p2'] as const) if (state.lastCompleteMoves[player] === 'block') {
+      tags.push({ category: 'status', kind: 'tutorial-block', player,
+        src: `${TAG_ROOT}/tutorial-tag${player === 'p2' ? '-p2' : ''}-sheet.webp` });
+    }
+  }
   add('proc', 'advantaged', state.advantagedProcPlayers);
   add('impact', 'juggernaut', state.juggernautProcPlayers?.map(other));
   add('impact', 'thief', state.thiefTransferPlayer ? [other(state.thiefTransferPlayer)] : undefined);
@@ -191,6 +199,7 @@ export const ABM_SCENE_URLS = [
   ...([1, 2, 3, 4, 5] as const).map((remaining) => `${TAG_ROOT}/fireborne-cloud-${remaining}-sheet.webp`),
   ...([1, 2, 3, 4, 5] as const).map((remaining) => `${TAG_ROOT}/golden-arrow-${remaining}-sheet.webp`),
   ...(['attack', 'mana', 'block', 'block-p2'] as const).map((name) => `${TAG_ROOT}/golden-arrow-${name}-sheet.webp`),
+  `${TAG_ROOT}/tutorial-tag-sheet.webp`, `${TAG_ROOT}/tutorial-tag-p2-sheet.webp`,
   ...([0, 1, 2] as const).map((remaining) => `${TAG_ROOT}/sumo-${remaining}-left-sheet.webp`),
   ...([1, 2, 3, 4, 5, 6, 7, 8] as const).map((bonus) => `${TAG_ROOT}/last-ditch-tag-${bonus}-sheet.webp`),
   ...ABM_TAG_ENTRANCE_SOURCES,

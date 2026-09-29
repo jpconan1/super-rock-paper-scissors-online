@@ -307,13 +307,13 @@ describe('Attack Block Mana rules', () => {
   });
 
   test('suppresses Lucky and exposes hidden-badge/no-deadline tutorial flags', () => {
-    let state: AbmState = { ...startedWith('lucky', 'lucky'), tutorialDisableLucky: true, tutorialHideClassBadges: true, tutorialNoDeadline: true };
+    let state: AbmState = { ...startedWith('lucky', 'lucky'), tutorialDisableLucky: true, tutorialHideClassBadges: true, tutorialNoDeadline: true, tutorialShowBlockTag: true };
     state = send(state, 'p1', { type: 'choose-move', move: 'mana' });
     const resolution = attackBlockManaRules.resolve(state, 'p2', { type: 'choose-move', move: 'attack' }, { ...context, random: () => 0 });
 
     expect(resolution.state).toMatchObject({ phase: 'counter-picking', lastRoundWinner: 'p2' });
     expect(resolution.state.luckyProcPlayer).toBeUndefined();
-    expect(attackBlockManaRules.project(resolution.state, 'p1')).toMatchObject({ hideClassBadges: true, noMoveDeadline: true });
+    expect(attackBlockManaRules.project(resolution.state, 'p1')).toMatchObject({ hideClassBadges: true, noMoveDeadline: true, tutorialShowBlockTag: true });
   });
 
   test('Joe rolls after both moves lock and negates a lethal Attack on success', () => {

@@ -175,14 +175,33 @@ describe('tutorial slideshow', () => {
     expect(highlight.hidden).toBe(false);
   });
 
-  test('renders placeholder endings with a Finish button', () => {
+  test('renders ending copy with emphasis and the slide-one Next button placement', () => {
     const complete = vi.fn(); const container = new FakeElement(); const background = new FakeElement();
     const slideshow = mountTutorialSlideshow(container as unknown as HTMLElement, background as unknown as HTMLElement, {} as never, [tutorialEndingSlide('good')], complete);
     const elements = (slideshow.element as unknown as FakeElement).querySelectorAll('*');
-    expect(elements.find((element) => element.className.includes('tutorial-slideshow__text'))?.textContent).toBe('Good Ending');
-    const finish = elements.find((element) => element.className.includes('tutorial-slideshow__button--finish'))!;
-    expect(finish.textContent).toBe('Finish');
-    finish.activate?.();
+    const text = elements.filter((element) => element.className.includes('tutorial-slideshow__text'));
+    expect(text[0]?.children.map(({ textContent }) => textContent).join('')).toBe('You Attacked while your opponent Mana\'d.');
+    expect(text[0]?.attributes.get('tag')).toBe('h2');
+    expect(text[0]?.children.find(({ textContent }) => textContent === 'Attacked')?.className).toContain('tutorial-slideshow__term--attack');
+    expect(text[0]?.children.find(({ textContent }) => textContent === 'Mana\'d')?.className).toContain('tutorial-slideshow__term--mana');
+    expect(text[1]?.textContent).toBe('Nice!');
+    expect(text[1]?.attributes.get('tag')).toBe('h1');
+    expect(text[2]?.textContent).toBe('But it\'s not over yet: Super ABM is played best-of-three.');
+    expect(text[3]?.children.find((element) => element.attributes.get('tag') === 'strong')?.textContent).toBe('pick a new class');
+    const next = elements.find((element) => element.className.includes('tutorial-slideshow__button--next'))!;
+    expect(Object.fromEntries(next.style.values)).toMatchObject({ left: '806px', top: '238px', width: '128px', height: '64px' });
+    expect(gameButtonOptions.at(-1)).toMatchObject({ label: 'Next', upSheet: '/variants/abm/next-button-up-sheet.webp' });
+    next.activate?.();
     expect(complete).toHaveBeenCalledOnce();
+  });
+
+  test('omits the best-of-three reminder on the round-three ending slide', () => {
+    const container = new FakeElement(); const background = new FakeElement();
+    const slideshow = mountTutorialSlideshow(container as unknown as HTMLElement, background as unknown as HTMLElement, {} as never, [tutorialEndingSlide('bad', true)], () => {});
+    const text = (slideshow.element as unknown as FakeElement).querySelectorAll('*')
+      .filter((element) => element.className.includes('tutorial-slideshow__text'));
+    expect(text.some(({ textContent }) => textContent.startsWith('But it\'s not over yet'))).toBe(false);
+    expect(text.at(-1)?.children.map(({ textContent }) => textContent).join('')).toBe('You will now get a chance to pick a new class. The round winner is forced to keep their class.');
+    slideshow.destroy();
   });
 });

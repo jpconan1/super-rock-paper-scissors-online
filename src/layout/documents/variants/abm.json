@@ -2677,6 +2677,56 @@
       }
     },
     {
+      "id": "p1-tutorial-block-tag",
+      "type": "collection",
+      "parent": "scene",
+      "layer": 7,
+      "properties": {
+        "allowParentOverflow": true
+      },
+      "layouts": {
+        "landscape": {
+          "x": -230,
+          "y": 255,
+          "width": 190,
+          "height": 90,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": -95,
+          "y": 255,
+          "width": 190,
+          "height": 90,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "p2-tutorial-block-tag",
+      "type": "collection",
+      "parent": "scene",
+      "layer": 7,
+      "properties": {
+        "allowParentOverflow": true
+      },
+      "layouts": {
+        "landscape": {
+          "x": 424,
+          "y": 255,
+          "width": 190,
+          "height": 90,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 250,
+          "y": 255,
+          "width": 190,
+          "height": 90,
+          "aspectLock": true
+        }
+      }
+    },
+    {
       "id": "menu",
       "type": "button",
       "protected": true,

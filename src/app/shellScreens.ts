@@ -33,6 +33,7 @@ export type LobbyScreenMount = ScreenCleanup & {
   receiveWhiteboard(message: WhiteboardServerMessage): void;
   updateRoster(players: LobbyPlayer[], selfId: string): void;
   setUnlockedClassCount(count: number): void;
+  setTutorialDisabled(disabled: boolean): void;
 };
 
 export interface LobbyClassCardDefinition {
@@ -112,8 +113,8 @@ export function mountLobbyScreen(
   playerLevel = 1,
   unlockedClassCount = playerLevel,
   progressUnitsInLevel = 0,
+  tutorialDisabled = false,
   faceOptions: { initialFace?: LobbyFace } = {},
-  onTestLevelUp?: () => void,
 ): LobbyScreenMount {
   const initialFace = faceOptions.initialFace ?? 'whiteboard';
   const layoutDocument = getLayoutDocument('lobby');
@@ -252,6 +253,9 @@ export function mountLobbyScreen(
     between: '/interactive-elements/menu-buttons/more-variants-button-between-sheet.webp',
     depressed: '/interactive-elements/menu-buttons/more-variants-button-depressed-sheet.webp',
   }, 'lobby-screen__action');
+  moreVariantsFaceButton.setDisabled(true);
+  moreVariantsFaceButton.element.classList.add('lobby-screen__more-variants');
+  const comingSoon = sprite('/lobby/coming-soon-sheet.webp', 'lobby-screen__coming-soon');
   const roster = document.createElement('aside');
   roster.className = 'textbox lobby-screen__roster';
   roster.hidden = true;
@@ -292,21 +296,22 @@ export function mountLobbyScreen(
     { id: 'ready', element: matchmakingToggle.element },
     { id: 'settings', element: menuButton('Settings', 'settings-button', 'lobby-screen__action', onSettings) },
   ];
+  const tutorialButton = gameButtonByElement.get(actions[1]!.element)!;
+  tutorialButton.setDisabled(tutorialDisabled);
   const scoreboard = multiVariantFlow ? action('Scoreboard', leaveQueue(onScoreboard)) : undefined;
   scoreboard?.classList.add('lobby-screen__scoreboard-preview');
-  const testLevelUp = onTestLevelUp ? action('TEST: Level Up', onTestLevelUp) : undefined;
-  testLevelUp?.classList.add('lobby-screen__test-level-up');
   progressionFace.append(...progressElements);
   whiteboardFace.append(whiteboard, ...tools.map((item) => item.element), chat);
   composition.append(header, ...faceLayers.values(), flip, whiteboardFaceButton.element,
-    progressionFaceButton.element, moreVariantsFaceButton.element,
-    ...actions.map((item) => item.element), roster, ...(scoreboard ? [scoreboard] : []), ...(testLevelUp ? [testLevelUp] : []), curtainLeft, curtainRight);
+    progressionFaceButton.element, moreVariantsFaceButton.element, comingSoon,
+    ...actions.map((item) => item.element), roster, ...(scoreboard ? [scoreboard] : []), curtainLeft, curtainRight);
   composition.append(rosterToggle.element);
   layoutBindings.push(
     { id: 'header', element: header }, { id: 'player-name', element: playerNameDisplay }, { id: 'player-level', element: playerLevelDisplay },
     { id: 'xp-bar', element: progressBar }, { id: 'xp-count', element: progressCopy }, { id: 'next-unlock', element: nextUnlock }, ...classCards, { id: 'whiteboard', element: whiteboard },
     { id: 'whiteboard-blank-face', element: flip }, { id: 'whiteboard-button', element: whiteboardFaceButton.element },
-    { id: 'progression', element: progressionFaceButton.element }, { id: 'more-variants', element: moreVariantsFaceButton.element }, ...tools,
+    { id: 'progression', element: progressionFaceButton.element }, { id: 'more-variants', element: moreVariantsFaceButton.element },
+    { id: 'more-variants', element: comingSoon }, ...tools,
     { id: 'chat-input', element: chatEntry.element }, { id: 'chat-button', element: chatButton },
     { id: 'roster-toggle', element: rosterToggle.element }, ...actions, { id: 'roster', element: roster },
     ...(scoreboard ? [{ id: 'scoreboard-preview', element: scoreboard }] : []), { id: 'curtain-left', element: curtainLeft },
@@ -371,7 +376,7 @@ export function mountLobbyScreen(
     whiteboardController.setEnabled(connected && showLiveBoard);
     chatEntry.input.disabled = !connected || !showLiveBoard;
     gameButtonByElement.get(chatButton)?.setDisabled(!connected || !showLiveBoard);
-    for (const [face, button] of faceButtons) button.setDisabled(!connected || animatingFace || face === activeFace);
+    for (const [face, button] of faceButtons) button.setDisabled(face === 'more-variants' || !connected || animatingFace || face === activeFace);
   }
 
   async function setLobbyFace(face: LobbyFace): Promise<void> {
@@ -429,7 +434,7 @@ export function mountLobbyScreen(
     rosterToggle.setDisabled(unavailable);
     matchmakingToggle.setDisabled(unavailable);
     whiteboardController.setEnabled(!unavailable && whiteboardActive);
-    for (const [face, button] of faceButtons) button.setDisabled(unavailable || animatingFace || face === activeFace);
+    for (const [face, button] of faceButtons) button.setDisabled(face === 'more-variants' || unavailable || animatingFace || face === activeFace);
   };
   cleanup.setMatchmaking = (active) => matchmakingToggle.setPressed(active);
   cleanup.receiveWhiteboard = (message) => whiteboardController.receive(message);
@@ -438,6 +443,7 @@ export function mountLobbyScreen(
     const definitions = lobbyClassCardDefinitions(count);
     for (let index = 0; index < classCards.length; index++) classCards[index]!.sprite.setSource(definitions[index]!.asset);
   };
+  cleanup.setTutorialDisabled = (disabled) => tutorialButton.setDisabled(disabled);
   return cleanup;
 }
 

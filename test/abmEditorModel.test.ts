@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { abmEditorGeometry, getEditorMirrorUpdate, isAbmBattleEditorElement, isAbmCounterpickThoughtBubbleEditorContext, isAbmCounterpickThoughtBubbleEditorElement, isAbmPostMatchEditorElement, isAbmWaitingEditorElement, isEditorElementVisible, mirroredEditorGeometry, resizeEditorGeometry, setAbmEditorGeometry } from '../src/editor/abmEditorModel';
+import { abmEditorGeometry, getEditorMirrorUpdate, isAbmBattleEditorElement, isAbmCounterpickThoughtBubbleEditorContext, isAbmCounterpickThoughtBubbleEditorElement, isAbmPostMatchEditorElement, isAbmTutorialBlockTagEditorContext, isAbmTutorialBlockTagEditorElement, isAbmWaitingEditorElement, isEditorElementVisible, mirroredEditorGeometry, resizeEditorGeometry, setAbmEditorGeometry } from '../src/editor/abmEditorModel';
 import type { LayoutElement } from '../src/layout/layoutDocument';
 import { getLayoutDocument } from '../src/layout/layoutDocuments';
 
@@ -73,10 +73,37 @@ describe('ABM editor model', () => {
     expect(isAbmCounterpickThoughtBubbleEditorContext(element('attack', 'button'))).toBe(false);
   });
 
+  it('makes only both tutorial Block tags editable in their dedicated state', () => {
+    const document = getLayoutDocument('variant-abm');
+    const tags = document.elements.filter(isAbmTutorialBlockTagEditorElement).map(({ id }) => id);
+    expect(tags).toEqual(['p1-tutorial-block-tag', 'p2-tutorial-block-tag']);
+    expect(tags.map((id) => isAbmTutorialBlockTagEditorContext(document.elements.find((element) => element.id === id)!))).toEqual([true, true]);
+    expect(isAbmTutorialBlockTagEditorContext(document.elements.find(({ id }) => id === 'p1-block-group')!)).toBe(true);
+    expect(isAbmTutorialBlockTagEditorElement(document.elements.find(({ id }) => id === 'p1-block-group')!)).toBe(false);
+    expect(isAbmBattleEditorElement(document.elements.find(({ id }) => id === 'p1-tutorial-block-tag')!)).toBe(false);
+    for (const id of ['attack', 'block', 'mana']) {
+      expect(isAbmTutorialBlockTagEditorContext(document.elements.find((element) => element.id === id)!)).toBe(true);
+    }
+    for (const id of ['ability', 'p1-class-badge', 'p2-class-badge', 'p1-limited-group', 'p2-limited-group']) {
+      expect(isAbmTutorialBlockTagEditorContext(document.elements.find((element) => element.id === id)!)).toBe(false);
+    }
+  });
+
+  it('can preview ordinary move geometry without class-resource offsets', () => {
+    const item = element('attack', 'button');
+    item.alternateLayouts = { 'class-resource': {
+      landscape: { x: 200, y: 210, width: 100, height: 50 },
+      portrait: { x: 220, y: 230, width: 40, height: 20 },
+    } };
+    expect(abmEditorGeometry(item, 'landscape')).toEqual(item.alternateLayouts['class-resource']!.landscape);
+    expect(abmEditorGeometry(item, 'landscape', false)).toEqual(item.layouts.landscape);
+  });
+
   it('mirrors each supported P1 element into its exact P2 counterpart', () => {
     const document = structuredClone(getLayoutDocument('variant-abm'));
     const ids = ['info', 'picked', 'class-badge', 'wins-label', 'wins', 'mana-group', 'mana-icon', 'mana-count',
-      'block-group', 'block-1', 'block-5', 'limited-group', 'limited-icon', 'limited-count', 'waiting-ready', 'waiting-dots'];
+      'block-group', 'block-1', 'block-5', 'limited-group', 'limited-icon', 'limited-count', 'waiting-ready', 'waiting-dots',
+      'tutorial-block-tag'];
     for (const suffix of ids) expect(getEditorMirrorUpdate(document, `p1-${suffix}`, 'landscape')?.targetId).toBe(`p2-${suffix}`);
     expect(getEditorMirrorUpdate(document, 'counterpick-cloud-p1-small', 'landscape')?.targetId).toBe('counterpick-cloud-p2-small');
     expect(getEditorMirrorUpdate(document, 'p2-info', 'landscape')).toBeUndefined();

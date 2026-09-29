@@ -16,9 +16,15 @@ const MIRRORABLE_P1_IDS = new Set([
   'p1-block-group', 'p1-block-1', 'p1-block-2', 'p1-block-3', 'p1-block-4', 'p1-block-5',
   'p1-limited-group', 'p1-limited-icon', 'p1-limited-count',
   'p1-waiting-ready', 'p1-waiting-dots',
+  'p1-tutorial-block-tag',
 ]);
 const COUNTERPICK_THOUGHT_BUBBLE_CONTEXT_IDS = new Set([
   'p1-info', 'p2-info', 'scene', 'counterpick-cloud-big', 'picker-portrait', 'picker-copy',
+]);
+const TUTORIAL_BLOCK_TAG_HIDDEN_IDS = new Set([
+  'p1-class-badge', 'p2-class-badge', 'ability',
+  'p1-limited-group', 'p1-limited-icon', 'p1-limited-count',
+  'p2-limited-group', 'p2-limited-icon', 'p2-limited-count',
 ]);
 
 export function isAbmCounterpickThoughtBubbleEditorElement(element: LayoutElement): boolean {
@@ -29,8 +35,18 @@ export function isAbmCounterpickThoughtBubbleEditorContext(element: LayoutElemen
   return COUNTERPICK_THOUGHT_BUBBLE_CONTEXT_IDS.has(element.id) || isAbmCounterpickThoughtBubbleEditorElement(element);
 }
 
+export function isAbmTutorialBlockTagEditorElement(element: LayoutElement): boolean {
+  return /^p[12]-tutorial-block-tag$/.test(element.id);
+}
+
+export function isAbmTutorialBlockTagEditorContext(element: LayoutElement): boolean {
+  return isAbmTutorialBlockTagEditorElement(element)
+    || (!TUTORIAL_BLOCK_TAG_HIDDEN_IDS.has(element.id) && isAbmBattleEditorElement(element));
+}
+
 export function isAbmBattleEditorElement(element: LayoutElement): boolean {
-  if (EXCLUDED_IDS.has(element.id) || element.id.startsWith('counterpick-cloud-') || /-tag-[1-3]$/.test(element.id)) return false;
+  if (EXCLUDED_IDS.has(element.id) || element.id.startsWith('counterpick-cloud-') || /-tag-[1-3]$/.test(element.id)
+    || isAbmTutorialBlockTagEditorElement(element)) return false;
   return element.stateVisibility?.battle !== false;
 }
 
@@ -48,8 +64,8 @@ export function isEditorElementVisible(element: LayoutElement, state: string): b
   return element.stateVisibility?.[state] !== false;
 }
 
-export function abmEditorGeometry(element: LayoutElement, orientation: LayoutOrientation): LayoutGeometry {
-  return CLASS_RESOURCE_RUNTIME_IDS.has(element.id)
+export function abmEditorGeometry(element: LayoutElement, orientation: LayoutOrientation, useClassResource = true): LayoutGeometry {
+  return useClassResource && CLASS_RESOURCE_RUNTIME_IDS.has(element.id)
     ? element.alternateLayouts?.['class-resource']?.[orientation] ?? element.layouts[orientation]
     : element.layouts[orientation];
 }

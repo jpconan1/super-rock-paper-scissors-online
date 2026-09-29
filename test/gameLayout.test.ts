@@ -3,14 +3,19 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   buttonDestroys: [] as ReturnType<typeof vi.fn>[],
   spriteDestroys: [] as ReturnType<typeof vi.fn>[],
+  buttonElements: [] as HTMLButtonElement[],
+  buttonActivations: [] as (() => void)[],
   stop: vi.fn(),
 }));
 
 vi.mock('../src/input/gameButton', () => ({
-  createGameButton: () => {
+  createGameButton: (options: { onActivate: () => void }) => {
     const destroy = vi.fn();
+    const element = document.createElement('button');
     mocks.buttonDestroys.push(destroy);
-    return { element: document.createElement('button'), setDisabled: vi.fn(), destroy };
+    mocks.buttonElements.push(element as HTMLButtonElement);
+    mocks.buttonActivations.push(options.onActivate);
+    return { element, setDisabled: vi.fn(), destroy };
   },
 }));
 
@@ -101,6 +106,8 @@ afterEach(() => {
   vi.clearAllMocks();
   mocks.buttonDestroys.length = 0;
   mocks.spriteDestroys.length = 0;
+  mocks.buttonElements.length = 0;
+  mocks.buttonActivations.length = 0;
   vi.unstubAllGlobals();
   if (originalDocument) vi.stubGlobal('document', originalDocument);
 });
@@ -175,6 +182,26 @@ describe('shared game layout contract', () => {
     expect(mocks.spriteDestroys).toHaveLength(9);
     expect(mocks.spriteDestroys.every((destroy) => destroy.mock.calls.length === 1)).toBe(true);
     expect(container.children).toHaveLength(0);
+  });
+
+  test('connects and controls the Rules button', () => {
+    useFakeDocument();
+    const onRules = vi.fn();
+    const content = Object.fromEntries(['p1-move', 'p2-move', 'p1-resources', 'p2-resources', 'controls'].map((name) => [name, new FakeElement()]));
+    const layout = createGameLayout({
+      container: new FakeElement() as unknown as HTMLElement, clock: {} as never, layouts: FIREBALL_WAR_LAYOUTS,
+      screenClassName: 'test', compositionClassName: 'test', ariaLabel: 'Test', onRules,
+      players: { p1: { heading: 'P1', rating: '', platform: '' }, p2: { heading: 'P2', rating: '', platform: '' } },
+      artwork: { turn: { src: 'turn', alt: '' }, p1Wins: { src: 'one', alt: '' }, p2Wins: { src: 'two', alt: '' }, scene: { src: 'scene', alt: '' } },
+      variantContent: content as never,
+    });
+    mocks.buttonActivations[0]!();
+    expect(onRules).toHaveBeenCalledOnce();
+    layout.setRulesVisible(false);
+    expect(mocks.buttonElements[0]!.hidden).toBe(true);
+    layout.setRulesVisible(true);
+    expect(mocks.buttonElements[0]!.hidden).toBe(false);
+    layout.destroy();
   });
 
   test('positions the viewer tag outside landscape scenes and clamped over portrait edges', () => {

@@ -33,6 +33,21 @@ const COUNTERPICK_CLOUD_ART = {
   small: `${ABM_ROOT}/counterpick-cloud-small-sheet.webp`,
   tiny: `${ABM_ROOT}/counterpick-cloud-tiny-sheet.webp`,
 } as const;
+export function tutorialBlockTagSource(player: 'p1' | 'p2', orientation: LayoutOrientation): string {
+  const useP2Art = orientation === 'portrait' ? player === 'p1' : player === 'p2';
+  return `${ABM_ROOT}/scenes/tags/tutorial-tag${useP2Art ? '-p2' : ''}-sheet.webp`;
+}
+
+export function shouldShowAbmRules(projection: AbmProjection): boolean {
+  return Boolean(projection.players.p1.classId && projection.players.p2.classId)
+    && !(projection.tutorialShowBlockTag && projection.round === 1);
+}
+
+export function getAbmPickerStatus(projection: AbmProjection, implemented: boolean): string {
+  if (projection.ownPendingClass) return 'LOCKED · WAITING';
+  if (projection.phase === 'counter-picking' && projection.counterPicker !== projection.self) return 'WINNER STAYS';
+  return implemented ? '' : 'LOCKED';
+}
 const SYSTEM_SCENE_ROOT = '/visual-elements/system-scenes';
 export const ABM_RESULT_SCENES = {
   roundWon: `${SYSTEM_SCENE_ROOT}/round-won-sheet.webp`,
@@ -404,7 +419,43 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   const tagItems = new Map<string, HTMLElement>();
   const tagAssets = new Map<string, string>();
   const tagSlots = new Map<string, HTMLElement>();
+  const tutorialTagSlots = new Map<'p1' | 'p2', HTMLElement>();
   const procBackgroundSprites = new Map<string, BoilingSprite>();
+
+  const rulesOverlay = element('div', 'abm-rules-overlay');
+  rulesOverlay.hidden = true;
+  rulesOverlay.tabIndex = 0;
+  rulesOverlay.setAttribute('role', 'dialog');
+  rulesOverlay.setAttribute('aria-label', 'Class rules');
+  const rulesShade = element('div', 'tutorial-slideshow__shade abm-rules-overlay__shade');
+  const ruleCopies = (['p1', 'p2'] as const).map((player) => {
+    const name = element('strong', 'abm-picker__name');
+    const description = element('p', 'abm-picker__description');
+    const box = createTextbox({ className: `abm-picker__copy abm-rules-overlay__copy abm-rules-overlay__copy--${player}`,
+      ariaLabel: `${player.toUpperCase()} class rules`, content: [name, description] });
+    return { player, name, description, box };
+  });
+  rulesOverlay.append(rulesShade, ...ruleCopies.map(({ box }) => box.element));
+
+  const setRulesOpen = (open: boolean) => {
+    if (open) {
+      const current = newestProjection;
+      if (!current || !shouldShowAbmRules(current)) return;
+      for (const copy of ruleCopies) {
+        const definition = ABM_CLASS_BY_ID.get(current.players[copy.player].classId!);
+        copy.name.textContent = definition?.name ?? '';
+        copy.description.textContent = definition?.description ?? '';
+      }
+    }
+    rulesOverlay.hidden = !open;
+    for (const child of layout.composition.children) if (child !== rulesOverlay) (child as HTMLElement).inert = open;
+    if (open) rulesOverlay.focus();
+  };
+  rulesOverlay.addEventListener('click', () => setRulesOpen(false));
+  rulesOverlay.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' && event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault(); setRulesOpen(false);
+  });
 
   const layout: GameLayout = createGameLayout({
     container, clock, layouts: ABM_LAYOUTS, screenClassName: 'abm-game', compositionClassName: 'abm-game__composition', ariaLabel: 'Attack Block Mana',
@@ -416,9 +467,11 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     },
     artwork: { turn: turnArtwork(0), p1Wins: winArtwork('p1', 0), p2Wins: winArtwork('p2', 0), scene: { src: sceneForMoves(), alt: 'Players face each other.' } },
     variantContent: { 'p1-move': p1Status.output, 'p2-move': p2Status.output, 'p1-resources': p1Resources.element, 'p2-resources': p2Resources.element, controls },
+    onRules: () => setRulesOpen(true),
     onLayoutChange(nextLayout) { orientation = nextLayout.name; applyVariantLayout(); },
     onMenu,
   });
+  layout.composition.append(rulesOverlay);
   layout.slots.scene.append(picker, waiting, result.element);
   layout.slots.scene.prepend(counterpickBigCloud.element);
   for (const player of ['p1', 'p2'] as const) for (const category of ABM_TAG_CATEGORIES) for (const order of ABM_TAG_ORDERS) {
@@ -427,14 +480,18 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     slot.dataset.tagCategory = category; slot.dataset.tagOrder = String(order);
     tagSlots.set(slotId, slot); layout.slots.scene.append(slot);
   }
+  for (const player of ['p1', 'p2'] as const) {
+    const slot = element('div', 'abm-tag-slot abm-tutorial-block-tag-slot');
+    tutorialTagSlots.set(player, slot); layout.slots.scene.append(slot);
+  }
   const labels: Record<AbmTagKind, string> = {
       lucky: 'Lucky', advantaged: 'Advantaged plus one Mana', juggernaut: 'Block broken', thief: 'Yoink', stunned: 'Stunned',
       bull: 'Bull Market', bear: 'Bear Market', cheater: 'Cheater bonus Mana', copywriter: 'Copied move bonus', duplicator: 'Mana duplicated',
       'cupid-arrow': 'Golden Arrow turns remaining', 'cupid-attack': 'Golden Arrow free Attack', 'cupid-block': 'Golden Arrow Block loss', 'cupid-mana': 'Golden Arrow bonus Mana',
-      defender: 'Block preserved', 'last-ditch': 'Last Ditch bonus Mana', 'null-reset': 'Round Reset', 'joe-infinite': 'Infinite Mana', 'joe-proc': 'One in a thousand', 'fireborne-shield': 'Extra life turns remaining', gambler: 'Gambler result', parried: 'Parried', retired: 'Un-Retired', sumo: 'Free Attack', taxed: 'Taxed',
+      defender: 'Block preserved', 'last-ditch': 'Last Ditch bonus Mana', 'null-reset': 'Round Reset', 'joe-infinite': 'Infinite Mana', 'joe-proc': 'One in a thousand', 'fireborne-shield': 'Extra life turns remaining', gambler: 'Gambler result', parried: 'Parried', retired: 'Un-Retired', sumo: 'Free Attack', taxed: 'Taxed', 'tutorial-block': 'Maximum of 5 consecutive Blocks',
   };
   for (const player of ['p1', 'p2'] as const) {
-    for (const kind of ['lucky', 'advantaged', 'juggernaut', 'thief', 'stunned', 'taxed', 'parried', 'bull', 'bear', 'cheater', 'copywriter', 'duplicator', 'cupid-arrow', 'cupid-attack', 'cupid-block', 'cupid-mana', 'defender', 'last-ditch', 'null-reset', 'joe-infinite', 'joe-proc', 'fireborne-shield', 'gambler', 'retired', 'sumo'] as const satisfies readonly AbmTagKind[]) {
+    for (const kind of ['lucky', 'advantaged', 'juggernaut', 'thief', 'stunned', 'taxed', 'parried', 'bull', 'bear', 'cheater', 'copywriter', 'duplicator', 'cupid-arrow', 'cupid-attack', 'cupid-block', 'cupid-mana', 'defender', 'last-ditch', 'null-reset', 'joe-infinite', 'joe-proc', 'fireborne-shield', 'gambler', 'retired', 'sumo', 'tutorial-block'] as const satisfies readonly AbmTagKind[]) {
       const src = kind === 'sumo' ? `${ABM_ROOT}/scenes/tags/sumo-2-left-sheet.webp`
         : kind === 'gambler' ? `${ABM_ROOT}/scenes/tags/gambler-plus-1-mana-sheet.webp`
           : kind === 'fireborne-shield' ? `${ABM_ROOT}/scenes/tags/fireborne-cloud-5-sheet.webp`
@@ -442,6 +499,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
               : kind.startsWith('cupid-') ? `${ABM_ROOT}/scenes/tags/golden-arrow-${kind.slice(6)}-sheet.webp`
                 : kind === 'last-ditch' ? `${ABM_ROOT}/scenes/tags/last-ditch-tag-1-sheet.webp`
                   : kind === 'joe-proc' ? `${ABM_ROOT}/scenes/tags/joe-thousand-sheet.webp`
+                    : kind === 'tutorial-block' ? `${ABM_ROOT}/scenes/tags/tutorial-tag${player === 'p2' ? '-p2' : ''}-sheet.webp`
                     : `${ABM_ROOT}/scenes/tags/${kind}-sheet.webp`;
       const copies = 1;
       for (let occurrence = 1; occurrence <= copies; occurrence++) {
@@ -550,6 +608,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
       ['picker-portrait', portrait.element], ['picker-copy', copy.element],
       ...p1Resources.bindings, ...p2Resources.bindings,
       ...tagSlots,
+      ...([...tutorialTagSlots].map(([player, slot]) => [`${player}-tutorial-block-tag`, slot] as [string, HTMLElement])),
       ...arrows,
       ...moves.map(([move, button]) => [move, button.element] as [string, HTMLElement])];
     for (const [id, target] of bindings) {
@@ -571,6 +630,13 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
       const base = config(`${player}-class-badge`).layouts[orientation];
       applyLayoutGeometry(badge.element, frame ? getAbmClassBadgeGeometry(player, base, frame) : base);
     }
+    for (const player of ['p1', 'p2'] as const) {
+      const key = `${player}:tutorial-block:1`;
+      const source = tutorialBlockTagSource(player, orientation);
+      tagAssets.set(key, source);
+      const item = tagItems.get(key); const tag = tagSprites.get(key);
+      if (item && !item.hidden && tag) tag.setSource(source);
+    }
   }
 
   function updatePicker() {
@@ -591,7 +657,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
       renderResources(p2Resources, projection, 'p2', previewResources, definition?.id ?? null);
     }
     const canPick = Boolean(projection?.legalActions.includes('lock-class'));
-    status.textContent = projection?.ownPendingClass ? 'LOCKED · WAITING' : projection?.phase === 'counter-picking' && projection.counterPicker !== projection.self ? 'WINNER STAYS' : definition?.implemented ? 'PLAYABLE' : 'LOCKED';
+    status.textContent = projection && definition ? getAbmPickerStatus(projection, definition.implemented) : 'LOCKED';
     lock.setDisabled(!definition?.implemented || !canPick); previous.setDisabled(!canPick); next.setDisabled(!canPick);
   }
 
@@ -645,6 +711,9 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     layout.slots['p1-picked'].hidden = picking;
     layout.slots['p2-picked'].hidden = picking;
     layout.setYouTagVisible(shouldShowAbmYouTag(nextProjection.phase));
+    const rulesVisible = shouldShowAbmRules(nextProjection);
+    layout.setRulesVisible(rulesVisible);
+    if (!rulesVisible && !rulesOverlay.hidden) setRulesOpen(false);
     const showingResult = (counterLocked || complete) && resultRevealed;
     const transitioning = counterLocked || complete;
     const thiefFeedback = Boolean(nextProjection.thiefAttemptPlayers?.length);
@@ -742,11 +811,13 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     sceneArtwork.classList.toggle('is-flipped', scene.flip);
     const sceneCanvas = sceneArtwork.querySelector<HTMLElement>('.boiling-sprite__canvas');
     if (sceneCanvas) sceneCanvas.style.transform = scene.flip ? 'scaleX(-1)' : '';
-    const visibleTags = !picking && !showingResult ? resolveAbmTags({
+    const visibleTags = (!picking && !showingResult ? resolveAbmTags({
       ...nextProjection, advantagedProcPlayers, juggernautProcPlayers, stunnedPlayers, investorBullPlayers, investorBearPlayers, duplicatorProcPlayers, copywriterProcPlayers,
       sumoProcRemaining, cheaterProcPlayers, cupidAttackProcPlayers, cupidManaProcPlayers, cupidBlockImpactPlayers, defenderProcPlayers, lastDitchBonusMana, retiredProcPlayers, gamblerOutcomes,
       pendingGoldenArrowPlayer: nextProjection.ownPendingAbility === 'golden-arrow' ? nextProjection.self : undefined,
-    }) : [];
+    }) : []).map((tag) => tag.kind === 'tutorial-block'
+      ? { ...tag, src: tutorialBlockTagSource(tag.player, orientation) }
+      : tag);
     const tagOccurrences = new Map<string, number>();
     const keyedTags = visibleTags.map((tag) => {
       const base = `${tag.player}:${tag.kind}`;
@@ -754,7 +825,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
       return { ...tag, key: `${base}:${occurrence}` };
     });
     for (const player of ['p1', 'p2'] as const) for (const category of ABM_TAG_CATEGORIES) {
-      const categoryTags = keyedTags.filter((tag) => tag.player === player && tag.category === category);
+      const categoryTags = keyedTags.filter((tag) => tag.player === player && tag.category === category && tag.kind !== 'tutorial-block');
       if (categoryTags.length > ABM_TAG_ORDERS.length) console.warn(`ABM has ${categoryTags.length} ${player} ${category} tags; only three slots exist.`);
       for (const [index, visibleTag] of categoryTags.slice(0, ABM_TAG_ORDERS.length).entries()) {
         const key = visibleTag.key;
@@ -766,6 +837,10 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
         }
       }
     }
+    for (const visibleTag of keyedTags.filter(({ kind }) => kind === 'tutorial-block')) {
+      const item = tagItems.get(visibleTag.key); const slot = tutorialTagSlots.get(visibleTag.player);
+      if (item && slot) slot.append(item);
+    }
     tagEntrance.sync(
       keyedTags.map(({ key }) => key),
       !wipeRunning,
@@ -775,6 +850,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     const visibleBackgroundKeys = new Set(visibleBackgrounds.map(({ player, kind }) => `${player}:${kind}`));
     for (const [key, background] of procBackgroundSprites) background.element.hidden = !visibleBackgroundKeys.has(key);
     for (const slot of tagSlots.values()) slot.hidden = picking || showingResult;
+    for (const slot of tutorialTagSlots.values()) slot.hidden = picking || showingResult;
     const simultaneousSteals = nextProjection.thiefAttemptPlayers?.length === 2;
     thiefTransfer.element.hidden = Boolean(splitPlayer) || showingResult || (!nextProjection.thiefTransferPlayer && !simultaneousSteals);
     thiefTransferMirror.element.hidden = Boolean(splitPlayer) || showingResult || !simultaneousSteals;
@@ -852,7 +928,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   }
 
   applyVariantLayout(); updatePicker();
-  return { render, destroy() { transitionAbort.abort(); unsubscribeCounterpickEntrance(); xpBar?.destroy(); tagEntrance.destroy(); if (revealTimer) clearTimeout(revealTimer); if (waitingTimer) clearTimeout(waitingTimer); layout.destroy(); copy.destroy(); for (const button of buttons) button.destroy(); for (const sprite of sprites) sprite.destroy(); } };
+  return { render, destroy() { transitionAbort.abort(); unsubscribeCounterpickEntrance(); xpBar?.destroy(); tagEntrance.destroy(); if (revealTimer) clearTimeout(revealTimer); if (waitingTimer) clearTimeout(waitingTimer); ruleCopies.forEach(({ box }) => box.destroy()); layout.destroy(); copy.destroy(); for (const button of buttons) button.destroy(); for (const sprite of sprites) sprite.destroy(); } };
 }
 
 export function soundForAbmMoves(moves: Readonly<Record<'p1' | 'p2', AbmMove>>): SoundId | undefined {

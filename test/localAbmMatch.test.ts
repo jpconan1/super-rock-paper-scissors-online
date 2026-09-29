@@ -111,7 +111,7 @@ describe('LocalAbmMatch', () => {
     match.start(); match.send({ type: 'choose-move', move: 'mana' }); vi.advanceTimersByTime(10_000);
     expect(variant(snapshots).lastRoundWinner).toBe('p2');
     expect(variant(snapshots).luckyProcPlayer).toBeUndefined();
-    expect(bad).toHaveBeenCalledWith('bad');
+    expect(bad).toHaveBeenCalledWith('bad', false);
     match.destroy();
 
     const good = vi.fn(); const second: ServerSnapshot[] = [];
@@ -122,8 +122,92 @@ describe('LocalAbmMatch', () => {
     winning.start(); winning.send({ type: 'choose-move', move: 'block' }); vi.advanceTimersByTime(2_000);
     winning.send({ type: 'choose-move', move: 'attack' }); vi.advanceTimersByTime(10_000);
     expect(variant(second).lastRoundWinner).toBe('p1');
-    expect(good).toHaveBeenCalledWith('good');
+    expect(good).toHaveBeenCalledWith('good', false);
     winning.destroy();
+  });
+
+  test('continues a bad ending into the unlocked human counterpick with normal rules', () => {
+    const snapshots: ServerSnapshot[] = [];
+    const match = new LocalAbmMatch({
+      playerName: 'JP', publish: (snapshot) => snapshots.push(snapshot), random: () => 0,
+      unlockedClassIds: ['lucky'], startingClasses: { p1: 'lucky', p2: 'lucky' }, tutorial: { onEnding: () => {} },
+    });
+    match.start(); match.send({ type: 'choose-move', move: 'mana' }); vi.advanceTimersByTime(10_000);
+    match.continueAfterTutorialEnding('bad');
+    expect(variant(snapshots)).toMatchObject({ phase: 'counter-picking', counterPicker: 'p1' });
+    expect(variant(snapshots).hideClassBadges).toBeUndefined();
+    expect(variant(snapshots).tutorialShowBlockTag).toBe(true);
+    expect(() => match.send({ type: 'lock-class', classId: 'advantaged' })).toThrow('Class is locked.');
+    match.send({ type: 'lock-class', classId: 'lucky' });
+    expect(variant(snapshots).phase).toBe('idle');
+    match.send({ type: 'choose-move', move: 'mana' });
+    expect(latestSnapshot(snapshots).deadlineAt).toBeDefined();
+    match.destroy();
+  });
+
+  test('scripts half-beat CPU previews and selects Juggernaut after the good ending', () => {
+    const snapshots: ServerSnapshot[] = [];
+    const match = new LocalAbmMatch({
+      playerName: 'JP', publish: (snapshot) => snapshots.push(snapshot), random: () => 0,
+      startingClasses: { p1: 'lucky', p2: 'lucky' }, tutorial: { onEnding: () => {} },
+    });
+    match.start(); match.send({ type: 'choose-move', move: 'block' }); vi.advanceTimersByTime(2_000);
+    match.send({ type: 'choose-move', move: 'attack' }); vi.advanceTimersByTime(10_000);
+    match.continueAfterTutorialEnding('good');
+    const before = snapshots.length;
+    vi.advanceTimersByTime(2_249);
+    expect(snapshots).toHaveLength(before);
+    vi.advanceTimersByTime(1);
+    let previews = snapshots.slice(before).flatMap(({ events }) => events.filter(({ type }) => type === 'class-preview'));
+    expect(previews.map(({ payload }) => (payload as { classId: string }).classId)).toEqual(['advantaged']);
+    vi.advanceTimersByTime(375);
+    previews = snapshots.slice(before).flatMap(({ events }) => events.filter(({ type }) => type === 'class-preview'));
+    expect(previews.map(({ payload }) => (payload as { classId: string }).classId)).toEqual(['advantaged', 'thief']);
+    vi.advanceTimersByTime(375);
+    previews = snapshots.slice(before).flatMap(({ events }) => events.filter(({ type }) => type === 'class-preview'));
+    expect(previews.map(({ payload }) => (payload as { classId: string }).classId)).toEqual(['advantaged', 'thief', 'juggernaut']);
+    expect(variant(snapshots).phase).toBe('counter-picking');
+    vi.advanceTimersByTime(1_499);
+    expect(variant(snapshots).phase).toBe('counter-picking');
+    vi.advanceTimersByTime(1);
+    expect(variant(snapshots)).toMatchObject({ phase: 'idle', players: { p2: { classId: 'juggernaut' } } });
+    match.send({ type: 'choose-move', move: 'mana' });
+    expect(latestSnapshot(snapshots).deadlineAt).toBeDefined();
+    match.destroy();
+  });
+
+  test('does not reopen an ending after a continuing-round tie', () => {
+    const ending = vi.fn(); const snapshots: ServerSnapshot[] = [];
+    const match = new LocalAbmMatch({
+      playerName: 'JP', publish: (snapshot) => snapshots.push(snapshot), random: () => 0,
+      startingClasses: { p1: 'lucky', p2: 'lucky' }, tutorial: { onEnding: ending },
+    });
+    match.start(); match.send({ type: 'choose-move', move: 'block' }); vi.advanceTimersByTime(2_000);
+    match.send({ type: 'choose-move', move: 'attack' }); vi.advanceTimersByTime(10_000);
+    expect(ending).toHaveBeenCalledOnce();
+    match.continueAfterTutorialEnding('good');
+    vi.advanceTimersByTime(5_000);
+    expect(variant(snapshots).players.p2.classId).toBe('juggernaut');
+    match.send({ type: 'choose-move', move: 'attack' });
+    vi.advanceTimersByTime(2_000);
+    expect(variant(snapshots).lastCompleteMoves).toEqual({ p1: 'attack', p2: 'attack' });
+    expect(ending).toHaveBeenCalledOnce();
+    match.destroy();
+  });
+
+  test('marks the second round ending for the shortened round-three slide', () => {
+    const ending = vi.fn(); const snapshots: ServerSnapshot[] = [];
+    const match = new LocalAbmMatch({
+      playerName: 'JP', publish: (snapshot) => snapshots.push(snapshot), random: () => 0,
+      startingClasses: { p1: 'lucky', p2: 'lucky' }, tutorial: { onEnding: ending },
+    });
+    match.start(); match.send({ type: 'choose-move', move: 'block' }); vi.advanceTimersByTime(2_000);
+    match.send({ type: 'choose-move', move: 'attack' }); vi.advanceTimersByTime(10_000);
+    match.continueAfterTutorialEnding('good'); vi.advanceTimersByTime(5_000);
+    match.send({ type: 'choose-move', move: 'mana' }); vi.advanceTimersByTime(10_000);
+    expect(variant(snapshots)).toMatchObject({ round: 3, score: { p1: 1, p2: 1 } });
+    expect(ending).toHaveBeenNthCalledWith(2, 'bad', true);
+    match.destroy();
   });
 
   test('hands the tutorial to the ordinary computer after reaching 2-1 Mana', () => {

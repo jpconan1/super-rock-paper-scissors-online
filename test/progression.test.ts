@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
-  createNextLevelProgressAward, createProgressAward, isClassUnlocked, MAX_PROGRESS_UNITS, progressGainForLevel, progressionForTotal,
+  createNextLevelProgressAward, createProgressAward, createTutorialProgressAward, isClassUnlocked, MAX_PROGRESS_UNITS, progressGainForLevel, progressionForTotal,
 } from '../src/core/progression';
 import { ABM_CLASS_IDS } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 import { xpAnimationStops } from '../src/app/xpProgressBar';
@@ -51,6 +51,20 @@ describe('progression', () => {
   test('creates an exact one-level test award without discarding current progress', () => {
     expect(createNextLevelProgressAward(2_500)).toMatchObject({ gainedProgressUnits: 7_500, unlockedClassIds: ['advantaged'], after: { totalProgressUnits: 10_000 } });
     expect(createNextLevelProgressAward(MAX_PROGRESS_UNITS)).toBeUndefined();
+  });
+
+  test('awards a full level for a level-one tutorial and 100 XP afterward regardless of outcome', () => {
+    expect(createTutorialProgressAward(0, 'loss')).toMatchObject({
+      outcome: 'loss', gainedProgressUnits: 10_000, unlockedClassIds: ['advantaged'],
+      after: { level: 2, totalProgressUnits: 10_000 },
+    });
+    expect(createTutorialProgressAward(9_500, 'win')).toMatchObject({
+      outcome: 'win', gainedProgressUnits: 10_000, unlockedClassIds: ['advantaged'],
+      after: { level: 2, totalProgressUnits: 19_500 },
+    });
+    expect(createTutorialProgressAward(10_000, 'loss')).toMatchObject({
+      gainedProgressUnits: 100, unlockedClassIds: [], after: { totalProgressUnits: 10_100 },
+    });
   });
 
   test('splits XP animation at every filled level bar', () => {

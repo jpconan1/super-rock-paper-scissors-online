@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { ABM_CLASSES, startingResourcesForClass } from '../src/variants/attackBlockMana/attackBlockManaCatalog';
-import { ABM_COUNTERPICK_ENTRANCE_TICKS_PER_STAGE, ABM_LAYOUTS, ABM_RESULT_SCENES, ABM_SELECT_ART, ABM_TAG_CATEGORIES, ABM_TAG_ORDERS, abmTagSlotId, blockSegments, displayedAbmMove, getAbmAttackCostDisplay, getAbmClassBadgeGeometry, getAbmClassReadyFrame, getAbmClassResourceControlGeometry, getAbmClassResourceGeometry, getAbmClassSelectChrome, getAbmCounterpickCloudPlayer, getAbmCounterpickEntranceVisibility, getAbmLimitedResource, getAbmObservedCounterpickClass, getAbmPickerEntries, getAbmPlayerResourceGeometry, getAbmResultScene, getAbmWaitingLayoutIds, getAbmWaitingVisual, initialManaForClass, latestClassPreview, reconcileAbmArmedAbility, sceneForMoves, shouldShowAbmContinuingRoundProcTags, shouldShowAbmYouTag, shouldShowClassBadge, shouldShowClassReadyOpponentTag, winArtwork } from '../src/variants/attackBlockMana/attackBlockManaPresentation';
+import { ABM_COUNTERPICK_ENTRANCE_TICKS_PER_STAGE, ABM_LAYOUTS, ABM_RESULT_SCENES, ABM_SELECT_ART, ABM_TAG_CATEGORIES, ABM_TAG_ORDERS, abmTagSlotId, blockSegments, displayedAbmMove, getAbmAttackCostDisplay, getAbmClassBadgeGeometry, getAbmClassReadyFrame, getAbmClassResourceControlGeometry, getAbmClassResourceGeometry, getAbmClassSelectChrome, getAbmCounterpickCloudPlayer, getAbmCounterpickEntranceVisibility, getAbmLimitedResource, getAbmObservedCounterpickClass, getAbmPickerEntries, getAbmPickerStatus, getAbmPlayerResourceGeometry, getAbmResultScene, getAbmWaitingLayoutIds, getAbmWaitingVisual, initialManaForClass, latestClassPreview, reconcileAbmArmedAbility, sceneForMoves, shouldShowAbmContinuingRoundProcTags, shouldShowAbmRules, shouldShowAbmYouTag, shouldShowClassBadge, shouldShowClassReadyOpponentTag, tutorialBlockTagSource, winArtwork } from '../src/variants/attackBlockMana/attackBlockManaPresentation';
 import type { AbmProjection } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 import { ABM_CLASS_IDS } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 import { ABM_SCENE_URLS, resolveAbmProcBackgrounds, resolveAbmScene, resolveAbmSplitScene, resolveAbmTags, resolveConjureScene, resolveJoeScene, resolveNullScene } from '../src/variants/attackBlockMana/attackBlockManaScenes';
@@ -9,6 +9,26 @@ import { validateLayoutDocument } from '../src/layout/layoutDocument';
 import { ABM_TAG_ENTRANCE_SOURCES } from '../src/variants/attackBlockMana/abmTagEntrance';
 
 describe('Attack Block Mana presentation data', () => {
+  test('shows rules only after both classes are selected and outside tutorial round one', () => {
+    const projection = { round: 2, players: { p1: { classId: 'lucky' }, p2: { classId: 'taxman' } } } as AbmProjection;
+    expect(shouldShowAbmRules(projection)).toBe(true);
+    expect(shouldShowAbmRules({ ...projection, players: { ...projection.players, p2: {} as never } })).toBe(false);
+    expect(shouldShowAbmRules({ ...projection, round: 1, tutorialShowBlockTag: true })).toBe(false);
+  });
+
+  test('omits PLAYABLE while preserving meaningful picker statuses', () => {
+    const projection = { self: 'p1', phase: 'idle' } as AbmProjection;
+    expect(getAbmPickerStatus(projection, true)).toBe('');
+    expect(getAbmPickerStatus(projection, false)).toBe('LOCKED');
+    expect(getAbmPickerStatus({ ...projection, ownPendingClass: 'lucky' }, true)).toBe('LOCKED · WAITING');
+    expect(getAbmPickerStatus({ ...projection, phase: 'counter-picking', counterPicker: 'p2' }, true)).toBe('WINNER STAYS');
+  });
+  test('swaps tutorial Block tag direction only in portrait', () => {
+    expect(tutorialBlockTagSource('p1', 'landscape')).toContain('tutorial-tag-sheet.webp');
+    expect(tutorialBlockTagSource('p2', 'landscape')).toContain('tutorial-tag-p2-sheet.webp');
+    expect(tutorialBlockTagSource('p1', 'portrait')).toContain('tutorial-tag-p2-sheet.webp');
+    expect(tutorialBlockTagSource('p2', 'portrait')).toContain('tutorial-tag-sheet.webp');
+  });
   test('selects authored waiting geometry for the early and late players', () => {
     expect(getAbmWaitingLayoutIds('p1', 'p2')).toEqual({ ready: 'p1-waiting-ready', countdown: 'p2-waiting-ready', dots: 'p2-waiting-dots' });
     expect(getAbmWaitingLayoutIds('p2', 'p1')).toEqual({ ready: 'p2-waiting-ready', countdown: 'p1-waiting-ready', dots: 'p1-waiting-dots' });
@@ -340,6 +360,20 @@ describe('Attack Block Mana presentation data', () => {
     expect(ABM_SCENE_URLS).toContain('/variants/abm/scenes/tags/copywriter-sheet.webp');
   });
 
+  test('maps tutorial Blocks to directional tags without affecting ordinary matches', () => {
+    expect(resolveAbmTags({ lastCompleteMoves: { p1: 'block', p2: 'mana' } })).toEqual([]);
+    expect(resolveAbmTags({ tutorialShowBlockTag: true, lastCompleteMoves: { p1: 'block', p2: 'attack' } })).toEqual([
+      { category: 'status', kind: 'tutorial-block', player: 'p1', src: '/variants/abm/scenes/tags/tutorial-tag-sheet.webp' },
+    ]);
+    expect(resolveAbmTags({ tutorialShowBlockTag: true, lastCompleteMoves: { p1: 'block', p2: 'block' } })).toEqual([
+      { category: 'status', kind: 'tutorial-block', player: 'p1', src: '/variants/abm/scenes/tags/tutorial-tag-sheet.webp' },
+      { category: 'status', kind: 'tutorial-block', player: 'p2', src: '/variants/abm/scenes/tags/tutorial-tag-p2-sheet.webp' },
+    ]);
+    expect(ABM_SCENE_URLS).toEqual(expect.arrayContaining([
+      '/variants/abm/scenes/tags/tutorial-tag-sheet.webp', '/variants/abm/scenes/tags/tutorial-tag-p2-sheet.webp',
+    ]));
+  });
+
   test('maps every reachable Last Ditch bonus to baked proc art', () => {
     for (const bonus of [1, 2, 3, 4, 5, 6, 7, 8] as const) {
       expect(resolveAbmTags({ lastDitchBonusMana: { p1: bonus } })).toEqual([{
@@ -594,6 +628,7 @@ describe('Attack Block Mana presentation data', () => {
       'p1-mana-group', 'p1-mana-icon', 'p1-mana-count', 'p1-block-group', 'p1-block-1', 'p1-block-5',
       'p2-mana-group', 'p2-mana-icon', 'p2-mana-count', 'p2-block-group', 'p2-block-1', 'p2-block-5',
       'p1-limited-group', 'p1-limited-icon', 'p1-limited-count', 'p2-limited-group', 'p2-limited-icon', 'p2-limited-count',
+      'p1-tutorial-block-tag', 'p2-tutorial-block-tag',
     ]));
     expect(document.elements.some(({ id }) => id === 'activate')).toBe(false);
     for (const id of ['picker-prev', 'picker-next']) {

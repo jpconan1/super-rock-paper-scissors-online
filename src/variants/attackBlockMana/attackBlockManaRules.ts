@@ -40,6 +40,7 @@ export const attackBlockManaRules: VariantRules<AbmState, AbmCommand, AbmProject
     return {
       ...(state.tutorialHideClassBadges ? { hideClassBadges: true } : {}),
       ...(state.tutorialNoDeadline ? { noMoveDeadline: true } : {}),
+      ...(state.tutorialShowBlockTag ? { tutorialShowBlockTag: true } : {}),
       self: viewer, phase: projectedPhase(state, viewer), turn: state.turn, round: state.round,
       score: { ...state.score }, players: clonePlayers(state.players),
       ...(ownPendingClass ? { ownPendingClass } : {}), ...(ownPendingMove ? { ownPendingMove } : {}),

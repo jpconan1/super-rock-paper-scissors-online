@@ -56,6 +56,7 @@ export interface AbmState {
   tutorialDisableLucky?: boolean;
   tutorialHideClassBadges?: boolean;
   tutorialNoDeadline?: boolean;
+  tutorialShowBlockTag?: boolean;
   phase: AbmPhase;
   turn: number;
   round: number;
@@ -115,6 +116,7 @@ export type AbmLegalAction = 'lock-class' | 'attack' | 'block' | 'mana' | AbmAbi
 export interface AbmProjection {
   hideClassBadges?: boolean;
   noMoveDeadline?: boolean;
+  tutorialShowBlockTag?: boolean;
   self: PlayerId;
   phase: AbmPhase;
   turn: number;

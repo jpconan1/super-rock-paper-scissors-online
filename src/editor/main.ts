@@ -9,7 +9,7 @@ import { getLayoutDocument } from '../layout/layoutDocuments';
 import { createBoilingSprite } from '../renderer/boilingSprite';
 import { curtainOpenAsset } from '../renderer/curtainWipe';
 import { applyAlertGeometry } from '../ui/fixedAlertCanvas';
-import { abmEditorGeometry, getEditorMirrorUpdate, isAbmBattleEditorElement, isAbmCounterpickThoughtBubbleEditorContext, isAbmCounterpickThoughtBubbleEditorElement, isAbmPostMatchEditorElement, isAbmWaitingEditorElement, isEditorElementVisible, resizeEditorGeometry, setAbmEditorGeometry } from './abmEditorModel';
+import { abmEditorGeometry, getEditorMirrorUpdate, isAbmBattleEditorElement, isAbmCounterpickThoughtBubbleEditorContext, isAbmCounterpickThoughtBubbleEditorElement, isAbmPostMatchEditorElement, isAbmTutorialBlockTagEditorContext, isAbmTutorialBlockTagEditorElement, isAbmWaitingEditorElement, isEditorElementVisible, resizeEditorGeometry, setAbmEditorGeometry } from './abmEditorModel';
 
 const hostElement = document.querySelector<HTMLElement>('#editor');
 if (!hostElement) throw new Error('Missing editor mount.');
@@ -17,7 +17,7 @@ const host: HTMLElement = hostElement;
 const clock = new BoilClock(document, true);
 type EditorScreen = 'variant-abm' | 'class-reward' | 'tutorial-slide-one';
 type RewardState = 'unlocked' | 'next';
-type AbmState = 'battle' | 'waiting' | 'counterpick-thought-bubble' | 'post-match';
+type AbmState = 'battle' | 'waiting' | 'counterpick-thought-bubble' | 'tutorial-block-tags' | 'post-match';
 const drafts = new Map<EditorScreen, LayoutDocument>();
 const savedDocuments = new Map<EditorScreen, LayoutDocument>();
 for (const id of ['variant-abm', 'class-reward', 'tutorial-slide-one'] as const) {
@@ -50,14 +50,17 @@ host.innerHTML = `<main class="abm-editor">
 
 const $ = <T extends Element>(selector: string) => host.querySelector<T>(selector)!;
 const selected = () => working.elements.find(({ id }) => id === selectedId);
+const editorGeometry = (element: LayoutElement) => abmEditorGeometry(element, orientation, abmState !== 'tutorial-block-tags');
 const visibleElements = () => working.elements.filter((element) => screen === 'variant-abm'
   ? (abmState === 'post-match' ? isAbmPostMatchEditorElement(element)
     : abmState === 'waiting' ? isAbmWaitingEditorElement(element)
       : abmState === 'counterpick-thought-bubble' ? isAbmCounterpickThoughtBubbleEditorContext(element)
+        : abmState === 'tutorial-block-tags' ? isAbmTutorialBlockTagEditorContext(element)
         : isAbmBattleEditorElement(element))
   : screen === 'class-reward' ? isEditorElementVisible(element, rewardState) : true);
 const editableElements = () => visibleElements().filter((element) => screen !== 'variant-abm'
-  || abmState !== 'counterpick-thought-bubble' || isAbmCounterpickThoughtBubbleEditorElement(element));
+  || (abmState !== 'counterpick-thought-bubble' && abmState !== 'tutorial-block-tags')
+  || (abmState === 'counterpick-thought-bubble' ? isAbmCounterpickThoughtBubbleEditorElement(element) : isAbmTutorialBlockTagEditorElement(element)));
 
 function render(): void {
   cleanups.forEach((cleanup) => cleanup()); cleanups = [];
@@ -74,7 +77,7 @@ function render(): void {
     else node.classList.add('is-reference');
     node.classList.toggle('is-selected', config.id === selectedId);
     if (configs.some(({ parent }) => parent === config.id)) { node.classList.add('is-structural'); node.textContent = ''; }
-    applyLayoutGeometry(node, screen === 'variant-abm' ? abmEditorGeometry(config, orientation) : config.layouts[orientation]); node.style.zIndex = String(config.layer ?? 0); nodes.set(config.id, node);
+    applyLayoutGeometry(node, screen === 'variant-abm' ? editorGeometry(config) : config.layouts[orientation]); node.style.zIndex = String(config.layer ?? 0); nodes.set(config.id, node);
   }
   for (const config of configs) {
     const node = nodes.get(config.id)!;
@@ -92,7 +95,7 @@ function render(): void {
   }
   renderList(); renderInspector(); updateToolbar(); applyZoom();
   $('[data-title]').textContent = screen === 'variant-abm'
-    ? `Attack Block Mana · ${abmState === 'battle' ? 'Game screen' : abmState === 'waiting' ? 'Waiting' : abmState === 'counterpick-thought-bubble' ? 'Counterpick thought bubble' : 'Post-match XP'}`
+    ? `Attack Block Mana · ${abmState === 'battle' ? 'Game screen' : abmState === 'waiting' ? 'Waiting' : abmState === 'counterpick-thought-bubble' ? 'Counterpick thought bubble' : abmState === 'tutorial-block-tags' ? 'Tutorial Block tags' : 'Post-match XP'}`
     : screen === 'class-reward' ? `Class Reward · ${rewardState === 'unlocked' ? 'Class Unlocked' : 'Next Class'}`
       : 'Tutorial · Slide 1';
 }
@@ -104,13 +107,23 @@ function renderTutorialBackdrop(canvas: HTMLElement): void {
   const copy = document.createElement('div'); copy.className = 'tutorial-slideshow__copy';
   copy.replaceChildren(...slide.content.map((block) => {
     const node = document.createElement(block.style === 'heading' ? 'h1' : block.style === 'subheading' ? 'h2' : 'p');
-    node.className = `tutorial-slideshow__text tutorial-slideshow__text--${block.style}`; node.textContent = block.text; return node;
+    node.className = `tutorial-slideshow__text tutorial-slideshow__text--${block.style}`;
+    if (typeof block.text === 'string') node.textContent = block.text;
+    else node.textContent = block.text.map(({ text }) => text).join('');
+    return node;
   }));
   panel.append(copy); applyAlertGeometry(panel, slide.panel, orientation); canvas.append(shade, panel);
 }
 
 function makeNode(config: LayoutElement): HTMLElement {
   const className = `abm-editor__node abm-editor__node--${config.type}${config.className ? ` ${config.className}` : ''}`;
+  if (isAbmTutorialBlockTagEditorElement(config)) {
+    const p2 = config.id.startsWith('p2-');
+    const useP2Art = orientation === 'portrait' ? !p2 : p2;
+    const src = `/variants/abm/scenes/tags/tutorial-tag${useP2Art ? '-p2' : ''}-sheet.webp`;
+    const sprite = createBoilingSprite({ src, clock, className, alt: 'Tutorial Block tag' });
+    cleanups.push(() => sprite.destroy()); return sprite.element;
+  }
   if (config.id === 'next-progress-count' || config.id === 'match-progress-count') {
     const count = document.createElement('div'); count.className = `${className} xp-progress-bar__count`;
     const value = document.createElement('span'); value.className = 'xp-progress-bar__count-value'; value.textContent = '7,250 / 10,000 XP'; count.append(value);
@@ -162,7 +175,7 @@ function renderList(): void {
 
 function renderInspector(): void {
   const panel = $<HTMLElement>('[data-inspector]'); const item = selected();
-  const geometry = item ? (screen === 'variant-abm' ? abmEditorGeometry(item, orientation) : item.layouts[orientation]) : undefined;
+  const geometry = item ? (screen === 'variant-abm' ? editorGeometry(item) : item.layouts[orientation]) : undefined;
   if (!item || !geometry) { panel.innerHTML = '<h2>Element</h2><p>Select an element to edit its geometry.</p>'; return; }
   const fields = (['x', 'y', 'width', 'height'] as const).map((key) => `<label>${key}<input type="number" step="5" data-geometry="${key}" value="${round(geometry[key])}"></label>`).join('');
   const mirror = screen === 'variant-abm' ? getEditorMirrorUpdate(working, item.id, orientation) : undefined;
@@ -185,7 +198,7 @@ function beginPieceDrag(event: PointerEvent, id: string, target: HTMLElement): v
   if (event.button !== 0) return;
   if (selectedId !== id) { selectedId = id; render(); target = $<HTMLElement>(`[data-id="${id}"]`); }
   const item = selected(); if (!item) return;
-  const original = { ...(screen === 'variant-abm' ? abmEditorGeometry(item, orientation) : item.layouts[orientation]) };
+  const original = { ...(screen === 'variant-abm' ? editorGeometry(item) : item.layouts[orientation]) };
   const before = clone(working); const origin = { x: event.clientX, y: event.clientY };
   const bounds = target.getBoundingClientRect(); const resize = event.clientX >= bounds.right - 14 && event.clientY >= bounds.bottom - 14;
   const canvas = $<HTMLElement>('[data-canvas]'); canvas.setPointerCapture(event.pointerId);
@@ -207,7 +220,7 @@ function beginPieceDrag(event: PointerEvent, id: string, target: HTMLElement): v
       const geometry = { ...original, x: snap(original.x + dx), y: snap(original.y + dy) };
       if (screen === 'variant-abm') setAbmEditorGeometry(item, orientation, geometry); else item.layouts[orientation] = geometry;
     }
-    applyLayoutGeometry(target, screen === 'variant-abm' ? abmEditorGeometry(item, orientation) : item.layouts[orientation]); renderInspector(); updateToolbar();
+    applyLayoutGeometry(target, screen === 'variant-abm' ? editorGeometry(item) : item.layouts[orientation]); renderInspector(); updateToolbar();
   };
   const end = (next: PointerEvent) => {
     if (next.pointerId !== event.pointerId) return;
@@ -262,7 +275,7 @@ function syncStateOptions(): void {
   if (screen === 'tutorial-slide-one') { select.replaceChildren(); return; }
   select.innerHTML = screen === 'class-reward'
     ? '<option value="unlocked">Class Unlocked</option><option value="next">Next Class</option>'
-    : '<option value="battle">Battle</option><option value="waiting">Waiting</option><option value="counterpick-thought-bubble">Counterpick thought bubble</option><option value="post-match">Post-match XP fill</option>';
+    : '<option value="battle">Battle</option><option value="waiting">Waiting</option><option value="counterpick-thought-bubble">Counterpick thought bubble</option><option value="tutorial-block-tags">Tutorial Block tags</option><option value="post-match">Post-match XP fill</option>';
   select.value = screen === 'class-reward' ? rewardState : abmState;
 }
 $<HTMLSelectElement>('[data-orientation]').onchange = (event) => { orientation = (event.target as HTMLSelectElement).value as LayoutOrientation; selectedId = undefined; render(); fit(); };

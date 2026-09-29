@@ -59,6 +59,20 @@ export function createProgressAward(totalProgressUnits: number, outcome: Progres
   };
 }
 
+export function createTutorialProgressAward(totalProgressUnits: number, outcome: ProgressOutcome): ProgressAward {
+  const before = progressionForTotal(totalProgressUnits);
+  const requestedGain = before.level === MIN_PLAYER_LEVEL ? PROGRESS_UNITS_PER_LEVEL : 100;
+  const gainedProgressUnits = Math.min(MAX_PROGRESS_UNITS - before.totalProgressUnits, requestedGain);
+  const after = progressionForTotal(before.totalProgressUnits + gainedProgressUnits);
+  return {
+    outcome,
+    gainedProgressUnits,
+    before,
+    after,
+    unlockedClassIds: after.unlockedClassIds.slice(before.unlockedClassIds.length),
+  };
+}
+
 export function createNextLevelProgressAward(totalProgressUnits: number): ProgressAward | undefined {
   const before = progressionForTotal(totalProgressUnits);
   if (!before.nextUnlock) return undefined;

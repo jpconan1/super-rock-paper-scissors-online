@@ -12,7 +12,8 @@ import {
 
 export type TutorialTextStyle = 'heading' | 'subheading' | 'body';
 export type TutorialCompletionTrigger = 'move';
-export interface TutorialTextBlock { text: string; style: TutorialTextStyle }
+export interface TutorialTextSegment { text: string; emphasis?: boolean; tone?: 'attack' | 'mana' }
+export interface TutorialTextBlock { text: string | readonly TutorialTextSegment[]; style: TutorialTextStyle }
 export interface TutorialSlide {
   id: string;
   ariaLabel: string;
@@ -24,6 +25,7 @@ export interface TutorialSlide {
   back?: boolean;
   next?: boolean;
   nextLabel?: string;
+  nextGeometry?: ResponsiveAlertGeometry;
 }
 
 export interface TutorialSlideshow {
@@ -60,12 +62,14 @@ export function mountTutorialSlideshow(
   let index = 0;
   let layoutDocument: LayoutDocument | undefined;
   let layoutNodes = new Map<string, HTMLElement>();
+  let navigationButton: HTMLElement | undefined;
   const canvas = createFixedAlertCanvas(container, 'tutorial-slideshow', (nextOrientation) => {
     orientation = nextOrientation;
     const slide = slides[index];
     if (!slide) return;
     applyAlertGeometry(panel, slide.panel, orientation);
     if (slide.highlight) applyAlertGeometry(highlight, slide.highlight, orientation);
+    if (slide.nextGeometry && navigationButton) applyAlertGeometry(navigationButton, slide.nextGeometry, orientation);
     if (layoutDocument) for (const config of layoutDocument.elements) {
       const node = layoutNodes.get(config.id); if (node) applyLayoutGeometry(node, config.layouts[orientation]);
     }
@@ -126,10 +130,17 @@ export function mountTutorialSlideshow(
     copy.replaceChildren(...slide.content.map((block) => {
       const node = document.createElement(block.style === 'heading' ? 'h1' : block.style === 'subheading' ? 'h2' : 'p');
       node.className = `tutorial-slideshow__text tutorial-slideshow__text--${block.style}`;
-      node.textContent = block.text;
+      if (typeof block.text === 'string') node.textContent = block.text;
+      else node.append(...block.text.map((segment) => {
+        const part = document.createElement(segment.emphasis ? 'strong' : 'span');
+        part.textContent = segment.text;
+        if (segment.tone) part.className = `tutorial-slideshow__term tutorial-slideshow__term--${segment.tone}`;
+        return part;
+      }));
       return node;
     }));
     actions.replaceChildren();
+    navigationButton = undefined;
     const advance = () => { if (index === slides.length - 1) finish(); else { index++; render(); } };
     if (slide.layoutDocumentId) {
       layoutDocument = getLayoutDocument(slide.layoutDocumentId);
@@ -158,11 +169,17 @@ export function mountTutorialSlideshow(
       canvas.content.append(visualLayer, actions); panel.replaceChildren(copy);
     } else {
       if (index > 0 && slide.back !== false) actions.append(backButton('Previous', () => { index--; render(); }));
-      if (slide.next !== false) actions.append(nextButton(advance, slide.nextLabel));
-      panel.replaceChildren(copy, actions);
+      if (slide.next !== false) {
+        navigationButton = nextButton(advance, slide.nextLabel);
+        if (slide.nextGeometry) navigationButton.classList.add('tutorial-slideshow__layout-element');
+        actions.append(navigationButton);
+      }
+      panel.replaceChildren(copy, ...(slide.nextGeometry ? [] : [actions]));
+      if (slide.nextGeometry) canvas.content.append(actions);
     }
     applyAlertGeometry(panel, slide.panel, orientation);
     if (slide.highlight) applyAlertGeometry(highlight, slide.highlight, orientation);
+    if (slide.nextGeometry && navigationButton) applyAlertGeometry(navigationButton, slide.nextGeometry, orientation);
     shade.hidden = Boolean(slide.highlight);
     highlight.hidden = !slide.highlight;
     queueMicrotask(() => {
@@ -231,15 +248,42 @@ export const ABM_TUTORIAL_SLIDES: readonly TutorialSlide[] = [{
   completeOn: 'move',
 }];
 
-export function tutorialEndingSlide(ending: 'good' | 'bad'): TutorialSlide {
-  const label = ending === 'good' ? 'Good Ending' : 'Bad Ending';
+export function tutorialEndingSlide(ending: 'good' | 'bad', omitIntro = false): TutorialSlide {
+  const good = ending === 'good';
+  const heading: readonly TutorialTextSegment[] = good
+    ? [
+      { text: 'You ' }, { text: 'Attacked', tone: 'attack' },
+      { text: ' while your opponent ' }, { text: 'Mana\'d', tone: 'mana' }, { text: '.' },
+    ]
+    : [
+      { text: 'Your opponent ' }, { text: 'Attacked', tone: 'attack' },
+      { text: ' while you were charging a ' }, { text: 'Mana', tone: 'mana' }, { text: '.' },
+    ];
+  const tail = good
+    ? 'Your opponent will now get a chance to pick a new class. The round winner is forced to keep their class.'
+    : 'You will now get a chance to pick a new class. The round winner is forced to keep their class.';
+  const emphasis = 'pick a new class';
+  const emphasisAt = tail.indexOf(emphasis);
   return {
-    id: `${ending}-ending`, ariaLabel: label,
+    id: `${ending}-ending`, ariaLabel: good ? 'Good ending' : 'Bad ending',
     panel: {
-      landscape: { x: 330, y: 180, width: 300, height: 180 },
-      portrait: { x: 95, y: 390, width: 350, height: 180 },
+      landscape: { x: 170, y: 140, width: 620, height: 260 },
+      portrait: { x: 45, y: 300, width: 450, height: 330 },
     },
-    content: [{ text: label, style: 'heading' }],
-    back: false, next: true, nextLabel: 'Finish',
+    content: [
+      { text: heading, style: 'subheading' },
+      ...(good ? [{ text: 'Nice!', style: 'heading' as const }] : []),
+      ...(omitIntro ? [] : [{ text: 'But it\'s not over yet: Super ABM is played best-of-three.', style: 'body' as const }]),
+      { text: [
+        { text: tail.slice(0, emphasisAt) },
+        { text: emphasis, emphasis: true },
+        { text: tail.slice(emphasisAt + emphasis.length) },
+      ], style: 'body' },
+    ],
+    back: false, next: true,
+    nextGeometry: {
+      landscape: { x: 806, y: 238, width: 128, height: 64 },
+      portrait: { x: 410, y: 710, width: 128, height: 64 },
+    },
   };
 }
