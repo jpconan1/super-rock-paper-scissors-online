@@ -15,8 +15,8 @@ import {
 } from '../src/whiteboard/protocol';
 import { isLobbyPresence, type LobbyPlayer, type LobbyPresence, type LobbyServerMessage } from '../src/lobby/protocol';
 import { eloDeltas } from '../src/core/elo';
-import { createProgressAward, isClassUnlocked, type ProgressAward } from '../src/core/progression';
-import type { AbmCommand } from '../src/variants/attackBlockMana/attackBlockManaTypes';
+import { countNewestClassRoundWins, createProgressAward, createTutorialProgressAward, isClassUnlocked, type ProgressAward } from '../src/core/progression';
+import { ABM_CLASS_IDS, type AbmCommand, type AbmClassId, type AbmState } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 import { WhiteboardRateLimiter, type WhiteboardRateCategory } from '../src/whiteboard/rateLimiter';
 import { LOBBY_SOCKET_PROTOCOL, MATCH_SOCKET_PROTOCOL, socketCredential, WHITEBOARD_SOCKET_PROTOCOL } from '../src/protocol/webSocketAuth';
 import { consumeSlidingWindow, messageFitsUtf8Limit, readJsonBody, RequestBodyError } from '../src/protocol/abuseProtection';
@@ -26,8 +26,8 @@ import {
   createMatchTicketRecords, matchmakingTicketKey, recoverableMatchTicket, type MatchTicket,
 } from '../src/core/matchmakingTickets';
 import {
-  GUEST_NAME_MAX_LENGTH, guestProfile, normalizeGuestDisplayName, type GuestSessionRequest, type GuestSessionResponse,
-} from '../src/protocol/guestSession';
+  PLAYER_NAME_MAX_LENGTH, normalizePlayerDisplayName, playerProfile,
+} from '../src/protocol/playerProfile';
 import { createAuth, type AuthEnv } from './auth';
 
 interface Env extends AuthEnv {
@@ -39,7 +39,6 @@ interface Env extends AuthEnv {
   SOCKET_RATE: RateLimit;
   MATCHMAKING_IP_RATE: RateLimit;
   MATCHMAKING_GUEST_RATE: RateLimit;
-  GUEST_SESSION_RATE: RateLimit;
   ALLOWED_ORIGINS?: string;
 }
 
@@ -250,9 +249,13 @@ export class MatchObject extends DurableObject<Env> {
   private createProgressAwards(record: MatchRecord): Partial<Record<Seat, ProgressAward>> {
     if (!record.playerProgress || !record.winner) return {};
     const awards: Partial<Record<Seat, ProgressAward>> = {};
+    const abm = record.gameState as AbmState | undefined;
     for (const seat of ['p1', 'p2'] as const) {
       if (record.completionReason === 'disconnect' && record.disconnectedPlayer === seat) continue;
-      awards[seat] = createProgressAward(record.playerProgress[seat], seat === record.winner ? 'win' : 'loss', record.playerUnlockAll?.[seat]);
+      const newestClassRoundWins = countNewestClassRoundWins(record.playerProgress[seat], abm?.roundWinningClassIds?.[seat] ?? []);
+      awards[seat] = createProgressAward(record.playerProgress[seat], seat === record.winner ? 'win' : 'loss', {
+        opponent: 'human', newestClassRoundWins, paused: record.playerUnlockAll?.[seat],
+      });
     }
     return awards;
   }
@@ -373,11 +376,10 @@ export class LobbyObject extends DurableObject<Env> {
     const url = new URL(request.url);
     let playerId: string; let displayName: string;
     try {
-      const player = await authenticateRequestPlayer(request, this.env, url.searchParams.get('guest'),
-        socketCredential(request.headers.get('Sec-WebSocket-Protocol'), LOBBY_SOCKET_PROTOCOL));
+      const player = await authenticateRequestPlayer(request, this.env);
       playerId = player.playerId; displayName = player.displayName;
     }
-    catch { return json({ error: 'Invalid guest credentials.' }, 401); }
+    catch { return json({ error: 'Authentication required.' }, 401); }
     const clientKey = request.headers.get('CF-Connecting-IP') ?? 'unknown-client';
     const connections = this.connectedPlayers();
     if (connections.filter((player) => player.playerId === playerId).length >= CHANNEL_SOCKETS_PER_GUEST
@@ -486,11 +488,10 @@ export class WhiteboardObject extends DurableObject<Env> {
     const url = new URL(request.url);
     let guestId: string; let displayName: string;
     try {
-      const player = await authenticateRequestPlayer(request, this.env, url.searchParams.get('guest'),
-        socketCredential(request.headers.get('Sec-WebSocket-Protocol'), WHITEBOARD_SOCKET_PROTOCOL));
+      const player = await authenticateRequestPlayer(request, this.env);
       guestId = player.playerId; displayName = player.displayName;
     }
-    catch { return json({ error: 'Invalid guest credentials.' }, 401); }
+    catch { return json({ error: 'Authentication required.' }, 401); }
     const clientKey = request.headers.get('CF-Connecting-IP') ?? 'unknown-client';
     const connections = this.ctx.getWebSockets().flatMap((socket) => {
       const attachment = socket.deserializeAttachment() as WhiteboardAttachment | null; return attachment ? [attachment] : [];
@@ -645,7 +646,27 @@ export async function finalizeMatch(db: D1Database, result: {
   return responses[3]?.meta.changes === 1 || responses[6]?.meta.changes === 1 ? 'applied' : 'duplicate';
 }
 
+export async function applyLocalProgressAward(db: D1Database, playerId: string, resultId: string, award: ProgressAward): Promise<ProgressAward> {
+  const awardJson = JSON.stringify(award);
+  await db.batch([
+    db.prepare('INSERT OR IGNORE INTO local_progress_awards (result_id, player_id, gained_progress_units, award_json, progress_applied) VALUES (?, ?, ?, ?, 0)')
+      .bind(resultId, playerId, award.gainedProgressUnits, awardJson),
+    db.prepare(`UPDATE players SET total_progress_units = MIN(200000, total_progress_units + (
+      SELECT gained_progress_units FROM local_progress_awards WHERE result_id = ? AND player_id = ? AND progress_applied = 0
+    )) WHERE player_id = ? AND EXISTS (
+      SELECT 1 FROM local_progress_awards WHERE result_id = ? AND player_id = ? AND progress_applied = 0
+    )`).bind(resultId, playerId, playerId, resultId, playerId),
+    db.prepare('UPDATE local_progress_awards SET progress_applied = 1 WHERE result_id = ? AND player_id = ? AND progress_applied = 0')
+      .bind(resultId, playerId),
+  ]);
+  const stored = await db.prepare('SELECT player_id, award_json FROM local_progress_awards WHERE result_id = ?').bind(resultId)
+    .first<{ player_id: string; award_json: string }>();
+  if (!stored || stored.player_id !== playerId) throw new LocalProgressAwardConflictError();
+  return JSON.parse(stored.award_json) as ProgressAward;
+}
+
 class GuestAuthError extends Error {}
+class LocalProgressAwardConflictError extends Error {}
 
 interface AuthenticatedPlayer { playerId: string; displayName: string; rating: number; totalProgressUnits: number; unlockAllClasses: boolean }
 
@@ -656,68 +677,13 @@ async function getPlayer(db: D1Database, playerId: string): Promise<{ displayNam
   return { displayName: player.display_name, rating: player.rating, totalProgressUnits: player.total_progress_units, unlockAllClasses: player.unlock_all_classes === 1 };
 }
 
-async function authenticateRequestPlayer(request: Request, env: Env, guestId?: string | null,
-  guestSecret?: string | null): Promise<AuthenticatedPlayer> {
+async function authenticateRequestPlayer(request: Request, env: Env): Promise<AuthenticatedPlayer> {
   const session = await createAuth(env).api.getSession({ headers: request.headers });
-  if (session) {
-    const player = await env.DB.prepare('SELECT player_id, display_name, rating, total_progress_units, unlock_all_classes FROM players WHERE auth_user_id = ?')
-      .bind(session.user.id).first<{ player_id: string; display_name: string; rating: number; total_progress_units: number; unlock_all_classes: number }>();
-    if (player) return { playerId: player.player_id, displayName: player.display_name, rating: player.rating, totalProgressUnits: player.total_progress_units, unlockAllClasses: player.unlock_all_classes === 1 };
-  }
-  if (!guestId || !guestSecret) throw new GuestAuthError('Authentication required.');
-  const player = await authenticateExistingGuest(env.DB, guestId, guestSecret);
-  return { playerId: guestId, ...player };
-}
-
-async function authenticateExistingGuest(db: D1Database, guestId: string, secret: string): Promise<{ displayName: string; rating: number; totalProgressUnits: number; unlockAllClasses: boolean }> {
-  if (!validClientId(guestId) || secret.length < 32 || secret.length > 256) throw new GuestAuthError('Invalid guest credentials.');
-  const secretHash = await sha256(secret);
-  const player = await db.prepare('SELECT guest_secret_hash, display_name, rating, total_progress_units, unlock_all_classes FROM players WHERE player_id = ?').bind(guestId)
-    .first<{ guest_secret_hash: string; display_name: string; rating: number; total_progress_units: number; unlock_all_classes: number }>();
-  if (!player || !constantTimeEqual(player.guest_secret_hash, secretHash)) throw new GuestAuthError('Invalid guest credentials.');
-  return { displayName: player.display_name, rating: player.rating, totalProgressUnits: player.total_progress_units, unlockAllClasses: player.unlock_all_classes === 1 };
-}
-
-async function createGuestSession(db: D1Database, request: GuestSessionRequest): Promise<GuestSessionResponse> {
-  if (request.guestId && request.guestSecret) {
-    try {
-      const current = await authenticateExistingGuest(db, request.guestId, request.guestSecret);
-      if (request.displayName === undefined) {
-        return { ...guestProfile(request.guestId, current.displayName, current.rating, current.totalProgressUnits, current.unlockAllClasses), guestSecret: request.guestSecret };
-      }
-      const displayName = normalizeGuestDisplayName(request.displayName);
-      if (!displayName) throw new RequestBodyError(400, `Display name must be 1-${GUEST_NAME_MAX_LENGTH} characters.`);
-      if (current.displayName !== displayName) {
-        await db.prepare('UPDATE players SET display_name = ?, updated_at = ? WHERE player_id = ?')
-          .bind(displayName, Date.now(), request.guestId).run();
-      }
-      return { ...guestProfile(request.guestId, displayName, current.rating, current.totalProgressUnits, current.unlockAllClasses), guestSecret: request.guestSecret };
-    } catch (error) {
-      if (error instanceof RequestBodyError) throw error;
-      if (!(error instanceof GuestAuthError)) throw error;
-      /* invalid legacy credentials become a fresh guest once a valid name is supplied */
-    }
-  }
-  const displayName = normalizeGuestDisplayName(request.displayName);
-  if (!displayName) throw new RequestBodyError(400, `Display name must be 1-${GUEST_NAME_MAX_LENGTH} characters.`);
-  const playerId = crypto.randomUUID();
-  const guestSecret = `${crypto.randomUUID()}${crypto.randomUUID()}`;
-  const now = Date.now();
-  await db.prepare('INSERT INTO players (player_id, guest_secret_hash, display_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
-    .bind(playerId, await sha256(guestSecret), displayName, now, now).run();
-  return { ...guestProfile(playerId, displayName, 1500), guestSecret };
-}
-
-function constantTimeEqual(left: string, right: string): boolean {
-  const length = Math.max(left.length, right.length);
-  let difference = left.length ^ right.length;
-  for (let index = 0; index < length; index++) difference |= (left.charCodeAt(index) || 0) ^ (right.charCodeAt(index) || 0);
-  return difference === 0;
-}
-
-async function sha256(value: string): Promise<string> {
-  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
-  return [...new Uint8Array(bytes)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  if (!session) throw new GuestAuthError('Authentication required.');
+  const player = await env.DB.prepare('SELECT player_id, display_name, rating, total_progress_units, unlock_all_classes FROM players WHERE auth_user_id = ?')
+    .bind(session.user.id).first<{ player_id: string; display_name: string; rating: number; total_progress_units: number; unlock_all_classes: number }>();
+  if (!player) throw new GuestAuthError('Player not found.');
+  return { playerId: player.player_id, displayName: player.display_name, rating: player.rating, totalProgressUnits: player.total_progress_units, unlockAllClasses: player.unlock_all_classes === 1 };
 }
 
 export default {
@@ -734,19 +700,27 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
     const clientKey = request.headers.get('CF-Connecting-IP') ?? 'unknown-client';
     if (url.pathname.startsWith('/api/auth/')) return createAuth(env).handler(request);
     if (url.pathname === '/health') return json({ ok: true });
+    if (url.pathname === '/auth-capabilities') return json({ emailPassword: Boolean(env.AUTH_MAILER) });
     if (url.pathname === '/online-status') {
       if (!await allowed(env.SOCKET_RATE, `status:${clientKey}`)) return rateLimited();
       return json({ playersOnline: await env.LOBBY.getByName('global').getOnlinePlayerCount() });
     }
-    if (url.pathname === '/guest-session' && request.method === 'POST') {
+    if (url.pathname === '/account-method' && request.method === 'DELETE') {
       try {
-        if (!await allowed(env.GUEST_SESSION_RATE, clientKey)) return rateLimited();
-        const body = await readJsonBody<GuestSessionRequest>(request, 1_000);
-        if (!body || typeof body !== 'object') return json({ error: 'Invalid guest session request.' }, 400);
-        return json(await createGuestSession(env.DB, body));
+        const authSession = await createAuth(env).api.getSession({ headers: request.headers });
+        if (!authSession || (authSession.user as { isAnonymous?: boolean }).isAnonymous) return json({ error: 'Authentication required.' }, 401);
+        if (Date.now() - new Date(authSession.session.createdAt).getTime() > 5 * 60_000) return json({ error: 'Sign in again before changing login methods.' }, 403);
+        const body = await readJsonBody<{ providerId?: unknown }>(request, 1_000);
+        if (body.providerId !== 'google' && body.providerId !== 'credential') return json({ error: 'Unknown login method.' }, 400);
+        const accounts = await env.DB.prepare('SELECT id, providerId FROM account WHERE userId = ?').bind(authSession.user.id).all<{ id: string; providerId: string }>();
+        if (accounts.results.length < 2) return json({ error: 'Add another login method before removing this one.' }, 409);
+        const target = accounts.results.find((account) => account.providerId === body.providerId);
+        if (!target) return json({ error: 'Login method is not connected.' }, 404);
+        await env.DB.prepare('DELETE FROM account WHERE id = ? AND userId = ?').bind(target.id, authSession.user.id).run();
+        return new Response(null, { status: 204 });
       } catch (error) {
         if (error instanceof RequestBodyError) return json({ error: error.message }, error.status);
-        return json({ error: 'Guest session failed.' }, 500);
+        return json({ error: 'Could not remove login method.' }, 500);
       }
     }
     if (url.pathname === '/player-session') {
@@ -754,39 +728,27 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
         const authSession = await createAuth(env).api.getSession({ headers: request.headers });
         if (!authSession) return json({ error: 'Authentication required.' }, 401);
         if (request.method === 'POST') {
-          const body = await readJsonBody<{ guestId?: string; guestSecret?: string; displayName?: unknown }>(request, 1_000);
-          if (body.guestId && body.guestSecret) {
-            await authenticateExistingGuest(env.DB, body.guestId, body.guestSecret);
-            const occupied = await env.DB.prepare('SELECT player_id FROM players WHERE auth_user_id = ?').bind(authSession.user.id)
-              .first<{ player_id: string }>();
-            if (occupied && occupied.player_id !== body.guestId) return json({ error: 'Account already has a player.' }, 409);
-            const result = await env.DB.prepare(`UPDATE players SET auth_user_id = ?, updated_at = ? WHERE player_id = ? AND (
-              auth_user_id IS NULL OR auth_user_id = ? OR EXISTS (
-                SELECT 1 FROM user WHERE user.id = players.auth_user_id AND user.isAnonymous = 1
-              )
-            )`).bind(authSession.user.id, Date.now(), body.guestId, authSession.user.id).run();
-            if (result.meta.changes !== 1) return json({ error: 'Guest belongs to another account.' }, 409);
-          } else {
-            if ((authSession.user as { isAnonymous?: boolean }).isAnonymous) return json({ error: 'Guest credentials required.' }, 400);
-            const displayName = normalizeGuestDisplayName(body.displayName);
-            if (!displayName) return json({ error: `Display name must be 1-${GUEST_NAME_MAX_LENGTH} characters.` }, 400);
-            const now = Date.now();
-            await env.DB.prepare(`INSERT OR IGNORE INTO players
-              (player_id, guest_secret_hash, display_name, auth_user_id, created_at, updated_at)
-              VALUES (?, 'revoked', ?, ?, ?, ?)`).bind(crypto.randomUUID(), displayName, authSession.user.id, now, now).run();
-          }
+          const body = await readJsonBody<{ displayName?: unknown }>(request, 1_000);
+          const displayName = normalizePlayerDisplayName(body.displayName);
+          if (!displayName) return json({ error: `Display name must be 1-${PLAYER_NAME_MAX_LENGTH} characters.` }, 400);
+          const now = Date.now();
+          await env.DB.prepare(`INSERT OR IGNORE INTO players
+            (player_id, display_name, auth_user_id, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?)`).bind(crypto.randomUUID(), displayName, authSession.user.id, now, now).run();
         } else if (request.method === 'PUT') {
           const body = await readJsonBody<{ displayName?: unknown }>(request, 1_000);
-          const displayName = normalizeGuestDisplayName(body.displayName);
-          if (!displayName) return json({ error: `Display name must be 1-${GUEST_NAME_MAX_LENGTH} characters.` }, 400);
+          const displayName = normalizePlayerDisplayName(body.displayName);
+          if (!displayName) return json({ error: `Display name must be 1-${PLAYER_NAME_MAX_LENGTH} characters.` }, 400);
           await env.DB.prepare('UPDATE players SET display_name = ?, updated_at = ? WHERE auth_user_id = ?')
             .bind(displayName, Date.now(), authSession.user.id).run();
         } else if (request.method !== 'GET') return json({ error: 'Method not allowed.' }, 405);
-        const player = await env.DB.prepare('SELECT player_id, display_name, rating, guest_secret_hash, total_progress_units, unlock_all_classes FROM players WHERE auth_user_id = ?')
-          .bind(authSession.user.id).first<{ player_id: string; display_name: string; rating: number; guest_secret_hash: string; total_progress_units: number; unlock_all_classes: number }>();
+        const player = await env.DB.prepare('SELECT player_id, display_name, rating, total_progress_units, unlock_all_classes FROM players WHERE auth_user_id = ?')
+          .bind(authSession.user.id).first<{ player_id: string; display_name: string; rating: number; total_progress_units: number; unlock_all_classes: number }>();
         if (!player) return json({ error: 'Player not found.' }, 404);
-        return json({ ...guestProfile(player.player_id, player.display_name, player.rating, player.total_progress_units, player.unlock_all_classes === 1),
-          isAnonymous: Boolean((authSession.user as { isAnonymous?: boolean }).isAnonymous) });
+        const accounts = await env.DB.prepare('SELECT providerId FROM account WHERE userId = ?').bind(authSession.user.id).all<{ providerId: string }>();
+        return json({ ...playerProfile(player.player_id, player.display_name, player.rating, player.total_progress_units, player.unlock_all_classes === 1),
+          isAnonymous: Boolean((authSession.user as { isAnonymous?: boolean }).isAnonymous), email: authSession.user.email,
+          emailVerified: authSession.user.emailVerified, connectedMethods: accounts.results.map((account) => account.providerId) });
       } catch (error) {
         if (error instanceof RequestBodyError) return json({ error: error.message }, error.status);
         return json({ error: 'Player session failed.' }, 401);
@@ -803,18 +765,43 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
         const player = await env.DB.prepare('SELECT player_id, display_name, rating, total_progress_units, unlock_all_classes FROM players WHERE auth_user_id = ?')
           .bind(authSession.user.id).first<{ player_id: string; display_name: string; rating: number; total_progress_units: number; unlock_all_classes: number }>();
         if (!player) return json({ error: 'Player not found.' }, 404);
-        return json(guestProfile(player.player_id, player.display_name, player.rating, player.total_progress_units, player.unlock_all_classes === 1));
+        return json(playerProfile(player.player_id, player.display_name, player.rating, player.total_progress_units, player.unlock_all_classes === 1));
       } catch (error) {
         if (error instanceof RequestBodyError) return json({ error: error.message }, error.status);
         return json({ error: 'Progression update failed.' }, 500);
       }
     }
+    if (url.pathname === '/local-progress-award' && request.method === 'POST') {
+      try {
+        const body = await readJsonBody<{ resultId?: unknown; kind?: unknown; outcome?: unknown; roundWinningClassIds?: unknown }>(request, 4_000);
+        if (!validClientId(body.resultId)) return json({ error: 'resultId is required.' }, 400);
+        if (body.kind !== 'tutorial' && body.kind !== 'computer') return json({ error: 'Unknown local award kind.' }, 400);
+        if (body.outcome !== 'win' && body.outcome !== 'loss') return json({ error: 'Unknown progress outcome.' }, 400);
+        const roundWinningClassIds = body.roundWinningClassIds ?? [];
+        if (!Array.isArray(roundWinningClassIds) || roundWinningClassIds.length > 2
+          || !roundWinningClassIds.every((classId): classId is AbmClassId => typeof classId === 'string' && (ABM_CLASS_IDS as readonly string[]).includes(classId))) {
+          return json({ error: 'Invalid round-winning classes.' }, 400);
+        }
+        const player = await authenticateRequestPlayer(request, env);
+        const award = body.kind === 'tutorial'
+          ? createTutorialProgressAward(player.totalProgressUnits, body.outcome)
+          : createProgressAward(player.totalProgressUnits, body.outcome, {
+            opponent: 'computer', newestClassRoundWins: countNewestClassRoundWins(player.totalProgressUnits, roundWinningClassIds), paused: player.unlockAllClasses,
+          });
+        return json(await applyLocalProgressAward(env.DB, player.playerId, body.resultId, award));
+      } catch (error) {
+        if (error instanceof RequestBodyError) return json({ error: error.message }, error.status);
+        if (error instanceof GuestAuthError) return json({ error: error.message }, 401);
+        if (error instanceof LocalProgressAwardConflictError) return json({ error: 'Result ID belongs to another player.' }, 409);
+        return json({ error: 'Progress award failed.' }, 500);
+      }
+    }
     if (url.pathname === '/matchmaking' && request.method === 'POST') {
       try {
         if (!await allowed(env.MATCHMAKING_IP_RATE, clientKey)) return rateLimited();
-        const body = await readJsonBody<{ guestId?: string; guestSecret?: string; attemptId?: string }>(request);
+        const body = await readJsonBody<{ attemptId?: string }>(request);
         if (!validClientId(body.attemptId)) return json({ error: 'attemptId is required.' }, 400);
-        const player = await authenticateRequestPlayer(request, env, body.guestId, body.guestSecret);
+        const player = await authenticateRequestPlayer(request, env);
         if (!await allowed(env.MATCHMAKING_GUEST_RATE, player.playerId)) return rateLimited();
         return json(await env.MATCHMAKER.getByName('global').enqueue(player.playerId, body.attemptId));
       } catch (error) {
@@ -825,9 +812,9 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
     if (url.pathname === '/matchmaking' && request.method === 'DELETE') {
       try {
         if (!await allowed(env.MATCHMAKING_IP_RATE, clientKey)) return rateLimited();
-        const body = await readJsonBody<{ guestId?: string; guestSecret?: string; attemptId?: string }>(request);
+        const body = await readJsonBody<{ attemptId?: string }>(request);
         if (!validClientId(body.attemptId)) return json({ error: 'attemptId is required.' }, 400);
-        const player = await authenticateRequestPlayer(request, env, body.guestId, body.guestSecret);
+        const player = await authenticateRequestPlayer(request, env);
         if (!await allowed(env.MATCHMAKING_GUEST_RATE, player.playerId)) return rateLimited();
         await env.MATCHMAKER.getByName('global').cancel(player.playerId, body.attemptId);
         return new Response(null, { status: 204 });
@@ -843,9 +830,7 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
     }
     if (url.pathname === '/lobby' || url.pathname === '/whiteboard') {
       if (!await allowed(env.SOCKET_RATE, `socket:${clientKey}`)) return rateLimited();
-      const guestId = url.searchParams.get('guest');
-      const rateIdentity = guestId && validClientId(guestId) ? guestId : clientKey;
-      if (!await allowed(env.SOCKET_RATE, `guest:${rateIdentity}`)) return rateLimited();
+      if (!await allowed(env.SOCKET_RATE, `guest:${clientKey}`)) return rateLimited();
       return url.pathname === '/lobby' ? env.LOBBY.getByName('global').fetch(request) : env.WHITEBOARD.getByName('global').fetch(request);
     }
     return json({ error: 'Not found.' }, 404);

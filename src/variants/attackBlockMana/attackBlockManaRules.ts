@@ -43,6 +43,7 @@ export const attackBlockManaRules: VariantRules<AbmState, AbmCommand, AbmProject
       ...(state.tutorialShowBlockTag ? { tutorialShowBlockTag: true } : {}),
       self: viewer, phase: projectedPhase(state, viewer), turn: state.turn, round: state.round,
       score: { ...state.score }, players: clonePlayers(state.players),
+      ...(state.roundWinningClassIds ? { roundWinningClassIds: cloneRoundWinningClasses(state.roundWinningClassIds) } : {}),
       ...(ownPendingClass ? { ownPendingClass } : {}), ...(ownPendingMove ? { ownPendingMove } : {}),
       ...(ownPendingAbility ? { ownPendingAbility } : {}),
       ...(state.conjurer ? { conjurer: state.conjurer } : {}),
@@ -356,7 +357,7 @@ function resolveTimeout(state: AbmState, context: DeterministicContext): Variant
       if (players[opponent].strikes >= 2) {
         const duration = ABM_LETHAL_TO_RESULT_MS;
         return { state: { ...clearWaiting(state), phase: 'match-complete', players, pendingMoves: {}, pendingAbilities: {}, winner: conjurer,
-          resultReason: 'forfeit', resultRevealAt: now + duration },
+          roundWinningClassIds: recordRoundWin(state, conjurer), resultReason: 'forfeit', resultRevealAt: now + duration },
           events: [cue('move-timeout', now, duration, { earlyPlayer: conjurer, latePlayer: opponent, strikes: players[opponent].strikes })] };
       }
       return beginConjurerChoice({ ...state, players }, conjurer, 'skip', context.now);
@@ -404,7 +405,8 @@ function resolveTimeout(state: AbmState, context: DeterministicContext): Variant
     copywriterProcPlayers: copywriterProcPlayers.length ? copywriterProcPlayers : undefined, sumoProcRemaining: undefined, cheaterProcPlayers,
     cupidAttackProcPlayers: undefined, cupidManaProcPlayers: undefined, cupidBlockImpactPlayers: undefined, defenderProcPlayers: undefined, lastDitchBonusMana,
     gamblerOutcomes: Object.keys(gamblerOutcomes).length ? gamblerOutcomes : undefined };
-  if (players[late].strikes >= 2) return { state: { ...timedOut, phase: 'match-complete', winner: early, resultReason: 'forfeit', resultRevealAt: now + revealDuration }, events };
+  if (players[late].strikes >= 2) return { state: { ...timedOut, phase: 'match-complete', winner: early,
+    roundWinningClassIds: recordRoundWin(timedOut, early), resultReason: 'forfeit', resultRevealAt: now + revealDuration }, events };
   if (move === 'attack' && !fireborneProcPlayer) return finishRound(timedOut, early, events, now + revealDuration);
   return { state: { ...timedOut, phase: 'idle', turn: state.turn + 1 }, events };
 }
@@ -423,15 +425,16 @@ function resolveDoubleConjureTimeout(state: AbmState, context: DeterministicCont
     conjuredMove: undefined, conjuredOpponentTimedOut: undefined, conjureStalemate: undefined,
     nullResetPlayer: undefined,
     copywriterProcPlayers: copywriterProcPlayers.length ? copywriterProcPlayers : undefined,
-    ...(players[conjurer].strikes >= 2 ? { winner: opponent, resultReason: 'forfeit' as const, resultRevealAt: now + duration } : {}) };
+    ...(players[conjurer].strikes >= 2 ? { winner: opponent, roundWinningClassIds: recordRoundWin(state, opponent), resultReason: 'forfeit' as const, resultRevealAt: now + duration } : {}) };
   return { state: timedOut, events: [cue('move-timeout', now, duration, { earlyPlayer: opponent, latePlayer: conjurer, move: 'skip', strikes: players[conjurer].strikes,
     turn: state.turn, copywriterProcPlayers })] };
 }
 
 function finishRound(state: AbmState, winner: PlayerId, events: ReturnType<typeof cue>[], startsAt: number): VariantResolution<AbmState> {
   const score = { ...state.score, [winner]: state.score[winner] + 1 };
+  const roundWinningClassIds = recordRoundWin(state, winner);
   events.push(cue('round-result', startsAt, ABM_RESULT_TO_COUNTER_PICK_MS, { winner, score, round: state.round }));
-  if (score[winner] >= 2) return { state: { ...state, phase: 'match-complete', score, winner, lastRoundWinner: winner, resultRevealAt: startsAt }, events };
+  if (score[winner] >= 2) return { state: { ...state, phase: 'match-complete', score, roundWinningClassIds, winner, lastRoundWinner: winner, resultRevealAt: startsAt }, events };
   const loser = OTHER[winner];
   const players = clonePlayers(state.players);
   for (const id of ['p1', 'p2'] as const) {
@@ -449,9 +452,20 @@ function finishRound(state: AbmState, winner: PlayerId, events: ReturnType<typeo
   if (players.p1.classId === 'sumo') players.p1.refundsRemaining = 3;
   if (players.p2.classId === 'sumo') players.p2.refundsRemaining = 3;
   events.push(cue('counter-pick', startsAt + ABM_RESULT_TO_COUNTER_PICK_MS, 600, { winner, loser, classId: state.players[winner].classId }));
-  return { state: { ...state, phase: 'counter-picking', turn: 0, round: state.round + 1, score, players, pendingClasses: {}, pendingMoves: {}, pendingAbilities: {},
+  return { state: { ...state, phase: 'counter-picking', turn: 0, round: state.round + 1, score, roundWinningClassIds, players, pendingClasses: {}, pendingMoves: {}, pendingAbilities: {},
     conjurer: undefined, conjuredMove: undefined, conjuredOpponentTimedOut: undefined, conjureStalemate: undefined,
     counterPicker: loser, counterPickAvailableAt: startsAt + ABM_RESULT_TO_COUNTER_PICK_MS, resultRevealAt: startsAt, lastRoundWinner: winner }, events };
+}
+
+function cloneRoundWinningClasses(value?: Partial<Record<PlayerId, AbmClassId[]>>): Partial<Record<PlayerId, AbmClassId[]>> {
+  return { ...(value?.p1 ? { p1: [...value.p1] } : {}), ...(value?.p2 ? { p2: [...value.p2] } : {}) };
+}
+
+function recordRoundWin(state: AbmState, winner: PlayerId): Partial<Record<PlayerId, AbmClassId[]>> {
+  const result = cloneRoundWinningClasses(state.roundWinningClassIds);
+  const winningClassId = state.players[winner].classId;
+  if (winningClassId) (result[winner] ??= []).push(winningClassId);
+  return result;
 }
 
 function applyMove(player: AbmPlayerState, move: AbmMove, manaGain = 1, record = true, refundAttack = false, preserveBlock = false): void {

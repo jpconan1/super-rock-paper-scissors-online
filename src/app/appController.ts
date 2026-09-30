@@ -26,10 +26,11 @@ import { randomId } from '../core/randomId';
 import { hasSeenAbmNewsletter, mountAbmLetterModal } from './abmLetterModal';
 import { mountAccountScreen } from './accountScreen';
 import { mountProgressScreen } from './progressScreen';
-import { createTutorialProgressAward, type ProgressAward } from '../core/progression';
+import type { ProgressAward } from '../core/progression';
 import { createClassRewardFlow, mountClassRewardScreen } from './classRewardScreen';
 import { AlertSystem } from '../ui/alertSystem';
 import { ABM_TUTORIAL_SLIDES, mountTutorialSlideshow, tutorialEndingSlide, type TutorialSlideshow } from './tutorialSlideshow';
+import type { AbmProjection } from '../variants/attackBlockMana/attackBlockManaTypes';
 
 export type ConnectionState = 'connected' | 'reconnecting' | 'offline';
 export type ShellDestination = 'title' | 'lobby' | 'account' | 'match-found' | 'slot-picker' | 'scoreboard' | 'gameplay' | 'progress' | 'reward';
@@ -278,7 +279,15 @@ export class AppController {
       }, () => options.session.getOnlinePlayerCount(), (trigger) => this.openAbmLetter(trigger),
       options.session.accountState().displayName || options.session.suggestedPlayerName(), (name) => {
         void this.startGoogleSignIn('title', name);
-      }, options.session.accountState().signedIn ? options.session.accountState().displayName : undefined);
+      }, options.session.accountState().signedIn ? options.session.accountState().displayName : undefined, async (email, password) => {
+        await options.session.signInWithEmail(email, password);
+        this.playerName = options.session.accountState().displayName;
+        await this.navigate('lobby');
+      }, (email) => options.session.requestPasswordReset(email, location.href), options.session.accountState().emailAuthAvailable,
+      async (token, password) => {
+        await options.session.resetPassword(token, password);
+        const clean = new URL(location.href); clean.searchParams.delete('token'); history.replaceState(history.state, '', clean);
+      });
       this.screenCleanup = title;
       this.screenReady = title.ready;
     } else if (destination === 'lobby') {
@@ -316,7 +325,14 @@ export class AppController {
         const profile = await options.session.updateDisplayName(name);
         this.playerName = profile.displayName;
         return options.session.accountState();
-      }, () => void this.startGoogleSignIn('claim'), () => void this.logOutToTitle(), () => void this.returnFromAccount());
+      }, () => void this.startGoogleSignIn('claim'), () => void this.logOutToTitle(), () => void this.returnFromAccount(), async (provider) => {
+        await options.session.disconnectMethod(provider);
+        return options.session.accountState();
+      }, async () => {
+        await options.session.deleteAccount();
+        this.playerName = '';
+        void this.navigate('title');
+      }, (email, password) => options.session.claimWithEmail(email, password));
       this.screenCleanup = () => account.destroy();
     } else if (destination === 'match-found') {
       const projection = this.matchProjection;
@@ -693,14 +709,13 @@ export class AppController {
     if (projection.progressAward) { this.installProgressAward(snapshot, projection.progressAward); return; }
     if (!local) return;
     if (this.localMatchAwardMode === 'tutorial') {
-      const account = this.options.session.accountState();
-      this.installProgressAward(snapshot, createTutorialProgressAward(
-        account.totalProgressUnits,
-        projection.winner === projection.self ? 'win' : 'loss',
-      ));
+      void this.options.session.awardTutorialMatch(snapshot.matchId, projection.winner === projection.self ? 'win' : 'loss')
+        .then((award) => { if (this.latestSnapshot?.matchId === snapshot.matchId) this.installProgressAward(snapshot, award); })
+        .catch((error) => this.showError(error));
       return;
     }
-    void this.options.session.awardComputerMatch(snapshot.matchId, projection.winner === projection.self ? 'win' : 'loss')
+    const abm = projection.variant as AbmProjection | undefined;
+    void this.options.session.awardComputerMatch(snapshot.matchId, projection.winner === projection.self ? 'win' : 'loss', abm?.roundWinningClassIds?.[projection.self])
       .then((award) => { if (this.latestSnapshot?.matchId === snapshot.matchId) this.installProgressAward(snapshot, award); })
       .catch((error) => this.showError(error));
   }
@@ -757,14 +772,15 @@ export class AppController {
       try {
         award = this.pendingProgressAward;
         if (!award && this.localMatchAwardMode === 'tutorial') {
-          award = createTutorialProgressAward(
-            this.options.session.accountState().totalProgressUnits,
+          award = await this.options.session.awardTutorialMatch(
+            this.latestSnapshot!.matchId,
             this.matchProjection.winner === this.matchProjection.self ? 'win' : 'loss',
           );
         } else if (!award) {
           award = await this.options.session.awardComputerMatch(
             this.latestSnapshot!.matchId,
             this.matchProjection.winner === this.matchProjection.self ? 'win' : 'loss',
+            (this.matchProjection.variant as AbmProjection | undefined)?.roundWinningClassIds?.[this.matchProjection.self],
           );
         }
       } catch (error) { this.showError(error); return; }

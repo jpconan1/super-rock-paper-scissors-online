@@ -13,13 +13,13 @@ describe('class reward flow', () => {
   afterEach(() => vi.useRealTimers());
 
   test('keeps multiple unlocks in progression order and previews the next class', () => {
-    expect(createClassRewardFlow(createProgressAward(9_000, 'win'))).toEqual({
-      unlockedClassIds: ['advantaged', 'thief'], nextClassId: 'juggernaut',
+    expect(createClassRewardFlow(createProgressAward(9_000, 'win', { opponent: 'human' }))).toEqual({
+      unlockedClassIds: ['advantaged'], nextClassId: 'thief',
     });
   });
 
   test('omits the preview after the final class unlock', () => {
-    expect(createClassRewardFlow(createProgressAward(199_000, 'win'))).toEqual({ unlockedClassIds: ['joe'] });
+    expect(createClassRewardFlow(createProgressAward(199_100, 'win', { opponent: 'human' }))).toEqual({ unlockedClassIds: ['joe'] });
   });
 
   test('plays seven ordered flip frames for the previewed class', () => {

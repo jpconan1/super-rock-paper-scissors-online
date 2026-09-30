@@ -17,7 +17,7 @@ import { generateRandomName } from './randomName';
 import { createVolumeSlider } from './volumeSlider';
 import { getLayoutDocument } from '../layout/layoutDocuments';
 import { applyDocumentLayout } from '../layout/layoutRuntime';
-import { normalizeGuestDisplayName } from '../protocol/guestSession';
+import { normalizePlayerDisplayName } from '../protocol/playerProfile';
 
 const TITLE_LAYOUT = getLayoutDocument('title');
 const titleElement = (id: string) => TITLE_LAYOUT.elements.find((element) => element.id === id)!;
@@ -34,7 +34,10 @@ export function formatOnlinePlayerCount(count: number | null): string { return `
 export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPlay: (playerName: string) => void,
   getOnlinePlayerCount: () => Promise<number | null> = async () => null,
   onOpenLetter: (trigger: HTMLElement) => void = () => {}, initialName?: string,
-  onGoogleSignIn: (playerName: string) => void = () => {}, connectedAccount?: string): TitleScreenMount {
+  onGoogleSignIn: (playerName: string) => void = () => {}, connectedAccount?: string,
+  onEmailSignIn: (email: string, password: string) => Promise<void> = async () => {},
+  onPasswordReset: (email: string) => Promise<void> = async () => {}, emailAuthAvailable = false,
+  onCompletePasswordReset: (token: string, password: string) => Promise<void> = async () => {}): TitleScreenMount {
   const screen = document.createElement('section');
   screen.className = 'title-screen';
   screen.setAttribute('aria-labelledby', 'title-screen-heading');
@@ -102,7 +105,7 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
     value: initialName?.trim() || generateRandomName(),
     maxLength: 24,
     autocomplete: 'nickname',
-    validate: (value) => normalizeGuestDisplayName(value) !== null,
+    validate: (value) => normalizePlayerDisplayName(value) !== null,
     sheet: titleElement('name-entry').assets!.src!,
     clock,
   });
@@ -155,6 +158,22 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
   accountStatus.className = 'title-screen__account-status';
   accountStatus.textContent = `${connectedAccount ?? ''} — Account connected`;
   const googleElement = google?.element ?? accountStatus;
+  const emailDialog = document.createElement('dialog'); emailDialog.className = 'title-screen__email-dialog';
+  const emailInput = document.createElement('input'); emailInput.type = 'email'; emailInput.autocomplete = 'email'; emailInput.placeholder = 'Email';
+  const passwordInput = document.createElement('input'); passwordInput.type = 'password'; passwordInput.autocomplete = 'current-password'; passwordInput.placeholder = 'Password';
+  const emailError = document.createElement('p'); emailError.setAttribute('aria-live', 'polite');
+  const resetToken = new URL(location.href).searchParams.get('token');
+  if (resetToken) { emailInput.hidden = true; passwordInput.autocomplete = 'new-password'; passwordInput.placeholder = 'New password'; }
+  const signInEmail = document.createElement('button'); signInEmail.type = 'button'; signInEmail.textContent = resetToken ? 'Set new password' : 'Sign in';
+  signInEmail.addEventListener('click', () => { emailError.textContent = ''; const action = resetToken ? onCompletePasswordReset(resetToken, passwordInput.value) : onEmailSignIn(emailInput.value, passwordInput.value); void action.catch((reason) => { emailError.textContent = reason instanceof Error ? reason.message : 'Sign in failed.'; }); });
+  const resetPassword = document.createElement('button'); resetPassword.type = 'button'; resetPassword.textContent = 'Reset password';
+  resetPassword.hidden = Boolean(resetToken);
+  resetPassword.addEventListener('click', () => { emailError.textContent = ''; void onPasswordReset(emailInput.value).then(() => { emailError.textContent = 'If that account exists, recovery mail was sent.'; }); });
+  const closeEmail = document.createElement('button'); closeEmail.type = 'button'; closeEmail.textContent = 'Close'; closeEmail.addEventListener('click', () => emailDialog.close());
+  emailDialog.append(emailInput, passwordInput, signInEmail, resetPassword, closeEmail, emailError);
+  const emailButton = document.createElement('button'); emailButton.type = 'button'; emailButton.className = 'title-screen__email-button'; emailButton.textContent = 'Sign in with email'; emailButton.hidden = !emailAuthAvailable || Boolean(connectedAccount);
+  emailButton.addEventListener('click', () => emailDialog.showModal());
+  if (resetToken) queueMicrotask(() => emailDialog.showModal());
 
   const discord = createGameButton({
     label: 'Join the ABM Community Discord',
@@ -184,7 +203,7 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
   };
   nameEntry.input.addEventListener('keydown', onNameKeyDown);
 
-  composition.append(logo.element, randomName.element, enterLobby.element, nameEntry.element, googleElement, discord.element, discordPortrait.element,
+  composition.append(logo.element, randomName.element, enterLobby.element, nameEntry.element, googleElement, emailButton, discord.element, discordPortrait.element,
     soundToggle.element, musicVolume.element, sfxVolume.element, boilToggle.element, onlineCount);
   bindings.push(
     { id: 'logo', element: logo.element }, { id: 'random-name', element: randomName.element },
@@ -197,7 +216,7 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onPla
     { id: 'online-count', element: onlineCount },
   );
   applyLayout();
-  screen.append(heading, legalLinks);
+  screen.append(heading, legalLinks, emailDialog);
   container.replaceChildren(screen);
 
   const cleanup = (() => {

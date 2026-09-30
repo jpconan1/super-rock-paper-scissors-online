@@ -11,6 +11,8 @@ Run `npm run dev` in another terminal for the browser client. The ignored `.env.
 
 Copy `.dev.vars.example` to `.dev.vars`, generate `BETTER_AUTH_SECRET` with `npx auth@latest secret`, and add the Google web OAuth client credentials. Google's local callback is `http://localhost:8787/api/auth/callback/google`; production uses `https://abm.jpconan.ca/api/auth/callback/google`.
 
+Email/password routes are feature-gated by the optional `AUTH_MAILER` binding. It must implement `sendVerification({ email, url })` and `sendPasswordReset({ email, url })`. Without that binding, email signup and recovery remain hidden and Better Auth credential signup is disabled. This keeps the auth core independent of the eventual mail provider.
+
 Before the first remote deployment:
 
 1. Authenticate with `npx wrangler login`.
@@ -22,7 +24,7 @@ Before the first remote deployment:
 
 That command builds the browser app, then deploys its static assets and the API/WebSocket Worker together. Attach `abm.jpconan.ca` to `super-rps-online`; the old `super-rps-online-menu` Worker is no longer used.
 
-Matchmaking creates Match Durable Objects internally. Connect a returned seat to `/matches/{matchId}?seat=p1` using WebSocket subprotocols `super-rps-match-v1` and the private seat token. `/lobby` and `/whiteboard` accept Better Auth cookies; legacy guests also send the guest secret as a WebSocket subprotocol. Public match creation is intentionally unavailable.
+Matchmaking creates Match Durable Objects internally. Connect a returned seat to `/matches/{matchId}?seat=p1` using WebSocket subprotocols `super-rps-match-v1` and the private seat token. `/lobby` and `/whiteboard` accept Better Auth session cookies only. Public match creation is intentionally unavailable.
 
 Browser HTTP and WebSocket traffic is same-origin by default. Future trusted web distributions can be enabled without code changes by setting `ALLOWED_ORIGINS` to a comma-separated list of exact origins. Native clients that omit the browser `Origin` header remain supported.
 

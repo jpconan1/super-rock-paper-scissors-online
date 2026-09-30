@@ -6,6 +6,8 @@ export const MAX_PLAYER_LEVEL = ABM_CLASS_IDS.length;
 export const MAX_PROGRESS_UNITS = (MAX_PLAYER_LEVEL - 1) * PROGRESS_UNITS_PER_LEVEL;
 
 export type ProgressOutcome = 'win' | 'loss';
+export type ProgressOpponent = 'computer' | 'human';
+export type ClassBonusMultiplier = 1 | 1.5 | 2;
 
 export interface PlayerProgression {
   level: number;
@@ -21,6 +23,17 @@ export interface ProgressAward {
   before: PlayerProgression;
   after: PlayerProgression;
   unlockedClassIds: readonly AbmClassId[];
+  baseProgressUnits?: number;
+  bonusProgressUnits?: number;
+  classBonusMultiplier?: ClassBonusMultiplier;
+  newestClassId?: AbmClassId;
+  newestClassRoundWins?: 0 | 1 | 2;
+}
+
+export interface ProgressAwardOptions {
+  opponent: ProgressOpponent;
+  newestClassRoundWins?: number;
+  paused?: boolean;
 }
 
 export function progressionForTotal(totalProgressUnits: number): PlayerProgression {
@@ -44,11 +57,27 @@ export function progressGainForLevel(level: number, outcome: ProgressOutcome): n
   return Math.round(levels * PROGRESS_UNITS_PER_LEVEL);
 }
 
-export function createProgressAward(totalProgressUnits: number, outcome: ProgressOutcome, paused = false): ProgressAward {
+export function standardRateMultiplierForLevel(level: number): number {
+  const finalEarningLevel = MAX_PLAYER_LEVEL - 1;
+  const currentLevel = Math.max(MIN_PLAYER_LEVEL, Math.min(finalEarningLevel, Math.floor(level)));
+  return 1 - 0.75 * ((currentLevel - MIN_PLAYER_LEVEL) / (finalEarningLevel - MIN_PLAYER_LEVEL));
+}
+
+export function createProgressAward(totalProgressUnits: number, outcome: ProgressOutcome, options: ProgressAwardOptions): ProgressAward {
   const before = progressionForTotal(totalProgressUnits);
-  if (paused) return { outcome, gainedProgressUnits: 0, before, after: before, unlockedClassIds: [] };
+  const newestClassId = before.unlockedClassIds.at(-1)!;
+  const newestClassRoundWins = Math.max(0, Math.min(2, Math.floor(options.newestClassRoundWins ?? 0))) as 0 | 1 | 2;
+  const classBonusMultiplier: ClassBonusMultiplier = newestClassRoundWins === 2 ? 2 : newestClassRoundWins === 1 ? 1.5 : 1;
+  const details = { baseProgressUnits: 0, bonusProgressUnits: 0, classBonusMultiplier, newestClassId, newestClassRoundWins };
+  if (options.paused) return { outcome, gainedProgressUnits: 0, before, after: before, unlockedClassIds: [], ...details };
+  const winRate = options.opponent === 'computer' ? 1 / 8 : 1 / 2;
+  const winBase = Math.round(progressGainForLevel(before.level, 'win') * standardRateMultiplierForLevel(before.level) * winRate);
+  const requestedBase = outcome === 'win' ? winBase : Math.round(winBase / 2);
+  const requestedTotal = Math.round(requestedBase * classBonusMultiplier);
   const available = MAX_PROGRESS_UNITS - before.totalProgressUnits;
-  const gainedProgressUnits = Math.min(available, progressGainForLevel(before.level, outcome));
+  const baseProgressUnits = Math.min(available, requestedBase);
+  const bonusProgressUnits = Math.min(available - baseProgressUnits, requestedTotal - requestedBase);
+  const gainedProgressUnits = baseProgressUnits + bonusProgressUnits;
   const after = progressionForTotal(before.totalProgressUnits + gainedProgressUnits);
   return {
     outcome,
@@ -56,6 +85,7 @@ export function createProgressAward(totalProgressUnits: number, outcome: Progres
     before,
     after,
     unlockedClassIds: after.unlockedClassIds.slice(before.unlockedClassIds.length),
+    baseProgressUnits, bonusProgressUnits, classBonusMultiplier, newestClassId, newestClassRoundWins,
   };
 }
 
@@ -85,6 +115,11 @@ export function createNextLevelProgressAward(totalProgressUnits: number): Progre
 
 export function isClassUnlocked(totalProgressUnits: number, classId: AbmClassId): boolean {
   return progressionForTotal(totalProgressUnits).unlockedClassIds.includes(classId);
+}
+
+export function countNewestClassRoundWins(totalProgressUnits: number, roundWinningClassIds: readonly AbmClassId[]): 0 | 1 | 2 {
+  const newestClassId = progressionForTotal(totalProgressUnits).unlockedClassIds.at(-1);
+  return Math.min(2, roundWinningClassIds.filter((classId) => classId === newestClassId).length) as 0 | 1 | 2;
 }
 
 function clampProgress(value: number): number {

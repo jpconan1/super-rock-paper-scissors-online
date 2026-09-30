@@ -1,14 +1,14 @@
 import { describe, expect, test, vi } from 'vitest';
 import { generateRandomName, replaceWithRandomName } from '../src/title/randomName';
 import { isNonBlankText } from '../src/input/textEntry';
-import { GUEST_NAME_MAX_LENGTH, normalizeGuestDisplayName } from '../src/protocol/guestSession';
+import { PLAYER_NAME_MAX_LENGTH, normalizePlayerDisplayName } from '../src/protocol/playerProfile';
 
 describe('random player names', () => {
   test('always produces a server-valid name', () => {
     for (let index = 0; index < 1_000; index++) {
       const name = generateRandomName();
-      expect(normalizeGuestDisplayName(name)).toBe(name);
-      expect(name.length).toBeLessThanOrEqual(GUEST_NAME_MAX_LENGTH);
+      expect(normalizePlayerDisplayName(name)).toBe(name);
+      expect(name.length).toBeLessThanOrEqual(PLAYER_NAME_MAX_LENGTH);
     }
   });
 

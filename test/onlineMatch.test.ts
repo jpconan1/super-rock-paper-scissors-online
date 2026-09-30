@@ -40,7 +40,9 @@ describe('online match', () => {
     expect(state.completionReason).toBe('played');
     expect(advanceMatchDeadline(state, Number.MAX_SAFE_INTEGER)).toBe(false);
     expect(state.phase).toBe('complete');
-    expect(state.gameState).toMatchObject({ phase: 'match-complete', winner: 'p1', score: { p1: 2, p2: 0 } });
+    expect(state.gameState).toMatchObject({ phase: 'match-complete', winner: 'p1', score: { p1: 2, p2: 0 },
+      roundWinningClassIds: { p1: ['advantaged', 'advantaged'] } });
+    expect(projectOnlineMatch(state, 'p1').variant).toMatchObject({ roundWinningClassIds: { p1: ['advantaged', 'advantaged'] } });
   });
 
   test('schedules and resolves the late ABM player deadline', () => {

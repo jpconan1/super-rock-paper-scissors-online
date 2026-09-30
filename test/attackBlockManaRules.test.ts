@@ -1569,7 +1569,8 @@ describe('Attack Block Mana rules', () => {
 
     state = send(state, 'p1', { type: 'choose-move', move: 'mana' }, 40_000);
     state = attackBlockManaRules.advanceDeadline!(state, { ...context, now: state.waitingDeadlineAt! })!.state;
-    expect(state).toMatchObject({ phase: 'match-complete', winner: 'p1', resultReason: 'forfeit', score: { p1: 0, p2: 0 } });
+    expect(state).toMatchObject({ phase: 'match-complete', winner: 'p1', resultReason: 'forfeit', score: { p1: 0, p2: 0 },
+      roundWinningClassIds: { p1: ['lucky'] } });
     expect(attackBlockManaRules.result(state)).toEqual({ winner: 'p1', scores: { p1: 0, p2: 0 }, reason: 'forfeit' });
   });
 
@@ -1577,7 +1578,8 @@ describe('Attack Block Mana rules', () => {
     let attackState = started();
     attackState = send(attackState, 'p1', { type: 'choose-move', move: 'attack' }, 2_000);
     attackState = attackBlockManaRules.advanceDeadline!(attackState, { ...context, now: attackState.waitingDeadlineAt! })!.state;
-    expect(attackState).toMatchObject({ phase: 'counter-picking', score: { p1: 1, p2: 0 }, heldSplitFor: 'p1' });
+    expect(attackState).toMatchObject({ phase: 'counter-picking', score: { p1: 1, p2: 0 }, heldSplitFor: 'p1',
+      roundWinningClassIds: { p1: ['lucky'] } });
 
     let blockState = started();
     blockState.players.p1.mana = 0;

@@ -61,6 +61,7 @@ export interface AbmState {
   turn: number;
   round: number;
   score: Record<PlayerId, number>;
+  roundWinningClassIds?: Partial<Record<PlayerId, AbmClassId[]>>;
   players: Record<PlayerId, AbmPlayerState>;
   pendingClasses: Partial<Record<PlayerId, AbmClassId>>;
   classReadyPlayer?: PlayerId;
@@ -122,6 +123,7 @@ export interface AbmProjection {
   turn: number;
   round: number;
   score: Record<PlayerId, number>;
+  roundWinningClassIds?: Partial<Record<PlayerId, AbmClassId[]>>;
   players: Record<PlayerId, AbmPlayerState>;
   ownPendingClass?: AbmClassId;
   classReadyPlayer?: PlayerId;

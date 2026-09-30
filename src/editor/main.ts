@@ -130,7 +130,7 @@ function makeNode(config: LayoutElement): HTMLElement {
     cleanups.push(() => count.remove()); return count;
   }
   if (config.id === 'next-progress' || config.id === 'back-lobby') {
-    const progress = createXpProgressBar(clock, createProgressAward(31_000, 'loss'), false);
+    const progress = createXpProgressBar(clock, createProgressAward(31_000, 'loss', { opponent: 'human' }), false);
     progress.countElement.hidden = true;
     progress.element.className += ` ${className}`;
     cleanups.push(() => progress.destroy()); return progress.element;

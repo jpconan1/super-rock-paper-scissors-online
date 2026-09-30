@@ -1,5 +1,5 @@
 import nameData from './nameGeneratorData.json';
-import { GUEST_NAME_MAX_LENGTH } from '../protocol/guestSession';
+import { PLAYER_NAME_MAX_LENGTH } from '../protocol/playerProfile';
 
 type RandomSource = () => number;
 
@@ -29,9 +29,9 @@ export function generateRandomName(random: RandomSource = Math.random): string {
   };
   for (const candidate of [parts, [main, suffix], [prefix, main], [main]]) {
     const name = format(candidate);
-    if (name.length <= GUEST_NAME_MAX_LENGTH) return name;
+    if (name.length <= PLAYER_NAME_MAX_LENGTH) return name;
   }
-  return main.slice(0, GUEST_NAME_MAX_LENGTH);
+  return main.slice(0, PLAYER_NAME_MAX_LENGTH);
 }
 
 export interface WritableFocusableText {

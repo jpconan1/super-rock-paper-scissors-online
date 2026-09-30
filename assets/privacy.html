@@ -23,13 +23,13 @@
       <p>You can play as a guest. When you do, we collect or create:</p>
       <ul>
         <li>your chosen display name;</li>
-        <li>a random player identifier and an authentication secret;</li>
+        <li>a random player identifier and a secure session cookie;</li>
         <li>your rating and game records, including opponents, results, and gameplay summaries;</li>
         <li>technical information needed to operate and protect the service, such as your IP address, browser or device information, request times, and connection activity; and</li>
         <li>content you choose to submit through multiplayer features, such as the shared whiteboard.</li>
       </ul>
-      <p>Your guest identifier, authentication secret, and display name are also stored in your browser so the game can recognize you when you return. Sound and interface preferences may be stored in your browser. You can remove this browser data through your browser settings, but doing so may prevent you from recovering the same guest profile.</p>
-      <p>If you choose to sign in with Google, we also receive information from Google needed to create and secure your account. This may include your name, email address, profile image, Google account identifier, and authentication tokens. Super ABM does not receive your Google password.</p>
+      <p>Authentication uses a secure session cookie. The game may store your display name, sound settings, and interface preferences in your browser, but does not place account credentials in local storage. Clearing cookies may permanently lose access to an unprotected guest profile.</p>
+      <p>If you protect an account with email and password, we store the email address, verification state, and a secure password hash. We do not store the password itself. If you choose Google sign-in, we receive information needed to connect and secure the account, which may include your name, email, profile image, Google account identifier, and authentication tokens. Super ABM does not receive your Google password.</p>
       <p>We do not intentionally collect payment information, precise location, contacts, private Google content, or information for targeted advertising.</p>
 
       <h2>How we use information</h2>
@@ -55,11 +55,12 @@
       <p>When information is no longer needed, we will delete it or remove identifying details, subject to technical limitations, backups, record integrity, and legal requirements.</p>
 
       <h2>Security</h2>
-      <p>We use reasonable safeguards appropriate to a small community project. These include encrypted connections, access controls, hashed guest secrets on the server, and encryption of Google authentication tokens. No online service can guarantee perfect security.</p>
-      <p>Keep your device and account secure. Anyone with access to the guest authentication secret stored in your browser may be able to use that guest profile.</p>
+      <p>We use reasonable safeguards appropriate to a small community project. These include encrypted connections, secure cookies, password hashing, access controls, session expiry and revocation, and encryption of Google authentication tokens. No online service can guarantee perfect security.</p>
+      <p>Keep your device and account secure. Anyone able to use an active browser session may be able to use that profile.</p>
 
       <h2>Your choices and rights</h2>
       <p>Google sign-in is optional. You may play as a guest instead.</p>
+      <p>You may reset a guest or delete a protected account from the account screen. Authentication and personal profile data are removed. Completed match records may retain an opaque, anonymized player identifier so results remain internally consistent.</p>
       <p>You may ask us to:</p>
       <ul>
         <li>tell you whether we hold personal information about you;</li>
