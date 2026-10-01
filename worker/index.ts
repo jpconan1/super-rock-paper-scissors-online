@@ -15,7 +15,7 @@ import {
 } from '../src/whiteboard/protocol';
 import { isLobbyPresence, type LobbyPlayer, type LobbyPresence, type LobbyServerMessage } from '../src/lobby/protocol';
 import { eloDeltas } from '../src/core/elo';
-import { countNewestClassRoundWins, createProgressAward, createTutorialProgressAward, isClassUnlocked, type ProgressAward } from '../src/core/progression';
+import { countNewestClassRoundWins, createProgressAward, createTokenProgressAward, createTutorialProgressAward, isClassUnlocked, type ProgressAward } from '../src/core/progression';
 import { ABM_CLASS_IDS, type AbmCommand, type AbmClassId, type AbmState } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 import { WhiteboardRateLimiter, type WhiteboardRateCategory } from '../src/whiteboard/rateLimiter';
 import { LOBBY_SOCKET_PROTOCOL, MATCH_SOCKET_PROTOCOL, socketCredential, WHITEBOARD_SOCKET_PROTOCOL } from '../src/protocol/webSocketAuth';
@@ -29,6 +29,10 @@ import {
   PLAYER_NAME_MAX_LENGTH, normalizePlayerDisplayName, playerProfile,
 } from '../src/protocol/playerProfile';
 import { createAuth, type AuthEnv } from './auth';
+import {
+  hasFullLocalMatchAwardAllowance, LOCAL_MATCH_AWARD_WINDOW_MS, LOCAL_MATCH_GRANT_TTL_MS,
+  localMatchGrantProblem, type LocalMatchGrant, type LocalMatchKind,
+} from '../src/protocol/localMatchReceipt';
 
 interface Env extends AuthEnv {
   MATCHES: DurableObjectNamespace<MatchObject>;
@@ -39,8 +43,16 @@ interface Env extends AuthEnv {
   SOCKET_RATE: RateLimit;
   MATCHMAKING_IP_RATE: RateLimit;
   MATCHMAKING_GUEST_RATE: RateLimit;
+  SIGNUP_REQUEST_RATE: RateLimit;
+  SIGNUP_VERIFY_RATE: RateLimit;
   ALLOWED_ORIGINS?: string;
 }
+
+const LOCAL_MATCH_GRANT_DEBOUNCE_MS = 2_000;
+const EMAIL_SIGNUP_TTL_MS = 10 * 60_000;
+const EMAIL_RATE_WINDOW_MS = 15 * 60_000;
+const TERMS_VERSION = '2026-09-13';
+const PRIVACY_VERSION = '2026-09-13';
 
 type Seat = 'p1' | 'p2';
 const MATCH_MESSAGE_MAX_BYTES = 256_000;
@@ -646,11 +658,14 @@ export async function finalizeMatch(db: D1Database, result: {
   return responses[3]?.meta.changes === 1 || responses[6]?.meta.changes === 1 ? 'applied' : 'duplicate';
 }
 
-export async function applyLocalProgressAward(db: D1Database, playerId: string, resultId: string, award: ProgressAward): Promise<ProgressAward> {
+export async function applyLocalProgressAward(db: D1Database, playerId: string, resultId: string, kind: LocalMatchKind, award: ProgressAward, fullReward: boolean, createdAt = Date.now()): Promise<ProgressAward> {
   const awardJson = JSON.stringify(award);
   await db.batch([
-    db.prepare('INSERT OR IGNORE INTO local_progress_awards (result_id, player_id, gained_progress_units, award_json, progress_applied) VALUES (?, ?, ?, ?, 0)')
-      .bind(resultId, playerId, award.gainedProgressUnits, awardJson),
+    db.prepare(`INSERT OR IGNORE INTO local_progress_awards
+      (result_id, player_id, kind, gained_progress_units, award_json, full_reward, progress_applied, created_at)
+      SELECT ?, ?, ?, ?, ?, ?, 0, ? WHERE EXISTS (
+        SELECT 1 FROM local_match_grants WHERE grant_id = ? AND player_id = ? AND claimed_at IS NULL
+      )`).bind(resultId, playerId, kind, award.gainedProgressUnits, awardJson, fullReward ? 1 : 0, createdAt, resultId, playerId),
     db.prepare(`UPDATE players SET total_progress_units = MIN(200000, total_progress_units + (
       SELECT gained_progress_units FROM local_progress_awards WHERE result_id = ? AND player_id = ? AND progress_applied = 0
     )) WHERE player_id = ? AND EXISTS (
@@ -658,6 +673,8 @@ export async function applyLocalProgressAward(db: D1Database, playerId: string, 
     )`).bind(resultId, playerId, playerId, resultId, playerId),
     db.prepare('UPDATE local_progress_awards SET progress_applied = 1 WHERE result_id = ? AND player_id = ? AND progress_applied = 0')
       .bind(resultId, playerId),
+    db.prepare('UPDATE local_match_grants SET claimed_at = ? WHERE grant_id = ? AND player_id = ? AND claimed_at IS NULL')
+      .bind(createdAt, resultId, playerId),
   ]);
   const stored = await db.prepare('SELECT player_id, award_json FROM local_progress_awards WHERE result_id = ?').bind(resultId)
     .first<{ player_id: string; award_json: string }>();
@@ -686,6 +703,114 @@ async function authenticateRequestPlayer(request: Request, env: Env): Promise<Au
   return { playerId: player.player_id, displayName: player.display_name, rating: player.rating, totalProgressUnits: player.total_progress_units, unlockAllClasses: player.unlock_all_classes === 1 };
 }
 
+function normalizeEmail(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const email = value.trim().toLowerCase();
+  if (email.length < 3 || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
+  return email;
+}
+
+function emailSignupEnabled(env: Env): boolean {
+  return Boolean(env.RESEND_API_KEY) || (env.BETTER_AUTH_URL.startsWith('http://localhost') && /^\d{6}$/.test(env.DEV_AUTH_EMAIL_CODE ?? ''));
+}
+
+async function rateKey(prefix: string, value: string): Promise<string> {
+  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+  return `${prefix}:${[...new Uint8Array(bytes)].map((byte) => byte.toString(16).padStart(2, '0')).join('')}`;
+}
+
+async function useSignupRateLimit(db: D1Database, key: string, limit: number, now: number): Promise<boolean> {
+  const cutoff = now - EMAIL_RATE_WINDOW_MS;
+  const row = await db.prepare(`INSERT INTO email_signup_rate_limits (rate_key, window_started_at, request_count)
+    VALUES (?, ?, 1)
+    ON CONFLICT(rate_key) DO UPDATE SET
+      window_started_at = CASE WHEN window_started_at <= ? THEN excluded.window_started_at ELSE window_started_at END,
+      request_count = CASE WHEN window_started_at <= ? THEN 1 ELSE request_count + 1 END
+    RETURNING request_count`).bind(key, now, cutoff, cutoff).first<{ request_count: number }>();
+  return Boolean(row && row.request_count <= limit);
+}
+
+async function anonymousSignupSession(request: Request, env: Env) {
+  const session = await createAuth(env).api.getSession({ headers: request.headers });
+  if (!session || !(session.user as { isAnonymous?: boolean }).isAnonymous) return null;
+  const player = await env.DB.prepare('SELECT player_id FROM players WHERE auth_user_id = ?').bind(session.user.id).first();
+  return player ? session : null;
+}
+
+async function requestEmailSignup(request: Request, env: Env, clientKey: string): Promise<Response> {
+  if (!emailSignupEnabled(env)) return json({ error: 'Email signup is unavailable.' }, 503);
+  try {
+    const session = await anonymousSignupSession(request, env);
+    if (!session) return json({ error: 'Start a guest profile before signing up.' }, 401);
+    const body = await readJsonBody<{ email?: unknown; legalAccepted?: unknown }>(request, 2_000);
+    const email = normalizeEmail(body.email);
+    if (!email) return json({ error: 'Enter a valid email address.' }, 400);
+    if (body.legalAccepted !== true) return json({ error: 'Accept the Terms and Privacy Policy to continue.' }, 400);
+    const now = Date.now();
+    const emailKey = await rateKey('signup-email', email);
+    const ipKey = await rateKey('signup-ip', clientKey);
+    const [bindingAllowed, emailAllowed, ipAllowed] = await Promise.all([
+      allowed(env.SIGNUP_REQUEST_RATE, ipKey),
+      useSignupRateLimit(env.DB, emailKey, 3, now),
+      useSignupRateLimit(env.DB, ipKey, 10, now),
+    ]);
+    if (!bindingAllowed || !emailAllowed || !ipAllowed) return rateLimited(15 * 60);
+    await env.DB.prepare(`INSERT INTO email_signup_pending
+      (anonymous_user_id, email, terms_version, privacy_version, accepted_at, expires_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(anonymous_user_id) DO UPDATE SET email = excluded.email,
+        terms_version = excluded.terms_version, privacy_version = excluded.privacy_version,
+        accepted_at = excluded.accepted_at, expires_at = excluded.expires_at`)
+      .bind(session.user.id, email, TERMS_VERSION, PRIVACY_VERSION, now, now + EMAIL_SIGNUP_TTL_MS).run();
+    try {
+      await createAuth(env).api.sendVerificationOTP({ body: { email, type: 'sign-in' }, headers: request.headers });
+    } catch {
+      await env.DB.batch([
+        env.DB.prepare('DELETE FROM email_signup_pending WHERE anonymous_user_id = ?').bind(session.user.id),
+        env.DB.prepare('DELETE FROM verification WHERE identifier = ?').bind(`sign-in-otp-${email}`),
+      ]);
+      return json({ error: 'Could not send code. Try again.' }, 502);
+    }
+    return json({ success: true });
+  } catch (error) {
+    if (error instanceof RequestBodyError) return json({ error: error.message }, error.status);
+    return json({ error: 'Could not send code. Try again.' }, 500);
+  }
+}
+
+async function verifyEmailSignup(request: Request, env: Env, url: URL, clientKey: string): Promise<Response> {
+  if (!emailSignupEnabled(env)) return json({ error: 'Email signup is unavailable.' }, 503);
+  try {
+    const session = await anonymousSignupSession(request, env);
+    if (!session) return json({ error: 'Signup session expired.' }, 401);
+    const body = await readJsonBody<{ email?: unknown; code?: unknown }>(request, 2_000);
+    const email = normalizeEmail(body.email);
+    const code = typeof body.code === 'string' ? body.code.replace(/\s/g, '') : '';
+    if (!email || !/^\d{6}$/.test(code)) return json({ error: 'Enter the six-digit code.' }, 400);
+    const now = Date.now();
+    const ipKey = await rateKey('verify-ip', clientKey);
+    const [bindingAllowed, ipAllowed] = await Promise.all([
+      allowed(env.SIGNUP_VERIFY_RATE, ipKey), useSignupRateLimit(env.DB, ipKey, 20, now),
+    ]);
+    if (!bindingAllowed || !ipAllowed) return rateLimited(15 * 60);
+    const pending = await env.DB.prepare(`SELECT email FROM email_signup_pending
+      WHERE anonymous_user_id = ? AND email = ? AND expires_at > ?`)
+      .bind(session.user.id, email, now).first();
+    if (!pending) return json({ error: 'Code invalid or expired.' }, 400);
+    const headers = new Headers(request.headers);
+    headers.set('content-type', 'application/json');
+    const authRequest = new Request(new URL('/api/auth/sign-in/email-otp', url.origin), {
+      method: 'POST', headers, body: JSON.stringify({ email, otp: code }),
+    });
+    const response = await createAuth(env).handler(authRequest);
+    if (!response.ok) return json({ error: 'Code invalid or expired.' }, response.status === 429 ? 429 : 400);
+    return response;
+  } catch (error) {
+    if (error instanceof RequestBodyError) return json({ error: error.message }, error.status);
+    return json({ error: 'Could not verify code. Try again.' }, 500);
+  }
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -694,13 +819,28 @@ export default {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: origin ? corsHeadersForOrigin(origin) : undefined });
     return withCors(await routeRequest(request, env, url), origin);
   },
+  async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
+    const now = Date.now();
+    await env.DB.batch([
+      env.DB.prepare('DELETE FROM email_signup_pending WHERE expires_at <= ?').bind(now),
+      env.DB.prepare('DELETE FROM verification WHERE expiresAt <= ?').bind(now),
+      env.DB.prepare('DELETE FROM email_signup_rate_limits WHERE window_started_at <= ?').bind(now - EMAIL_RATE_WINDOW_MS),
+    ]);
+  },
 } satisfies ExportedHandler<Env>;
 
 async function routeRequest(request: Request, env: Env, url: URL): Promise<Response> {
     const clientKey = request.headers.get('CF-Connecting-IP') ?? 'unknown-client';
+    if (url.pathname === '/email-signup/request' && request.method === 'POST') return requestEmailSignup(request, env, clientKey);
+    if (url.pathname === '/email-signup/verify' && request.method === 'POST') return verifyEmailSignup(request, env, url, clientKey);
+    if (url.pathname === '/api/auth/email-otp/send-verification-otp' || url.pathname === '/api/auth/sign-in/email-otp') {
+      return json({ error: 'Use the game email signup flow.' }, 404);
+    }
     if (url.pathname.startsWith('/api/auth/')) return createAuth(env).handler(request);
     if (url.pathname === '/health') return json({ ok: true });
-    if (url.pathname === '/auth-capabilities') return json({ emailPassword: Boolean(env.AUTH_MAILER) });
+    if (url.pathname === '/auth-capabilities') return json({
+      emailSignup: emailSignupEnabled(env), emailCodeLogin: false, password: false,
+    });
     if (url.pathname === '/online-status') {
       if (!await allowed(env.SOCKET_RATE, `status:${clientKey}`)) return rateLimited();
       return json({ playersOnline: await env.LOBBY.getByName('global').getOnlinePlayerCount() });
@@ -771,10 +911,33 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
         return json({ error: 'Progression update failed.' }, 500);
       }
     }
+    if (url.pathname === '/local-match-grant' && request.method === 'POST') {
+      try {
+        const body = await readJsonBody<{ kind?: unknown }>(request, 1_000);
+        if (body.kind !== 'tutorial' && body.kind !== 'computer') return json({ error: 'Unknown local match kind.' }, 400);
+        const player = await authenticateRequestPlayer(request, env);
+        const now = Date.now();
+        const current = await env.DB.prepare('SELECT grant_id, kind, issued_at, expires_at, claimed_at FROM local_match_grants WHERE player_id = ?')
+          .bind(player.playerId).first<{ grant_id: string; kind: LocalMatchKind; issued_at: number; expires_at: number; claimed_at: number | null }>();
+        if (current && current.kind === body.kind && current.claimed_at === null && now - current.issued_at < LOCAL_MATCH_GRANT_DEBOUNCE_MS) {
+          return json({ receipt: current.grant_id, kind: current.kind, issuedAt: current.issued_at, expiresAt: current.expires_at } satisfies LocalMatchGrant);
+        }
+        const grant: LocalMatchGrant = { receipt: crypto.randomUUID(), kind: body.kind, issuedAt: now, expiresAt: now + LOCAL_MATCH_GRANT_TTL_MS };
+        await env.DB.prepare(`INSERT INTO local_match_grants (player_id, grant_id, kind, issued_at, expires_at, claimed_at)
+          VALUES (?, ?, ?, ?, ?, NULL) ON CONFLICT(player_id) DO UPDATE SET grant_id = excluded.grant_id,
+          kind = excluded.kind, issued_at = excluded.issued_at, expires_at = excluded.expires_at, claimed_at = NULL`)
+          .bind(player.playerId, grant.receipt, grant.kind, grant.issuedAt, grant.expiresAt).run();
+        return json(grant, 201);
+      } catch (error) {
+        if (error instanceof RequestBodyError) return json({ error: error.message }, error.status);
+        if (error instanceof GuestAuthError) return json({ error: error.message }, 401);
+        return json({ error: 'Local match could not start.' }, 500);
+      }
+    }
     if (url.pathname === '/local-progress-award' && request.method === 'POST') {
       try {
-        const body = await readJsonBody<{ resultId?: unknown; kind?: unknown; outcome?: unknown; roundWinningClassIds?: unknown }>(request, 4_000);
-        if (!validClientId(body.resultId)) return json({ error: 'resultId is required.' }, 400);
+        const body = await readJsonBody<{ receipt?: unknown; kind?: unknown; outcome?: unknown; roundWinningClassIds?: unknown }>(request, 4_000);
+        if (!validClientId(body.receipt)) return json({ error: 'receipt is required.' }, 400);
         if (body.kind !== 'tutorial' && body.kind !== 'computer') return json({ error: 'Unknown local award kind.' }, 400);
         if (body.outcome !== 'win' && body.outcome !== 'loss') return json({ error: 'Unknown progress outcome.' }, 400);
         const roundWinningClassIds = body.roundWinningClassIds ?? [];
@@ -783,12 +946,35 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
           return json({ error: 'Invalid round-winning classes.' }, 400);
         }
         const player = await authenticateRequestPlayer(request, env);
-        const award = body.kind === 'tutorial'
+        const stored = await env.DB.prepare('SELECT player_id, kind, award_json FROM local_progress_awards WHERE result_id = ?').bind(body.receipt)
+          .first<{ player_id: string; kind: LocalMatchKind; award_json: string }>();
+        if (stored) {
+          if (stored.player_id !== player.playerId) return json({ error: 'Receipt belongs to another player.' }, 403);
+          if (stored.kind !== body.kind) return json({ error: 'Receipt kind does not match.' }, 409);
+          return json(JSON.parse(stored.award_json));
+        }
+        const grant = await env.DB.prepare('SELECT player_id, kind, issued_at, expires_at, claimed_at FROM local_match_grants WHERE grant_id = ?').bind(body.receipt)
+          .first<{ player_id: string; kind: LocalMatchKind; issued_at: number; expires_at: number; claimed_at: number | null }>();
+        const now = Date.now();
+        const problem = localMatchGrantProblem(grant ? {
+          playerId: grant.player_id, kind: grant.kind, issuedAt: grant.issued_at, expiresAt: grant.expires_at, claimedAt: grant.claimed_at,
+        } : undefined, player.playerId, body.kind, now);
+        if (problem === 'unknown') return json({ error: 'Unknown or superseded receipt.' }, 404);
+        if (problem === 'wrong-player') return json({ error: 'Receipt belongs to another player.' }, 403);
+        if (problem === 'wrong-kind') return json({ error: 'Receipt kind does not match.' }, 409);
+        if (problem === 'premature') return json({ error: 'Match finished too quickly.' }, 409);
+        if (problem === 'expired') return json({ error: 'Receipt expired.' }, 410);
+        if (problem === 'claimed') return json({ error: 'Receipt already claimed.' }, 409);
+        const recent = await env.DB.prepare(`SELECT COUNT(*) AS count FROM local_progress_awards
+          WHERE player_id = ? AND kind = ? AND full_reward = 1 AND created_at > ?`)
+          .bind(player.playerId, body.kind, now - LOCAL_MATCH_AWARD_WINDOW_MS).first<{ count: number }>();
+        const fullReward = hasFullLocalMatchAwardAllowance(recent?.count ?? 0);
+        const award = !fullReward ? createTokenProgressAward(player.totalProgressUnits, body.outcome, player.unlockAllClasses) : body.kind === 'tutorial'
           ? createTutorialProgressAward(player.totalProgressUnits, body.outcome)
           : createProgressAward(player.totalProgressUnits, body.outcome, {
             opponent: 'computer', newestClassRoundWins: countNewestClassRoundWins(player.totalProgressUnits, roundWinningClassIds), paused: player.unlockAllClasses,
           });
-        return json(await applyLocalProgressAward(env.DB, player.playerId, body.resultId, award));
+        return json(await applyLocalProgressAward(env.DB, player.playerId, body.receipt, body.kind, award, fullReward, now));
       } catch (error) {
         if (error instanceof RequestBodyError) return json({ error: error.message }, error.status);
         if (error instanceof GuestAuthError) return json({ error: error.message }, 401);
@@ -858,9 +1044,9 @@ async function allowed(limiter: RateLimit, key: string): Promise<boolean> {
   return (await limiter.limit({ key })).success;
 }
 
-function rateLimited(): Response {
+function rateLimited(retryAfterSeconds = 60): Response {
   return Response.json({ error: 'Too many requests.' }, {
-    status: 429, headers: { 'cache-control': 'no-store', 'retry-after': '60' },
+    status: 429, headers: { 'cache-control': 'no-store', 'retry-after': String(retryAfterSeconds) },
   });
 }
 

@@ -16,10 +16,7 @@
     }
   },
   "copy": {
-    "heading": "Super Rock Paper Scissors Online",
-    "nameLabel": "Player name",
-    "randomName": "Random Name",
-    "enterLobby": "Enter Lobby"
+    "heading": "Super Rock Paper Scissors Online"
   },
   "elements": [
     {
@@ -50,37 +47,13 @@
       "visible": true
     },
     {
-      "id": "name-entry",
-      "type": "text-entry",
-      "protected": true,
-      "behavior": "player-name",
-      "assets": {
-        "src": "/interactive-elements/text-entry/text-frame-sheet.webp"
-      },
-      "layouts": {
-        "landscape": {
-          "x": 195,
-          "y": 320,
-          "width": 560,
-          "height": 60
-        },
-        "portrait": {
-          "x": 30,
-          "y": 575,
-          "width": 480,
-          "height": 60
-        }
-      }
-    },
-    {
-      "id": "random-name",
+      "id": "sign-up",
       "type": "button",
       "protected": true,
-      "behavior": "random-name",
       "assets": {
-        "up": "/interactive-elements/menu-buttons/name-button-up-sheet.webp",
-        "between": "/interactive-elements/menu-buttons/name-button-between-sheet.webp",
-        "depressed": "/interactive-elements/menu-buttons/name-button-depressed-sheet.webp"
+        "up": "/title/auth/sign-up-button-up-sheet.webp",
+        "between": "/title/auth/sign-up-button-between-sheet.webp",
+        "depressed": "/title/auth/sign-up-button-depressed-sheet.webp"
       },
       "layouts": {
         "landscape": {
@@ -105,9 +78,9 @@
       "protected": true,
       "behavior": "enter-lobby",
       "assets": {
-        "up": "/interactive-elements/menu-buttons/lobby-button-up-sheet.webp",
-        "between": "/interactive-elements/menu-buttons/lobby-button-between-sheet.webp",
-        "depressed": "/interactive-elements/menu-buttons/lobby-button-depressed-sheet.webp"
+        "up": "/title/auth/lobby-guest-button-up-sheet.webp",
+        "between": "/title/auth/lobby-guest-button-between-sheet.webp",
+        "depressed": "/title/auth/lobby-guest-button-depressed-sheet.webp"
       },
       "layouts": {
         "landscape": {
@@ -127,6 +100,16 @@
       }
     },
     {
+      "id": "password-sign-in", "type": "button", "protected": true,
+      "assets": { "up": "/title/auth/sign-in-password-up-sheet.webp", "between": "/title/auth/sign-in-password-between-sheet.webp", "depressed": "/title/auth/sign-in-password-depressed-sheet.webp" },
+      "layouts": { "landscape": { "x": 278, "y": 320, "width": 120, "height": 60 }, "portrait": { "x": 83, "y": 575, "width": 115, "height": 60 } }
+    },
+    {
+      "id": "email-sign-in", "type": "button", "protected": true,
+      "assets": { "up": "/title/auth/sign-in-email-up-sheet.webp", "between": "/title/auth/sign-in-email-between-sheet.webp", "depressed": "/title/auth/sign-in-email-depressed-sheet.webp" },
+      "layouts": { "landscape": { "x": 413, "y": 320, "width": 120, "height": 60 }, "portrait": { "x": 213, "y": 575, "width": 115, "height": 60 } }
+    },
+    {
       "id": "google-sign-in",
       "type": "button",
       "protected": true,
@@ -138,20 +121,91 @@
       },
       "layouts": {
         "landscape": {
-          "x": 325,
-          "y": 390,
-          "width": 154,
-          "height": 40,
-          "aspectLock": true
+          "x": 548,
+          "y": 320,
+          "width": 120,
+          "height": 60
         },
         "portrait": {
-          "x": 129,
-          "y": 805,
-          "width": 282,
-          "height": 73,
-          "aspectLock": true
+          "x": 343,
+          "y": 575,
+          "width": 115,
+          "height": 60
         }
       }
+    },
+    {
+      "id": "apple-sign-in", "type": "button", "protected": true,
+      "assets": { "up": "/title/auth/apple-sign-in-button-up.webp", "between": "/title/auth/apple-sign-in-button-between.webp", "depressed": "/title/auth/apple-sign-in-button-depressed.webp" },
+      "layouts": {
+        "landscape": { "x": 548, "y": 352, "width": 120, "height": 27.8095238095, "aspectLock": true },
+        "portrait": { "x": 343, "y": 607, "width": 115, "height": 26.6507936508, "aspectLock": true }
+      }
+    },
+    {
+      "id": "password-form", "type": "group", "protected": true,
+      "layouts": { "landscape": { "x": 0, "y": 0, "width": 960, "height": 540 }, "portrait": { "x": 0, "y": 0, "width": 540, "height": 960 } }
+    },
+    {
+      "id": "password-email", "type": "text-entry", "protected": true,
+      "assets": { "src": "/title/auth/password-entry-landscape-sheet.webp" },
+      "layouts": {
+        "landscape": { "x": 195, "y": 320, "width": 340, "height": 50, "aspectLock": true },
+        "portrait": { "x": 30, "y": 575, "width": 275.3515625, "height": 47.5, "aspectLock": true }
+      }
+    },
+    {
+      "id": "password-password", "type": "text-entry", "protected": true,
+      "assets": { "src": "/title/auth/password-entry-landscape-sheet.webp" },
+      "layouts": {
+        "landscape": { "x": 195, "y": 385, "width": 340, "height": 50, "aspectLock": true },
+        "portrait": { "x": 30, "y": 640, "width": 275.3515625, "height": 47.5, "aspectLock": true }
+      }
+    },
+    {
+      "id": "password-submit", "type": "button", "protected": true,
+      "assets": { "up": "/title/auth/sign-in-button-up-sheet.webp", "between": "/title/auth/sign-in-button-between-sheet.webp", "depressed": "/title/auth/sign-in-button-depressed-sheet.webp" },
+      "layouts": { "landscape": { "x": 545, "y": 320, "width": 100, "height": 50, "aspectLock": true }, "portrait": { "x": 320, "y": 575, "width": 95, "height": 47.5, "aspectLock": true } }
+    },
+    {
+      "id": "password-back", "type": "button", "protected": true,
+      "assets": { "up": "/interactive-elements/menu-buttons/back-button-w-up-sheet.webp", "between": "/interactive-elements/menu-buttons/back-button-w-between-sheet.webp", "depressed": "/interactive-elements/menu-buttons/back-button-w-depressed-sheet.webp" },
+      "layouts": { "landscape": { "x": 655, "y": 352.5, "width": 100, "height": 50, "aspectLock": true }, "portrait": { "x": 425, "y": 607.5, "width": 95, "height": 47.5, "aspectLock": true } }
+    },
+    {
+      "id": "forgot-password", "type": "button", "protected": true,
+      "assets": { "up": "/title/auth/forgot-password-button-up-sheet.webp", "between": "/title/auth/forgot-password-button-between-sheet.webp", "depressed": "/title/auth/forgot-password-button-depressed-sheet.webp" },
+      "layouts": { "landscape": { "x": 545, "y": 385, "width": 100, "height": 50, "aspectLock": true }, "portrait": { "x": 320, "y": 640, "width": 95, "height": 47.5, "aspectLock": true } }
+    },
+    {
+      "id": "password-error", "type": "dynamic-text", "protected": true,
+      "layouts": { "landscape": { "x": 195, "y": 300, "width": 560, "height": 20 }, "portrait": { "x": 30, "y": 548, "width": 480, "height": 25 } }
+    },
+    {
+      "id": "email-code-form", "type": "group", "protected": true,
+      "layouts": { "landscape": { "x": 0, "y": 0, "width": 960, "height": 540 }, "portrait": { "x": 0, "y": 0, "width": 540, "height": 960 } }
+    },
+    {
+      "id": "email-code-email", "type": "text-entry", "protected": true,
+      "assets": { "src": "/title/auth/password-entry-landscape-sheet.webp" },
+      "layouts": {
+        "landscape": { "x": 195, "y": 352.5, "width": 340, "height": 50, "aspectLock": true },
+        "portrait": { "x": 30, "y": 607.5, "width": 275.3515625, "height": 47.5, "aspectLock": true }
+      }
+    },
+    {
+      "id": "email-code-send", "type": "button", "protected": true,
+      "assets": { "up": "/title/auth/send-code-button-up-sheet.webp", "between": "/title/auth/send-code-button-between-sheet.webp", "depressed": "/title/auth/send-code-button-depressed-sheet.webp" },
+      "layouts": { "landscape": { "x": 545, "y": 352.5, "width": 100, "height": 50, "aspectLock": true }, "portrait": { "x": 320, "y": 607.5, "width": 95, "height": 47.5, "aspectLock": true } }
+    },
+    {
+      "id": "email-code-back", "type": "button", "protected": true,
+      "assets": { "up": "/interactive-elements/menu-buttons/back-button-w-up-sheet.webp", "between": "/interactive-elements/menu-buttons/back-button-w-between-sheet.webp", "depressed": "/interactive-elements/menu-buttons/back-button-w-depressed-sheet.webp" },
+      "layouts": { "landscape": { "x": 655, "y": 352.5, "width": 100, "height": 50, "aspectLock": true }, "portrait": { "x": 425, "y": 607.5, "width": 95, "height": 47.5, "aspectLock": true } }
+    },
+    {
+      "id": "account-status", "type": "dynamic-text", "protected": true,
+      "layouts": { "landscape": { "x": 195, "y": 325, "width": 560, "height": 50 }, "portrait": { "x": 30, "y": 575, "width": 480, "height": 60 } }
     },
     {
       "id": "online-count",
@@ -159,7 +213,7 @@
       "protected": true,
       "layouts": {
         "landscape": {
-          "x": 485,
+          "x": 370,
           "y": 395,
           "width": 220,
           "height": 26

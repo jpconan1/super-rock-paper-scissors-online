@@ -14,7 +14,7 @@ export interface AccountScreenMount { destroy(): void; update(account: AccountSt
 export function mountAccountScreen(container: HTMLElement, clock: BoilClock, initial: AccountState,
   onChangeName: (name: string) => Promise<AccountState>, onClaim: () => void, onLogout: () => void,
   onBack: () => void, onDisconnect: (provider: 'google' | 'credential') => Promise<AccountState>,
-  onDelete: () => Promise<void>, onClaimEmail: (email: string, password: string) => Promise<void>): AccountScreenMount {
+  onDelete: () => Promise<void>): AccountScreenMount {
   const layout = getLayoutDocument('account');
   let orientation: 'landscape' | 'portrait' = 'landscape';
   const bindings: { id: string; element: HTMLElement }[] = [];
@@ -70,15 +70,7 @@ export function mountAccountScreen(container: HTMLElement, clock: BoilClock, ini
       void onDisconnect('credential').then((next) => { account = next; renderDetails(); renderSecurity(); })
         .catch((reason) => { error.textContent = reason instanceof Error ? reason.message : 'Could not remove email login.'; });
     }));
-    else if (account.emailAuthAvailable) {
-      const email = document.createElement('input'); email.type = 'email'; email.autocomplete = 'email'; email.placeholder = 'Email';
-      const password = document.createElement('input'); password.type = 'password'; password.autocomplete = 'new-password'; password.placeholder = 'Password';
-      security.append(email, password, action('Add email + password', () => {
-        error.textContent = '';
-        void onClaimEmail(email.value, password.value).then(() => { error.textContent = 'Check your email to verify this login.'; })
-          .catch((reason) => { error.textContent = reason instanceof Error ? reason.message : 'Could not add email login.'; });
-      }));
-    } else {
+    else {
       const unavailable = document.createElement('span'); unavailable.textContent = 'Email login unavailable'; security.append(unavailable);
     }
     security.append(action(account.isAnonymous ? 'Reset guest account' : 'Delete account', () => {

@@ -11,7 +11,9 @@ Run `npm run dev` in another terminal for the browser client. The ignored `.env.
 
 Copy `.dev.vars.example` to `.dev.vars`, generate `BETTER_AUTH_SECRET` with `npx auth@latest secret`, and add the Google web OAuth client credentials. Google's local callback is `http://localhost:8787/api/auth/callback/google`; production uses `https://abm.jpconan.ca/api/auth/callback/google`.
 
-Email/password routes are feature-gated by the optional `AUTH_MAILER` binding. It must implement `sendVerification({ email, url })` and `sendPasswordReset({ email, url })`. Without that binding, email signup and recovery remain hidden and Better Auth credential signup is disabled. This keeps the auth core independent of the eventual mail provider.
+Email signup is feature-gated by the optional `RESEND_API_KEY` secret. Without it, signup stays hidden. Signup sends a six-digit code through Resend from `Super ABM <no-reply@abm.jpconan.ca>`; password login, recovery, and email change remain disabled.
+
+Local development may set `DEV_AUTH_EMAIL_CODE=123456` instead of a Resend key. The fake mailer sends nothing; enter that fixed code in the signup dialog. This fallback is accepted only when `BETTER_AUTH_URL` starts with `http://localhost`.
 
 Before the first remote deployment:
 
@@ -19,12 +21,13 @@ Before the first remote deployment:
 2. Create the shared database with `npx wrangler d1 create super-rps-online`.
 3. Copy the returned database ID into `wrangler.jsonc` in place of `replace-with-cloudflare-d1-id`.
 4. Store `BETTER_AUTH_SECRET`, `GOOGLE_CLIENT_ID`, and `GOOGLE_CLIENT_SECRET` with `npx wrangler secret put NAME`.
-5. Apply `npm run d1:migrate:remote`.
-6. Deploy with `npm run worker:deploy`.
+5. Verify `abm.jpconan.ca` in Resend, select North Virginia as its sending region, disable open/click tracking for the domain, then store `RESEND_API_KEY` with `npx wrangler secret put RESEND_API_KEY`.
+6. Apply `npm run d1:migrate:remote`.
+7. Deploy with `npm run worker:deploy`.
 
 That command builds the browser app, then deploys its static assets and the API/WebSocket Worker together. Attach `abm.jpconan.ca` to `super-rps-online`; the old `super-rps-online-menu` Worker is no longer used.
 
-Matchmaking creates Match Durable Objects internally. Connect a returned seat to `/matches/{matchId}?seat=p1` using WebSocket subprotocols `super-rps-match-v1` and the private seat token. `/lobby` and `/whiteboard` accept Better Auth session cookies only. Public match creation is intentionally unavailable.
+Matchmaking creates Match Durable Objects internally. Connect a returned seat to `/matches/{matchId}?seat=p1` using WebSocket subprotocols `super-rps-match-v1` and the private seat token. `/lobby` and `/whiteboard` accept Better Auth session cookies only. Public match creation is intentionally unavailable. Local computer/tutorial rewards require a server-issued receipt from `/local-match-grant` before `/local-progress-award` accepts completion.
 
 Browser HTTP and WebSocket traffic is same-origin by default. Future trusted web distributions can be enabled without code changes by setting `ALLOWED_ORIGINS` to a comma-separated list of exact origins. Native clients that omit the browser `Origin` header remain supported.
 

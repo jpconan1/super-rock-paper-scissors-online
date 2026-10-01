@@ -114,7 +114,7 @@ export function mountUniversalMenu(container: HTMLElement, background: HTMLEleme
     accountButton.element.classList.add('universal-menu__account-button', 'game-button--baked-label');
     const accountPanel = document.createElement('div'); accountPanel.className = 'universal-menu__account';
     const accountLabel = document.createElement('p');
-    accountLabel.textContent = options.account.signedIn ? `${options.account.displayName} — Google connected` : `${options.account.displayName || 'Guest'} — Guest`;
+    accountLabel.textContent = options.account.signedIn ? `${options.account.displayName} — Signed in` : `${options.account.displayName || 'Guest'} — Guest`;
     accountPanel.append(accountLabel);
     controls.append(accountButton.element, accountPanel);
     lobbyResources.push(unlockController, resumeProgression, accountButton);

@@ -158,7 +158,7 @@ function makeNode(config: LayoutElement): HTMLElement {
 }
 
 function previewText(config: LayoutElement): string {
-  return ({ 'name-entry': 'PLAYER NAME', 'online-count': 'players online: 123', 'sound-toggle': 'SOUND',
+  return ({ 'account-status': 'Logged in as PLAYER', 'password-form': 'EMAIL · PASSWORD · SIGN IN · BACK', 'online-count': 'players online: 123', 'sound-toggle': 'SOUND',
     'music-slider': 'MUSIC', 'sfx-slider': 'SFX', 'boil-toggle': 'ANIMATION',
     'unlocked-copy': 'LUCKY\nHas a 1/4 chance to survive a lethal attack.',
     'next-copy': 'ADVANTAGED\nFor the first three turns, Mana gives 2 instead of 1.' } as Record<string, string>)[config.id]

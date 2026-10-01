@@ -103,6 +103,13 @@ export function createTutorialProgressAward(totalProgressUnits: number, outcome:
   };
 }
 
+export function createTokenProgressAward(totalProgressUnits: number, outcome: ProgressOutcome, paused = false): ProgressAward {
+  const before = progressionForTotal(totalProgressUnits);
+  const gainedProgressUnits = paused ? 0 : Math.min(1, MAX_PROGRESS_UNITS - before.totalProgressUnits);
+  const after = progressionForTotal(before.totalProgressUnits + gainedProgressUnits);
+  return { outcome, gainedProgressUnits, before, after, unlockedClassIds: after.unlockedClassIds.slice(before.unlockedClassIds.length) };
+}
+
 export function createNextLevelProgressAward(totalProgressUnits: number): ProgressAward | undefined {
   const before = progressionForTotal(totalProgressUnits);
   if (!before.nextUnlock) return undefined;

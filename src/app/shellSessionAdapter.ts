@@ -10,8 +10,11 @@ import { countNewestClassRoundWins, createProgressAward, createTutorialProgressA
 import { ABM_CLASS_IDS, type AbmClassId } from '../variants/attackBlockMana/attackBlockManaTypes';
 import type { ProgressAward } from '../core/progression';
 import { randomId } from '../core/randomId';
+import { generateRandomName } from '../title/randomName';
+import type { LocalMatchGrant, LocalMatchKind } from '../protocol/localMatchReceipt';
+export type { LocalMatchGrant, LocalMatchKind } from '../protocol/localMatchReceipt';
 
-export interface AccountState { signedIn: boolean; isAnonymous: boolean; displayName: string; playerId: string; rating: number; totalProgressUnits: number; level: number; unlockedClassIds: readonly import('../variants/attackBlockMana/attackBlockManaTypes').AbmClassId[]; unlockAllClasses: boolean; email: string; emailVerified: boolean; connectedMethods: readonly string[]; emailAuthAvailable: boolean }
+export interface AccountState { signedIn: boolean; isAnonymous: boolean; displayName: string; playerId: string; rating: number; totalProgressUnits: number; level: number; unlockedClassIds: readonly import('../variants/attackBlockMana/attackBlockManaTypes').AbmClassId[]; unlockAllClasses: boolean; email: string; emailVerified: boolean; connectedMethods: readonly string[]; emailAuthAvailable: boolean; emailSignupAvailable: boolean }
 
 export interface ShellSessionListener {
   connection(state: ConnectionState): void;
@@ -30,8 +33,9 @@ export interface ShellSessionAdapter {
   suggestedPlayerName(): string;
   accountState(): AccountState;
   setUnlockAllClasses(enabled: boolean): Promise<void>;
-  awardTutorialMatch(resultId: string, outcome: 'win' | 'loss'): Promise<ProgressAward>;
-  awardComputerMatch(resultId: string, outcome: 'win' | 'loss', roundWinningClassIds?: readonly AbmClassId[]): Promise<ProgressAward>;
+  beginLocalMatch(kind: LocalMatchKind): Promise<LocalMatchGrant>;
+  awardTutorialMatch(receipt: string, outcome: 'win' | 'loss'): Promise<ProgressAward>;
+  awardComputerMatch(receipt: string, outcome: 'win' | 'loss', roundWinningClassIds?: readonly AbmClassId[]): Promise<ProgressAward>;
   applyProgressAward(award: ProgressAward): void;
   requestGoogleSignInFromTitle(playerName: string, callbackURL: string, errorCallbackURL: string): Promise<string>;
   requestGuestClaimWithGoogle(callbackURL: string, errorCallbackURL: string): Promise<string>;
@@ -39,7 +43,9 @@ export interface ShellSessionAdapter {
   signInWithGoogleFromTitle(playerName: string): Promise<void>;
   claimGuestWithGoogle(): Promise<void>;
   updateDisplayName(displayName: string): Promise<PlayerProfile>;
-  claimWithEmail(email: string, password: string): Promise<void>;
+  requestEmailSignup(email: string, legalAccepted: boolean): Promise<void>;
+  verifyEmailSignup(email: string, code: string): Promise<void>;
+  resendEmailSignup(email: string): Promise<void>;
   signInWithEmail(email: string, password: string): Promise<void>;
   requestPasswordReset(email: string, redirectTo: string): Promise<void>;
   resetPassword(token: string, newPassword: string): Promise<void>;
@@ -95,6 +101,7 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
   private emailVerified = false;
   private connectedMethods: string[] = [];
   private emailAuthAvailable = false;
+  private emailSignupAvailable = false;
 
   constructor(private readonly baseUrl = location.origin) {
     this.authClient = createGameAuthClient(baseUrl);
@@ -132,7 +139,7 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
   suggestedPlayerName(): string { return loadSavedGuestName(); }
   accountState(): AccountState {
     const progression = progressionForTotal(this.totalProgressUnits);
-    return { signedIn: !this.authIsAnonymous, isAnonymous: this.authIsAnonymous, displayName: this.playerName || loadSavedGuestName(), playerId: this.playerId, rating: this.rating, totalProgressUnits: this.totalProgressUnits, level: progression.level, unlockedClassIds: this.unlockAllClasses ? ABM_CLASS_IDS : progression.unlockedClassIds, unlockAllClasses: this.unlockAllClasses, email: this.email, emailVerified: this.emailVerified, connectedMethods: this.connectedMethods, emailAuthAvailable: this.emailAuthAvailable };
+    return { signedIn: !this.authIsAnonymous, isAnonymous: this.authIsAnonymous, displayName: this.playerName || loadSavedGuestName(), playerId: this.playerId, rating: this.rating, totalProgressUnits: this.totalProgressUnits, level: progression.level, unlockedClassIds: this.unlockAllClasses ? ABM_CLASS_IDS : progression.unlockedClassIds, unlockAllClasses: this.unlockAllClasses, email: this.email, emailVerified: this.emailVerified, connectedMethods: this.connectedMethods, emailAuthAvailable: this.emailAuthAvailable, emailSignupAvailable: this.emailSignupAvailable };
   }
   async setUnlockAllClasses(enabled: boolean): Promise<void> {
     const response = await fetch(`${this.baseUrl}/player-progression`, { method: 'PUT', credentials: 'include', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ unlockAllClasses: enabled }) });
@@ -141,14 +148,25 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
     if (player.unlockAllClasses !== enabled) throw new Error('Progression update returned invalid data.');
     this.totalProgressUnits = player.totalProgressUnits; this.unlockAllClasses = player.unlockAllClasses;
   }
-  async awardTutorialMatch(resultId: string, outcome: 'win' | 'loss'): Promise<ProgressAward> {
-    return this.awardLocalMatch({ resultId, kind: 'tutorial', outcome });
+  async beginLocalMatch(kind: LocalMatchKind): Promise<LocalMatchGrant> {
+    const response = await fetch(`${this.baseUrl}/local-match-grant`, {
+      method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind }), signal: AbortSignal.timeout(3_000),
+    });
+    if (!response.ok) throw new Error(`Local match authorization failed: ${response.status}`);
+    const grant = await response.json() as LocalMatchGrant;
+    if (!grant || typeof grant.receipt !== 'string' || grant.kind !== kind || !Number.isFinite(grant.issuedAt) || !Number.isFinite(grant.expiresAt)) {
+      throw new Error('Local match authorization returned invalid data.');
+    }
+    return grant;
   }
-  async awardComputerMatch(resultId: string, outcome: 'win' | 'loss', roundWinningClassIds: readonly AbmClassId[] = []): Promise<ProgressAward> {
-    return this.awardLocalMatch({ resultId, kind: 'computer', outcome, roundWinningClassIds });
+  async awardTutorialMatch(receipt: string, outcome: 'win' | 'loss'): Promise<ProgressAward> {
+    return this.awardLocalMatch({ receipt, kind: 'tutorial', outcome });
+  }
+  async awardComputerMatch(receipt: string, outcome: 'win' | 'loss', roundWinningClassIds: readonly AbmClassId[] = []): Promise<ProgressAward> {
+    return this.awardLocalMatch({ receipt, kind: 'computer', outcome, roundWinningClassIds });
   }
   applyProgressAward(award: ProgressAward): void { this.totalProgressUnits = award.after.totalProgressUnits; }
-  private async awardLocalMatch(body: { resultId: string; kind: 'tutorial' | 'computer'; outcome: 'win' | 'loss'; roundWinningClassIds?: readonly AbmClassId[] }): Promise<ProgressAward> {
+  private async awardLocalMatch(body: { receipt: string; kind: LocalMatchKind; outcome: 'win' | 'loss'; roundWinningClassIds?: readonly AbmClassId[] }): Promise<ProgressAward> {
     const response = await fetch(`${this.baseUrl}/local-progress-award`, {
       method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
@@ -199,11 +217,30 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
     this.playerName = player.displayName; this.playerId = player.playerId; this.rating = player.rating; this.totalProgressUnits = player.totalProgressUnits ?? 0; this.unlockAllClasses = player.unlockAllClasses ?? false; saveGuestName(player.displayName);
     return player;
   }
-  async claimWithEmail(email: string, password: string): Promise<void> {
-    if (!this.authIsAnonymous) throw new Error('This account is already protected.');
-    if (!this.emailAuthAvailable) throw new Error('Email sign-in is not configured yet.');
-    const result = await this.authClient.signUp.email({ email, password, name: this.playerName, callbackURL: location.href });
-    if (result.error) throw new Error(result.error.message || 'Could not add email and password.');
+  async requestEmailSignup(email: string, legalAccepted: boolean): Promise<void> {
+    if (!this.emailSignupAvailable) throw new Error('Email signup is unavailable.');
+    let player = await this.loadAuthenticatedPlayer();
+    if (player && !this.authIsAnonymous) throw new Error('This account is already protected.');
+    if (!player) {
+      const anonymous = await this.authClient.signIn.anonymous();
+      if (anonymous.error) throw new Error(anonymous.error.message || 'Could not start signup.');
+      player = await this.createAuthenticatedPlayer(loadSavedGuestName() || generateRandomName());
+      if (!player) throw new Error('Could not create player profile.');
+    }
+    await this.postEmailSignup('/email-signup/request', { email, legalAccepted });
+  }
+  async verifyEmailSignup(email: string, code: string): Promise<void> {
+    await this.postEmailSignup('/email-signup/verify', { email, code });
+    if (!await this.loadAuthenticatedPlayer() || this.authIsAnonymous) throw new Error('Signup could not be completed.');
+  }
+  async resendEmailSignup(email: string): Promise<void> {
+    await this.postEmailSignup('/email-signup/request', { email, legalAccepted: true });
+  }
+  private async postEmailSignup(path: string, body: object): Promise<void> {
+    const response = await fetch(`${this.baseUrl}${path}`, { method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    if (response.ok) return;
+    const result = await response.json().catch(() => ({})) as { error?: string };
+    throw new Error(result.error || 'Email signup failed.');
   }
   async signInWithEmail(email: string, password: string): Promise<void> {
     const result = await this.authClient.signIn.email({ email, password });
@@ -251,6 +288,11 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
     }
     saveGuestName(requestedName);
     this.playerName = requestedName;
+    authenticated = await this.createAuthenticatedPlayer(requestedName);
+    if (authenticated) {
+      await this.connectOnlineServices();
+      return authenticated;
+    }
     const result = await this.authClient.signIn.anonymous();
     if (result.error) throw new Error(result.error.message || 'Could not start guest session.');
     authenticated = await this.createAuthenticatedPlayer(requestedName);
@@ -290,7 +332,11 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
   private async loadAuthCapabilities(): Promise<void> {
     try {
       const response = await fetch(`${this.baseUrl}/auth-capabilities`, { cache: 'no-store' });
-      if (response.ok) this.emailAuthAvailable = (await response.json() as { emailPassword?: boolean }).emailPassword === true;
+      if (response.ok) {
+        const capabilities = await response.json() as { emailSignup?: boolean; emailCodeLogin?: boolean; password?: boolean };
+        this.emailSignupAvailable = capabilities.emailSignup === true;
+        this.emailAuthAvailable = capabilities.emailCodeLogin === true || capabilities.password === true;
+      }
     } catch { /* feature remains unavailable */ }
   }
   private async prepareFreshPlayerForGoogle(playerName: string): Promise<void> {
@@ -316,6 +362,7 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
     this.unlockAllClasses = false;
     this.authIsAnonymous = true;
     this.email = ''; this.emailVerified = false; this.connectedMethods = [];
+    this.emailAuthAvailable = false; this.emailSignupAvailable = false;
   }
   async getOnlinePlayerCount(): Promise<number | null> {
     try {
@@ -531,8 +578,9 @@ export class LocalShellSessionAdapter implements ShellSessionAdapter {
   isGoogleSignInReturn(): boolean { return false; }
   async completeGoogleSignIn(): Promise<PlayerProfile | null> { return null; }
   suggestedPlayerName(): string { return ''; }
-  accountState(): AccountState { const progress = progressionForTotal(0); return { signedIn: false, isAnonymous: true, displayName: '', playerId: 'local-player', rating: 1500, totalProgressUnits: 0, level: progress.level, unlockedClassIds: this.unlockAllClasses ? ABM_CLASS_IDS : progress.unlockedClassIds, unlockAllClasses: this.unlockAllClasses, email: '', emailVerified: false, connectedMethods: [], emailAuthAvailable: false }; }
+  accountState(): AccountState { const progress = progressionForTotal(0); return { signedIn: false, isAnonymous: true, displayName: '', playerId: 'local-player', rating: 1500, totalProgressUnits: 0, level: progress.level, unlockedClassIds: this.unlockAllClasses ? ABM_CLASS_IDS : progress.unlockedClassIds, unlockAllClasses: this.unlockAllClasses, email: '', emailVerified: false, connectedMethods: [], emailAuthAvailable: false, emailSignupAvailable: false }; }
   async setUnlockAllClasses(enabled: boolean): Promise<void> { this.unlockAllClasses = enabled; }
+  async beginLocalMatch(kind: LocalMatchKind): Promise<LocalMatchGrant> { const now = Date.now(); return { receipt: `local-${randomId()}`, kind, issuedAt: now, expiresAt: now + 30 * 60_000 }; }
   async awardTutorialMatch(_resultId: string, outcome: 'win' | 'loss'): Promise<ProgressAward> { return createTutorialProgressAward(0, outcome); }
   async awardComputerMatch(_resultId: string, outcome: 'win' | 'loss', roundWinningClassIds: readonly AbmClassId[] = []): Promise<ProgressAward> {
     const newestClassRoundWins = countNewestClassRoundWins(0, roundWinningClassIds);
@@ -545,7 +593,9 @@ export class LocalShellSessionAdapter implements ShellSessionAdapter {
   async signInWithGoogleFromTitle(_playerName: string): Promise<void> {}
   async claimGuestWithGoogle(): Promise<void> {}
   async updateDisplayName(displayName: string): Promise<PlayerProfile> { return { playerId: 'local-player', displayName, rating: 1500, unlockAllClasses: this.unlockAllClasses, ...progressionForTotal(0) }; }
-  async claimWithEmail(_email: string, _password: string): Promise<void> {}
+  async requestEmailSignup(_email: string, _legalAccepted: boolean): Promise<void> {}
+  async verifyEmailSignup(_email: string, _code: string): Promise<void> {}
+  async resendEmailSignup(_email: string): Promise<void> {}
   async signInWithEmail(_email: string, _password: string): Promise<void> {}
   async requestPasswordReset(_email: string, _redirectTo: string): Promise<void> {}
   async resetPassword(_token: string, _newPassword: string): Promise<void> {}

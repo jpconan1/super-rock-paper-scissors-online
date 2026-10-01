@@ -4,6 +4,14 @@ import { LocalAbmMatch, chooseComputerCommand } from '../src/app/localAbmMatch';
 import type { AbmProjection } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 
 describe('LocalAbmMatch', () => {
+  test('uses a server receipt as the rewarded local match ID', () => {
+    const snapshots: ServerSnapshot[] = [];
+    const match = new LocalAbmMatch({ playerName: 'JP', matchId: 'server-receipt', publish: (snapshot) => snapshots.push(snapshot) });
+    match.start();
+    expect(snapshots[0]?.matchId).toBe('server-receipt');
+    match.destroy();
+  });
+
   test('rejects a locked human class while leaving computer selection unrestricted', () => {
     const match = new LocalAbmMatch({ playerName: 'JP', publish: () => {}, unlockedClassIds: ['lucky'], now: () => 10_000 });
     match.start();

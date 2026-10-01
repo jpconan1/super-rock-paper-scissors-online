@@ -4,6 +4,9 @@ import { createBoilingSprite } from '../renderer/boilingSprite';
 export interface TextEntryOptions {
   label: string;
   value?: string;
+  type?: 'text' | 'email' | 'password';
+  placeholder?: string;
+  required?: boolean;
   maxLength?: number;
   autocomplete?: string;
   validate?: (value: string) => boolean;
@@ -16,6 +19,7 @@ export interface TextEntry {
   input: HTMLInputElement;
   value(): string;
   setValue(value: string): void;
+  setSheet(sheet: string): void;
   validate(): boolean;
   focus(): void;
   destroy(): void;
@@ -38,9 +42,11 @@ export function createTextEntry(options: TextEntryOptions): TextEntry {
 
   const input = document.createElement('input');
   input.className = 'text-entry__input';
-  input.type = 'text';
+  input.type = options.type ?? 'text';
   input.value = options.value ?? '';
   input.setAttribute('aria-label', options.label);
+  if (options.placeholder !== undefined) input.placeholder = options.placeholder;
+  input.required = options.required ?? false;
   if (options.maxLength !== undefined) input.maxLength = options.maxLength;
   if (options.autocomplete !== undefined) input.setAttribute('autocomplete', options.autocomplete);
 
@@ -64,6 +70,7 @@ export function createTextEntry(options: TextEntryOptions): TextEntry {
       input.value = value;
       validate();
     },
+    setSheet: (sheet) => art.setSource(sheet),
     validate,
     focus: () => input.focus(),
     destroy() {

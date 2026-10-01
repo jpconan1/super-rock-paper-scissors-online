@@ -3,6 +3,7 @@ DELETE FROM verification;
 DELETE FROM session;
 DELETE FROM account;
 DELETE FROM user;
+DELETE FROM local_match_grants;
 DELETE FROM local_progress_awards;
 
 UPDATE players

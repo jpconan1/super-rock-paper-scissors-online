@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
-  countNewestClassRoundWins, createNextLevelProgressAward, createProgressAward, createTutorialProgressAward, isClassUnlocked, MAX_PROGRESS_UNITS, progressGainForLevel, progressionForTotal, standardRateMultiplierForLevel,
+  countNewestClassRoundWins, createNextLevelProgressAward, createProgressAward, createTokenProgressAward, createTutorialProgressAward, isClassUnlocked, MAX_PROGRESS_UNITS, progressGainForLevel, progressionForTotal, standardRateMultiplierForLevel,
 } from '../src/core/progression';
 import { ABM_CLASS_IDS } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 import { xpAnimationStops } from '../src/app/xpProgressBar';
@@ -111,6 +111,12 @@ describe('progression', () => {
     expect(createTutorialProgressAward(10_000, 'loss')).toMatchObject({
       gainedProgressUnits: 100, unlockedClassIds: [], after: { totalProgressUnits: 10_100 },
     });
+  });
+
+  test('creates the capped one-XP award unless progression is paused or complete', () => {
+    expect(createTokenProgressAward(10_000, 'win')).toMatchObject({ gainedProgressUnits: 1, after: { totalProgressUnits: 10_001 } });
+    expect(createTokenProgressAward(10_000, 'loss', true)).toMatchObject({ gainedProgressUnits: 0, after: { totalProgressUnits: 10_000 } });
+    expect(createTokenProgressAward(MAX_PROGRESS_UNITS, 'win')).toMatchObject({ gainedProgressUnits: 0 });
   });
 
   test('splits XP animation at every filled level bar', () => {

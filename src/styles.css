@@ -119,6 +119,19 @@ body::before {
 .alert-system__error { margin: 0; color: #ac3235; font-size: 18px; font-weight: 900; text-align: center; }
 .alert-system__actions { display: flex; width: 100%; flex-wrap: wrap; align-items: center; justify-content: center; gap: 24px; }
 .game-button.alert-system__action { width: 160px; }
+.alert-system__box.sign-up-alert { gap: 16px; padding: 22px 28px; }
+.sign-up-alert .alert-system__content { width: 100%; color: #171412; }
+.sign-up-dialog { display: grid; width: 100%; justify-items: center; gap: 14px; }
+.sign-up-dialog__heading { margin: 0 0 4px; color: #ac3235; font-size: 30px; line-height: 1; }
+.sign-up-dialog .text-entry { width: 340px; height: 50px; flex: none; }
+.sign-up-dialog__form { display: grid; width: 100%; justify-items: center; gap: 14px; }
+.sign-up-dialog__legal { max-width: 390px; font-size: 16px; line-height: 1.3; }
+.sign-up-dialog__legal input { width: 18px; height: 18px; vertical-align: middle; }
+.sign-up-dialog__instruction, .sign-up-dialog__status { margin: 0; font-size: 17px; line-height: 1.25; }
+.sign-up-dialog__status { min-height: 22px; color: #ac3235; font-weight: 900; }
+.sign-up-dialog__controls { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.sign-up-dialog__plain-button { min-height: 38px; padding: 6px 14px; border: 3px solid #171412; background: #f4d35e; color: #171412; font: inherit; font-size: 17px; font-weight: 900; cursor: pointer; }
+.sign-up-dialog__plain-button:disabled { cursor: wait; opacity: .55; }
 .tutorial-slideshow {
   position: absolute;
   inset: 0;
@@ -502,8 +515,11 @@ input {
 .title-screen__logo > .game-button__art { inset: 0; }
 .title-screen__logo > .game-button__juice { display: none; }
 .title-screen__online-count { position: absolute; margin: 0; color: rgba(23,20,18,.72); font-size: 22px; font-weight: 950; line-height: 1; text-align: center; transform: rotate(.25deg); }
-.game-button.title-screen__google { position: absolute; width: auto; max-width: none; }
-.title-screen__email-button { position: absolute; left: 50%; bottom: 8px; z-index: 20; transform: translateX(-50%); border: 2px solid #171717; background: #fff; font: inherit; font-weight: 700; }
+.game-button.title-screen__auth-button { position: absolute; width: auto; max-width: none; }
+.title-screen__password-form, .title-screen__email-code-form { position: absolute; display: block; margin: 0; padding: 0; border: 0; background: transparent; }
+.title-screen__password-form[hidden], .title-screen__email-code-form[hidden] { display: none; }
+.title-screen__password-button { position: absolute; width: auto; max-width: none; }
+.title-screen__password-error { position: absolute; margin: 0; color: #ac3235; font-size: 13px; font-weight: 800; line-height: 1.1; text-align: center; }
 .title-screen__email-dialog { border: 4px solid #171717; box-shadow: 8px 8px 0 #171717; }
 .title-screen__email-dialog[open] { display: grid; gap: 10px; }
 .title-screen__email-dialog::backdrop { background: rgb(0 0 0 / 55%); }
@@ -528,6 +544,7 @@ input {
 .menu-canvas__composition[data-layout='portrait'] .account-screen__details { grid-template-columns: 115px 1fr; font-size: 18px; }
 .title-screen__account-status { position: absolute; display: grid; place-items: center; margin: 0; color: #24533d; font-size: 17px; font-weight: 950; line-height: 1.05; text-align: center; transform: rotate(-.4deg); }
 .title-screen__account-status[hidden] { display: none; }
+.local-reward-notice { position: fixed; z-index: 90; left: 50%; bottom: 24px; max-width: min(520px, calc(100vw - 32px)); margin: 0; padding: 12px 18px; transform: translateX(-50%) rotate(-.4deg); border: 3px solid #1f1712; border-radius: 8px; background: #fff3b0; color: #1f1712; font-weight: 900; text-align: center; pointer-events: none; box-shadow: 4px 5px 0 #1f1712; }
 .title-screen__legal-links {
   position: absolute;
   z-index: 2;
@@ -793,6 +810,8 @@ input {
   font-size: clamp(1rem, 7cqi, 2rem);
   line-height: 1;
 }
+
+.text-entry__input::placeholder { color: rgba(23, 20, 18, .45); opacity: 1; }
 
 .text-entry:focus-within { filter: drop-shadow(0 3px 0 #d7432f); }
 .text-entry:has(.text-entry__input[aria-invalid='true']) { filter: drop-shadow(0 0 0.22rem #e23b2f); }

@@ -39,7 +39,7 @@ We do not use personal information to train artificial intelligence models.
 
 We do not sell personal information or give it to others for their own marketing or advertising.
 
-We use service providers to run the game. Cloudflare hosts the game, network services, and database. Google processes information when you choose Google sign-in. These providers may process information on our behalf under their own terms and privacy policies, and information may be processed outside your province or outside Canada, where it may be subject to local law.
+We use service providers to run the game. Cloudflare hosts the game, network services, and database. Resend processes email addresses and authentication messages when you use email signup. Google processes information when you choose Google sign-in. These providers may process information on our behalf under their own terms and privacy policies, and information may be processed outside your province or outside Canada, where it may be subject to local law.
 
 Your display name, rating, online presence, match participation, and content you submit to shared multiplayer features may be visible to other players or the public as part of the game.
 

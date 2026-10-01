@@ -81,6 +81,26 @@ describe('layout documents', () => {
     });
   });
 
+  it('ships the redesigned title authentication controls without the old name controls', () => {
+    const title = layoutDocuments.get('title')!;
+    const ids = title.elements.map(({ id }) => id);
+    expect(ids).not.toContain('name-entry');
+    expect(ids).not.toContain('random-name');
+    expect(ids).toEqual(expect.arrayContaining([
+      'sign-up', 'enter-lobby', 'password-sign-in', 'email-sign-in', 'google-sign-in', 'apple-sign-in', 'password-form', 'account-status',
+      'password-email', 'password-password', 'password-submit', 'password-back', 'forgot-password', 'password-error',
+      'email-code-form', 'email-code-email', 'email-code-send', 'email-code-back',
+    ]));
+    expect(title.elements.find(({ id }) => id === 'enter-lobby')?.assets).toMatchObject({ up: '/title/auth/lobby-guest-button-up-sheet.webp' });
+    expect(title.elements.find(({ id }) => id === 'sign-up')?.assets).toMatchObject({ up: '/title/auth/sign-up-button-up-sheet.webp' });
+    expect(title.elements.find(({ id }) => id === 'apple-sign-in')?.assets).toMatchObject({ up: '/title/auth/apple-sign-in-button-up.webp' });
+    expect(title.elements.find(({ id }) => id === 'password-email')?.assets).toMatchObject({ src: '/title/auth/password-entry-landscape-sheet.webp' });
+    expect(title.elements.find(({ id }) => id === 'password-submit')?.assets).toMatchObject({ up: '/title/auth/sign-in-button-up-sheet.webp' });
+    expect(title.elements.find(({ id }) => id === 'password-back')?.assets).toMatchObject({ up: '/interactive-elements/menu-buttons/back-button-w-up-sheet.webp' });
+    expect(title.elements.find(({ id }) => id === 'forgot-password')?.assets).toMatchObject({ up: '/title/auth/forgot-password-button-up-sheet.webp' });
+    expect(title.elements.find(({ id }) => id === 'email-code-send')?.assets).toMatchObject({ up: '/title/auth/send-code-button-up-sheet.webp' });
+  });
+
   it('ships one closed-curtain composition for every variant', () => {
     expect(variantDetailLayoutDocuments).toHaveLength(9);
     for (const detail of variantDetailLayoutDocuments) {

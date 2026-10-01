@@ -2,3 +2,7 @@ BETTER_AUTH_SECRET=replace-with-at-least-32-random-characters
 BETTER_AUTH_URL=http://localhost:8787
 GOOGLE_CLIENT_ID=replace-with-google-web-client-id
 GOOGLE_CLIENT_SECRET=replace-with-google-web-client-secret
+# Optional. Email signup stays hidden when omitted.
+RESEND_API_KEY=replace-with-resend-api-key
+# Localhost-only fake mailer. The code is never logged or returned by the API.
+DEV_AUTH_EMAIL_CODE=123456

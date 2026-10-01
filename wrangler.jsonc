@@ -16,10 +16,13 @@
     "run_worker_first": [
       "/health",
       "/auth-capabilities",
+      "/email-signup/request",
+      "/email-signup/verify",
       "/online-status",
       "/account-method",
       "/player-session",
       "/player-progression",
+      "/local-match-grant",
       "/local-progress-award",
       "/api/auth/*",
       "/matches",
@@ -50,9 +53,14 @@
   "vars": {
     "BETTER_AUTH_URL": "https://abm.jpconan.ca"
   },
+  "triggers": {
+    "crons": ["17 * * * *"]
+  },
   "ratelimits": [
     { "name": "SOCKET_RATE", "namespace_id": "731001", "simple": { "limit": 120, "period": 60 } },
     { "name": "MATCHMAKING_IP_RATE", "namespace_id": "731002", "simple": { "limit": 600, "period": 60 } },
-    { "name": "MATCHMAKING_GUEST_RATE", "namespace_id": "731003", "simple": { "limit": 120, "period": 60 } }
+    { "name": "MATCHMAKING_GUEST_RATE", "namespace_id": "731003", "simple": { "limit": 120, "period": 60 } },
+    { "name": "SIGNUP_REQUEST_RATE", "namespace_id": "731004", "simple": { "limit": 10, "period": 60 } },
+    { "name": "SIGNUP_VERIFY_RATE", "namespace_id": "731005", "simple": { "limit": 20, "period": 60 } }
   ]
 }

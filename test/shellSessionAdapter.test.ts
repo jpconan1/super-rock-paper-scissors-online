@@ -81,6 +81,26 @@ describe('matchmaking session adapters', () => {
     expect(connection).toHaveBeenLastCalledWith('connected');
   });
 
+  test('repairs an authenticated guest session whose player row is missing', async () => {
+    const profile = { playerId: 'repaired-player', displayName: 'Player One', rating: 1500, isAnonymous: true };
+    let created = false;
+    const fetchMock = vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/player-session') && init?.method === 'POST') { created = true; return Promise.resolve(new Response(null, { status: 200 })); }
+      if (url.endsWith('/player-session')) return Promise.resolve(created
+        ? new Response(JSON.stringify(profile), { status: 200 })
+        : new Response(null, { status: 404 }));
+      return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('WebSocket', vi.fn(() => ({ addEventListener: vi.fn(), close: vi.fn() })));
+    const adapter = new WebSocketShellSessionAdapter('https://example.test');
+
+    await expect(adapter.enterLobby('Player One')).resolves.toMatchObject(profile);
+
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/api/auth/sign-in/anonymous'))).toBe(false);
+  });
+
   test('persists a cookie-backed guest and suggests its harmless saved name after reload', async () => {
     const profile = { playerId: 'server-guest', displayName: 'Saved Player', rating: 1512, isAnonymous: true };
     let playerCreated = false;
@@ -270,10 +290,27 @@ describe('matchmaking session adapters', () => {
     adapter.applyProgressAward(received);
 
     expect(fetchMock).toHaveBeenCalledWith('https://example.test/local-progress-award', expect.objectContaining({ method: 'POST', credentials: 'include' }));
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
-      resultId: 'practice-result-1', kind: 'tutorial', outcome: 'win',
-    });
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ receipt: 'practice-result-1', kind: 'tutorial', outcome: 'win' });
     expect(adapter.accountState()).toMatchObject({ level: 2, totalProgressUnits: 10_000, unlockedClassIds: ['lucky', 'advantaged'] });
+  });
+
+  test('requests and validates a server receipt before a rewarded local match', async () => {
+    const grant = { receipt: 'receipt-1', kind: 'computer', issuedAt: 10_000, expiresAt: 1_810_000 };
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(grant), { status: 201 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const adapter = new WebSocketShellSessionAdapter('https://example.test');
+
+    await expect(adapter.beginLocalMatch('computer')).resolves.toEqual(grant);
+
+    expect(fetchMock).toHaveBeenCalledWith('https://example.test/local-match-grant', expect.objectContaining({ method: 'POST', credentials: 'include' }));
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ kind: 'computer' });
+  });
+
+  test('rejects a malformed local-match receipt response', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ receipt: '', kind: 'tutorial' }), { status: 200 })));
+    const adapter = new WebSocketShellSessionAdapter('https://example.test');
+
+    await expect(adapter.beginLocalMatch('tutorial')).rejects.toThrow('invalid data');
   });
 
   test('local unlock-all mode can be enabled and resumed', async () => {

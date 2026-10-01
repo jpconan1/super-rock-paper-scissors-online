@@ -17,6 +17,7 @@ type TutorialStage = 'opening' | 'attack-followup' | 'forced-reset' | 'block-fol
 
 interface LocalAbmMatchOptions {
   playerName: string;
+  matchId?: string;
   publish(snapshot: ServerSnapshot): void;
   now?: () => number;
   random?: () => number;
@@ -60,7 +61,7 @@ export class LocalAbmMatch {
       p2: { name: 'Computer', platform: 'CPU', rating: 0 },
     };
     const now = this.now();
-    this.state = createOnlineMatch(`practice-${randomId()}`, players, Math.floor(this.random() * 0x7fffffff), now, 'abm-only');
+    this.state = createOnlineMatch(options.matchId ?? `practice-${randomId()}`, players, Math.floor(this.random() * 0x7fffffff), now, 'abm-only');
     advanceMatchDeadline(this.state, this.state.deadlineAt!);
     if (options.startingClasses) {
       this.mutateWithoutPublishing(HUMAN, { type: 'lock-class', classId: options.startingClasses[HUMAN] });
