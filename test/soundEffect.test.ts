@@ -25,13 +25,13 @@ describe('createSoundEffect', () => {
     vi.resetModules();
   });
 
-  it('defaults to sound enabled, music muted, and sound effects at 75% slider volume', async () => {
+  it('defaults to sound enabled, music at 66%, and sound effects at 75% slider volume', async () => {
     vi.stubGlobal('Audio', AudioMock);
     vi.stubGlobal('AudioContext', undefined);
     const audio = await import('../src/audio/soundEffect');
 
     expect(audio.isSoundEnabled()).toBe(true);
-    expect(audio.getMusicVolume()).toBe(0);
+    expect(audio.getMusicVolume()).toBe(0.66 ** 3);
     expect(audio.getSfxVolume()).toBe(0.75 ** 3);
   });
 
@@ -60,6 +60,42 @@ describe('createSoundEffect', () => {
 
     expect(audio.getMusicVolume()).toBe(0.25);
     expect(audio.getSfxVolume()).toBe(0.75);
+  });
+
+  it('caps a fallback effect at a dynamic maximum gain', async () => {
+    vi.stubGlobal('Audio', AudioMock);
+    vi.stubGlobal('AudioContext', undefined);
+    const audio = await import('../src/audio/soundEffect');
+    audio.setSfxVolume(0.8);
+    audio.setMusicVolume(0.2);
+    const sound = audio.createSoundEffect('/limited.mp3', { maximumGain: audio.getMusicVolume });
+
+    sound.play();
+    expect(AudioMock.instances[0]?.volume).toBe(0.2);
+
+    audio.setMusicVolume(0.9);
+    sound.play();
+    expect(AudioMock.instances[1]?.volume).toBe(0.8);
+  });
+
+  it('plays and stops a bounded fallback segment', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('Audio', AudioMock);
+    vi.stubGlobal('AudioContext', undefined);
+    const { createSoundEffect } = await import('../src/audio/soundEffect');
+    const sound = createSoundEffect('/segment.mp3');
+
+    const playback = sound.play({ offsetSeconds: 1.25, durationSeconds: 0.5 });
+    expect(AudioMock.instances[0]?.currentTime).toBe(1.25);
+    expect(AudioMock.instances[0]?.play).toHaveBeenCalledOnce();
+    vi.advanceTimersByTime(499);
+    expect(AudioMock.instances[0]?.pause).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(AudioMock.instances[0]?.pause).toHaveBeenCalledOnce();
+
+    playback.stop();
+    sound.destroy();
+    vi.useRealTimers();
   });
 
 });

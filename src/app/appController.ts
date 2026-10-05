@@ -21,7 +21,7 @@ import { createEmptyWhiteboard, type WhiteboardServerMessage, type WhiteboardSna
 import type { LobbyPlayer } from '../lobby/protocol';
 import { beats } from '../core/time';
 import { MusicDirector } from '../audio/musicDirector';
-import { destroySoundCatalog, playCatalogSound } from '../audio/soundCatalog';
+import { destroySoundCatalog, MATCH_FOUND_SOUND_MS, playCatalogSound } from '../audio/soundCatalog';
 import { LocalAbmMatch, type TutorialEnding } from './localAbmMatch';
 import { randomId } from '../core/randomId';
 import { hasSeenAbmNewsletter, mountAbmLetterModal } from './abmLetterModal';
@@ -190,7 +190,6 @@ export class AppController {
     this.mounted = presentation;
     this.assetLease = lease;
     this.activeSlot = slotId;
-    if (descriptor?.variantId === 'attack-block-mana') this.music.enterAbm();
     const emit = send ?? ((command: unknown) => {
       if (this.localMatch) {
         this.localMatch.send(command);
@@ -211,6 +210,11 @@ export class AppController {
         presentation.render(variantProjection(this.latestSnapshot.projection), [event], serverTime, this.pendingProgressAward);
       }
     });
+    if (descriptor?.variantId === 'attack-block-mana') {
+      if (this.localMatchAwardMode === 'computer') this.music.enterPracticeAbm();
+      else if (this.localMatch) this.music.enterAbm();
+      else this.music.enterOnlineAbm();
+    }
   }
 
   receiveSnapshot(snapshot: ServerSnapshot, local = false): void {
@@ -276,15 +280,20 @@ export class AppController {
 
   private mountDestination(destination: ShellDestination): void {
     const options = this.options;
-    this.music.enterMenu();
+    if (destination === 'title') this.music.enterTitle();
+    else if (destination === 'lobby') this.music.enterLobby();
     if (destination === 'title') {
       const titleAccount = options.session.accountState();
       const enterLobby = (name: string) => {
         this.playerName = name;
+        this.music.enterLobby();
         void options.session.enterLobby(name).then((profile) => {
           this.playerName = profile.displayName;
           return this.navigate('lobby');
-        }).catch((error) => this.showError(error, 'title'));
+        }).catch((error) => {
+          this.music.enterTitle();
+          this.showError(error, 'title');
+        });
       };
       const title = mountTitleScreen(this.screenLayer, options.clock, () => enterLobby(generateRandomName()),
       () => options.session.getOnlinePlayerCount(), (trigger) => this.openAbmLetter(trigger), {
@@ -624,6 +633,7 @@ export class AppController {
     this.progressAwardMatchId = undefined; this.rewardTransitionStarted = false;
     this.tutorialPending = false;
     this.closeTutorialSlideshow();
+    this.music.preparePracticeAbm();
     this.setMatchmaking(false);
     this.latestSnapshot = undefined;
     this.matchFlowDirector?.cancel();
@@ -712,10 +722,14 @@ export class AppController {
     if (projection.phase === 'match-found') {
       this.matchmakingActive = false;
       if (this.destination !== 'match-found') {
+        this.music.enterOnlineMatchFound();
+        const stingStartedAt = performance.now();
+        playCatalogSound('match-found');
         await this.navigate('match-found');
-        // The server deadline starts when players are paired. Hold again from
-        // the moment the match-found screen is actually visible to this player.
-        await waitFor(beats(2), this.lifecycle?.signal);
+        // The sting begins with the wipe. Hold the revealed screen only for
+        // whatever audible time remains after the actual curtain animation.
+        const remainingStingMs = Math.max(0, MATCH_FOUND_SOUND_MS - (performance.now() - stingStartedAt));
+        await waitFor(remainingStingMs, this.lifecycle?.signal);
       }
       return;
     }
@@ -815,7 +829,7 @@ export class AppController {
       this.localMatchGrant = undefined;
       this.options.session.setLobbyPresence('idle');
     } else this.options.session.leaveMatch();
-    this.latestSnapshot = undefined; this.matchFlowDirector?.cancel(); this.music.enterMenu(true);
+    this.latestSnapshot = undefined; this.matchFlowDirector?.cancel();
   }
 
   private async returnToLobbyFromMatch(): Promise<void> {

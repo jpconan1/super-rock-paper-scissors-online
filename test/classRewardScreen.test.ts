@@ -19,7 +19,7 @@ describe('class reward flow', () => {
   });
 
   test('omits the preview after the final class unlock', () => {
-    expect(createClassRewardFlow(createProgressAward(199_100, 'win', { opponent: 'human' }))).toEqual({ unlockedClassIds: ['joe'] });
+    expect(createClassRewardFlow(createProgressAward(199_500, 'win', { opponent: 'human' }))).toEqual({ unlockedClassIds: ['joe'] });
   });
 
   test('plays seven ordered flip frames for the previewed class', () => {

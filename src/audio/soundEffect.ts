@@ -1,9 +1,23 @@
-import { musicManifest, type MusicBase, type MusicTopper } from './musicManifest';
+import { musicManifest, type MusicBase } from './musicManifest';
 import { MusicTransport } from './musicTransport';
 
 export interface SoundEffect {
-  play(): void;
+  play(options?: SoundPlaybackOptions): SoundPlayback;
   destroy(): void;
+}
+
+export interface SoundPlayback {
+  stop(): void;
+}
+
+export interface SoundPlaybackOptions {
+  offsetSeconds?: number;
+  durationSeconds?: number;
+}
+
+export interface SoundEffectOptions {
+  /** Caps this effect's final gain while preserving the global SFX setting. */
+  maximumGain?: () => number;
 }
 
 export interface MusicLoop {
@@ -30,12 +44,11 @@ let interruptGain: GainNode | undefined;
 let musicTransport: MusicTransport | undefined;
 let unlockListenersInstalled = false;
 let muted = false;
-let musicVolume = 0;
+let musicVolume = 0.66 ** 3;
 // The volume slider uses a cubic response curve, so 75% on the control is
 // 0.75³ gain.
 let sfxVolume = 0.75 ** 3;
-let requestedBase: MusicBase = 'drums-bass';
-let requestedTopper: MusicTopper = 'none';
+let requestedBase: MusicBase = 'title-loop';
 const stateListeners = new Set<(state: AudioState) => void>();
 
 const unlockEvents = ['pointerdown', 'touchstart', 'keydown'] as const;
@@ -222,8 +235,6 @@ function ensureMusicTransport(): MusicTransport | undefined {
     manifest: musicManifest,
     load: (src) => loadAudioBuffer(src, audioContext),
   });
-  musicTransport.setBase(requestedBase);
-  musicTransport.setTopper(requestedTopper);
   return musicTransport;
 }
 
@@ -237,17 +248,24 @@ export function setMusicBaseImmediately(base: MusicBase): void {
   ensureMusicTransport()?.setBaseImmediately(base);
 }
 
-export function setMusicVariationsEnabled(enabled: boolean): void {
-  ensureMusicTransport()?.setVariationsEnabled(enabled);
+export function setMusicBaseAtCurrentMeasurePhase(base: MusicBase): void {
+  requestedBase = base;
+  ensureMusicTransport()?.setBaseAtCurrentMeasurePhase(base);
 }
 
-export function queueMusicBaseOnce(base: MusicBase): Promise<void> {
-  return ensureMusicTransport()?.queueBaseOnce(base) ?? Promise.resolve();
+export function setMusicBaseAtCurrentLoopPhase(base: MusicBase): void {
+  requestedBase = base;
+  ensureMusicTransport()?.setBaseAtCurrentLoopPhase(base);
 }
 
-export function setMusicTopper(topper: MusicTopper): void {
-  requestedTopper = topper;
-  ensureMusicTransport()?.setTopper(topper);
+export function startPreloadedMusic(base: MusicBase, group: string): Promise<void> {
+  requestedBase = base;
+  return ensureMusicTransport()?.startPreloaded(base, group) ?? Promise.resolve();
+}
+
+export function playMusicIntroThenLoop(intro: MusicBase, loop: MusicBase): Promise<void> {
+  requestedBase = loop;
+  return ensureMusicTransport()?.playIntroThenLoop(intro, loop) ?? Promise.resolve();
 }
 
 export function preloadMusic(group: string): Promise<void> {
@@ -256,10 +274,6 @@ export function preloadMusic(group: string): Promise<void> {
 
 export function playMusicInterrupt(id: string, resume = true): Promise<boolean> {
   return ensureMusicTransport()?.playInterrupt(id, resume) ?? Promise.resolve(false);
-}
-
-export function getMusicPhaseSeconds(): number {
-  return musicTransport?.phaseSeconds ?? 0;
 }
 
 export function stopMusic(): void {
@@ -278,29 +292,39 @@ function createFallbackPool(src: string, size = 4): HTMLAudioElement[] {
   return pool;
 }
 
-export function createSoundEffect(src: string): SoundEffect {
+export function createSoundEffect(src: string, options: SoundEffectOptions = {}): SoundEffect {
   const fallbackPool = createFallbackPool(src);
   let nextFallback = 0;
   let destroyed = false;
 
-  function playFallback(): void {
-    if (fallbackPool.length === 0) return;
+  function playFallback(playbackOptions: SoundPlaybackOptions = {}): SoundPlayback {
+    if (fallbackPool.length === 0) return { stop() {} };
     const idleIndex = fallbackPool.findIndex((audio) => audio.paused || audio.ended);
     const index = idleIndex >= 0 ? idleIndex : nextFallback;
     const audio = fallbackPool[index];
-    if (!audio) return;
+    if (!audio) return { stop() {} };
     nextFallback = (index + 1) % fallbackPool.length;
 
     try {
-      audio.volume = sfxVolume;
-      audio.currentTime = 0;
+      audio.volume = Math.min(sfxVolume, options.maximumGain?.() ?? 1);
+      audio.currentTime = Math.max(0, playbackOptions.offsetSeconds ?? 0);
       void audio.play().catch(() => {});
     } catch {}
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const stop = () => {
+      if (timer !== undefined) clearTimeout(timer);
+      timer = undefined;
+      audio.pause();
+    };
+    if (playbackOptions.durationSeconds !== undefined) {
+      timer = setTimeout(stop, Math.max(0, playbackOptions.durationSeconds) * 1_000);
+    }
+    return { stop };
   }
 
   return {
-    play() {
-      if (destroyed || muted) return;
+    play(playbackOptions: SoundPlaybackOptions = {}) {
+      if (destroyed || muted) return { stop() {} };
 
       // Do not create AudioContext while mounting the page. iOS requires its
       // creation to happen during a user gesture; the sound toggle does that.
@@ -308,34 +332,49 @@ export function createSoundEffect(src: string): SoundEffect {
       const sound = audioContext ? loadSound(src, audioContext) : undefined;
 
       if (!audioContext || !sound?.buffer) {
-        playFallback();
-        return;
+        return playFallback(playbackOptions);
       }
 
+      let voice: AudioBufferSourceNode | undefined;
+      let fallback: SoundPlayback | undefined;
+      let stopped = false;
+
       const playBuffer = () => {
+        if (stopped) return;
         if (audioContext.state !== 'running') {
-          playFallback();
+          fallback = playFallback(playbackOptions);
           return;
         }
 
         try {
-          const voice = audioContext.createBufferSource();
+          voice = audioContext.createBufferSource();
           voice.buffer = sound.buffer!;
-          voice.connect(sfxGain ?? audioContext.destination);
-          voice.start();
+          if (sfxGain && options.maximumGain) {
+            const effectGain = audioContext.createGain();
+            const finalGain = Math.min(sfxVolume, clampVolume(options.maximumGain()));
+            effectGain.gain.value = sfxVolume > 0 ? finalGain / sfxVolume : 0;
+            voice.connect(effectGain);
+            effectGain.connect(sfxGain);
+            voice.addEventListener('ended', () => effectGain.disconnect(), { once: true });
+          } else voice.connect(sfxGain ?? audioContext.destination);
+          const offset = Math.max(0, playbackOptions.offsetSeconds ?? 0);
+          if (playbackOptions.durationSeconds === undefined) voice.start(0, offset);
+          else voice.start(0, offset, Math.max(0, playbackOptions.durationSeconds));
         } catch {
-          playFallback();
+          fallback = playFallback(playbackOptions);
         }
       };
 
       // iOS may leave a source started on a suspended context permanently
       // silent. Wait until resume has actually completed before starting it.
       if (audioContext.state !== 'running' && audioContext.state !== 'closed') {
-        void audioContext.resume().then(playBuffer).catch(playFallback);
-        return;
+        void audioContext.resume().then(playBuffer).catch(() => {
+          if (!stopped) fallback = playFallback(playbackOptions);
+        });
+      } else {
+        playBuffer();
       }
-
-      playBuffer();
+      return { stop() { stopped = true; try { voice?.stop(); } catch {} fallback?.stop(); } };
     },
     destroy() {
       destroyed = true;
@@ -351,7 +390,7 @@ export function createSoundEffect(src: string): SoundEffect {
 export function createMusicLoop(src: string): MusicLoop {
   // Compatibility shim for prototype callers. Music is app-owned now, so
   // destroying a screen handle intentionally does not stop the transport.
-  const base = (Object.entries(musicManifest.bases).find(([, track]) => track.src === src)?.[0] ?? 'drums-bass') as MusicBase;
+  const base = (Object.entries(musicManifest.bases).find(([, track]) => track.src === src)?.[0] ?? 'title-loop') as MusicBase;
   setMusicBase(base);
   return { destroy() {} };
 }

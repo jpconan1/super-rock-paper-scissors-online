@@ -7,7 +7,7 @@ export const MAX_PROGRESS_UNITS = (MAX_PLAYER_LEVEL - 1) * PROGRESS_UNITS_PER_LE
 
 export type ProgressOutcome = 'win' | 'loss';
 export type ProgressOpponent = 'computer' | 'human';
-export type ClassBonusMultiplier = 1 | 1.5 | 2;
+export type ClassBonusRate = 0 | 0.25 | 0.5;
 
 export interface PlayerProgression {
   level: number;
@@ -25,7 +25,7 @@ export interface ProgressAward {
   unlockedClassIds: readonly AbmClassId[];
   baseProgressUnits?: number;
   bonusProgressUnits?: number;
-  classBonusMultiplier?: ClassBonusMultiplier;
+  classBonusRate?: ClassBonusRate;
   newestClassId?: AbmClassId;
   newestClassRoundWins?: 0 | 1 | 2;
 }
@@ -35,6 +35,13 @@ export interface ProgressAwardOptions {
   newestClassRoundWins?: number;
   paused?: boolean;
 }
+
+export const HUMAN_WIN_PROGRESS_BY_LEVEL = [
+  10_000, 9_500, 9_000, 8_500, 8_000,
+  7_500, 7_000, 6_500, 6_000, 5_500,
+  5_000, 4_500, 4_000, 3_500, 3_000,
+  2_500, 2_000, 1_500, 1_000, 500,
+] as const;
 
 export function progressionForTotal(totalProgressUnits: number): PlayerProgression {
   const total = clampProgress(totalProgressUnits);
@@ -49,31 +56,23 @@ export function progressionForTotal(totalProgressUnits: number): PlayerProgressi
   };
 }
 
-export function progressGainForLevel(level: number, outcome: ProgressOutcome): number {
+export function progressGainForLevel(level: number, outcome: ProgressOutcome, opponent: ProgressOpponent = 'human'): number {
   const currentLevel = Math.max(MIN_PLAYER_LEVEL, Math.min(MAX_PLAYER_LEVEL, Math.floor(level)));
   if (currentLevel >= MAX_PLAYER_LEVEL) return 0;
-  const levelOffset = (currentLevel - 1) / (MAX_PLAYER_LEVEL - 2);
-  const levels = outcome === 'win' ? 1.5 - 0.75 * levelOffset : 0.75 - 0.5 * levelOffset;
-  return Math.round(levels * PROGRESS_UNITS_PER_LEVEL);
-}
-
-export function standardRateMultiplierForLevel(level: number): number {
-  const finalEarningLevel = MAX_PLAYER_LEVEL - 1;
-  const currentLevel = Math.max(MIN_PLAYER_LEVEL, Math.min(finalEarningLevel, Math.floor(level)));
-  return 1 - 0.75 * ((currentLevel - MIN_PLAYER_LEVEL) / (finalEarningLevel - MIN_PLAYER_LEVEL));
+  const humanWin = HUMAN_WIN_PROGRESS_BY_LEVEL[currentLevel - 1]!;
+  const humanAward = outcome === 'win' ? humanWin : Math.round(humanWin / 2);
+  return opponent === 'computer' ? Math.round(humanAward / 10) : humanAward;
 }
 
 export function createProgressAward(totalProgressUnits: number, outcome: ProgressOutcome, options: ProgressAwardOptions): ProgressAward {
   const before = progressionForTotal(totalProgressUnits);
   const newestClassId = before.unlockedClassIds.at(-1)!;
   const newestClassRoundWins = Math.max(0, Math.min(2, Math.floor(options.newestClassRoundWins ?? 0))) as 0 | 1 | 2;
-  const classBonusMultiplier: ClassBonusMultiplier = newestClassRoundWins === 2 ? 2 : newestClassRoundWins === 1 ? 1.5 : 1;
-  const details = { baseProgressUnits: 0, bonusProgressUnits: 0, classBonusMultiplier, newestClassId, newestClassRoundWins };
+  const classBonusRate: ClassBonusRate = newestClassRoundWins === 2 ? 0.5 : newestClassRoundWins === 1 ? 0.25 : 0;
+  const details = { baseProgressUnits: 0, bonusProgressUnits: 0, classBonusRate, newestClassId, newestClassRoundWins };
   if (options.paused) return { outcome, gainedProgressUnits: 0, before, after: before, unlockedClassIds: [], ...details };
-  const winRate = options.opponent === 'computer' ? 1 / 8 : 1 / 2;
-  const winBase = Math.round(progressGainForLevel(before.level, 'win') * standardRateMultiplierForLevel(before.level) * winRate);
-  const requestedBase = outcome === 'win' ? winBase : Math.round(winBase / 2);
-  const requestedTotal = Math.round(requestedBase * classBonusMultiplier);
+  const requestedBase = progressGainForLevel(before.level, outcome, options.opponent);
+  const requestedTotal = requestedBase + Math.round(requestedBase * classBonusRate);
   const available = MAX_PROGRESS_UNITS - before.totalProgressUnits;
   const baseProgressUnits = Math.min(available, requestedBase);
   const bonusProgressUnits = Math.min(available - baseProgressUnits, requestedTotal - requestedBase);
@@ -85,7 +84,7 @@ export function createProgressAward(totalProgressUnits: number, outcome: Progres
     before,
     after,
     unlockedClassIds: after.unlockedClassIds.slice(before.unlockedClassIds.length),
-    baseProgressUnits, bonusProgressUnits, classBonusMultiplier, newestClassId, newestClassRoundWins,
+    baseProgressUnits, bonusProgressUnits, classBonusRate, newestClassId, newestClassRoundWins,
   };
 }
 

@@ -1,7 +1,7 @@
 export type BoilFrame = 0 | 1 | 2;
 export type BoilSubscriber = (frame: BoilFrame) => void;
 
-export const BOIL_FRAME_MS = 125;
+export const BOIL_FRAME_MS = 60_000 / 92 / 4;
 
 export function nextBoilFrame(frame: BoilFrame): BoilFrame {
   return ((frame + 1) % 3) as BoilFrame;
@@ -52,6 +52,7 @@ export class BoilClock {
   }
 
   tick(): void {
+    if (!this.enabled) return;
     this.frame = nextBoilFrame(this.frame);
     for (const subscriber of this.subscribers) subscriber(this.frame);
   }

@@ -21,7 +21,7 @@ export function mountProgressScreen(container: HTMLElement, clock: BoilClock, aw
     breakdown.append(base);
     if ((award.bonusProgressUnits ?? 0) > 0) {
       const bonus = document.createElement('p'); bonus.className = 'progress-screen__bonus';
-      bonus.textContent = `Newest class bonus ×${award.classBonusMultiplier}: +${award.bonusProgressUnits!.toLocaleString()} XP`;
+      bonus.textContent = `Newest class bonus +${Math.round((award.classBonusRate ?? 0) * 100)}%: +${award.bonusProgressUnits!.toLocaleString()} XP`;
       breakdown.append(bonus);
     }
   }

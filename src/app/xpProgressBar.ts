@@ -1,11 +1,14 @@
 import type { BoilClock } from '../animation/boilClock';
 import { beats } from '../core/time';
 import { MAX_PROGRESS_UNITS, PROGRESS_UNITS_PER_LEVEL, type ProgressAward } from '../core/progression';
+import { playCatalogSound } from '../audio/soundCatalog';
+import type { SoundPlayback } from '../audio/soundEffect';
 import { createBoilingSprite } from '../renderer/boilingSprite';
 
 const WIDTH = 512;
 const HEIGHT = 256;
-const DURATION_MS = 1_400;
+export const XP_BAR_CLIMB_MS = 2_090;
+export const XP_BAR_DING_HOLD_MS = beats(1);
 
 export interface XpProgressBar {
   element: HTMLDivElement;
@@ -21,6 +24,16 @@ export function xpAnimationStops(start: number, end: number): readonly number[] 
   return boundaries;
 }
 
+export function xpAnimationSegment(start: number, end: number): { durationMs: number; offsetSeconds: number; durationSeconds: number } {
+  const distance = Math.max(0, end - start);
+  const durationMs = XP_BAR_CLIMB_MS * distance / PROGRESS_UNITS_PER_LEVEL;
+  return {
+    durationMs,
+    offsetSeconds: XP_BAR_CLIMB_MS / 1_000 * (start % PROGRESS_UNITS_PER_LEVEL) / PROGRESS_UNITS_PER_LEVEL,
+    durationSeconds: durationMs / 1_000,
+  };
+}
+
 export function createXpProgressBar(clock: BoilClock, award: ProgressAward, animate = true): XpProgressBar {
   const element = document.createElement('div'); element.className = 'xp-progress-bar';
   const canvas = document.createElement('canvas'); canvas.width = WIDTH; canvas.height = HEIGHT; canvas.className = 'xp-progress-bar__canvas';
@@ -33,18 +46,27 @@ export function createXpProgressBar(clock: BoilClock, award: ProgressAward, anim
   empty.src = '/visual-elements/progress-bar-empty-sheet.webp'; full.src = '/visual-elements/progress-bar-full-sheet.webp';
   let total = award.before.totalProgressUnits; let showFull = false; let frame: 0 | 1 | 2 = 0; let animationFrame = 0;
   const abort = new AbortController(); let resolveFinished!: () => void;
+  let climbPlayback: SoundPlayback | undefined;
   const finished = new Promise<void>((resolve) => { resolveFinished = resolve; });
   const unsubscribe = clock.subscribe((next) => { frame = next; draw(); });
   Promise.all([empty.decode(), full.decode(), juice.whenReady()]).then(async () => {
     if (abort.signal.aborted) return;
     if (!animate || award.gainedProgressUnits === 0 || matchMedia('(prefers-reduced-motion: reduce)').matches) { finish(); return; }
     for (const stop of xpAnimationStops(total, award.after.totalProgressUnits)) {
-      const start = total; const distance = stop - start;
-      await animateTo(start, stop, DURATION_MS * distance / award.gainedProgressUnits);
+      const start = total;
+      const segment = xpAnimationSegment(start, stop);
+      await animateTo(start, stop, segment.durationMs, () => {
+        climbPlayback = playCatalogSound('xp-climb', {
+          offsetSeconds: segment.offsetSeconds,
+          durationSeconds: segment.durationSeconds,
+        });
+      });
+      climbPlayback?.stop(); climbPlayback = undefined;
       if (abort.signal.aborted) return;
       if (stop > award.before.totalProgressUnits && stop % PROGRESS_UNITS_PER_LEVEL === 0) {
         showFull = true; draw(); juice.element.hidden = false;
-        await wait(beats(1));
+        playCatalogSound('xp-ding');
+        await wait(XP_BAR_DING_HOLD_MS);
         if (abort.signal.aborted) return;
         juice.element.hidden = true; showFull = false; draw();
       }
@@ -52,13 +74,14 @@ export function createXpProgressBar(clock: BoilClock, award: ProgressAward, anim
     finish();
   }).catch(() => finish());
 
-  function animateTo(start: number, end: number, duration: number): Promise<void> {
+  function animateTo(start: number, end: number, duration: number, onStart: () => void): Promise<void> {
     return new Promise((resolve) => {
-      const started = performance.now();
+      let started: number | undefined;
       const tick = (now: number) => {
         if (abort.signal.aborted) { resolve(); return; }
+        if (started === undefined) { started = now; total = start; draw(); onStart(); animationFrame = requestAnimationFrame(tick); return; }
         const progress = duration <= 0 ? 1 : Math.min(1, (now - started) / duration);
-        total = Math.round(start + (end - start) * (1 - Math.pow(1 - progress, 3))); draw();
+        total = Math.round(start + (end - start) * progress); draw();
         if (progress < 1) animationFrame = requestAnimationFrame(tick); else resolve();
       };
       animationFrame = requestAnimationFrame(tick);
@@ -85,5 +108,5 @@ export function createXpProgressBar(clock: BoilClock, award: ProgressAward, anim
     countValue.textContent = `${value.toLocaleString()} / ${PROGRESS_UNITS_PER_LEVEL.toLocaleString()} XP`;
     canvas.setAttribute('aria-valuenow', String(value));
   }
-  return { element, countElement: count, finished, destroy() { abort.abort(); cancelAnimationFrame(animationFrame); unsubscribe(); juice.destroy(); element.remove(); } };
+  return { element, countElement: count, finished, destroy() { abort.abort(); climbPlayback?.stop(); cancelAnimationFrame(animationFrame); unsubscribe(); juice.destroy(); element.remove(); } };
 }

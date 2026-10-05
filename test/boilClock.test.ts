@@ -12,7 +12,7 @@ function fakeDocument() {
 }
 
 describe('BoilClock', () => {
-  test('ticks at 8 fps and wraps after frame two', () => {
+  test('ticks once per sixteenth note at 92 BPM and wraps after frame two', () => {
     vi.useFakeTimers();
     const page = fakeDocument();
     const clock = new BoilClock(page);

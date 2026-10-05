@@ -1,10 +1,9 @@
 import type { BoilClock } from '../animation/boilClock';
-import { BOIL_FRAME_MS } from '../animation/boilClock';
 import { assetLoader } from '../assets/assetLoader';
 import { primeAudioFromGesture } from '../audio/soundEffect';
 import { createBoilingSprite } from '../renderer/boilingSprite';
 
-export const MINIMUM_LOADING_MS = BOIL_FRAME_MS * 9;
+export const MINIMUM_LOADING_MS = 1_125;
 const LOADING_SRC = '/loading/loadingooo-sheet.webp';
 const CLICK_SRC = '/loading/click_msg-sheet.webp';
 const TAP_SRC = '/loading/tap_msg-sheet.webp';

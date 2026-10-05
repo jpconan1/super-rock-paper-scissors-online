@@ -1,12 +1,12 @@
 import { AnimationPlayer } from '../animation/animationPlayer';
-import { BOIL_FRAME_MS, type BoilClock } from '../animation/boilClock';
-import { BOIL_FRAME_COUNT, createBoilingSprite } from './boilingSprite';
+import type { BoilClock } from '../animation/boilClock';
+import { createBoilingSprite } from './boilingSprite';
 import type { CoveredSwap, WipeTransition } from './wipeTransition';
 import { createMenuCanvas, type MenuCanvas } from '../layout/menuLayout';
 import { playCatalogSound } from '../audio/soundCatalog';
 
 export const CURTAIN_FRAME_MS = 84;
-export const CURTAIN_CLOSED_HOLD_MS = BOIL_FRAME_MS * BOIL_FRAME_COUNT;
+export const CURTAIN_CLOSED_HOLD_MS = 375;
 
 export type CurtainWipeState = 'open' | 'closed' | 'animating';
 export type CurtainLayout = 'portrait' | 'landscape';
