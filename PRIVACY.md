@@ -11,14 +11,14 @@ We may use a news or community section to promote Super ABM or other projects, i
 You can play as a guest. When you do, we collect or create:
 
 - your chosen display name;
-- a random player identifier and a secure session cookie;
+- a public, readable player identifier and a secure session cookie;
 - your rating and game records, including opponents, results, and gameplay summaries;
 - technical information needed to operate and protect the service, such as your IP address, browser or device information, request times, and connection activity; and
 - content you choose to submit through multiplayer features, such as the shared whiteboard.
 
 Authentication uses a secure session cookie. The game may store your display name, sound settings, and interface preferences in your browser, but does not place account credentials in local storage. Clearing cookies may permanently lose access to an unprotected guest profile.
 
-If you protect an account with email and password, we store the email address, verification state, and a secure password hash. We do not store the password itself. If you choose Google sign-in, we receive information needed to connect and secure the account, which may include your name, email, profile image, Google account identifier, and authentication tokens. Super ABM does not receive your Google password.
+If you choose an email account, we store the email address and verification state. The address is permanent and cannot be changed automatically. If you add a password, we store a secure password hash, not the password itself. If you choose Google or Apple sign-in, we receive information needed to authenticate the account, which may include your name, email or relay email, profile image, provider account identifier, and authentication tokens. Super ABM does not receive your Google or Apple password.
 
 We do not intentionally collect payment information, precise location, contacts, private Google content, or information for targeted advertising.
 
@@ -39,9 +39,9 @@ We do not use personal information to train artificial intelligence models.
 
 We do not sell personal information or give it to others for their own marketing or advertising.
 
-We use service providers to run the game. Cloudflare hosts the game, network services, and database. Resend processes email addresses and authentication messages when you use email signup. Google processes information when you choose Google sign-in. These providers may process information on our behalf under their own terms and privacy policies, and information may be processed outside your province or outside Canada, where it may be subject to local law.
+We use service providers to run the game. Cloudflare hosts the game, network services, and database. Resend processes email addresses and authentication messages when you use an email account. Google processes information when you choose Google sign-in, and Apple processes information when you choose Apple sign-in. These providers may process information on our behalf under their own terms and privacy policies, and information may be processed outside your province or outside Canada, where it may be subject to local law.
 
-Your display name, rating, online presence, match participation, and content you submit to shared multiplayer features may be visible to other players or the public as part of the game.
+Your readable player identifier, display name, rating, online presence, match participation, and content you submit to shared multiplayer features may be visible to other players or the public as part of the game. Your readable player identifier does not change when your display name changes.
 
 We may disclose personal information when Canadian law requires or permits us to do so, including in response to a valid request, court order, warrant, or other lawful process from Canadian law enforcement or another Canadian public authority. We may challenge or reject requests that we believe are invalid or too broad. We will not voluntarily provide personal information to law enforcement where we are not legally permitted to do so.
 
@@ -53,15 +53,15 @@ When information is no longer needed, we will delete it or remove identifying de
 
 ## Security
 
-We use reasonable safeguards appropriate to a small community project. These include encrypted connections, secure cookies, password hashing, access controls, session expiry and revocation, and encryption of Google authentication tokens. No online service can guarantee perfect security.
+We use reasonable safeguards appropriate to a small community project. These include encrypted connections, secure cookies, password hashing, access controls, session expiry and revocation, and encryption of provider authentication tokens. No online service can guarantee perfect security.
 
 Keep your device and account secure. Anyone able to use an active browser session may be able to use that profile.
 
 ## Your choices and rights
 
-Google sign-in is optional. You may play as a guest instead.
+Google, Apple, and email sign-in are optional account types. You may play as a guest instead. Each protected account uses only the account type selected when it is created; sign-in providers are not combined automatically based on matching email addresses.
 
-You may reset a guest or delete a protected account from the account screen. Authentication and personal profile data are removed. Completed match records may retain an opaque, anonymized player identifier so results remain internally consistent.
+You may reset a guest or delete a protected account from the account screen. Authentication and personal profile data are removed. Completed match records may retain the account's readable player identifier on an anonymized tombstone so results remain internally consistent. Player identifiers are not recycled.
 
 You may ask us to:
 

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { ABM_CLASSES, startingResourcesForClass } from '../src/variants/attackBlockMana/attackBlockManaCatalog';
-import { ABM_COUNTERPICK_ENTRANCE_TICKS_PER_STAGE, ABM_LAYOUTS, ABM_RESULT_SCENES, ABM_SELECT_ART, ABM_TAG_CATEGORIES, ABM_TAG_ORDERS, abmTagSlotId, blockSegments, displayedAbmMove, getAbmAttackCostDisplay, getAbmClassBadgeGeometry, getAbmClassReadyFrame, getAbmClassResourceControlGeometry, getAbmClassResourceGeometry, getAbmClassSelectChrome, getAbmCounterpickCloudPlayer, getAbmCounterpickEntranceVisibility, getAbmLimitedResource, getAbmObservedCounterpickClass, getAbmPickerEntries, getAbmPickerStatus, getAbmPlayerResourceGeometry, getAbmResultScene, getAbmWaitingLayoutIds, getAbmWaitingVisual, initialManaForClass, latestClassPreview, reconcileAbmArmedAbility, sceneForMoves, shouldShowAbmContinuingRoundProcTags, shouldShowAbmRules, shouldShowAbmYouTag, shouldShowClassBadge, shouldShowClassReadyOpponentTag, tutorialBlockTagSource, winArtwork } from '../src/variants/attackBlockMana/attackBlockManaPresentation';
+import { ABM_BONUS_XP_ART, ABM_COUNTERPICK_ENTRANCE_TICKS_PER_STAGE, ABM_LAYOUTS, ABM_RESULT_SCENES, ABM_SELECT_ART, ABM_TAG_CATEGORIES, ABM_TAG_ORDERS, abmTagSlotId, blockSegments, displayedAbmMove, getAbmAttackCostDisplay, getAbmClassBadgeGeometry, getAbmClassReadyFrame, getAbmClassResourceControlGeometry, getAbmClassResourceGeometry, getAbmClassSelectChrome, getAbmCounterpickCloudPlayer, getAbmCounterpickEntranceVisibility, getAbmLimitedResource, getAbmObservedCounterpickClass, getAbmPickerEntries, getAbmPickerStatus, getAbmPlayerResourceGeometry, getAbmResultScene, getAbmWaitingLayoutIds, getAbmWaitingVisual, initialManaForClass, latestClassPreview, reconcileAbmArmedAbility, sceneForMoves, shouldShowAbmBonusXp, shouldShowAbmClassPicker, shouldShowAbmContinuingRoundProcTags, shouldShowAbmRules, shouldShowAbmYouTag, shouldShowClassBadge, shouldShowClassReadyOpponentTag, tutorialBlockTagSource, winArtwork } from '../src/variants/attackBlockMana/attackBlockManaPresentation';
 import type { AbmProjection } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 import { ABM_CLASS_IDS } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 import { ABM_SCENE_URLS, resolveAbmProcBackgrounds, resolveAbmScene, resolveAbmSplitScene, resolveAbmTags, resolveConjureScene, resolveJoeScene, resolveNullScene } from '../src/variants/attackBlockMana/attackBlockManaScenes';
@@ -9,6 +9,16 @@ import { validateLayoutDocument } from '../src/layout/layoutDocument';
 import { ABM_TAG_ENTRANCE_SOURCES } from '../src/variants/attackBlockMana/abmTagEntrance';
 
 describe('Attack Block Mana presentation data', () => {
+  test('shows bonus XP art only behind the newest selectable class', () => {
+    expect(ABM_BONUS_XP_ART).toBe('/variants/abm/bonus-xp-sheet.webp');
+    const unlocked = ['lucky', 'advantaged', 'thief'] as const;
+    expect(shouldShowAbmBonusXp('thief', unlocked)).toBe(true);
+    expect(shouldShowAbmBonusXp('advantaged', unlocked)).toBe(false);
+    expect(shouldShowAbmBonusXp(undefined, unlocked)).toBe(false);
+    expect(shouldShowAbmBonusXp('thief', unlocked, true)).toBe(false);
+    expect(shouldShowAbmBonusXp('joe', ABM_CLASS_IDS)).toBe(true);
+  });
+
   test('shows rules only after both classes are selected and outside tutorial round one', () => {
     const projection = { round: 2, players: { p1: { classId: 'lucky' }, p2: { classId: 'taxman' } } } as AbmProjection;
     expect(shouldShowAbmRules(projection)).toBe(true);
@@ -130,6 +140,12 @@ describe('Attack Block Mana presentation data', () => {
     expect(getAbmCounterpickEntranceVisibility(2)).toEqual({ tiny: true, small: true, medium: false, big: false, content: false });
     expect(getAbmCounterpickEntranceVisibility(3)).toEqual({ tiny: true, small: true, medium: true, big: false, content: false });
     expect(getAbmCounterpickEntranceVisibility(4)).toEqual({ tiny: true, small: true, medium: true, big: true, content: true });
+  });
+
+  test('suppresses only an observed computer counterpick', () => {
+    expect(shouldShowAbmClassPicker({ phase: 'counter-picking', self: 'p1', counterPicker: 'p2' }, false, false)).toBe(false);
+    expect(shouldShowAbmClassPicker({ phase: 'counter-picking', self: 'p1', counterPicker: 'p2' }, false, true)).toBe(true);
+    expect(shouldShowAbmClassPicker({ phase: 'counter-picking', self: 'p1', counterPicker: 'p1' }, false, false)).toBe(true);
   });
 
   test('releases submitted Conjure after Null clears it while preserving locally armed abilities', () => {

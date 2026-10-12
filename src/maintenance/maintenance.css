@@ -1,0 +1,4 @@
+.maintenance-root { position: fixed; inset: 0; display: grid; overflow: auto; padding: 24px; place-items: center; background: #e7ddc4 url('/crumpled-paper-background.webp') center / cover; }
+.maintenance-card { width: min(560px, 100%); padding: clamp(28px, 7vw, 58px); border: 3px solid #211d19; background: rgba(255,252,237,.82); box-shadow: 7px 8px 0 rgba(33,29,25,.28); text-align: center; transform: rotate(-.35deg); }
+.maintenance-card h1 { margin: 0 0 24px; color: #ac3235; font-size: clamp(36px, 8vw, 68px); line-height: 1; }
+.maintenance-card p { margin: 0; font-size: clamp(20px, 4vw, 28px); line-height: 1.35; }

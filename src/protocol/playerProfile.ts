@@ -1,4 +1,5 @@
 import { progressionForTotal, type PlayerProgression } from '../core/progression';
+import { isReadablePlayerId, type PlayerAccountType } from './playerId';
 
 export const PLAYER_NAME_MAX_LENGTH = 24;
 
@@ -10,6 +11,7 @@ export function normalizePlayerDisplayName(value: unknown): string | null {
 
 export interface PlayerProfile extends PlayerProgression {
   playerId: string;
+  accountType: PlayerAccountType;
   displayName: string;
   rating: number;
   unlockAllClasses: boolean;
@@ -18,14 +20,15 @@ export interface PlayerProfile extends PlayerProgression {
 export function isPlayerProfile(value: unknown): value is PlayerProfile {
   if (!value || typeof value !== 'object') return false;
   const candidate = value as Partial<PlayerProfile>;
-  return typeof candidate.playerId === 'string' && candidate.playerId.length > 0 && candidate.playerId.length <= 100
+  return isReadablePlayerId(candidate.playerId)
+    && (candidate.accountType === 'guest' || candidate.accountType === 'google' || candidate.accountType === 'apple' || candidate.accountType === 'email')
     && normalizePlayerDisplayName(candidate.displayName) === candidate.displayName
     && typeof candidate.rating === 'number' && Number.isFinite(candidate.rating)
     && ensureProgression(candidate);
 }
 
-export function playerProfile(playerId: string, displayName: string, rating: number, totalProgressUnits = 0, unlockAllClasses = false): PlayerProfile {
-  return { playerId, displayName, rating, unlockAllClasses, ...progressionForTotal(totalProgressUnits) };
+export function playerProfile(playerId: string, accountType: PlayerAccountType, displayName: string, rating: number, totalProgressUnits = 0, unlockAllClasses = false): PlayerProfile {
+  return { playerId, accountType, displayName, rating, unlockAllClasses, ...progressionForTotal(totalProgressUnits) };
 }
 
 function ensureProgression(candidate: Partial<PlayerProfile>): boolean {

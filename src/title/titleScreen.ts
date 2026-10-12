@@ -28,15 +28,27 @@ export function openDiscordInvite(openWindow: typeof window.open = window.open.b
 export type TitleScreenMount = (() => void) & { readonly ready: Promise<void> };
 export function formatOnlinePlayerCount(count: number | null): string { return `players online: ${count ?? '?'}`; }
 export interface TitleAccountState { signedIn: boolean; displayName: string; emailAuthAvailable: boolean; emailSignupAvailable: boolean }
+export type TitleAuthMode = 'none' | 'password' | 'email-code';
+
+export function getTitleAuthControlVisibility(mode: TitleAuthMode) {
+  return {
+    primaryButtons: mode === 'none',
+    providers: mode === 'none',
+    onlineCount: mode === 'none',
+    passwordForm: mode === 'password',
+    emailCodeForm: mode === 'email-code',
+  };
+}
 
 export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onEnterGuest: () => void,
   getOnlinePlayerCount: () => Promise<number | null> = async () => null,
   onOpenLetter: (trigger: HTMLElement) => void = () => {}, account: TitleAccountState = { signedIn: false, displayName: '', emailAuthAvailable: false, emailSignupAvailable: false },
   onEnterAccount: () => void = () => {}, onGoogleSignIn: () => void = () => {},
   onPasswordSignIn: (email: string, password: string) => Promise<void> = async () => {},
-  onPasswordReset: (email: string) => Promise<void> = async () => {},
-  onCompletePasswordReset: (token: string, password: string) => Promise<void> = async () => {},
-  onSignUp: () => void = () => {}): TitleScreenMount {
+  onPasswordCodeRequest: (email: string) => Promise<void> = async () => {},
+  onPasswordUpdate: (email: string, code: string, password: string) => Promise<void> = async () => {},
+  onEmailCodeSignIn: (email: string) => Promise<void> = async () => {},
+  onSignUp: () => void = () => {}, onLogout: () => void = () => {}): TitleScreenMount {
   const screen = document.createElement('section');
   screen.className = 'title-screen';
   screen.setAttribute('aria-labelledby', 'title-screen-heading');
@@ -115,6 +127,14 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onEnt
     clock,
   });
   enterLobby.element.classList.add('game-button--baked-label');
+  const logoutElement = titleElement('logout');
+  const logout = createGameButton({
+    label: 'Log out', onActivate: onLogout,
+    upSheet: logoutElement.assets!.up!, betweenSheet: logoutElement.assets!.between!, depressedSheet: logoutElement.assets!.depressed!,
+    clock,
+  });
+  logout.element.classList.add('game-button--baked-label');
+  logout.element.hidden = !account.signedIn;
 
   const authButton = (id: string, label: string, activate: () => void) => {
     const element = titleElement(id);
@@ -149,10 +169,18 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onEnt
   const passwordError = document.createElement('p'); passwordError.className = 'title-screen__password-error'; passwordError.setAttribute('aria-live', 'polite');
   const emailCodeForm = document.createElement('form'); emailCodeForm.className = 'title-screen__email-code-form'; emailCodeForm.hidden = true;
   const emailCodeEntry = createTextEntry({ label: 'Email', type: 'email', placeholder: 'Email', required: true, autocomplete: 'email', sheet: entrySheet, clock });
-  const sendCode = formButton('email-code-send', 'Send code', () => {});
+  const sendCode = formButton('email-code-send', 'Send code', () => emailCodeForm.requestSubmit());
   const emailCodeBack = formButton('email-code-back', 'Back', () => setEmailCodeMode(false));
-  emailCodeForm.append(emailCodeEntry.element, sendCode.element, emailCodeBack.element);
-  emailCodeForm.addEventListener('submit', (event) => event.preventDefault());
+  const emailCodeError = document.createElement('p'); emailCodeError.className = 'title-screen__password-error'; emailCodeError.setAttribute('aria-live', 'polite');
+  emailCodeForm.append(emailCodeEntry.element, sendCode.element, emailCodeBack.element, emailCodeError);
+  emailCodeForm.addEventListener('submit', (event) => {
+    event.preventDefault(); emailCodeError.textContent = '';
+    if (!emailCodeEntry.input.reportValidity()) return;
+    sendCode.setDisabled(true);
+    void onEmailCodeSignIn(emailCodeEntry.value().trim().toLowerCase())
+      .catch((reason) => { emailCodeError.textContent = reason instanceof Error ? reason.message : 'Could not send code.'; })
+      .finally(() => sendCode.setDisabled(false));
+  });
   updateAuthEntrySheets = (orientation) => {
     const sheet = orientation === 'landscape' ? '/title/auth/password-entry-landscape-sheet.webp' : '/title/auth/password-entry-portrait-sheet.webp';
     emailEntry.setSheet(sheet);
@@ -173,7 +201,8 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onEnt
   function requestPasswordReset() {
     passwordError.textContent = '';
     if (!emailEntry.input.reportValidity()) { emailEntry.focus(); return; }
-    void onPasswordReset(emailEntry.value()).then(() => { passwordError.textContent = 'If that account exists, recovery mail was sent.'; })
+    resetEmail = emailEntry.value().trim().toLowerCase();
+    void onPasswordCodeRequest(resetEmail).then(() => { passwordError.textContent = 'If that account exists, a code was sent.'; resetDialog.showModal(); })
       .catch((reason) => { passwordError.textContent = reason instanceof Error ? reason.message : 'Recovery failed.'; });
   }
   function setPasswordMode(enabled: boolean) {
@@ -181,18 +210,21 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onEnt
     if (enabled && !emailEntry.input.disabled) emailEntry.focus();
   }
   function setEmailCodeMode(enabled: boolean) {
+    if (!enabled) emailCodeError.textContent = '';
     setAuthMode(enabled ? 'email-code' : 'none');
     if (enabled && !emailCodeEntry.input.disabled) emailCodeEntry.focus();
   }
-  let authMode: 'none' | 'password' | 'email-code' = 'none';
+  let authMode: TitleAuthMode = 'none';
   function setAuthMode(mode: typeof authMode) {
     if (account.signedIn) return;
     authMode = mode;
-    const active = mode !== 'none';
-    for (const provider of providers) provider.element.hidden = active;
-    onlineCount.hidden = active;
-    passwordForm.hidden = mode !== 'password';
-    emailCodeForm.hidden = mode !== 'email-code';
+    const visible = getTitleAuthControlVisibility(mode);
+    signUp.element.hidden = !visible.primaryButtons;
+    enterLobby.element.hidden = !visible.primaryButtons;
+    for (const provider of providers) provider.element.hidden = !visible.providers;
+    onlineCount.hidden = !visible.onlineCount;
+    passwordForm.hidden = !visible.passwordForm;
+    emailCodeForm.hidden = !visible.emailCodeForm;
   }
   const onTitleKeyDown = (event: KeyboardEvent) => {
     if (event.key === 'Escape' && authMode !== 'none') { event.preventDefault(); setAuthMode('none'); }
@@ -200,14 +232,19 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onEnt
   document.addEventListener('keydown', onTitleKeyDown);
 
   const resetDialog = document.createElement('dialog'); resetDialog.className = 'title-screen__email-dialog';
-  const resetToken = new URL(location.href).searchParams.get('token');
+  let resetEmail = '';
+  const resetCode = document.createElement('input'); resetCode.inputMode = 'numeric'; resetCode.autocomplete = 'one-time-code'; resetCode.placeholder = 'Six-digit code';
   const resetInput = document.createElement('input'); resetInput.type = 'password'; resetInput.autocomplete = 'new-password'; resetInput.placeholder = 'New password';
   const resetSubmit = document.createElement('button'); resetSubmit.type = 'button'; resetSubmit.textContent = 'Set new password';
   const resetClose = document.createElement('button'); resetClose.type = 'button'; resetClose.textContent = 'Close'; resetClose.addEventListener('click', () => resetDialog.close());
   const resetError = document.createElement('p'); resetError.setAttribute('aria-live', 'polite');
-  resetSubmit.addEventListener('click', () => { if (!resetToken) return; resetError.textContent = ''; void onCompletePasswordReset(resetToken, resetInput.value).catch((reason) => { resetError.textContent = reason instanceof Error ? reason.message : 'Password reset failed.'; }); });
-  resetDialog.append(resetInput, resetSubmit, resetClose, resetError);
-  if (resetToken) queueMicrotask(() => resetDialog.showModal());
+  resetSubmit.addEventListener('click', () => {
+    const code = resetCode.value.replace(/\s/g, ''); resetError.textContent = '';
+    if (!/^\d{6}$/.test(code) || resetInput.value.length < 8 || resetInput.value.length > 128) { resetError.textContent = 'Enter the code and an 8-128 character password.'; return; }
+    void onPasswordUpdate(resetEmail, code, resetInput.value).then(() => resetDialog.close())
+      .catch((reason) => { resetError.textContent = reason instanceof Error ? reason.message : 'Password reset failed.'; });
+  });
+  resetDialog.append(resetCode, resetInput, resetSubmit, resetClose, resetError);
 
   const discord = createGameButton({
     label: 'Join the ABM Community Discord',
@@ -230,11 +267,11 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onEnt
   landscapeDiscordElement = discord.element;
   portraitDiscordElement = discordPortrait.element;
 
-  composition.append(logo.element, signUp.element, enterLobby.element, ...providers.map((button) => button.element), passwordForm, emailCodeForm, accountStatus, discord.element, discordPortrait.element,
+  composition.append(logo.element, signUp.element, enterLobby.element, logout.element, ...providers.map((button) => button.element), passwordForm, emailCodeForm, accountStatus, discord.element, discordPortrait.element,
     soundToggle.element, musicVolume.element, sfxVolume.element, boilToggle.element, onlineCount);
   bindings.push(
     { id: 'logo', element: logo.element }, { id: 'sign-up', element: signUp.element },
-    { id: 'enter-lobby', element: enterLobby.element }, { id: 'password-sign-in', element: passwordButton.element },
+    { id: 'enter-lobby', element: enterLobby.element }, { id: 'logout', element: logout.element }, { id: 'password-sign-in', element: passwordButton.element },
     { id: 'email-sign-in', element: emailCodeButton.element }, { id: 'google-sign-in', element: google.element },
     { id: 'apple-sign-in', element: apple.element }, { id: 'password-form', element: passwordForm },
     { id: 'password-email', element: emailEntry.element }, { id: 'password-password', element: passwordEntry.element },
@@ -263,6 +300,7 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onEnt
     document.removeEventListener('keydown', onTitleKeyDown);
     signUp.destroy();
     enterLobby.destroy();
+    logout.destroy();
     providers.forEach((button) => button.destroy());
     emailEntry.destroy();
     passwordEntry.destroy();

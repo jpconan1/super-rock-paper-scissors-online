@@ -11,9 +11,15 @@ Run `npm run dev` in another terminal for the browser client. The ignored `.env.
 
 Copy `.dev.vars.example` to `.dev.vars`, generate `BETTER_AUTH_SECRET` with `npx auth@latest secret`, and add the Google web OAuth client credentials. Google's local callback is `http://localhost:8787/api/auth/callback/google`; production uses `https://abm.jpconan.ca/api/auth/callback/google`.
 
-Email signup is feature-gated by the optional `RESEND_API_KEY` secret. Without it, signup stays hidden. Signup sends a six-digit code through Resend from `Super ABM <no-reply@abm.jpconan.ca>`; password login, recovery, and email change remain disabled.
+The private dashboard lives at `/admin`. Set `ADMIN_EMAILS` to a comma-separated, case-insensitive email allowlist in `.dev.vars` locally and as a Worker secret in production (`npx wrangler secret put ADMIN_EMAILS`). The dashboard uses Google sign-in and never joins the player lobby.
 
-Local development may set `DEV_AUTH_EMAIL_CODE=123456` instead of a Resend key. The fake mailer sends nothing; enter that fixed code in the signup dialog. This fallback is accepted only when `BETTER_AUTH_URL` starts with `http://localhost`.
+Maintenance mode is controlled from the dashboard Overview. Enabling it blocks new public game/API/WebSocket entry while existing sockets finish naturally. “Grant pass & open test game” issues a signed four-hour browser pass, signs the admin account out, and opens the production game for isolated signup testing. Tester-created records remain visible with a TEST label but are excluded from normal metrics.
+
+Player accounts support guests, fixed Google accounts, and fixed email accounts. Email accounts always support verified email-code login and may optionally use an 8-128 character password. Signup, login, password management, and protected-account deletion use purpose-bound six-digit codes. Account email is permanent; Apple login remains disabled. Provider linking and login-method removal are unavailable.
+
+Protected-account deletion uses a separate six-digit email challenge entered in the game. Guest deletion does not send mail. Apply every D1 migration before deploying code that exposes the deletion endpoints.
+
+Local development may set `DEV_AUTH_EMAIL_CODE=123456` instead of a Resend key. The fake mailer sends nothing and is accepted only when `BETTER_AUTH_URL` starts with `http://localhost`.
 
 Before the first remote deployment:
 

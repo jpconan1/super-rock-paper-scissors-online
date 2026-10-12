@@ -8,6 +8,8 @@ import { validateClientSeason } from '../core/clientSeason';
 import { runLoadingScreen } from '../loading/loadingScreen';
 import { mountTitleScreen } from '../title/titleScreen';
 import { showSignUpDialog } from '../title/signUpDialog';
+import { showEmailLoginDialog } from '../title/emailLoginDialog';
+import { showGuestNameDialog } from '../title/guestNameDialog';
 import { playStarburstWipe } from '../renderer/starburstWipe';
 import { CurtainWipe } from '../renderer/curtainWipe';
 import { mountVariantSelectScreen } from '../variantSelect/variantSelectScreen';
@@ -202,6 +204,7 @@ export class AppController {
       openMenu: () => this.openUniversalMenu(), backToLobby: () => this.returnToLobbyFromMatch(),
       matchProgressComplete: () => void this.completeMatchProgressFlow(),
       self: this.matchProjection?.self ?? 'p1', players: this.matchProjection?.players,
+      showOpponentCounterpick: this.localMatchAwardMode !== 'computer',
       music: this.music, ...(isControllerOptions(this.optionsOrRegistry)
         ? { unlockedClassIds: this.optionsOrRegistry.session.accountState().unlockedClassIds } : {}),
     });
@@ -295,31 +298,46 @@ export class AppController {
           this.showError(error, 'title');
         });
       };
-      const title = mountTitleScreen(this.screenLayer, options.clock, () => enterLobby(generateRandomName()),
+      const title = mountTitleScreen(this.screenLayer, options.clock, () => {
+        if (!this.alertSystem) { enterLobby(generateRandomName()); return; }
+        void showGuestNameDialog(this.alertSystem, options.clock).then((name) => { if (name) enterLobby(name); });
+      },
       () => options.session.getOnlinePlayerCount(), (trigger) => this.openAbmLetter(trigger), {
         signedIn: titleAccount.signedIn, displayName: titleAccount.displayName, emailAuthAvailable: titleAccount.emailAuthAvailable,
         emailSignupAvailable: titleAccount.emailSignupAvailable,
       }, () => enterLobby(titleAccount.displayName), () => {
-        void this.startGoogleSignIn('title', generateRandomName());
+        if (titleAccount.accountType === 'guest' && titleAccount.playerId) void this.startGoogleSignIn('claim', '', 'lobby');
+        else void this.startGoogleSignIn('title', generateRandomName());
       }, async (email, password) => {
         await options.session.signInWithEmail(email, password);
         this.playerName = options.session.accountState().displayName;
         await this.navigate('lobby');
-      }, (email) => options.session.requestPasswordReset(email, location.href), async (token, password) => {
-        await options.session.resetPassword(token, password);
-        const clean = new URL(location.href); clean.searchParams.delete('token'); history.replaceState(history.state, '', clean);
-      }, () => {
+      }, (email) => options.session.requestPasswordCode(email),
+      (email, code, password) => options.session.updateEmailPassword(email, code, password),
+      async (email) => {
+        await options.session.requestEmailLogin(email);
         if (!this.alertSystem) return;
-        void showSignUpDialog(this.alertSystem, options.clock, {
-          request: (email, legalAccepted) => options.session.requestEmailSignup(email, legalAccepted),
-          verify: (email, code) => options.session.verifyEmailSignup(email, code),
-          resend: (email) => options.session.resendEmailSignup(email),
-        }).then(async (complete) => {
-          if (!complete) return;
+        const complete = await showEmailLoginDialog(this.alertSystem, options.clock, email, {
+          verify: (code) => options.session.verifyEmailLogin(email, code),
+          resend: () => options.session.requestEmailLogin(email),
+        });
+        if (complete) {
           this.playerName = options.session.accountState().displayName;
           await this.navigate('lobby');
-        }).catch((error) => this.showError(error, 'title'));
-      });
+        }
+      }, () => {
+        if (!this.alertSystem) return;
+        this.music.enterLobby();
+        void showSignUpDialog(this.alertSystem, options.clock, {
+          request: (displayName, email, legalAccepted) => options.session.requestEmailSignup(displayName, email, legalAccepted),
+          verify: (email, code, password) => options.session.verifyEmailSignup(email, code, password),
+          resend: (displayName, email) => options.session.resendEmailSignup(displayName, email),
+        }).then(async (complete) => {
+          if (!complete) { this.music.enterTitle(); return; }
+          this.playerName = options.session.accountState().displayName;
+          await this.navigate('lobby');
+        }).catch((error) => { this.music.enterTitle(); this.showError(error, 'title'); });
+      }, () => void this.logOutToTitle());
       this.screenCleanup = title;
       this.screenReady = title.ready;
     } else if (destination === 'lobby') {
@@ -353,18 +371,17 @@ export class AppController {
       if (!hasSeenAbmNewsletter()) this.openAbmLetter();
     } else if (destination === 'account') {
       this.screenReady = Promise.resolve();
-      const account = mountAccountScreen(this.screenLayer, options.clock, options.session.accountState(), async (name) => {
+      const account = mountAccountScreen(this.screenLayer, options.clock, this.alertSystem!, options.session.accountState(), async (name) => {
         const profile = await options.session.updateDisplayName(name);
         this.playerName = profile.displayName;
         return options.session.accountState();
-      }, () => void this.startGoogleSignIn('claim'), () => void this.logOutToTitle(), () => void this.returnFromAccount(), async (provider) => {
-        await options.session.disconnectMethod(provider);
-        return options.session.accountState();
-      }, async () => {
-        await options.session.deleteAccount();
+      }, () => void this.startGoogleSignIn('claim'), () => void this.logOutToTitle(), () => void this.returnFromAccount(),
+      () => options.session.requestAccountDeletionCode(), async (code) => {
+        await options.session.deleteAccount(code);
         this.playerName = '';
         void this.navigate('title');
-      });
+      }, (email) => options.session.requestPasswordCode(email),
+      (email, code, password, remove) => options.session.updateEmailPassword(email, code, password, remove));
       this.screenCleanup = () => account.destroy();
     } else if (destination === 'match-found') {
       const projection = this.matchProjection;
@@ -532,7 +549,7 @@ export class AppController {
     menu?.destroy();
   }
 
-  private async startGoogleSignIn(flow: 'title' | 'claim', name = ''): Promise<void> {
+  private async startGoogleSignIn(flow: 'title' | 'claim', name = '', successDestination?: 'account' | 'lobby'): Promise<void> {
     const popup = window.open('', 'super-rps-google-sign-in', 'popup,width=520,height=720');
     const curtain = this.getCurtain();
     if (!popup) {
@@ -561,7 +578,7 @@ export class AppController {
       const player = await this.options.session.finishGoogleSignIn();
       if (!player) throw new Error('Google sign-in completed without a player session.');
       this.playerName = player.displayName;
-      await this.navigate(flow === 'claim' ? 'account' : 'lobby');
+      await this.navigate(successDestination ?? (flow === 'claim' ? 'account' : 'lobby'));
     } catch (error) {
       if (!controller.signal.aborted) {
         await curtain.open();

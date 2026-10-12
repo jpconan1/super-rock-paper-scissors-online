@@ -56,10 +56,12 @@ vi.stubGlobal('document', fakeDocument);
 vi.stubGlobal('queueMicrotask', (run: () => void) => run());
 
 vi.mock('../src/input/gameButton', () => ({
-  createGameButton: (options: { onActivate(): void }) => {
+  createGameButton: (options: { label: string; onActivate(): void }) => {
     const element = fakeDocument.createElement('button');
+    element.setAttribute('aria-label', options.label);
     element.activate = options.onActivate;
-    return { element, ready: Promise.resolve(), setDisabled: (disabled: boolean) => { element.disabled = disabled; }, setLockedDepressed() {}, destroy: () => element.remove() };
+    return { element, ready: Promise.resolve(), setLabel: (label: string) => { element.textContent = label; element.setAttribute('aria-label', label); },
+      setDisabled: (disabled: boolean) => { element.disabled = disabled; }, setLockedDepressed() {}, destroy: () => element.remove() };
   },
 }));
 
@@ -108,6 +110,19 @@ describe('AlertSystem', () => {
     await expect(dismissed).resolves.toBe(false);
   });
 
+  test('alerts get a close button by default and can explicitly omit it', async () => {
+    const system = new AlertSystem(new FakeElement() as unknown as HTMLElement, new FakeElement() as unknown as HTMLElement, {} as never);
+    const standard = system.show({ ariaLabel: 'Standard', geometry, content: 'Standard', actions: [], dismissValue: 'closed' });
+    const closeButton = buttons(standard.element)[0]!;
+    expect(closeButton.className).toContain('alert-system__close');
+    closeButton.activate!();
+    await expect(standard.result).resolves.toBe('closed');
+
+    const excepted = system.show({ ariaLabel: 'Excepted', geometry, content: 'Excepted', actions: [], showCloseButton: false });
+    expect(buttons(excepted.element)).toHaveLength(0);
+    excepted.close();
+  });
+
   test('Escape closes only the top alert and restores its prior focus', async () => {
     const container = new FakeElement(); const background = new FakeElement(); const origin = new FakeElement(); origin.focus();
     const system = new AlertSystem(container as unknown as HTMLElement, background as unknown as HTMLElement, {} as never);
@@ -127,7 +142,7 @@ describe('AlertSystem', () => {
     const handle = system.show({ ariaLabel: 'Alert', geometry, content: 'Alert', actions: [
       { label: 'One', value: 1, sheets }, { label: 'Two', value: 2, sheets },
     ] });
-    const [first, last] = buttons(handle.element); last!.focus();
+    const focusable = buttons(handle.element); const first = focusable[0]!; const last = focusable.at(-1)!; last.focus();
     expect(key('Tab').defaultPrevented).toBe(true); expect(fakeDocument.activeElement).toBe(first);
     first!.focus(); key('Tab', true); expect(fakeDocument.activeElement).toBe(last);
   });
@@ -145,6 +160,35 @@ describe('AlertSystem', () => {
     expect((handle.element as unknown as FakeElement).children[0]!.children[0]!.children[1]!.textContent).toBe('Nope');
     handle.close(); handle.close();
     await expect(handle.result).resolves.toBeUndefined();
+  });
+
+  test('actions can be enabled after typed confirmation becomes valid', () => {
+    const system = new AlertSystem(new FakeElement() as unknown as HTMLElement, new FakeElement() as unknown as HTMLElement, {} as never);
+    const handle = system.show({ ariaLabel: 'Delete', geometry, content: 'Type DELETE', actions: [
+      { label: 'Back', value: false, sheets }, { label: 'Confirm', value: true, sheets, disabled: true },
+    ] });
+    const confirm = (handle.element as unknown as FakeElement).querySelectorAll<FakeElement>('button')[1]!;
+    expect(confirm.disabled).toBe(true);
+    handle.setActionDisabled(1, false);
+    expect(confirm.disabled).toBe(false);
+    handle.setActionLabel(1, 'Delete Account');
+    expect(confirm.textContent).toBe('Delete Account');
+    handle.setActionDisabled(1, true);
+    expect(confirm.disabled).toBe(true);
+    handle.close();
+  });
+
+  test('async actions can keep an alert open for a second challenge step', async () => {
+    const system = new AlertSystem(new FakeElement() as unknown as HTMLElement, new FakeElement() as unknown as HTMLElement, {} as never);
+    const handle = system.show({ ariaLabel: 'Challenge', geometry, content: 'Send code', actions: [
+      { label: 'Send Code', value: true, sheets, onActivate: async () => false },
+    ] });
+    const action = (handle.element as unknown as FakeElement).querySelectorAll<FakeElement>('button')[0]!;
+    action.activate!();
+    await Promise.resolve(); await Promise.resolve();
+    expect(system.hasOpenAlert).toBe(true);
+    expect(action.disabled).toBe(false);
+    handle.close();
   });
 
   test('closeAll and destroy are idempotent and restore background inertness', async () => {

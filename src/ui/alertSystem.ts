@@ -21,7 +21,7 @@ export interface AlertAction<T> {
   value: T;
   sheets: AlertButtonSheets;
   disabled?: boolean;
-  onActivate?: () => void | Promise<void>;
+  onActivate?: () => void | boolean | Promise<void | boolean>;
 }
 
 export interface AlertOptions<T> {
@@ -32,6 +32,7 @@ export interface AlertOptions<T> {
   role?: 'dialog' | 'alertdialog';
   dismissible?: boolean;
   dismissValue?: T;
+  showCloseButton?: boolean;
   className?: string;
 }
 
@@ -44,7 +45,15 @@ export interface AlertHandle<T> {
   readonly element: HTMLElement;
   readonly result: Promise<T | undefined>;
   close(value?: T): void;
+  setActionDisabled(index: number, disabled: boolean): void;
+  setActionLabel(index: number, label: string): void;
 }
+
+const CLOSE_BUTTON_SHEETS: AlertButtonSheets = {
+  up: '/interactive-elements/generic-buttons/close-button-up-sheet.webp',
+  between: '/interactive-elements/generic-buttons/close-button-between-sheet.webp',
+  depressed: '/interactive-elements/generic-buttons/close-button-depressed-sheet.webp',
+};
 
 interface ActiveAlert<T = unknown> {
   handle: AlertHandle<T>;
@@ -99,18 +108,21 @@ export class AlertSystem {
 
     let closed = false;
     let busy = false;
+    const actionDisabled = options.actions.map((action) => Boolean(action.disabled));
     let resolveResult!: (value: T | undefined) => void;
     const result = new Promise<T | undefined>((resolve) => { resolveResult = resolve; });
     const buttons: GameButton[] = [];
+    let closeButton: GameButton | undefined;
     const setBusy = (next: boolean) => {
       busy = next;
-      options.actions.forEach((action, index) => buttons[index]?.setDisabled(next || Boolean(action.disabled)));
+      options.actions.forEach((_action, index) => buttons[index]?.setDisabled(next || actionDisabled[index]!));
     };
     const close = (value?: T) => {
       if (closed) return;
       closed = true;
       const index = this.stack.findIndex((entry) => entry.handle === handle);
       if (index >= 0) this.stack.splice(index, 1);
+      closeButton?.destroy();
       buttons.forEach((button) => button.destroy());
       textbox.destroy();
       canvas.destroy();
@@ -118,28 +130,44 @@ export class AlertSystem {
       this.syncStack();
       if (previousFocus?.isConnected) previousFocus.focus();
     };
-    const handle: AlertHandle<T> = { element: backdrop, result, close };
+    const handle: AlertHandle<T> = {
+      element: backdrop,
+      result,
+      close,
+      setActionDisabled(index, disabled) {
+        if (closed || !buttons[index]) return;
+        actionDisabled[index] = disabled;
+        buttons[index].setDisabled(busy || disabled);
+      },
+      setActionLabel(index, label) { buttons[index]?.setLabel(label); },
+    };
 
-    for (const action of options.actions) {
-      const button = createGameButton({
+    for (const [index, action] of options.actions.entries()) {
+      let button!: GameButton;
+      button = createGameButton({
         label: action.label,
         clock: this.clock,
         upSheet: action.sheets.up,
         betweenSheet: action.sheets.between,
         depressedSheet: action.sheets.depressed,
         onActivate: () => {
-          if (busy || action.disabled) return;
-          let activation: void | Promise<void>;
+          if (busy || actionDisabled[index]) return;
+          let activation: void | boolean | Promise<void | boolean>;
           try { activation = action.onActivate?.(); }
           catch (reason) {
             error.textContent = reason instanceof Error ? reason.message : 'Could not continue.';
             error.hidden = false;
             return;
           }
-          if (!activation || typeof activation.then !== 'function') { close(action.value); return; }
+          if (typeof activation !== 'object' || activation === null || typeof activation.then !== 'function') {
+            if (activation === false) setBusy(false); else close(action.value);
+            return;
+          }
           error.hidden = true;
           setBusy(true);
-          void activation.then(() => close(action.value)).catch((reason: unknown) => {
+          void activation.then((shouldClose: void | boolean) => {
+            if (shouldClose === false) setBusy(false); else close(action.value);
+          }).catch((reason: unknown) => {
             error.textContent = reason instanceof Error ? reason.message : 'Could not continue.';
             error.hidden = false;
             setBusy(false);
@@ -147,9 +175,22 @@ export class AlertSystem {
         },
       });
       button.element.classList.add('alert-system__action', 'game-button--baked-label');
-      button.setDisabled(Boolean(action.disabled));
+      button.setDisabled(actionDisabled[index]!);
       buttons.push(button);
       actions.append(button.element);
+    }
+
+    if (options.dismissible !== false && options.showCloseButton !== false) {
+      closeButton = createGameButton({
+        label: 'Close',
+        clock: this.clock,
+        upSheet: CLOSE_BUTTON_SHEETS.up,
+        betweenSheet: CLOSE_BUTTON_SHEETS.between,
+        depressedSheet: CLOSE_BUTTON_SHEETS.depressed,
+        onActivate: () => close(options.dismissValue),
+      });
+      closeButton.element.classList.add('alert-system__close', 'game-button--baked-label');
+      textbox.element.append(closeButton.element);
     }
 
     if (!this.hasOpenAlert) this.backgroundWasInert = this.background.inert;

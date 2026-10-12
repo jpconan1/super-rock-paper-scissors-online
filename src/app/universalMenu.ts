@@ -57,12 +57,22 @@ export function mountUniversalMenu(container: HTMLElement, background: HTMLEleme
   const music = createVolumeSlider('music', clock, getMusicVolume(), setMusicVolume);
   const sfx = createVolumeSlider('sfx', clock, getSfxVolume(), setSfxVolume);
   const boil = createBoilToggle(clock);
+  const closeButton = createGameButton({
+    label: 'Close settings',
+    onActivate: options.onClose,
+    clock,
+    upSheet: '/interactive-elements/generic-buttons/close-button-up-sheet.webp',
+    betweenSheet: '/interactive-elements/generic-buttons/close-button-between-sheet.webp',
+    depressedSheet: '/interactive-elements/generic-buttons/close-button-depressed-sheet.webp',
+  });
+  closeButton.element.classList.add('universal-menu__close', 'game-button--baked-label');
   const showConfirmation = () => {
     void options.alerts.confirm({
       ariaLabel: 'Are you sure?',
       geometry: STANDARD_CONFIRMATION_GEOMETRY,
       content: options.mode === 'game' ? GAME_QUIT_CONFIRMATION_COPY : QUIT_CONFIRMATION_COPY,
       dismissible: true,
+      showCloseButton: false,
       cancel: { label: 'Back', sheets: ALERT_BUTTON_SHEETS.back },
       confirm: { label: 'Quit', sheets: ALERT_BUTTON_SHEETS.quit },
     }).then((confirmed) => { if (confirmed) options.onQuit(); });
@@ -124,6 +134,7 @@ export function mountUniversalMenu(container: HTMLElement, background: HTMLEleme
   controls.append(continueButton.element, quit.element);
   const box = createTextbox({ className: `universal-menu__box universal-menu__box--${options.mode}`, role: 'dialog', ariaLabel: 'Menu', content: controls });
   box.element.setAttribute('aria-modal', 'true');
+  box.element.append(closeButton.element);
   if (lobbyDecorations.length) box.element.prepend(...lobbyDecorations);
   overlay.append(box.element); container.append(overlay); background.inert = true;
   const unsubscribe = subscribeAudioState(({ enabled }) => { music.setDisabled(!enabled); sfx.setDisabled(!enabled); });
@@ -138,7 +149,7 @@ export function mountUniversalMenu(container: HTMLElement, background: HTMLEleme
   };
   overlay.addEventListener('keydown', onKeyDown); (focusables()[0] ?? box.element).focus();
   return { element: overlay, destroy() {
-    overlay.removeEventListener('keydown', onKeyDown); unsubscribe(); sound.destroy(); music.destroy(); sfx.destroy(); boil.destroy(); lobbyResources.forEach((resource) => resource.destroy()); continueButton.destroy(); quit.destroy(); box.destroy(); overlay.remove();
+    overlay.removeEventListener('keydown', onKeyDown); unsubscribe(); sound.destroy(); music.destroy(); sfx.destroy(); boil.destroy(); lobbyResources.forEach((resource) => resource.destroy()); closeButton.destroy(); continueButton.destroy(); quit.destroy(); box.destroy(); overlay.remove();
     background.inert = false; if (previousFocus?.isConnected) previousFocus.focus();
   } };
 }

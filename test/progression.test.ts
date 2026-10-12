@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
-  countNewestClassRoundWins, createNextLevelProgressAward, createProgressAward, createTokenProgressAward, createTutorialProgressAward, HUMAN_WIN_PROGRESS_BY_LEVEL, isClassUnlocked, MAX_PROGRESS_UNITS, progressGainForLevel, progressionForTotal,
+  computerProgressRateForLevel, countNewestClassRoundWins, createNextLevelProgressAward, createProgressAward, createTokenProgressAward, createTutorialProgressAward, HUMAN_WIN_PROGRESS_BY_LEVEL, isClassUnlocked, MAX_PROGRESS_UNITS, progressGainForLevel, progressionForTotal,
 } from '../src/core/progression';
 import { ABM_CLASS_IDS } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 import { XP_BAR_CLIMB_MS, XP_BAR_DING_HOLD_MS, xpAnimationSegment, xpAnimationStops } from '../src/app/xpProgressBar';
@@ -21,10 +21,18 @@ describe('progression', () => {
       const humanLoss = Math.round(humanWin / 2);
       expect(progressGainForLevel(level, 'win', 'human')).toBe(humanWin);
       expect(progressGainForLevel(level, 'loss', 'human')).toBe(humanLoss);
-      expect(progressGainForLevel(level, 'win', 'computer')).toBe(Math.round(humanWin / 10));
-      expect(progressGainForLevel(level, 'loss', 'computer')).toBe(Math.round(humanLoss / 10));
+      const computerRate = Math.max(0.1, 1.1 - level * 0.1);
+      expect(computerProgressRateForLevel(level)).toBeCloseTo(computerRate);
+      expect(progressGainForLevel(level, 'win', 'computer')).toBe(Math.round(humanWin * computerRate));
+      expect(progressGainForLevel(level, 'loss', 'computer')).toBe(Math.round(humanLoss * computerRate));
     }
     expect(progressGainForLevel(21, 'win')).toBe(0);
+    expect(HUMAN_WIN_PROGRESS_BY_LEVEL.map((_, index) => progressGainForLevel(index + 1, 'win', 'computer'))).toEqual([
+      10_000, 8_550, 7_200, 5_950, 4_800, 3_750, 2_800, 1_950, 1_200, 550,
+      500, 450, 400, 350, 300, 250, 200, 150, 100, 50,
+    ]);
+    expect(computerProgressRateForLevel(10)).toBeCloseTo(0.1);
+    expect(computerProgressRateForLevel(20)).toBeCloseTo(0.1);
   });
 
   test('preserves overflow and reports every crossed unlock', () => {
@@ -46,8 +54,8 @@ describe('progression', () => {
   });
 
   test('applies table opponent and outcome rates', () => {
-    expect(createProgressAward(0, 'loss', { opponent: 'computer' }).baseProgressUnits).toBe(500);
-    expect(createProgressAward(0, 'win', { opponent: 'computer' }).baseProgressUnits).toBe(1_000);
+    expect(createProgressAward(0, 'loss', { opponent: 'computer' }).baseProgressUnits).toBe(5_000);
+    expect(createProgressAward(0, 'win', { opponent: 'computer' }).baseProgressUnits).toBe(10_000);
     expect(createProgressAward(0, 'loss', { opponent: 'human' }).baseProgressUnits).toBe(5_000);
     expect(createProgressAward(0, 'win', { opponent: 'human' }).baseProgressUnits).toBe(10_000);
     expect(createProgressAward(90_000, 'win', { opponent: 'human' }).baseProgressUnits).toBe(5_500);
@@ -62,7 +70,8 @@ describe('progression', () => {
         const loss = createProgressAward(totalProgressUnits, 'loss', { opponent });
         const humanWin = HUMAN_WIN_PROGRESS_BY_LEVEL[progressionForTotal(totalProgressUnits).level - 1]!;
         const expectedLoss = Math.round(humanWin / 2);
-        expect(loss.baseProgressUnits).toBe(opponent === 'human' ? expectedLoss : Math.round(expectedLoss / 10));
+        expect(loss.baseProgressUnits).toBe(opponent === 'human'
+          ? expectedLoss : Math.round(expectedLoss * computerProgressRateForLevel(progressionForTotal(totalProgressUnits).level)));
       }
     }
   });
@@ -74,6 +83,9 @@ describe('progression', () => {
     });
     expect(createProgressAward(0, 'win', { opponent: 'human', newestClassRoundWins: 2 })).toMatchObject({
       baseProgressUnits: 10_000, bonusProgressUnits: 5_000, gainedProgressUnits: 15_000, classBonusRate: 0.5,
+    });
+    expect(createProgressAward(0, 'loss', { opponent: 'computer', newestClassRoundWins: 1 })).toMatchObject({
+      baseProgressUnits: 5_000, bonusProgressUnits: 1_250, gainedProgressUnits: 6_250, classBonusRate: 0.25,
     });
   });
 
@@ -95,17 +107,20 @@ describe('progression', () => {
     expect(createNextLevelProgressAward(MAX_PROGRESS_UNITS)).toBeUndefined();
   });
 
-  test('awards a full level for a level-one tutorial and 100 XP afterward regardless of outcome', () => {
-    expect(createTutorialProgressAward(0, 'loss')).toMatchObject({
+  test('awards 10,000 XP for the first tutorial and 10 XP afterward regardless of level or outcome', () => {
+    expect(createTutorialProgressAward(0, 'loss', true)).toMatchObject({
       outcome: 'loss', gainedProgressUnits: 10_000, unlockedClassIds: ['advantaged'],
       after: { level: 2, totalProgressUnits: 10_000 },
     });
-    expect(createTutorialProgressAward(9_500, 'win')).toMatchObject({
+    expect(createTutorialProgressAward(9_500, 'win', true)).toMatchObject({
       outcome: 'win', gainedProgressUnits: 10_000, unlockedClassIds: ['advantaged'],
       after: { level: 2, totalProgressUnits: 19_500 },
     });
-    expect(createTutorialProgressAward(10_000, 'loss')).toMatchObject({
-      gainedProgressUnits: 100, unlockedClassIds: [], after: { totalProgressUnits: 10_100 },
+    expect(createTutorialProgressAward(50_000, 'loss', true)).toMatchObject({
+      gainedProgressUnits: 10_000, unlockedClassIds: ['sumo'], after: { totalProgressUnits: 60_000 },
+    });
+    expect(createTutorialProgressAward(10_000, 'loss', false)).toMatchObject({
+      gainedProgressUnits: 10, unlockedClassIds: [], after: { totalProgressUnits: 10_010 },
     });
   });
 

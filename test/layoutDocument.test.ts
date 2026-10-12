@@ -34,6 +34,19 @@ describe('layout documents', () => {
     expect(layoutDocuments.get('lobby')!.elements.some((element) => element.id === 'account')).toBe(false);
   });
 
+  it('ships the cleaned account layout with responsive deletion controls', () => {
+    const account = layoutDocuments.get('account')!;
+    expect(account.elements.some(({ id }) => id === 'info-box')).toBe(false);
+    const deletion = account.elements.find(({ id }) => id === 'delete-account');
+    expect(deletion?.assets).toEqual({
+      up: '/account/delete-account-button-up-sheet.webp',
+      between: '/account/delete-account-button-between-sheet.webp',
+      depressed: '/account/delete-account-button-depressed-sheet.webp',
+    });
+    expect(deletion?.layouts.landscape).toBeTruthy();
+    expect(deletion?.layouts.portrait).toBeTruthy();
+  });
+
   it('defines separate reward states with one card-flip box', () => {
     const reward = layoutDocuments.get('class-reward')!;
     const unlocked = reward.elements.filter((element) => element.stateVisibility?.unlocked !== false);
@@ -95,10 +108,21 @@ describe('layout documents', () => {
     expect(title.elements.find(({ id }) => id === 'sign-up')?.assets).toMatchObject({ up: '/title/auth/sign-up-button-up-sheet.webp' });
     expect(title.elements.find(({ id }) => id === 'apple-sign-in')?.assets).toMatchObject({ up: '/title/auth/apple-sign-in-button-up.webp' });
     expect(title.elements.find(({ id }) => id === 'password-email')?.assets).toMatchObject({ src: '/title/auth/password-entry-landscape-sheet.webp' });
-    expect(title.elements.find(({ id }) => id === 'password-submit')?.assets).toMatchObject({ up: '/title/auth/sign-in-button-up-sheet.webp' });
+    expect(title.elements.find(({ id }) => id === 'password-email')?.layouts.landscape).toMatchObject({ x: 195, width: 450 });
+    expect(title.elements.find(({ id }) => id === 'password-password')?.layouts.portrait).toMatchObject({ x: 30, width: 385 });
+    expect(title.elements.find(({ id }) => id === 'password-submit')?.assets).toMatchObject({ up: '/title/auth/sign-in-green-button-up-sheet.webp' });
+    expect(title.elements.find(({ id }) => id === 'password-submit')?.layouts.landscape).toMatchObject({ x: 500, y: 235, width: 140, height: 70 });
     expect(title.elements.find(({ id }) => id === 'password-back')?.assets).toMatchObject({ up: '/interactive-elements/menu-buttons/back-button-w-up-sheet.webp' });
+    expect(title.elements.find(({ id }) => id === 'password-back')?.layouts.portrait).toMatchObject({ x: 45, y: 700, width: 184, height: 92 });
     expect(title.elements.find(({ id }) => id === 'forgot-password')?.assets).toMatchObject({ up: '/title/auth/forgot-password-button-up-sheet.webp' });
+    expect(title.elements.find(({ id }) => id === 'forgot-password')?.layouts.landscape).toMatchObject({ x: 655, y: 352.5, width: 100, height: 50 });
     expect(title.elements.find(({ id }) => id === 'email-code-send')?.assets).toMatchObject({ up: '/title/auth/send-code-button-up-sheet.webp' });
+    expect(title.elements.find(({ id }) => id === 'email-code-send')?.layouts.landscape).toMatchObject({ x: 500, y: 235, width: 140, height: 70 });
+    expect(title.elements.find(({ id }) => id === 'email-code-back')?.layouts.portrait).toMatchObject({ x: 45, y: 700, width: 184, height: 92 });
+    expect(title.elements.find(({ id }) => id === 'email-code-email')?.layouts).toMatchObject({
+      landscape: { x: 255, width: 450, height: 50 },
+      portrait: { x: 77.5, width: 385, height: 47.5 },
+    });
   });
 
   it('ships one closed-curtain composition for every variant', () => {

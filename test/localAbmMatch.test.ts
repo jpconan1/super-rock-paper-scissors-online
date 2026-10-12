@@ -87,7 +87,7 @@ describe('LocalAbmMatch', () => {
     match.destroy();
   });
 
-  test('scripts the tutorial Attack branch, forced Mana reset, and disables Lucky and deadlines', () => {
+  test('breaks the repeated Attack loop after the forced Mana reset', () => {
     const snapshots: ServerSnapshot[] = []; const ending = vi.fn();
     const match = new LocalAbmMatch({
       playerName: 'JP', publish: (snapshot) => snapshots.push(snapshot), random: () => 0,
@@ -107,6 +107,12 @@ describe('LocalAbmMatch', () => {
     match.send({ type: 'choose-move', move: 'mana' });
     expect(variant(snapshots)).toMatchObject({ players: { p1: { mana: 1 }, p2: { mana: 1 } } });
     expect(ending).not.toHaveBeenCalled();
+
+    match.send({ type: 'choose-move', move: 'attack' });
+    vi.advanceTimersByTime(10_000);
+    expect(variant(snapshots).lastCompleteMoves).toEqual({ p1: 'attack', p2: 'mana' });
+    expect(variant(snapshots).lastRoundWinner).toBe('p1');
+    expect(ending).toHaveBeenCalledWith('good', false);
     match.destroy();
   });
 

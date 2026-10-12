@@ -37,7 +37,7 @@ Presentation state is disposable. Immediate button feedback is local, but author
 
 ## Server authority
 
-The Worker accepts public HTTP/WebSocket traffic, authenticates guest resume tokens, validates envelopes, applies connection/user rate limits, and routes requests to Durable Objects.
+The Worker accepts public HTTP/WebSocket traffic, authenticates Better Auth cookie sessions, validates envelopes, applies connection/user rate limits, and routes requests to Durable Objects. Match sockets use separate short-lived seat credentials after matchmaking.
 
 One SQLite-backed Match Durable Object is the atom of match coordination. It owns canonical P1/P2, selection flow, game order, timers, disconnect grace, revisions, command idempotency, private choices, scores, and final result. Important state and an append-only accepted-command/event log are written to its local storage before broadcast. Hibernatable WebSockets and alarms allow idle matches to sleep and deadlines to survive restarts.
 
@@ -67,6 +67,12 @@ Semantic events include lifecycle meaning such as `ready`, `reveal`, `score`, `w
 ## Persistence
 
 Match DO SQLite stores active authoritative state, processed command IDs, deadlines, and compact events. D1 stores guest/player identity, seasons, nine-slot manifests, completed-match summaries, ratings, and leaderboards.
+
+Each player has one immutable, unique, readable game ID such as `apple-omega-pizza-turtle-45`. This is the canonical public identity used by game records, APIs, moderation, match history, and future profiles. Display names remain mutable and non-unique. Private Better Auth user IDs, provider subject IDs, emails, sessions, and OAuth tokens are separate authentication data and are never used as public player identity. Readable player IDs are not credentials; authorization always comes from an authenticated session or a short-lived match seat credential.
+
+Every protected account has exactly one fixed authentication type: Google, Apple, or email. Provider identities are never automatically merged by matching email, and normal UI does not link multiple providers. An email account always supports verified email-code login and may optionally add a password. Protecting a guest changes authentication without changing its readable player ID or game history. Full rules live in `auth-plan.md`.
+
+The implemented authentication slice exposes guest, Google, and email accounts. Email signup converts an existing guest after a purpose-bound verification code succeeds, preserving the readable player identity and game state. Email-code login is always available; an optional password can be added, replaced, reset, or removed after fresh mailbox verification. Emails are globally reserved and permanent. Apple remains disabled.
 
 Match completion crosses two storage systems, so it is retryable rather than pretending to be one distributed transaction. Every completion has a unique result ID. One D1 transaction inserts that result and applies both rating changes exactly once; conflict on the result ID is a successful no-op. The Match DO records finalization status and retries safely.
 
@@ -108,6 +114,8 @@ Large replay archives and historical whiteboards move to R2 only when retention 
 - One global Elo with idempotent result finalization.
 - One logical alpha matchmaking queue, lobby, and whiteboard, with sharding seams.
 - Exact match selection and ban flow remains deliberately unspecified.
+- Immutable readable player IDs are canonical game identity; mutable display names are presentation only.
+- Protected account types are fixed and mutually exclusive: Google, Apple, or email.
 
 ## Backend address
 

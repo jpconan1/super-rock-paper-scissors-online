@@ -13,7 +13,7 @@ import { ABM_CLASSES } from '../variants/attackBlockMana/attackBlockManaCatalog'
 import type { AbmClassId, AbmCommand, AbmMove, AbmProjection, AbmState } from '../variants/attackBlockMana/attackBlockManaTypes';
 
 export type TutorialEnding = 'good' | 'bad';
-type TutorialStage = 'opening' | 'attack-followup' | 'forced-reset' | 'block-followup' | 'freeplay' | 'ended';
+type TutorialStage = 'opening' | 'attack-followup' | 'forced-reset' | 'post-reset-opening' | 'block-followup' | 'freeplay' | 'ended';
 
 interface LocalAbmMatchOptions {
   playerName: string;
@@ -213,6 +213,10 @@ export class LocalAbmMatch {
       if (!humanMove) return undefined;
       return { type: 'choose-move', move: humanMove === 'attack' ? 'block' : 'attack' };
     }
+    if (this.tutorialStage === 'post-reset-opening') {
+      if (!humanMove) return undefined;
+      return { type: 'choose-move', move: humanMove === 'attack' ? 'mana' : 'attack' };
+    }
     if (this.tutorialStage === 'attack-followup') return { type: 'choose-move', move: 'attack' };
     if (this.tutorialStage === 'forced-reset') return { type: 'choose-move', move: 'mana' };
     if (this.tutorialStage === 'block-followup') return { type: 'choose-move', move: 'mana' };
@@ -235,7 +239,12 @@ export class LocalAbmMatch {
         if (moves.p1 === 'block') this.tutorialStage = 'forced-reset';
         else this.endTutorial('bad');
         break;
-      case 'forced-reset': this.tutorialStage = 'opening'; break;
+      case 'forced-reset': this.tutorialStage = 'post-reset-opening'; break;
+      case 'post-reset-opening':
+        if (moves.p1 === 'attack') this.endTutorial('good');
+        else if (moves.p1 === 'block') this.tutorialStage = 'block-followup';
+        else this.endTutorial('bad');
+        break;
       case 'block-followup':
         if (moves.p1 === 'block') this.tutorialStage = 'opening';
         else if (moves.p1 === 'attack') this.endTutorial('good');

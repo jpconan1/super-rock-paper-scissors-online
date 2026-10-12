@@ -14,7 +14,7 @@ describe('player profiles', () => {
   });
 
   test('accepts only complete, bounded server sessions', () => {
-    const profile = { playerId: 'guest', displayName: 'Player', rating: 1500 };
+    const profile = { playerId: 'anchor-chill-pizza-turtle-00', accountType: 'guest', displayName: 'Player', rating: 1500 };
     expect(isPlayerProfile(profile)).toBe(true);
     expect(isPlayerProfile({ ...profile, playerId: '' })).toBe(false);
     expect(isPlayerProfile({ ...profile, displayName: 'Player\nTwo' })).toBe(false);

@@ -100,6 +100,32 @@
       }
     },
     {
+      "id": "logout",
+      "type": "button",
+      "protected": true,
+      "assets": {
+        "up": "/account/log-out-button-up-sheet.webp",
+        "between": "/account/log-out-button-between-sheet.webp",
+        "depressed": "/account/log-out-button-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": {
+          "x": 325,
+          "y": 235,
+          "width": 140,
+          "height": 70,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 45,
+          "y": 700,
+          "width": 184,
+          "height": 92,
+          "aspectLock": true
+        }
+      }
+    },
+    {
       "id": "password-sign-in", "type": "button", "protected": true,
       "assets": { "up": "/title/auth/sign-in-password-up-sheet.webp", "between": "/title/auth/sign-in-password-between-sheet.webp", "depressed": "/title/auth/sign-in-password-depressed-sheet.webp" },
       "layouts": { "landscape": { "x": 278, "y": 320, "width": 120, "height": 60 }, "portrait": { "x": 83, "y": 575, "width": 115, "height": 60 } }
@@ -150,32 +176,32 @@
       "id": "password-email", "type": "text-entry", "protected": true,
       "assets": { "src": "/title/auth/password-entry-landscape-sheet.webp" },
       "layouts": {
-        "landscape": { "x": 195, "y": 320, "width": 340, "height": 50, "aspectLock": true },
-        "portrait": { "x": 30, "y": 575, "width": 275.3515625, "height": 47.5, "aspectLock": true }
+        "landscape": { "x": 195, "y": 320, "width": 450, "height": 50 },
+        "portrait": { "x": 30, "y": 575, "width": 385, "height": 47.5 }
       }
     },
     {
       "id": "password-password", "type": "text-entry", "protected": true,
       "assets": { "src": "/title/auth/password-entry-landscape-sheet.webp" },
       "layouts": {
-        "landscape": { "x": 195, "y": 385, "width": 340, "height": 50, "aspectLock": true },
-        "portrait": { "x": 30, "y": 640, "width": 275.3515625, "height": 47.5, "aspectLock": true }
+        "landscape": { "x": 195, "y": 385, "width": 450, "height": 50 },
+        "portrait": { "x": 30, "y": 640, "width": 385, "height": 47.5 }
       }
     },
     {
       "id": "password-submit", "type": "button", "protected": true,
-      "assets": { "up": "/title/auth/sign-in-button-up-sheet.webp", "between": "/title/auth/sign-in-button-between-sheet.webp", "depressed": "/title/auth/sign-in-button-depressed-sheet.webp" },
-      "layouts": { "landscape": { "x": 545, "y": 320, "width": 100, "height": 50, "aspectLock": true }, "portrait": { "x": 320, "y": 575, "width": 95, "height": 47.5, "aspectLock": true } }
+      "assets": { "up": "/title/auth/sign-in-green-button-up-sheet.webp", "between": "/title/auth/sign-in-green-button-between-sheet.webp", "depressed": "/title/auth/sign-in-green-button-depressed-sheet.webp" },
+      "layouts": { "landscape": { "x": 500, "y": 235, "width": 140, "height": 70, "aspectLock": true }, "portrait": { "x": 305, "y": 700, "width": 184, "height": 92, "aspectLock": true } }
     },
     {
       "id": "password-back", "type": "button", "protected": true,
       "assets": { "up": "/interactive-elements/menu-buttons/back-button-w-up-sheet.webp", "between": "/interactive-elements/menu-buttons/back-button-w-between-sheet.webp", "depressed": "/interactive-elements/menu-buttons/back-button-w-depressed-sheet.webp" },
-      "layouts": { "landscape": { "x": 655, "y": 352.5, "width": 100, "height": 50, "aspectLock": true }, "portrait": { "x": 425, "y": 607.5, "width": 95, "height": 47.5, "aspectLock": true } }
+      "layouts": { "landscape": { "x": 325, "y": 235, "width": 140, "height": 70, "aspectLock": true }, "portrait": { "x": 45, "y": 700, "width": 184, "height": 92, "aspectLock": true } }
     },
     {
       "id": "forgot-password", "type": "button", "protected": true,
       "assets": { "up": "/title/auth/forgot-password-button-up-sheet.webp", "between": "/title/auth/forgot-password-button-between-sheet.webp", "depressed": "/title/auth/forgot-password-button-depressed-sheet.webp" },
-      "layouts": { "landscape": { "x": 545, "y": 385, "width": 100, "height": 50, "aspectLock": true }, "portrait": { "x": 320, "y": 640, "width": 95, "height": 47.5, "aspectLock": true } }
+      "layouts": { "landscape": { "x": 655, "y": 352.5, "width": 100, "height": 50, "aspectLock": true }, "portrait": { "x": 425, "y": 607.5, "width": 95, "height": 47.5, "aspectLock": true } }
     },
     {
       "id": "password-error", "type": "dynamic-text", "protected": true,
@@ -189,19 +215,19 @@
       "id": "email-code-email", "type": "text-entry", "protected": true,
       "assets": { "src": "/title/auth/password-entry-landscape-sheet.webp" },
       "layouts": {
-        "landscape": { "x": 195, "y": 352.5, "width": 340, "height": 50, "aspectLock": true },
-        "portrait": { "x": 30, "y": 607.5, "width": 275.3515625, "height": 47.5, "aspectLock": true }
+        "landscape": { "x": 255, "y": 352.5, "width": 450, "height": 50 },
+        "portrait": { "x": 77.5, "y": 607.5, "width": 385, "height": 47.5 }
       }
     },
     {
       "id": "email-code-send", "type": "button", "protected": true,
       "assets": { "up": "/title/auth/send-code-button-up-sheet.webp", "between": "/title/auth/send-code-button-between-sheet.webp", "depressed": "/title/auth/send-code-button-depressed-sheet.webp" },
-      "layouts": { "landscape": { "x": 545, "y": 352.5, "width": 100, "height": 50, "aspectLock": true }, "portrait": { "x": 320, "y": 607.5, "width": 95, "height": 47.5, "aspectLock": true } }
+      "layouts": { "landscape": { "x": 500, "y": 235, "width": 140, "height": 70, "aspectLock": true }, "portrait": { "x": 305, "y": 700, "width": 184, "height": 92, "aspectLock": true } }
     },
     {
       "id": "email-code-back", "type": "button", "protected": true,
       "assets": { "up": "/interactive-elements/menu-buttons/back-button-w-up-sheet.webp", "between": "/interactive-elements/menu-buttons/back-button-w-between-sheet.webp", "depressed": "/interactive-elements/menu-buttons/back-button-w-depressed-sheet.webp" },
-      "layouts": { "landscape": { "x": 655, "y": 352.5, "width": 100, "height": 50, "aspectLock": true }, "portrait": { "x": 425, "y": 607.5, "width": 95, "height": 47.5, "aspectLock": true } }
+      "layouts": { "landscape": { "x": 325, "y": 235, "width": 140, "height": 70, "aspectLock": true }, "portrait": { "x": 45, "y": 700, "width": 184, "height": 92, "aspectLock": true } }
     },
     {
       "id": "account-status", "type": "dynamic-text", "protected": true,

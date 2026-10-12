@@ -61,7 +61,12 @@ export function progressGainForLevel(level: number, outcome: ProgressOutcome, op
   if (currentLevel >= MAX_PLAYER_LEVEL) return 0;
   const humanWin = HUMAN_WIN_PROGRESS_BY_LEVEL[currentLevel - 1]!;
   const humanAward = outcome === 'win' ? humanWin : Math.round(humanWin / 2);
-  return opponent === 'computer' ? Math.round(humanAward / 10) : humanAward;
+  return opponent === 'computer' ? Math.round(humanAward * computerProgressRateForLevel(currentLevel)) : humanAward;
+}
+
+export function computerProgressRateForLevel(level: number): number {
+  const currentLevel = Math.max(MIN_PLAYER_LEVEL, Math.min(MAX_PLAYER_LEVEL - 1, Math.floor(level)));
+  return Math.max(0.1, 1.1 - currentLevel * 0.1);
 }
 
 export function createProgressAward(totalProgressUnits: number, outcome: ProgressOutcome, options: ProgressAwardOptions): ProgressAward {
@@ -88,9 +93,9 @@ export function createProgressAward(totalProgressUnits: number, outcome: Progres
   };
 }
 
-export function createTutorialProgressAward(totalProgressUnits: number, outcome: ProgressOutcome): ProgressAward {
+export function createTutorialProgressAward(totalProgressUnits: number, outcome: ProgressOutcome, firstCompletion: boolean): ProgressAward {
   const before = progressionForTotal(totalProgressUnits);
-  const requestedGain = before.level === MIN_PLAYER_LEVEL ? PROGRESS_UNITS_PER_LEVEL : 100;
+  const requestedGain = firstCompletion ? PROGRESS_UNITS_PER_LEVEL : 10;
   const gainedProgressUnits = Math.min(MAX_PROGRESS_UNITS - before.totalProgressUnits, requestedGain);
   const after = progressionForTotal(before.totalProgressUnits + gainedProgressUnits);
   return {

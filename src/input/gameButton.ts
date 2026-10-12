@@ -25,6 +25,7 @@ export interface GameButtonOptions {
 export interface GameButton {
   element: HTMLButtonElement;
   readonly ready: Promise<void>;
+  setLabel(label: string): void;
   setDisabled(disabled: boolean): void;
   setLockedDepressed(locked: boolean): void;
   destroy(): void;
@@ -195,6 +196,10 @@ export function createGameButton(options: GameButtonOptions): GameButton {
   return {
     element,
     ready,
+    setLabel(nextLabel) {
+      label.textContent = nextLabel;
+      element.setAttribute('aria-label', nextLabel);
+    },
     setDisabled(nextDisabled) {
       if (requestedDisabled === nextDisabled) return;
       requestedDisabled = nextDisabled;

@@ -28,7 +28,17 @@ import {
 import {
   PLAYER_NAME_MAX_LENGTH, normalizePlayerDisplayName, playerProfile,
 } from '../src/protocol/playerProfile';
+import { claimReadablePlayerId, type PlayerAccountType } from '../src/protocol/playerId';
 import { createAuth, type AuthEnv } from './auth';
+import { createResendMailer, type AuthMailer } from './resendMailer';
+import { accountDeletionChallengeStatus, accountDeletionCodeHash, purgeAccountData } from './accountDeletion';
+import { adminRoute } from './admin';
+import { maintenanceCookie, maintenancePassExpiry, readMaintenanceState, verifyMaintenancePass } from './maintenance';
+import { hashPassword } from 'better-auth/crypto';
+import {
+  emailChallengeHash, emailChallengeStatus, generateEmailCode, normalizeAuthEmail, validEmailPassword,
+  type EmailChallengePurpose, type EmailChallengeRecord,
+} from './emailAccounts';
 import {
   hasFullLocalMatchAwardAllowance, LOCAL_MATCH_AWARD_WINDOW_MS, LOCAL_MATCH_GRANT_TTL_MS,
   localMatchGrantProblem, type LocalMatchGrant, type LocalMatchKind,
@@ -46,11 +56,15 @@ interface Env extends AuthEnv {
   SIGNUP_REQUEST_RATE: RateLimit;
   SIGNUP_VERIFY_RATE: RateLimit;
   ALLOWED_ORIGINS?: string;
+  ADMIN_EMAILS?: string;
 }
 
 const LOCAL_MATCH_GRANT_DEBOUNCE_MS = 2_000;
 const EMAIL_SIGNUP_TTL_MS = 10 * 60_000;
 const EMAIL_RATE_WINDOW_MS = 15 * 60_000;
+const ACCOUNT_DELETION_TTL_MS = 10 * 60_000;
+const ACCOUNT_DELETION_RESEND_MS = 60_000;
+const ACCOUNT_DELETION_MAX_ATTEMPTS = 3;
 const TERMS_VERSION = '2026-09-13';
 const PRIVACY_VERSION = '2026-09-13';
 
@@ -109,6 +123,8 @@ export class MatchObject extends DurableObject<Env> {
         ...(playerUnlockAll ? { playerUnlockAll } : {}),
       });
       await this.ctx.storage.put('match', this.record);
+      await recordEvent(this.env.DB, `match-start:${matchId}`, 'match-start', Date.now(), undefined, undefined, playerIds?.p1,
+        { matchId, opponentId: playerIds?.p2 });
       await this.scheduleAlarm();
     }
     return { matchId: this.record.matchId, seats: this.record.tokens };
@@ -252,6 +268,8 @@ export class MatchObject extends DurableObject<Env> {
           ratings: { p1: record.players.p1.rating, p2: record.players.p2.rating }, deltas }),
       });
       record.ratingsFinalized = true;
+      await recordEvent(this.env.DB, `match-complete:${record.matchId}`, record.completionReason === 'disconnect' ? 'match-disconnect' : 'match-complete',
+        Date.now(), undefined, undefined, record.playerIds.p1, { matchId: record.matchId, reason: record.completionReason });
       record.ratingRetryAt = undefined;
     } catch {
       record.ratingRetryAt = Date.now() + 5_000;
@@ -285,6 +303,18 @@ const MATCHMAKING_QUEUE_TTL_MS = 5_000;
 const MATCH_TICKET_TTL_MS = 30_000;
 
 export class MatchmakerObject extends DurableObject<Env> {
+  async getAdminSnapshot(): Promise<{ players: Array<MatchmakingQueueEntry & { startedAt: number; isTest: boolean }>; longestWaitMs: number }> {
+    const now = Date.now();
+    const active = ((await this.ctx.storage.get<MatchmakingQueueEntry[]>('queue')) ?? []).filter((entry) => now - entry.queuedAt < MATCHMAKING_QUEUE_TTL_MS);
+    const players = await Promise.all(active.map(async (entry) => {
+      const attempt = await this.env.DB.prepare(`SELECT a.started_at, CASE WHEN t.player_id IS NULL THEN 0 ELSE 1 END is_test
+        FROM matchmaking_attempts a LEFT JOIN test_players t ON t.player_id = a.player_id WHERE a.attempt_id = ?`)
+        .bind(entry.attemptId).first<{ started_at: number; is_test: number }>();
+      return { ...entry, startedAt: attempt?.started_at ?? entry.queuedAt, isTest: attempt?.is_test === 1 };
+    }));
+    return { players, longestWaitMs: players.length ? Math.max(...players.map((entry) => now - entry.startedAt)) : 0 };
+  }
+
   async enqueue(guestId: string, attemptId: string): Promise<{ status: 'waiting' | 'owned-elsewhere' } | ({ status: 'matched' } & MatchTicket)> {
     const player = await getPlayer(this.env.DB, guestId);
     const name = player.displayName;
@@ -299,6 +329,9 @@ export class MatchmakerObject extends DurableObject<Env> {
     const queue = (await this.ctx.storage.get<MatchmakingQueueEntry[]>('queue')) ?? [];
     const refreshed = refreshMatchmakingQueue(queue, guestId, attemptId, name, player.rating, now, MATCHMAKING_QUEUE_TTL_MS, player.totalProgressUnits, player.unlockAllClasses);
     if (refreshed.ownedElsewhere) return { status: 'owned-elsewhere' };
+    await this.env.DB.prepare(`INSERT OR IGNORE INTO matchmaking_attempts (attempt_id, player_id, started_at) VALUES (?, ?, ?)`)
+      .bind(attemptId, guestId, now).run();
+    await recordEvent(this.env.DB, `queue-start:${attemptId}`, 'queue-start', now, undefined, undefined, guestId);
     const opponent = refreshed.opponent;
     if (!opponent) {
       await this.ctx.storage.put('queue', refreshed.queue);
@@ -322,6 +355,12 @@ export class MatchmakerObject extends DurableObject<Env> {
       p2: { guestId, attemptId },
     }, expiresAt);
     await this.ctx.storage.put(ticketRecords);
+    await this.env.DB.batch([
+      this.env.DB.prepare(`UPDATE matchmaking_attempts SET ended_at = ?, outcome = 'matched', match_id = ? WHERE attempt_id = ? AND ended_at IS NULL`).bind(now, matchId, attemptId),
+      this.env.DB.prepare(`UPDATE matchmaking_attempts SET ended_at = ?, outcome = 'matched', match_id = ? WHERE attempt_id = ? AND ended_at IS NULL`).bind(now, matchId, opponent.attemptId),
+    ]);
+    await Promise.all([attemptId, opponent.attemptId].map((id) => recordEvent(this.env.DB, `queue-match:${id}`, 'queue-match', now, undefined, undefined,
+      id === attemptId ? guestId : opponent.guestId, { matchId })));
     await this.scheduleCleanup(expiresAt);
     return { status: 'matched', ...ticketRecords[ticketKey]! };
   }
@@ -330,12 +369,23 @@ export class MatchmakerObject extends DurableObject<Env> {
     const queue = (await this.ctx.storage.get<MatchmakingQueueEntry[]>('queue')) ?? [];
     await this.ctx.storage.put('queue', queue.filter((entry) => entry.guestId !== guestId || entry.attemptId !== attemptId));
     await this.ctx.storage.delete(matchmakingTicketKey(guestId, attemptId));
+    const now = Date.now();
+    await this.env.DB.prepare(`UPDATE matchmaking_attempts SET ended_at = ?, outcome = 'cancelled' WHERE attempt_id = ? AND player_id = ? AND ended_at IS NULL`)
+      .bind(now, attemptId, guestId).run();
+    await recordEvent(this.env.DB, `queue-cancel:${attemptId}`, 'queue-cancel', now, undefined, undefined, guestId);
   }
 
   async alarm(): Promise<void> {
     const now = Date.now();
-    const queue = ((await this.ctx.storage.get<MatchmakingQueueEntry[]>('queue')) ?? [])
-      .filter((entry) => now - entry.queuedAt < MATCHMAKING_QUEUE_TTL_MS);
+    const storedQueue = (await this.ctx.storage.get<MatchmakingQueueEntry[]>('queue')) ?? [];
+    const expired = storedQueue.filter((entry) => now - entry.queuedAt >= MATCHMAKING_QUEUE_TTL_MS);
+    const queue = storedQueue.filter((entry) => now - entry.queuedAt < MATCHMAKING_QUEUE_TTL_MS);
+    for (const entry of expired) {
+      await this.env.DB.prepare(`UPDATE matchmaking_attempts SET ended_at = ?, outcome = 'timed-out' WHERE attempt_id = ? AND ended_at IS NULL`)
+        .bind(entry.queuedAt + MATCHMAKING_QUEUE_TTL_MS, entry.attemptId).run();
+      await recordEvent(this.env.DB, `queue-timeout:${entry.attemptId}`, 'queue-timeout', entry.queuedAt + MATCHMAKING_QUEUE_TTL_MS,
+        undefined, undefined, entry.guestId);
+    }
     await this.ctx.storage.put('queue', queue);
     const tickets = await this.ctx.storage.list<MatchTicket>({ prefix: 'ticket:' });
     const expiredTicketKeys = [...tickets].filter(([, ticket]) => ticket.expiresAt <= now).map(([key]) => key);
@@ -374,22 +424,29 @@ abstract class BroadcastObject extends DurableObject<Env> {
   }
 }
 
-interface LobbyAttachment extends LobbyPlayer { messageTimes: number[]; clientKey: string }
-interface LobbyGracePlayer extends LobbyPlayer { expiresAt: number }
+interface LobbyAttachment extends LobbyPlayer { messageTimes: number[]; clientKey: string; connectedAt: number; accountType: 'guest' | 'protected'; isTest: boolean }
+interface LobbyGracePlayer extends LobbyPlayer { expiresAt: number; connectedAt: number; accountType: 'guest' | 'protected'; isTest: boolean }
 const LOBBY_GRACE_MS = 5_000;
 const CHANNEL_SOCKETS_PER_GUEST = 3;
 const CHANNEL_SOCKETS_PER_CLIENT = 20;
 
 export class LobbyObject extends DurableObject<Env> {
   async getOnlinePlayerCount(): Promise<number> { return (await this.roster()).length; }
+  async getAdminSnapshot(): Promise<unknown[]> {
+    const players = new Map<string, LobbyAttachment | LobbyGracePlayer>();
+    const grace = await this.ctx.storage.list<LobbyGracePlayer>({ prefix: 'lobby:grace:' });
+    for (const player of grace.values()) if (player.expiresAt > Date.now()) players.set(player.playerId, player);
+    for (const player of this.connectedPlayers()) players.set(player.playerId, player);
+    return [...players.values()].map(({ playerId, displayName, presence, connectedAt, accountType, isTest }) => ({ playerId, displayName, presence, connectedAt, accountType, isTest }));
+  }
 
   async fetch(request: Request): Promise<Response> {
     if (request.headers.get('Upgrade') !== 'websocket') return json({ error: 'WebSocket required.' }, 426);
     const url = new URL(request.url);
-    let playerId: string; let displayName: string;
+    let playerId: string; let displayName: string; let accountType: 'guest' | 'protected'; let isTest: boolean;
     try {
       const player = await authenticateRequestPlayer(request, this.env);
-      playerId = player.playerId; displayName = player.displayName;
+      playerId = player.playerId; displayName = player.displayName; accountType = player.accountType === 'guest' ? 'guest' : 'protected'; isTest = player.isTest;
     }
     catch { return json({ error: 'Authentication required.' }, 401); }
     const clientKey = request.headers.get('CF-Connecting-IP') ?? 'unknown-client';
@@ -399,7 +456,7 @@ export class LobbyObject extends DurableObject<Env> {
     await this.ctx.storage.delete(`lobby:grace:${playerId}`);
     const pair = new WebSocketPair(); const [client, server] = Object.values(pair);
     this.ctx.acceptWebSocket(server);
-    server.serializeAttachment({ playerId, displayName, presence: 'idle', messageTimes: [], clientKey } satisfies LobbyAttachment);
+    server.serializeAttachment({ playerId, displayName, presence: 'idle', messageTimes: [], clientKey, connectedAt: Date.now(), accountType, isTest } satisfies LobbyAttachment);
     await this.broadcastRoster();
     return webSocketResponse(client, LOBBY_SOCKET_PROTOCOL);
   }
@@ -461,7 +518,7 @@ export class LobbyObject extends DurableObject<Env> {
   }
 }
 
-interface WhiteboardAttachment { guestId: string; displayName: string; clientKey: string; messageTimes: number[] }
+interface WhiteboardAttachment { guestId: string; displayName: string; clientKey: string; messageTimes: number[]; accountType: 'guest' | 'protected'; isTest: boolean }
 interface WhiteboardPrune { throughSequence: number; removed: WhiteboardOperation[] }
 const WHITEBOARD_MAX_OPERATIONS = 2_000;
 const WHITEBOARD_PRUNE_OPERATIONS = 500;
@@ -495,13 +552,15 @@ export class WhiteboardObject extends DurableObject<Env> {
     });
   }
 
+  async getAdminSnapshot(): Promise<WhiteboardSnapshot> { return this.board; }
+
   async fetch(request: Request): Promise<Response> {
     if (request.headers.get('Upgrade') !== 'websocket') return json({ error: 'WebSocket required.' }, 426);
     const url = new URL(request.url);
-    let guestId: string; let displayName: string;
+    let guestId: string; let displayName: string; let accountType: 'guest' | 'protected'; let isTest: boolean;
     try {
       const player = await authenticateRequestPlayer(request, this.env);
-      guestId = player.playerId; displayName = player.displayName;
+      guestId = player.playerId; displayName = player.displayName; accountType = player.accountType === 'guest' ? 'guest' : 'protected'; isTest = player.isTest;
     }
     catch { return json({ error: 'Authentication required.' }, 401); }
     const clientKey = request.headers.get('CF-Connecting-IP') ?? 'unknown-client';
@@ -511,7 +570,7 @@ export class WhiteboardObject extends DurableObject<Env> {
     if (connections.filter((player) => player.guestId === guestId).length >= CHANNEL_SOCKETS_PER_GUEST
       || connections.filter((player) => player.clientKey === clientKey).length >= CHANNEL_SOCKETS_PER_CLIENT) return rateLimited();
     const pair = new WebSocketPair(); const [client, server] = Object.values(pair);
-    this.ctx.acceptWebSocket(server); server.serializeAttachment({ guestId, displayName, clientKey, messageTimes: [] } satisfies WhiteboardAttachment);
+    this.ctx.acceptWebSocket(server); server.serializeAttachment({ guestId, displayName, clientKey, messageTimes: [], accountType, isTest } satisfies WhiteboardAttachment);
     this.send(server, { type: 'snapshot', board: this.board });
     const visit = url.searchParams.get('visit');
     if (visit && validClientId(visit) && !this.board.operations.some((operation) => operation.clientOperationId === `join:${visit}`)) {
@@ -521,6 +580,7 @@ export class WhiteboardObject extends DurableObject<Env> {
         this.board.operations.push(operation); this.operationBytes += operationByteLength(operation);
         this.board.sequence = operation.sequence; this.board.nextY = operation.rowY + operation.rowSpan * this.board.rowHeight;
         await this.persistOperation(operation, prune); this.broadcastPrune(prune);
+        await this.archiveOperation(operation, guestId, displayName, accountType, isTest);
         this.broadcast({ type: 'operation', operation }); await this.trimIfNeeded();
       }
     }
@@ -546,6 +606,7 @@ export class WhiteboardObject extends DurableObject<Env> {
       this.board.operations.push(operation); this.operationBytes += operationByteLength(operation); this.board.sequence = operation.sequence;
       if (operation.kind === 'text') this.board.nextY = operation.rowY + operation.rowSpan * this.board.rowHeight;
       await this.persistOperation(operation, prune);
+      await this.archiveOperation(operation, attachment.guestId, attachment.displayName, attachment.accountType, attachment.isTest);
       this.broadcastPrune(prune);
       this.broadcast({ type: 'operation', operation });
       if (operation.kind === 'text') await this.trimIfNeeded();
@@ -584,6 +645,14 @@ export class WhiteboardObject extends DurableObject<Env> {
       await storage.put(operationKey(operation.sequence), operation);
       await storage.put('board:meta', boardMeta(this.board));
     });
+  }
+
+  private async archiveOperation(operation: WhiteboardOperation, playerId: string, displayName: string, accountType: 'guest' | 'protected', isTest: boolean): Promise<void> {
+    try {
+      await this.env.DB.prepare(`INSERT OR IGNORE INTO whiteboard_archive
+        (operation_id, sequence, occurred_at, player_id, display_name, account_type, operation_json, is_test) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+        .bind(operation.id, operation.sequence, Date.now(), playerId, displayName, accountType, JSON.stringify(operation), isTest ? 1 : 0).run();
+    } catch { /* Archiving must never interrupt the public board. */ }
   }
 
   private pruneIfNeeded(nextOperation: WhiteboardOperation): WhiteboardPrune | undefined {
@@ -685,7 +754,7 @@ export async function applyLocalProgressAward(db: D1Database, playerId: string, 
 class GuestAuthError extends Error {}
 class LocalProgressAwardConflictError extends Error {}
 
-interface AuthenticatedPlayer { playerId: string; displayName: string; rating: number; totalProgressUnits: number; unlockAllClasses: boolean }
+interface AuthenticatedPlayer { playerId: string; displayName: string; rating: number; totalProgressUnits: number; unlockAllClasses: boolean; accountType: PlayerAccountType; isTest: boolean }
 
 async function getPlayer(db: D1Database, playerId: string): Promise<{ displayName: string; rating: number; totalProgressUnits: number; unlockAllClasses: boolean }> {
   const player = await db.prepare('SELECT display_name, rating, total_progress_units, unlock_all_classes FROM players WHERE player_id = ?').bind(playerId)
@@ -697,17 +766,38 @@ async function getPlayer(db: D1Database, playerId: string): Promise<{ displayNam
 async function authenticateRequestPlayer(request: Request, env: Env): Promise<AuthenticatedPlayer> {
   const session = await createAuth(env).api.getSession({ headers: request.headers });
   if (!session) throw new GuestAuthError('Authentication required.');
-  const player = await env.DB.prepare('SELECT player_id, display_name, rating, total_progress_units, unlock_all_classes FROM players WHERE auth_user_id = ?')
-    .bind(session.user.id).first<{ player_id: string; display_name: string; rating: number; total_progress_units: number; unlock_all_classes: number }>();
+  const player = await env.DB.prepare(`SELECT p.player_id, p.display_name, p.rating, p.total_progress_units, p.unlock_all_classes, p.account_type,
+    CASE WHEN t.player_id IS NULL THEN 0 ELSE 1 END is_test FROM players p LEFT JOIN test_players t ON t.player_id = p.player_id WHERE p.auth_user_id = ?`)
+    .bind(session.user.id).first<{ player_id: string; display_name: string; rating: number; total_progress_units: number; unlock_all_classes: number; account_type: PlayerAccountType; is_test: number }>();
   if (!player) throw new GuestAuthError('Player not found.');
-  return { playerId: player.player_id, displayName: player.display_name, rating: player.rating, totalProgressUnits: player.total_progress_units, unlockAllClasses: player.unlock_all_classes === 1 };
+  return { playerId: player.player_id, displayName: player.display_name, rating: player.rating, totalProgressUnits: player.total_progress_units,
+    unlockAllClasses: player.unlock_all_classes === 1, accountType: player.account_type, isTest: player.is_test === 1 };
 }
 
-function normalizeEmail(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
-  const email = value.trim().toLowerCase();
-  if (email.length < 3 || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
-  return email;
+async function createPlayerRow(env: Env, authUserId: string, displayName: string, accountType: PlayerAccountType): Promise<string> {
+  const now = Date.now();
+  return claimReadablePlayerId(async (playerId) => {
+    try {
+      const inserted = await env.DB.prepare(`INSERT INTO players
+        (player_id, display_name, auth_user_id, account_type, created_at, updated_at, terms_version, privacy_version, legal_accepted_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(playerId, displayName, authUserId, accountType, now, now,
+          accountType === 'google' ? TERMS_VERSION : null, accountType === 'google' ? PRIVACY_VERSION : null,
+          accountType === 'google' ? now : null).run();
+      return inserted.meta.changes === 1;
+    } catch (error) {
+      if (String(error).toLowerCase().includes('unique')) return false;
+      throw error;
+    }
+  });
+}
+
+async function accountTypeForSession(db: D1Database, userId: string, anonymous: boolean): Promise<PlayerAccountType> {
+  if (anonymous) return 'guest';
+  const provider = await db.prepare('SELECT providerId FROM account WHERE userId = ? ORDER BY createdAt ASC LIMIT 1')
+    .bind(userId).first<{ providerId: string }>();
+  if (provider?.providerId === 'google') return 'google';
+  if (provider?.providerId === 'apple') return 'apple';
+  return 'email';
 }
 
 function emailSignupEnabled(env: Env): boolean {
@@ -737,14 +827,83 @@ async function anonymousSignupSession(request: Request, env: Env) {
   return player ? session : null;
 }
 
+interface StoredEmailChallenge extends EmailChallengeRecord {
+  challenge_key: string;
+  purpose: EmailChallengePurpose;
+  user_id: string | null;
+  email: string;
+  context_json: string;
+}
+
+function emailMailer(env: Env): AuthMailer | undefined {
+  if (env.RESEND_API_KEY) return createResendMailer(env.RESEND_API_KEY);
+  if (env.BETTER_AUTH_URL.startsWith('http://localhost') && /^\d{6}$/.test(env.DEV_AUTH_EMAIL_CODE ?? '')) {
+    return { sendSignupCode: async () => {}, sendSignInCode: async () => {}, sendPasswordCode: async () => {}, sendDeletionCode: async () => {} };
+  }
+  return undefined;
+}
+
+function challengeCode(env: Env): string {
+  return env.BETTER_AUTH_URL.startsWith('http://localhost') && /^\d{6}$/.test(env.DEV_AUTH_EMAIL_CODE ?? '')
+    ? env.DEV_AUTH_EMAIL_CODE! : generateEmailCode();
+}
+
+async function storeEmailChallenge(env: Env, challengeKey: string, purpose: EmailChallengePurpose, userId: string | null,
+  email: string, binding: string, context: object, now: number): Promise<string> {
+  const code = challengeCode(env);
+  const codeHash = await emailChallengeHash(env.BETTER_AUTH_SECRET, purpose, binding, code);
+  await env.DB.prepare(`INSERT INTO email_auth_challenges
+    (challenge_key, purpose, user_id, email, code_hash, context_json, expires_at, failed_attempts, requested_at, last_sent_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+    ON CONFLICT(challenge_key) DO UPDATE SET purpose = excluded.purpose, user_id = excluded.user_id, email = excluded.email,
+      code_hash = excluded.code_hash, context_json = excluded.context_json, expires_at = excluded.expires_at,
+      failed_attempts = 0, requested_at = excluded.requested_at, last_sent_at = excluded.last_sent_at`)
+    .bind(challengeKey, purpose, userId, email, codeHash, JSON.stringify(context), now + EMAIL_SIGNUP_TTL_MS, now, now).run();
+  return code;
+}
+
+async function storeEmailLoginOtp(env: Env, email: string, now: number): Promise<string> {
+  const code = challengeCode(env);
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(code));
+  const binary = String.fromCharCode(...new Uint8Array(digest));
+  const storedCode = `${btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '')}:0`;
+  const identifier = `sign-in-otp-${email}`;
+  const createdAt = new Date(now).toISOString();
+  const expiresAt = new Date(now + EMAIL_SIGNUP_TTL_MS).toISOString();
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM verification WHERE identifier = ?').bind(identifier),
+    env.DB.prepare(`INSERT INTO verification (id, identifier, value, expiresAt, createdAt, updatedAt)
+      VALUES (?, ?, ?, ?, ?, ?)`).bind(crypto.randomUUID(), identifier, storedCode, expiresAt, createdAt, createdAt),
+  ]);
+  return code;
+}
+
+async function verifyStoredEmailChallenge(env: Env, challengeKey: string, purpose: EmailChallengePurpose, binding: string,
+  code: string): Promise<StoredEmailChallenge | null> {
+  const row = await env.DB.prepare(`SELECT challenge_key, purpose, user_id, email, code_hash, context_json, expires_at, failed_attempts
+    FROM email_auth_challenges WHERE challenge_key = ? AND purpose = ?`).bind(challengeKey, purpose).first<StoredEmailChallenge>();
+  const candidate = await emailChallengeHash(env.BETTER_AUTH_SECRET, purpose, binding, code);
+  const status = emailChallengeStatus(row, candidate, Date.now());
+  if (status === 'valid') return row;
+  if (row) {
+    const attempts = row.failed_attempts + 1;
+    if (status === 'expired' || status === 'exhausted' || attempts >= 3) {
+      await env.DB.prepare('DELETE FROM email_auth_challenges WHERE challenge_key = ?').bind(challengeKey).run();
+    } else await env.DB.prepare('UPDATE email_auth_challenges SET failed_attempts = ? WHERE challenge_key = ?').bind(attempts, challengeKey).run();
+  }
+  return null;
+}
+
 async function requestEmailSignup(request: Request, env: Env, clientKey: string): Promise<Response> {
   if (!emailSignupEnabled(env)) return json({ error: 'Email signup is unavailable.' }, 503);
   try {
     const session = await anonymousSignupSession(request, env);
     if (!session) return json({ error: 'Start a guest profile before signing up.' }, 401);
-    const body = await readJsonBody<{ email?: unknown; legalAccepted?: unknown }>(request, 2_000);
-    const email = normalizeEmail(body.email);
+    const body = await readJsonBody<{ email?: unknown; displayName?: unknown; legalAccepted?: unknown }>(request, 2_000);
+    const email = normalizeAuthEmail(body.email);
+    const displayName = normalizePlayerDisplayName(body.displayName);
     if (!email) return json({ error: 'Enter a valid email address.' }, 400);
+    if (!displayName) return json({ error: `Display name must be 1-${PLAYER_NAME_MAX_LENGTH} characters.` }, 400);
     if (body.legalAccepted !== true) return json({ error: 'Accept the Terms and Privacy Policy to continue.' }, 400);
     const now = Date.now();
     const emailKey = await rateKey('signup-email', email);
@@ -755,21 +914,15 @@ async function requestEmailSignup(request: Request, env: Env, clientKey: string)
       useSignupRateLimit(env.DB, ipKey, 10, now),
     ]);
     if (!bindingAllowed || !emailAllowed || !ipAllowed) return rateLimited(15 * 60);
-    await env.DB.prepare(`INSERT INTO email_signup_pending
-      (anonymous_user_id, email, terms_version, privacy_version, accepted_at, expires_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-      ON CONFLICT(anonymous_user_id) DO UPDATE SET email = excluded.email,
-        terms_version = excluded.terms_version, privacy_version = excluded.privacy_version,
-        accepted_at = excluded.accepted_at, expires_at = excluded.expires_at`)
-      .bind(session.user.id, email, TERMS_VERSION, PRIVACY_VERSION, now, now + EMAIL_SIGNUP_TTL_MS).run();
+    const existing = await env.DB.prepare('SELECT id FROM user WHERE email = ?').bind(email).first<{ id: string }>();
+    if (existing) return json({ error: "There's an existing account associated with this email. Try the sign-in providers or another email." }, 409);
+    const code = await storeEmailChallenge(env, `signup:${session.user.id}`, 'signup', session.user.id, email, session.user.id,
+      { available: true, displayName, termsVersion: TERMS_VERSION, privacyVersion: PRIVACY_VERSION, acceptedAt: now }, now);
     try {
-      await createAuth(env).api.sendVerificationOTP({ body: { email, type: 'sign-in' }, headers: request.headers });
+      const mailer = emailMailer(env)!;
+      await mailer.sendSignupCode({ email, code });
     } catch {
-      await env.DB.batch([
-        env.DB.prepare('DELETE FROM email_signup_pending WHERE anonymous_user_id = ?').bind(session.user.id),
-        env.DB.prepare('DELETE FROM verification WHERE identifier = ?').bind(`sign-in-otp-${email}`),
-      ]);
-      return json({ error: 'Could not send code. Try again.' }, 502);
+      await env.DB.prepare('DELETE FROM email_auth_challenges WHERE challenge_key = ?').bind(`signup:${session.user.id}`).run();
     }
     return json({ success: true });
   } catch (error) {
@@ -781,34 +934,249 @@ async function requestEmailSignup(request: Request, env: Env, clientKey: string)
 async function verifyEmailSignup(request: Request, env: Env, url: URL, clientKey: string): Promise<Response> {
   if (!emailSignupEnabled(env)) return json({ error: 'Email signup is unavailable.' }, 503);
   try {
-    const session = await anonymousSignupSession(request, env);
-    if (!session) return json({ error: 'Signup session expired.' }, 401);
-    const body = await readJsonBody<{ email?: unknown; code?: unknown }>(request, 2_000);
-    const email = normalizeEmail(body.email);
+    const body = await readJsonBody<{ email?: unknown; code?: unknown; password?: unknown }>(request, 4_000);
+    const email = normalizeAuthEmail(body.email);
     const code = typeof body.code === 'string' ? body.code.replace(/\s/g, '') : '';
     if (!email || !/^\d{6}$/.test(code)) return json({ error: 'Enter the six-digit code.' }, 400);
+    if (body.password !== undefined && body.password !== '' && !validEmailPassword(body.password)) return json({ error: 'Password must be 8-128 characters.' }, 400);
+    const current = await createAuth(env).api.getSession({ headers: request.headers });
+    if (current && !(current.user as { isAnonymous?: boolean }).isAnonymous && current.user.email.toLowerCase() === email) {
+      const player = await env.DB.prepare(`SELECT 1 present FROM players WHERE auth_user_id = ? AND account_type = 'email'`).bind(current.user.id).first();
+      if (player) return json({ success: true });
+    }
+    const session = await anonymousSignupSession(request, env);
+    if (!session) return json({ error: 'Signup session expired.' }, 401);
     const now = Date.now();
     const ipKey = await rateKey('verify-ip', clientKey);
     const [bindingAllowed, ipAllowed] = await Promise.all([
       allowed(env.SIGNUP_VERIFY_RATE, ipKey), useSignupRateLimit(env.DB, ipKey, 20, now),
     ]);
     if (!bindingAllowed || !ipAllowed) return rateLimited(15 * 60);
-    const pending = await env.DB.prepare(`SELECT email FROM email_signup_pending
-      WHERE anonymous_user_id = ? AND email = ? AND expires_at > ?`)
-      .bind(session.user.id, email, now).first();
-    if (!pending) return json({ error: 'Code invalid or expired.' }, 400);
+    const pending = await verifyStoredEmailChallenge(env, `signup:${session.user.id}`, 'signup', session.user.id, code);
+    const context = pending ? JSON.parse(pending.context_json) as { available?: boolean; displayName?: string } : null;
+    if (!pending || pending.email !== email || context?.available !== true || !context.displayName) return json({ error: 'Code invalid or expired.' }, 400);
     const headers = new Headers(request.headers);
     headers.set('content-type', 'application/json');
-    const authRequest = new Request(new URL('/api/auth/sign-in/email-otp', url.origin), {
-      method: 'POST', headers, body: JSON.stringify({ email, otp: code }),
+    const password = typeof body.password === 'string' && body.password ? body.password : crypto.randomUUID() + crypto.randomUUID();
+    const authRequest = new Request(new URL('/api/auth/sign-up/email', url.origin), {
+      method: 'POST', headers, body: JSON.stringify({ email, password, name: context.displayName }),
     });
-    const response = await createAuth(env).handler(authRequest);
+    let response = await createAuth(env).handler(authRequest);
+    if (!response.ok) {
+      const linked = await env.DB.prepare(`SELECT u.id FROM user u JOIN players p ON p.auth_user_id = u.id
+        WHERE u.email = ? AND p.account_type = 'email'`).bind(email).first<{ id: string }>();
+      if (linked) {
+        response = await createAuth(env).handler(new Request(new URL('/api/auth/sign-in/email', url.origin), {
+          method: 'POST', headers, body: JSON.stringify({ email, password }),
+        }));
+      } else {
+        const orphan = await env.DB.prepare('SELECT id FROM user WHERE email = ?').bind(email).first<{ id: string }>();
+        if (orphan) await env.DB.batch([
+          env.DB.prepare('DELETE FROM session WHERE userId = ?').bind(orphan.id),
+          env.DB.prepare('DELETE FROM account WHERE userId = ?').bind(orphan.id),
+          env.DB.prepare('DELETE FROM user WHERE id = ?').bind(orphan.id),
+        ]);
+      }
+    }
     if (!response.ok) return json({ error: 'Code invalid or expired.' }, response.status === 429 ? 429 : 400);
+    const created = await env.DB.prepare('SELECT id FROM user WHERE email = ?').bind(email).first<{ id: string }>();
+    if (!created) return json({ error: 'Could not complete signup.' }, 500);
+    await env.DB.batch([
+      env.DB.prepare('UPDATE user SET emailVerified = 1, updatedAt = ? WHERE id = ?').bind(now, created.id),
+      ...(typeof body.password === 'string' && body.password ? [] : [env.DB.prepare(`UPDATE account SET password = NULL WHERE userId = ? AND providerId = 'credential'`).bind(created.id)]),
+      env.DB.prepare('DELETE FROM email_auth_challenges WHERE challenge_key = ?').bind(`signup:${session.user.id}`),
+    ]);
     return response;
   } catch (error) {
     if (error instanceof RequestBodyError) return json({ error: error.message }, error.status);
     return json({ error: 'Could not verify code. Try again.' }, 500);
   }
+}
+
+async function requestEmailLogin(request: Request, env: Env, clientKey: string): Promise<Response> {
+  if (!emailSignupEnabled(env)) return json({ error: 'Email login is unavailable.' }, 503);
+  try {
+    const body = await readJsonBody<{ email?: unknown }>(request, 1_000);
+    const email = normalizeAuthEmail(body.email);
+    if (!email) return json({ error: 'Enter a valid email address.' }, 400);
+    const now = Date.now();
+    const emailKey = await rateKey('login-email', email); const ipKey = await rateKey('login-ip', clientKey);
+    const [bindingAllowed, emailAllowed, ipAllowed] = await Promise.all([allowed(env.SIGNUP_REQUEST_RATE, ipKey), useSignupRateLimit(env.DB, emailKey, 5, now), useSignupRateLimit(env.DB, ipKey, 15, now)]);
+    if (!bindingAllowed || !emailAllowed || !ipAllowed) return rateLimited(15 * 60);
+    const player = await env.DB.prepare(`SELECT u.id FROM user u JOIN players p ON p.auth_user_id = u.id
+      WHERE u.email = ? AND p.account_type = 'email'`).bind(email).first<{ id: string }>();
+    if (player) {
+      try {
+        const code = await storeEmailLoginOtp(env, email, now);
+        await emailMailer(env)!.sendSignInCode({ email, code });
+      } catch (error) {
+        await env.DB.prepare('DELETE FROM verification WHERE identifier = ?').bind(`sign-in-otp-${email}`).run();
+        console.error('Could not send email login code.', error);
+      }
+    } else await hashPassword(crypto.randomUUID());
+    return json({ success: true });
+  } catch (error) {
+    if (error instanceof RequestBodyError) return json({ error: error.message }, error.status);
+    return json({ success: true });
+  }
+}
+
+async function verifyEmailLogin(request: Request, env: Env, url: URL, clientKey: string): Promise<Response> {
+  try {
+    const body = await readJsonBody<{ email?: unknown; code?: unknown }>(request, 1_000);
+    const email = normalizeAuthEmail(body.email); const code = typeof body.code === 'string' ? body.code.replace(/\s/g, '') : '';
+    if (!email || !/^\d{6}$/.test(code)) return json({ error: 'Code invalid or expired.' }, 400);
+    const ipKey = await rateKey('login-verify-ip', clientKey);
+    if (!await allowed(env.SIGNUP_VERIFY_RATE, ipKey) || !await useSignupRateLimit(env.DB, ipKey, 20, Date.now())) return rateLimited(15 * 60);
+    const player = await env.DB.prepare(`SELECT u.id FROM user u JOIN players p ON p.auth_user_id = u.id
+      WHERE u.email = ? AND p.account_type = 'email'`).bind(email).first();
+    if (!player) return json({ error: 'Code invalid or expired.' }, 400);
+    const headers = new Headers(request.headers); headers.set('content-type', 'application/json');
+    const response = await createAuth(env).handler(new Request(new URL('/api/auth/sign-in/email-otp', url.origin), {
+      method: 'POST', headers, body: JSON.stringify({ email, otp: code }),
+    }));
+    return response.ok ? response : json({ error: 'Code invalid or expired.' }, 400);
+  } catch (error) {
+    return error instanceof RequestBodyError ? json({ error: error.message }, error.status) : json({ error: 'Could not sign in.' }, 500);
+  }
+}
+
+async function requestPasswordCode(request: Request, env: Env, clientKey: string): Promise<Response> {
+  if (!emailSignupEnabled(env)) return json({ error: 'Password management is unavailable.' }, 503);
+  try {
+    const body = await readJsonBody<{ email?: unknown }>(request, 1_000);
+    const email = normalizeAuthEmail(body.email);
+    if (!email) return json({ error: 'Enter a valid email address.' }, 400);
+    const now = Date.now(); const ipKey = await rateKey('password-ip', clientKey); const emailKey = await rateKey('password-email', email);
+    const [bindingAllowed, emailAllowed, ipAllowed] = await Promise.all([allowed(env.SIGNUP_REQUEST_RATE, ipKey), useSignupRateLimit(env.DB, emailKey, 5, now), useSignupRateLimit(env.DB, ipKey, 15, now)]);
+    if (!bindingAllowed || !emailAllowed || !ipAllowed) return rateLimited(15 * 60);
+    const user = await env.DB.prepare(`SELECT u.id FROM user u JOIN players p ON p.auth_user_id = u.id
+      WHERE u.email = ? AND p.account_type = 'email'`).bind(email).first<{ id: string }>();
+    if (user) {
+      const code = await storeEmailChallenge(env, `password:${user.id}`, 'password', user.id, email, user.id, {}, now);
+      try { await emailMailer(env)!.sendPasswordCode({ email, code }); }
+      catch { await env.DB.prepare('DELETE FROM email_auth_challenges WHERE challenge_key = ?').bind(`password:${user.id}`).run(); }
+    } else await hashPassword(crypto.randomUUID());
+    return json({ success: true });
+  } catch (error) {
+    if (error instanceof RequestBodyError) return json({ error: error.message }, error.status);
+    return json({ success: true });
+  }
+}
+
+async function updateEmailPassword(request: Request, env: Env, clientKey: string): Promise<Response> {
+  try {
+    const body = await readJsonBody<{ email?: unknown; code?: unknown; password?: unknown; remove?: unknown }>(request, 3_000);
+    const email = normalizeAuthEmail(body.email); const code = typeof body.code === 'string' ? body.code.replace(/\s/g, '') : '';
+    if (!email || !/^\d{6}$/.test(code)) return json({ error: 'Code invalid or expired.' }, 400);
+    const ipKey = await rateKey('password-verify-ip', clientKey);
+    if (!await allowed(env.SIGNUP_VERIFY_RATE, ipKey) || !await useSignupRateLimit(env.DB, ipKey, 20, Date.now())) return rateLimited(15 * 60);
+    if (body.remove !== true && !validEmailPassword(body.password)) return json({ error: 'Password must be 8-128 characters.' }, 400);
+    const user = await env.DB.prepare(`SELECT u.id FROM user u JOIN players p ON p.auth_user_id = u.id
+      WHERE u.email = ? AND p.account_type = 'email'`).bind(email).first<{ id: string }>();
+    if (!user) return json({ error: 'Code invalid or expired.' }, 400);
+    const challenge = await verifyStoredEmailChallenge(env, `password:${user.id}`, 'password', user.id, code);
+    if (!challenge || challenge.email !== email) return json({ error: 'Code invalid or expired.' }, 400);
+    const session = await createAuth(env).api.getSession({ headers: request.headers });
+    if (body.remove === true && session?.user.id !== user.id) return json({ error: 'Sign in before removing your password.' }, 401);
+    const account = await env.DB.prepare(`SELECT id FROM account WHERE userId = ? AND providerId = 'credential'`).bind(user.id).first<{ id: string }>();
+    if (!account) return json({ error: 'Password account is unavailable.' }, 409);
+    const passwordHash = body.remove === true ? null : await hashPassword(body.password as string);
+    const statements = [
+      env.DB.prepare('UPDATE account SET password = ?, updatedAt = ? WHERE id = ?').bind(passwordHash, Date.now(), account.id),
+      env.DB.prepare('DELETE FROM email_auth_challenges WHERE challenge_key = ?').bind(`password:${user.id}`),
+    ];
+    if (session?.user.id === user.id) statements.push(env.DB.prepare('DELETE FROM session WHERE userId = ? AND id != ?').bind(user.id, session.session.id));
+    else statements.push(env.DB.prepare('DELETE FROM session WHERE userId = ?').bind(user.id));
+    await env.DB.batch(statements);
+    return json({ success: true, hasPassword: body.remove !== true });
+  } catch (error) {
+    return error instanceof RequestBodyError ? json({ error: error.message }, error.status) : json({ error: 'Could not update password.' }, 500);
+  }
+}
+
+interface DeletionSession {
+  user: { id: string; email: string; isAnonymous?: boolean };
+}
+
+async function deletionSession(request: Request, env: Env): Promise<DeletionSession | null> {
+  return await createAuth(env).api.getSession({ headers: request.headers }) as DeletionSession | null;
+}
+
+function deletionMailer(env: Env): AuthMailer | undefined {
+  if (env.RESEND_API_KEY) return createResendMailer(env.RESEND_API_KEY);
+  if (env.BETTER_AUTH_URL.startsWith('http://localhost') && /^\d{6}$/.test(env.DEV_AUTH_EMAIL_CODE ?? '')) {
+    return { sendSignupCode: async () => {}, sendSignInCode: async () => {}, sendPasswordCode: async () => {}, sendDeletionCode: async () => {} };
+  }
+  return undefined;
+}
+
+function generateSixDigitCode(env: Env): string {
+  if (env.BETTER_AUTH_URL.startsWith('http://localhost') && /^\d{6}$/.test(env.DEV_AUTH_EMAIL_CODE ?? '')) return env.DEV_AUTH_EMAIL_CODE!;
+  return String(crypto.getRandomValues(new Uint32Array(1))[0]! % 1_000_000).padStart(6, '0');
+}
+
+async function requestAccountDeletion(request: Request, env: Env, clientKey: string): Promise<Response> {
+  const session = await deletionSession(request, env);
+  if (!session) return json({ error: 'Authentication required.' }, 401);
+  if (session.user.isAnonymous) return json({ error: 'Guest accounts do not use email verification.' }, 400);
+  const mailer = deletionMailer(env);
+  if (!mailer) return json({ error: 'Account deletion email is unavailable.' }, 503);
+  const now = Date.now();
+  const current = await env.DB.prepare('SELECT last_sent_at FROM account_deletion_challenges WHERE user_id = ?')
+    .bind(session.user.id).first<{ last_sent_at: number }>();
+  if (current && now - current.last_sent_at < ACCOUNT_DELETION_RESEND_MS) return rateLimited(Math.ceil((ACCOUNT_DELETION_RESEND_MS - (now - current.last_sent_at)) / 1_000));
+  const email = session.user.email.toLowerCase();
+  const userKey = await rateKey('deletion-user', session.user.id);
+  const emailKey = await rateKey('deletion-email', email);
+  const ipKey = await rateKey('deletion-ip', clientKey);
+  const [userAllowed, emailAllowed, ipAllowed] = await Promise.all([
+    useSignupRateLimit(env.DB, userKey, 3, now), useSignupRateLimit(env.DB, emailKey, 3, now), useSignupRateLimit(env.DB, ipKey, 10, now),
+  ]);
+  if (!userAllowed || !emailAllowed || !ipAllowed) return rateLimited(15 * 60);
+  const code = generateSixDigitCode(env);
+  const codeHash = await accountDeletionCodeHash(env.BETTER_AUTH_SECRET, session.user.id, code);
+  await env.DB.prepare(`INSERT INTO account_deletion_challenges
+    (user_id, code_hash, expires_at, failed_attempts, requested_at, last_sent_at) VALUES (?, ?, ?, 0, ?, ?)
+    ON CONFLICT(user_id) DO UPDATE SET code_hash = excluded.code_hash, expires_at = excluded.expires_at,
+      failed_attempts = 0, requested_at = excluded.requested_at, last_sent_at = excluded.last_sent_at`)
+    .bind(session.user.id, codeHash, now + ACCOUNT_DELETION_TTL_MS, now, now).run();
+  try {
+    await mailer.sendDeletionCode({ email, code });
+  } catch {
+    await env.DB.prepare('DELETE FROM account_deletion_challenges WHERE user_id = ?').bind(session.user.id).run();
+    return json({ error: 'Could not send deletion code. Try again.' }, 502);
+  }
+  return json({ success: true });
+}
+
+async function deleteAccount(request: Request, env: Env): Promise<Response> {
+  const session = await deletionSession(request, env);
+  if (!session) return json({ error: 'Authentication required.' }, 401);
+  if (!session.user.isAnonymous) {
+    let body: { code?: unknown };
+    try { body = await readJsonBody<{ code?: unknown }>(request, 1_000); }
+    catch (error) { return error instanceof RequestBodyError ? json({ error: error.message }, error.status) : json({ error: 'Invalid request.' }, 400); }
+    const code = typeof body.code === 'string' ? body.code.replace(/\s/g, '') : '';
+    if (!/^\d{6}$/.test(code)) return json({ error: 'Enter the six-digit code.' }, 400);
+    const now = Date.now();
+    const challenge = await env.DB.prepare(`SELECT code_hash, expires_at, failed_attempts FROM account_deletion_challenges WHERE user_id = ?`)
+      .bind(session.user.id).first<{ code_hash: string; expires_at: number; failed_attempts: number }>();
+    const candidate = await accountDeletionCodeHash(env.BETTER_AUTH_SECRET, session.user.id, code);
+    const status = accountDeletionChallengeStatus(challenge, candidate, now, ACCOUNT_DELETION_MAX_ATTEMPTS);
+    if (!challenge || status === 'expired' || status === 'exhausted') {
+      if (challenge) await env.DB.prepare('DELETE FROM account_deletion_challenges WHERE user_id = ?').bind(session.user.id).run();
+      return json({ error: 'Code invalid or expired.' }, 400);
+    }
+    if (status !== 'valid') {
+      const attempts = challenge.failed_attempts + 1;
+      if (attempts >= ACCOUNT_DELETION_MAX_ATTEMPTS) await env.DB.prepare('DELETE FROM account_deletion_challenges WHERE user_id = ?').bind(session.user.id).run();
+      else await env.DB.prepare('UPDATE account_deletion_challenges SET failed_attempts = ? WHERE user_id = ?').bind(attempts, session.user.id).run();
+      return json({ error: 'Code invalid or expired.' }, 400);
+    }
+  }
+  await purgeAccountData(env.DB, session.user.id, session.user.email);
+  return json({ success: true });
 }
 
 export default {
@@ -821,48 +1189,62 @@ export default {
   },
   async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
     const now = Date.now();
+    const cutoffDay = new Date(now - 90 * 86_400_000).toISOString().slice(0, 10);
     await env.DB.batch([
       env.DB.prepare('DELETE FROM email_signup_pending WHERE expires_at <= ?').bind(now),
+      env.DB.prepare('DELETE FROM email_auth_challenges WHERE expires_at <= ?').bind(now),
       env.DB.prepare('DELETE FROM verification WHERE expiresAt <= ?').bind(now),
       env.DB.prepare('DELETE FROM email_signup_rate_limits WHERE window_started_at <= ?').bind(now - EMAIL_RATE_WINDOW_MS),
+      env.DB.prepare('DELETE FROM account_deletion_challenges WHERE expires_at <= ?').bind(now),
+      env.DB.prepare('DELETE FROM email_signup_pending WHERE anonymous_user_id NOT IN (SELECT id FROM user)'),
+      env.DB.prepare(`INSERT INTO analytics_daily (day, event_type, event_count)
+        SELECT substr(datetime(occurred_at / 1000, 'unixepoch'), 1, 10), event_type, COUNT(*) FROM analytics_events
+        WHERE is_test = 0 GROUP BY 1, 2 ON CONFLICT(day, event_type) DO UPDATE SET event_count = excluded.event_count`),
+      env.DB.prepare(`DELETE FROM analytics_events WHERE substr(datetime(occurred_at / 1000, 'unixepoch'), 1, 10) < ?`).bind(cutoffDay),
+      env.DB.prepare(`DELETE FROM whiteboard_archive WHERE substr(datetime(occurred_at / 1000, 'unixepoch'), 1, 10) < ?`).bind(cutoffDay),
     ]);
+    const orphans = await env.DB.prepare(`SELECT auth_user_id FROM players
+      WHERE auth_user_id IS NOT NULL AND auth_user_id NOT IN (SELECT id FROM user) LIMIT 100`)
+      .all<{ auth_user_id: string }>();
+    for (const orphan of orphans.results) await purgeAccountData(env.DB, orphan.auth_user_id, undefined, now);
   },
 } satisfies ExportedHandler<Env>;
 
 async function routeRequest(request: Request, env: Env, url: URL): Promise<Response> {
     const clientKey = request.headers.get('CF-Connecting-IP') ?? 'unknown-client';
+    if (url.pathname === '/admin/auth/google' && request.method === 'GET') return beginAdminGoogleLogin(request, env, url);
+    if (url.pathname.startsWith('/admin/api/')) return adminRoute(request, env as never, url);
+    if (url.pathname === '/maintenance-status' && request.method === 'GET') {
+      const access = await maintenanceAccess(request, env); return json({ enabled: access.state.enabled, bypassed: access.bypassed,
+        passExpiresAt: access.bypassed ? maintenancePassExpiry(maintenanceCookie(request)) : null });
+    }
+    if (!maintenanceExempt(url.pathname)) {
+      const access = await maintenanceAccess(request, env);
+      if (access.state.enabled && !access.bypassed) return maintenanceResponse();
+    }
+    if (url.pathname === '/analytics/events' && request.method === 'POST') return ingestAnalytics(request, env);
+    if (url.pathname === '/account-deletion/request' && request.method === 'POST') return requestAccountDeletion(request, env, clientKey);
+    if (url.pathname === '/account-deletion' && request.method === 'DELETE') return deleteAccount(request, env);
     if (url.pathname === '/email-signup/request' && request.method === 'POST') return requestEmailSignup(request, env, clientKey);
     if (url.pathname === '/email-signup/verify' && request.method === 'POST') return verifyEmailSignup(request, env, url, clientKey);
-    if (url.pathname === '/api/auth/email-otp/send-verification-otp' || url.pathname === '/api/auth/sign-in/email-otp') {
-      return json({ error: 'Use the game email signup flow.' }, 404);
-    }
+    if (url.pathname === '/email-login/request' && request.method === 'POST') return requestEmailLogin(request, env, clientKey);
+    if (url.pathname === '/email-login/verify' && request.method === 'POST') return verifyEmailLogin(request, env, url, clientKey);
+    if (url.pathname === '/email-password/request' && request.method === 'POST') return requestPasswordCode(request, env, clientKey);
+    if (url.pathname === '/email-password/update' && request.method === 'POST') return updateEmailPassword(request, env, clientKey);
+    const blockedAuthPaths = new Set(['/api/auth/sign-up/email', '/api/auth/sign-in/email-otp',
+      '/api/auth/request-password-reset', '/api/auth/reset-password', '/api/auth/change-password', '/api/auth/set-password', '/api/auth/change-email',
+      '/api/auth/link-social', '/api/auth/unlink-account']);
+    if (blockedAuthPaths.has(url.pathname) || url.pathname.startsWith('/api/auth/email-otp/')) return json({ error: 'Use the game account flow.' }, 404);
     if (url.pathname.startsWith('/api/auth/')) return createAuth(env).handler(request);
     if (url.pathname === '/health') return json({ ok: true });
     if (url.pathname === '/auth-capabilities') return json({
-      emailSignup: emailSignupEnabled(env), emailCodeLogin: false, password: false,
+      emailSignup: emailSignupEnabled(env), emailCodeLogin: emailSignupEnabled(env), password: emailSignupEnabled(env),
     });
     if (url.pathname === '/online-status') {
       if (!await allowed(env.SOCKET_RATE, `status:${clientKey}`)) return rateLimited();
       return json({ playersOnline: await env.LOBBY.getByName('global').getOnlinePlayerCount() });
     }
-    if (url.pathname === '/account-method' && request.method === 'DELETE') {
-      try {
-        const authSession = await createAuth(env).api.getSession({ headers: request.headers });
-        if (!authSession || (authSession.user as { isAnonymous?: boolean }).isAnonymous) return json({ error: 'Authentication required.' }, 401);
-        if (Date.now() - new Date(authSession.session.createdAt).getTime() > 5 * 60_000) return json({ error: 'Sign in again before changing login methods.' }, 403);
-        const body = await readJsonBody<{ providerId?: unknown }>(request, 1_000);
-        if (body.providerId !== 'google' && body.providerId !== 'credential') return json({ error: 'Unknown login method.' }, 400);
-        const accounts = await env.DB.prepare('SELECT id, providerId FROM account WHERE userId = ?').bind(authSession.user.id).all<{ id: string; providerId: string }>();
-        if (accounts.results.length < 2) return json({ error: 'Add another login method before removing this one.' }, 409);
-        const target = accounts.results.find((account) => account.providerId === body.providerId);
-        if (!target) return json({ error: 'Login method is not connected.' }, 404);
-        await env.DB.prepare('DELETE FROM account WHERE id = ? AND userId = ?').bind(target.id, authSession.user.id).run();
-        return new Response(null, { status: 204 });
-      } catch (error) {
-        if (error instanceof RequestBodyError) return json({ error: error.message }, error.status);
-        return json({ error: 'Could not remove login method.' }, 500);
-      }
-    }
+    if (url.pathname === '/account-method') return json({ error: 'Account types are fixed.' }, 404);
     if (url.pathname === '/player-session') {
       try {
         const authSession = await createAuth(env).api.getSession({ headers: request.headers });
@@ -872,9 +1254,17 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
           const displayName = normalizePlayerDisplayName(body.displayName);
           if (!displayName) return json({ error: `Display name must be 1-${PLAYER_NAME_MAX_LENGTH} characters.` }, 400);
           const now = Date.now();
-          await env.DB.prepare(`INSERT OR IGNORE INTO players
-            (player_id, display_name, auth_user_id, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?)`).bind(crypto.randomUUID(), displayName, authSession.user.id, now, now).run();
+          let created = await env.DB.prepare('SELECT player_id FROM players WHERE auth_user_id = ?').bind(authSession.user.id).first<{ player_id: string }>();
+          if (!created) {
+            const accountType = await accountTypeForSession(env.DB, authSession.user.id, Boolean((authSession.user as { isAnonymous?: boolean }).isAnonymous));
+            const newPlayerId = await createPlayerRow(env, authSession.user.id, displayName, accountType);
+            if (await requestHasTesterPass(request, env)) {
+              await env.DB.prepare('INSERT OR IGNORE INTO test_players (player_id, created_at) VALUES (?, ?)').bind(newPlayerId, now).run();
+            }
+            created = { player_id: newPlayerId };
+          }
+          if (created) await recordEvent(env.DB, `account:${created.player_id}:${(authSession.user as { isAnonymous?: boolean }).isAnonymous ? 'guest' : 'protected'}`,
+            (authSession.user as { isAnonymous?: boolean }).isAnonymous ? 'guest-created' : 'protected-account', now, undefined, undefined, created.player_id);
         } else if (request.method === 'PUT') {
           const body = await readJsonBody<{ displayName?: unknown }>(request, 1_000);
           const displayName = normalizePlayerDisplayName(body.displayName);
@@ -882,16 +1272,17 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
           await env.DB.prepare('UPDATE players SET display_name = ?, updated_at = ? WHERE auth_user_id = ?')
             .bind(displayName, Date.now(), authSession.user.id).run();
         } else if (request.method !== 'GET') return json({ error: 'Method not allowed.' }, 405);
-        const player = await env.DB.prepare('SELECT player_id, display_name, rating, total_progress_units, unlock_all_classes FROM players WHERE auth_user_id = ?')
-          .bind(authSession.user.id).first<{ player_id: string; display_name: string; rating: number; total_progress_units: number; unlock_all_classes: number }>();
+        const player = await env.DB.prepare(`SELECT p.player_id, p.display_name, p.rating, p.total_progress_units, p.unlock_all_classes, p.account_type,
+          CASE WHEN EXISTS (SELECT 1 FROM account a WHERE a.userId = p.auth_user_id AND a.providerId = 'credential' AND a.password IS NOT NULL) THEN 1 ELSE 0 END has_password
+          FROM players p WHERE p.auth_user_id = ?`)
+          .bind(authSession.user.id).first<{ player_id: string; display_name: string; rating: number; total_progress_units: number; unlock_all_classes: number; account_type: PlayerAccountType; has_password: number }>();
         if (!player) return json({ error: 'Player not found.' }, 404);
-        const accounts = await env.DB.prepare('SELECT providerId FROM account WHERE userId = ?').bind(authSession.user.id).all<{ providerId: string }>();
-        return json({ ...playerProfile(player.player_id, player.display_name, player.rating, player.total_progress_units, player.unlock_all_classes === 1),
-          isAnonymous: Boolean((authSession.user as { isAnonymous?: boolean }).isAnonymous), email: authSession.user.email,
-          emailVerified: authSession.user.emailVerified, connectedMethods: accounts.results.map((account) => account.providerId) });
+        return json({ ...playerProfile(player.player_id, player.account_type, player.display_name, player.rating, player.total_progress_units, player.unlock_all_classes === 1),
+          email: player.account_type === 'email' ? authSession.user.email : undefined,
+          hasPassword: player.account_type === 'email' && player.has_password === 1 });
       } catch (error) {
         if (error instanceof RequestBodyError) return json({ error: error.message }, error.status);
-        return json({ error: 'Player session failed.' }, 401);
+        return json({ error: 'Player session failed.' }, 500);
       }
     }
     if (url.pathname === '/player-progression' && request.method === 'PUT') {
@@ -902,10 +1293,10 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
         if (typeof body.unlockAllClasses !== 'boolean') return json({ error: 'unlockAllClasses must be a boolean.' }, 400);
         await env.DB.prepare('UPDATE players SET unlock_all_classes = ?, updated_at = ? WHERE auth_user_id = ?')
           .bind(body.unlockAllClasses ? 1 : 0, Date.now(), authSession.user.id).run();
-        const player = await env.DB.prepare('SELECT player_id, display_name, rating, total_progress_units, unlock_all_classes FROM players WHERE auth_user_id = ?')
-          .bind(authSession.user.id).first<{ player_id: string; display_name: string; rating: number; total_progress_units: number; unlock_all_classes: number }>();
+        const player = await env.DB.prepare('SELECT player_id, display_name, rating, total_progress_units, unlock_all_classes, account_type FROM players WHERE auth_user_id = ?')
+          .bind(authSession.user.id).first<{ player_id: string; display_name: string; rating: number; total_progress_units: number; unlock_all_classes: number; account_type: PlayerAccountType }>();
         if (!player) return json({ error: 'Player not found.' }, 404);
-        return json(playerProfile(player.player_id, player.display_name, player.rating, player.total_progress_units, player.unlock_all_classes === 1));
+        return json(playerProfile(player.player_id, player.account_type, player.display_name, player.rating, player.total_progress_units, player.unlock_all_classes === 1));
       } catch (error) {
         if (error instanceof RequestBodyError) return json({ error: error.message }, error.status);
         return json({ error: 'Progression update failed.' }, 500);
@@ -965,16 +1356,28 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
         if (problem === 'premature') return json({ error: 'Match finished too quickly.' }, 409);
         if (problem === 'expired') return json({ error: 'Receipt expired.' }, 410);
         if (problem === 'claimed') return json({ error: 'Receipt already claimed.' }, 409);
-        const recent = await env.DB.prepare(`SELECT COUNT(*) AS count FROM local_progress_awards
-          WHERE player_id = ? AND kind = ? AND full_reward = 1 AND created_at > ?`)
-          .bind(player.playerId, body.kind, now - LOCAL_MATCH_AWARD_WINDOW_MS).first<{ count: number }>();
-        const fullReward = hasFullLocalMatchAwardAllowance(recent?.count ?? 0);
-        const award = !fullReward ? createTokenProgressAward(player.totalProgressUnits, body.outcome, player.unlockAllClasses) : body.kind === 'tutorial'
-          ? createTutorialProgressAward(player.totalProgressUnits, body.outcome)
-          : createProgressAward(player.totalProgressUnits, body.outcome, {
-            opponent: 'computer', newestClassRoundWins: countNewestClassRoundWins(player.totalProgressUnits, roundWinningClassIds), paused: player.unlockAllClasses,
-          });
-        return json(await applyLocalProgressAward(env.DB, player.playerId, body.receipt, body.kind, award, fullReward, now));
+        let fullReward: boolean;
+        let award: ProgressAward;
+        if (body.kind === 'tutorial') {
+          const previous = await env.DB.prepare(`SELECT 1 AS present FROM local_progress_awards
+            WHERE player_id = ? AND kind = 'tutorial' LIMIT 1`).bind(player.playerId).first<{ present: number }>();
+          const firstCompletion = !previous;
+          fullReward = firstCompletion;
+          award = createTutorialProgressAward(player.totalProgressUnits, body.outcome, firstCompletion);
+        } else {
+          const recent = await env.DB.prepare(`SELECT COUNT(*) AS count FROM local_progress_awards
+            WHERE player_id = ? AND kind = ? AND full_reward = 1 AND created_at > ?`)
+            .bind(player.playerId, body.kind, now - LOCAL_MATCH_AWARD_WINDOW_MS).first<{ count: number }>();
+          fullReward = hasFullLocalMatchAwardAllowance(recent?.count ?? 0);
+          award = !fullReward ? createTokenProgressAward(player.totalProgressUnits, body.outcome, player.unlockAllClasses)
+            : createProgressAward(player.totalProgressUnits, body.outcome, {
+              opponent: 'computer', newestClassRoundWins: countNewestClassRoundWins(player.totalProgressUnits, roundWinningClassIds), paused: player.unlockAllClasses,
+            });
+        }
+        const applied = await applyLocalProgressAward(env.DB, player.playerId, body.receipt, body.kind, award, fullReward, now);
+        await recordEvent(env.DB, `local-match:${body.receipt}`, body.kind === 'tutorial' ? 'tutorial-match' : 'computer-match', now,
+          undefined, undefined, player.playerId, { outcome: body.outcome });
+        return json(applied);
       } catch (error) {
         if (error instanceof RequestBodyError) return json({ error: error.message }, error.status);
         if (error instanceof GuestAuthError) return json({ error: error.message }, 401);
@@ -1020,6 +1423,64 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
       return url.pathname === '/lobby' ? env.LOBBY.getByName('global').fetch(request) : env.WHITEBOARD.getByName('global').fetch(request);
     }
     return json({ error: 'Not found.' }, 404);
+}
+
+async function beginAdminGoogleLogin(request: Request, env: Env, url: URL): Promise<Response> {
+  const callback = url.searchParams.get('callback');
+  if (!callback) return json({ error: 'Missing callback.' }, 400);
+  let callbackUrl: URL;
+  try { callbackUrl = new URL(callback); } catch { return json({ error: 'Invalid callback.' }, 400); }
+  const allowedCallbacks = new Set(['http://localhost:5173', 'http://127.0.0.1:5173', 'https://abm.jpconan.ca']);
+  if (!allowedCallbacks.has(callbackUrl.origin) || callbackUrl.pathname !== '/admin') return json({ error: 'Invalid callback.' }, 400);
+  const headers = new Headers(request.headers); headers.set('content-type', 'application/json');
+  const authRequest = new Request(`${url.origin}/api/auth/sign-in/social`, { method: 'POST', headers,
+    body: JSON.stringify({ provider: 'google', callbackURL: callbackUrl.toString(), errorCallbackURL: callbackUrl.toString(), disableRedirect: true }) });
+  const response = await createAuth(env).handler(authRequest);
+  const payload = await response.clone().json().catch(() => ({})) as { url?: string; error?: string };
+  if (!response.ok || !payload.url) return json({ error: payload.error ?? 'Google sign-in could not start.' }, response.status || 500);
+  const redirectHeaders = new Headers(); redirectHeaders.set('location', payload.url);
+  const cookie = response.headers.get('set-cookie'); if (cookie) redirectHeaders.append('set-cookie', cookie);
+  return new Response(null, { status: 302, headers: redirectHeaders });
+}
+
+function maintenanceExempt(pathname: string): boolean {
+  return pathname === '/health' || pathname === '/api/auth/sign-out' || pathname === '/api/auth/callback/google';
+}
+
+async function maintenanceAccess(request: Request, env: Env): Promise<{ state: Awaited<ReturnType<typeof readMaintenanceState>>; bypassed: boolean }> {
+  const state = await readMaintenanceState(env.DB);
+  const bypassed = state.enabled && await verifyMaintenancePass(env.BETTER_AUTH_SECRET, maintenanceCookie(request), state.version);
+  return { state, bypassed };
+}
+
+async function requestHasTesterPass(request: Request, env: Env): Promise<boolean> { return (await maintenanceAccess(request, env)).bypassed; }
+function maintenanceResponse(): Response { return Response.json({ error: 'Maintenance in progress.', code: 'maintenance' }, {
+  status: 503, headers: { 'cache-control': 'no-store', 'retry-after': '60' },
+}); }
+
+const PUBLIC_ANALYTICS_EVENTS = new Set(['title-view', 'lobby-enter']);
+async function ingestAnalytics(request: Request, env: Env): Promise<Response> {
+  try {
+    const body = await readJsonBody<{ eventId?: unknown; eventType?: unknown; browserId?: unknown; visitId?: unknown }>(request, 2_000);
+    if (!validClientId(body.eventId) || !validClientId(body.browserId) || !validClientId(body.visitId)
+      || typeof body.eventType !== 'string' || !PUBLIC_ANALYTICS_EVENTS.has(body.eventType)) return json({ error: 'Invalid analytics event.' }, 400);
+    let playerId: string | undefined;
+    if (body.eventType === 'lobby-enter') playerId = (await authenticateRequestPlayer(request, env)).playerId;
+    await recordEvent(env.DB, body.eventId, body.eventType, Date.now(), body.browserId, body.visitId, playerId, {}, await requestHasTesterPass(request, env));
+    return new Response(null, { status: 204 });
+  } catch (error) {
+    if (error instanceof RequestBodyError) return json({ error: error.message }, error.status);
+    if (error instanceof GuestAuthError) return json({ error: error.message }, 401);
+    return json({ error: 'Analytics event failed.' }, 500);
+  }
+}
+
+async function recordEvent(db: D1Database, eventId: string, eventType: string, occurredAt: number, browserId?: string,
+  visitId?: string, playerId?: string, metadata: object = {}, forcedTest?: boolean): Promise<void> {
+  const test = forcedTest ?? (playerId ? Boolean(await db.prepare('SELECT 1 present FROM test_players WHERE player_id = ?').bind(playerId).first()) : false);
+  await db.prepare(`INSERT OR IGNORE INTO analytics_events
+    (event_id, event_type, occurred_at, browser_id, visit_id, player_id, metadata_json, is_test) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(eventId, eventType, occurredAt, browserId ?? null, visitId ?? null, playerId ?? null, JSON.stringify(metadata), test ? 1 : 0).run();
 }
 
 function token(): string { return crypto.randomUUID(); }

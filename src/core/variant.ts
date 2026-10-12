@@ -49,6 +49,7 @@ export interface VariantPresentationContext<TCommand> {
   players?: Readonly<Record<PlayerId, MatchPlayer>>;
   music?: MusicDirector;
   unlockedClassIds?: readonly AbmClassId[];
+  showOpponentCounterpick?: boolean;
 }
 
 export interface PresentationAssetLease {

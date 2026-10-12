@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from 'vitest';
-import { createResendMailer, formatSignInCode, signInEmailContent } from '../worker/resendMailer';
+import { createResendMailer, deletionEmailContent, formatSignInCode, passwordEmailContent, signInEmailContent, signupEmailContent } from '../worker/resendMailer';
 
 describe('Resend authentication mailer', () => {
   test('renders the fixed signup message and spaced six-digit code', () => {
@@ -10,6 +10,21 @@ describe('Resend authentication mailer', () => {
     expect(content.text).toContain('123 456');
     expect(content.html).toContain("font-family:'Architects Daughter',cursive");
     expect(content.html).toContain("font-family:Inter,'Arial Black',Arial,sans-serif");
+  });
+
+  test('keeps signup, sign-in, and password messages distinct', () => {
+    expect(signupEmailContent('123456').subject).toContain('Account Code');
+    expect(signInEmailContent('123456').subject).toContain('Sign In');
+    expect(passwordEmailContent('123456').subject).toContain('Password');
+  });
+
+  test('renders and sends account deletion codes separately from signup mail', async () => {
+    expect(deletionEmailContent('123456').text).toContain('delete your account');
+    const request = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: 'mail-2' }), { status: 200 }));
+    await createResendMailer('secret-key', request).sendDeletionCode({ email: 'player@example.com', code: '123456' });
+    const body = JSON.parse(String((request.mock.calls[0] as [string, RequestInit])[1].body));
+    expect(body).toMatchObject({ subject: 'Super ABM Account Deletion Code', tags: [{ name: 'category', value: 'account_deletion' }] });
+    expect(body.text).toContain('123 456');
   });
 
   test('sends through Resend without reply-to or tracking fields', async () => {
