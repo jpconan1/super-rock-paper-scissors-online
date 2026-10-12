@@ -1025,21 +1025,75 @@ input {
 .game-layout__slot[hidden] { display: none; }
 
 .game-layout__player-info {
-  width: 100%;
-  display: grid;
-  align-items: center;
-  padding-inline: 8px;
-  font-size: 19px;
-  line-height: 1.15;
+  position: relative;
+  width: 240px;
+  height: 120px;
+  flex: none;
+  color: #000;
+  font-size: 15px;
+  line-height: 1;
   white-space: nowrap;
+  transform: translateY(5px);
+}
+.game-layout:not([data-layout='portrait']) .game-layout__player-info { transform: translateY(14px); }
+.game-layout__player-emblem,
+.game-layout__player-emblem-border,
+.game-layout__player-heading { position: absolute; }
+.game-layout__player-emblem {
+  z-index: 2;
+  left: 19px;
+  top: 24px;
+  width: 202px;
+  height: 82px;
+  object-fit: contain;
+}
+.game-layout__player-emblem > .boiling-sprite__canvas { object-fit: contain; }
+.game-layout__player-emblem-border {
+  z-index: 1;
+  position: absolute;
+  inset: 0;
+  width: 240px;
+  height: 120px;
+  object-fit: fill;
+}
+.game-layout__player-heading {
+  z-index: 3;
+  top: -8px;
+  right: -6px;
+  left: -6px;
+  height: 24px;
+}
+.game-layout__player-name,
+.game-layout__player-level {
+  position: absolute;
+  top: 0;
+  box-sizing: border-box;
+  height: 24px;
+  border: 3px solid #000;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  padding: 0 5px;
+}
+.game-layout__player-name {
+  left: 0;
+  width: max-content;
+  max-width: calc(100% - 43px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.game-layout__player-level {
+  right: 0;
+  min-width: 46px;
+  justify-content: center;
 }
 .game-layout__you-tag { z-index: 4; overflow: visible; }
 .game-layout__you-tag[hidden] { display: none; }
 
-.game-layout__player-info--p2 { text-align: right; }
-
-.game-layout__slot--p1-info .game-layout__player-info { text-align: left; }
-.game-layout__slot--p2-info .game-layout__player-info { text-align: right; }
+.game-layout__slot--p1-info { justify-content: flex-start; }
+.game-layout__slot--p2-info { justify-content: flex-end; }
+.game-layout__player-info--p2 .game-layout__player-name { right: 0; left: auto; justify-content: flex-end; }
+.game-layout__player-info--p2 .game-layout__player-level { right: auto; left: 0; }
 
 .game-layout__turn { width: 200px; flex: none; }
 .game-layout__wins-label { width: 96px; }
@@ -1150,7 +1204,11 @@ input {
 .abm-picker__name { color: #ac3235; font-size: 22px; line-height: 1; }
 .abm-picker__bonus-xp-heading { color: #ac3235; font-size: 12px; line-height: 1.05; }
 .abm-picker__bonus-xp-heading[hidden] { display: none; }
-.abm-class-badge { position: absolute; overflow: visible; }
+.abm-class-badge { position: absolute; z-index: 4; overflow: visible; transform: translateY(5px); }
+.game-layout:not([data-layout='portrait']) .abm-class-badge { transform: translateY(14px); }
+.game-layout[data-layout='portrait'] .abm-class-badge { transform: translateY(5px) scale(.85); }
+.game-layout[data-layout='portrait'] .abm-class-badge--p1 { transform-origin: center left; }
+.game-layout[data-layout='portrait'] .abm-class-badge--p2 { transform-origin: center right; }
 .abm-pick-class-header { position: absolute; z-index: 6; overflow: visible; pointer-events: none; }
 .abm-counterpick-tag { position: absolute; z-index: 5; overflow: visible; pointer-events: none; }
 .abm-counterpick-cloud { position: absolute; overflow: visible; pointer-events: none; }
@@ -1253,9 +1311,29 @@ input {
 .game-layout__tool--burger-button { width: 64px; }
 
 .game-layout[data-layout='portrait'] .game-layout__player-info {
-  font-size: 15px;
-  line-height: 1.05;
+  width: 216px;
+  height: 108px;
+  font-size: 12px;
+  transform: translateY(28px) scale(.85);
+  transform-origin: top left;
 }
+.game-layout[data-layout='portrait'] .game-layout__player-info--p2 { transform-origin: top right; }
+.game-layout[data-layout='portrait'] .game-layout__player-emblem {
+  left: 17px;
+  top: 22px;
+  width: 182px;
+  height: 74px;
+}
+.game-layout[data-layout='portrait'] .game-layout__player-emblem-border { width: 216px; height: 108px; }
+.game-layout[data-layout='portrait'] .game-layout__player-name,
+.game-layout[data-layout='portrait'] .game-layout__player-level {
+  height: 20px;
+  border-width: 2px;
+  padding-inline: 4px;
+}
+.game-layout[data-layout='portrait'] .game-layout__player-heading { top: -7px; right: -5px; left: -5px; height: 20px; }
+.game-layout[data-layout='portrait'] .game-layout__player-name { max-width: calc(100% - 35px); }
+.game-layout[data-layout='portrait'] .game-layout__player-level { min-width: 38px; }
 .game-layout[data-layout='portrait'] .game-layout__turn { width: 150px; }
 .game-layout[data-layout='portrait'] .game-layout__wins-label { width: 72px; }
 .game-layout[data-layout='portrait'] .game-layout__win-counter { width: 48px; }

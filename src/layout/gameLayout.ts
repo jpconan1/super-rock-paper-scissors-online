@@ -2,6 +2,7 @@ import type { BoilClock } from '../animation/boilClock';
 import { createGameButton, type GameButton } from '../input/gameButton';
 import { createBoilingSprite, type BoilingSprite } from '../renderer/boilingSprite';
 import type { PlayerId } from '../core/variant';
+import type { PlayerEmblem } from '../protocol/protocol';
 import {
   createScaleBox,
   observeResponsiveScaleBox,
@@ -43,6 +44,21 @@ export interface GameLayoutPlayer {
   heading: string;
   rating: string;
   platform: string;
+  level?: number;
+  emblem?: PlayerEmblem;
+}
+
+const EMBLEM_BORDER_COUNT = 44;
+
+/** Temporary stable assignment until emblem borders become persisted account data. */
+export function emblemBorderNumber(displayName: string): number {
+  const normalized = displayName.normalize('NFKC').trim().replace(/\s+/gu, ' ').toLocaleLowerCase('en-US');
+  let hash = 0x811c9dc5;
+  for (const character of normalized) {
+    hash ^= character.codePointAt(0)!;
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0) % EMBLEM_BORDER_COUNT + 1;
 }
 
 export interface GameLayoutArtwork {
@@ -157,8 +173,11 @@ export function createGameLayout<TLayoutName extends string>(
   const buttons: GameButton[] = [];
   const layoutDocument = options.layoutDocument ?? getLayoutDocument(options.layoutDocumentId ?? 'game-parent');
 
-  slots['p1-info'].append(createPlayerInfo(options.players.p1, 'p1'));
-  slots['p2-info'].append(createPlayerInfo(options.players.p2, 'p2'));
+  const p1Info = createPlayerInfo(options.players.p1, 'p1', options.clock);
+  const p2Info = createPlayerInfo(options.players.p2, 'p2', options.clock);
+  sprites.push(p1Info.emblem, p2Info.emblem);
+  slots['p1-info'].append(p1Info.element);
+  slots['p2-info'].append(p2Info.element);
 
   const addSprite = (slot: GameLayoutSlotName, artwork: GameLayoutArtwork, className: string) => {
     if (artwork.boiling === false) {
@@ -258,14 +277,42 @@ export function createGameLayout<TLayoutName extends string>(
   };
 }
 
-function createPlayerInfo(player: GameLayoutPlayer, side: 'p1' | 'p2'): HTMLDivElement {
+export function createPlayerInfo(player: GameLayoutPlayer, side: 'p1' | 'p2', clock: BoilClock): {
+  element: HTMLDivElement;
+  emblem: BoilingSprite;
+} {
   const info = document.createElement('div');
   info.className = `game-layout__player-info game-layout__player-info--${side}`;
-  const lines = [player.heading, player.rating, player.platform];
-  for (const [index, text] of lines.entries()) {
-    const line = document.createElement(index === 0 ? 'strong' : 'span');
-    line.textContent = text;
-    info.append(line);
-  }
-  return info;
+  const level = Number.isSafeInteger(player.level) && player.level! > 0 ? player.level! : 1;
+  const emblemKind = player.emblem ?? 'new-player';
+  const emblemName = emblemKind === 'bot' ? 'Bot' : 'New Player';
+  const borderNumber = emblemBorderNumber(player.heading);
+  info.setAttribute('aria-label', `${player.heading}, level ${level}, ${emblemName} emblem`);
+
+  const emblem = createBoilingSprite({
+    src: `/emblems/${emblemKind === 'bot' ? 'bot-emblem' : 'new-player'}-sheet.webp`,
+    clock,
+    className: 'game-layout__player-emblem',
+    alt: '',
+  });
+
+  const border = document.createElement('img');
+  border.className = 'game-layout__player-emblem-border';
+  border.src = `/emblems/borders/${borderNumber}.webp`;
+  border.alt = '';
+  border.draggable = false;
+
+  const name = document.createElement('strong');
+  name.className = 'game-layout__player-name';
+  name.textContent = player.heading;
+  name.title = player.heading;
+
+  const levelLabel = document.createElement('span');
+  levelLabel.className = 'game-layout__player-level';
+  levelLabel.textContent = `Lv ${level}`;
+  const heading = document.createElement('div');
+  heading.className = 'game-layout__player-heading';
+  heading.append(name, levelLabel);
+  info.append(border, emblem.element, heading);
+  return { element: info, emblem };
 }

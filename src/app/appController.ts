@@ -658,6 +658,7 @@ export class AppController {
     this.localMatch?.destroy();
     this.localMatch = new LocalAbmMatch({
       playerName: this.playerName,
+      playerLevel: this.options.session.accountState().level,
       ...(grant ? { matchId: grant.receipt } : {}),
       unlockedClassIds: this.options.session.accountState().unlockedClassIds,
       publish: (snapshot) => this.receiveSnapshot(snapshot, true),
@@ -680,6 +681,7 @@ export class AppController {
     this.tutorialPending = true;
     this.localMatch = new LocalAbmMatch({
       playerName: this.playerName,
+      playerLevel: this.options.session.accountState().level,
       ...(grant ? { matchId: grant.receipt } : {}),
       startingClasses: { p1: 'lucky', p2: 'lucky' },
       unlockedClassIds: this.options.session.accountState().unlockedClassIds,

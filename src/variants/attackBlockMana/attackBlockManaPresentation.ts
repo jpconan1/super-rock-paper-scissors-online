@@ -306,7 +306,7 @@ export function blockSegments(player: 'p1' | 'p2', blocks: number): boolean[] {
 
 function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, send: (command: AbmCommand) => void, onMenu: () => void,
   matchProgressComplete: (() => void) | undefined, viewer: 'p1' | 'p2',
-  players: Readonly<Record<'p1' | 'p2', { name: string; platform: string; rating: number }>> | undefined,
+  players: Readonly<Record<'p1' | 'p2', { name: string; platform: string; rating: number; level?: number; emblem?: import('../../protocol/protocol').PlayerEmblem }>> | undefined,
   options: AttackBlockManaPresentationOptions, music?: MusicDirector, unlockedClassIds?: readonly AbmClassId[],
   showOpponentCounterpick = true) {
   const layoutDocument = options.layoutDocument ?? getLayoutDocument('variant-abm');
@@ -1083,6 +1083,6 @@ export function winArtwork(player: 'p1' | 'p2', wins: number) {
   return { src: `/visual-elements/win-couters/ft2-win-counter-${state}-sheet.webp`, alt: `${player} wins: ${wins}` };
 }
 function sheets(root: string) { return { up: `${root}-up-sheet.webp`, between: `${root}-between-sheet.webp`, depressed: `${root}-depressed-sheet.webp` }; }
-function playerDisplay(fallback: string, player?: { name: string; platform: string; rating: number }) {
-  return { heading: player?.name ?? fallback, rating: player ? `Elo ${player.rating}` : '', platform: player?.platform ?? '' };
+function playerDisplay(fallback: string, player?: { name: string; platform: string; rating: number; level?: number; emblem?: import('../../protocol/protocol').PlayerEmblem }) {
+  return { heading: player?.name ?? fallback, rating: '', platform: '', level: player?.level, emblem: player?.emblem };
 }

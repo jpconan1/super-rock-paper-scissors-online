@@ -15,7 +15,7 @@ import {
 } from '../src/whiteboard/protocol';
 import { isLobbyPresence, type LobbyPlayer, type LobbyPresence, type LobbyServerMessage } from '../src/lobby/protocol';
 import { eloDeltas } from '../src/core/elo';
-import { countNewestClassRoundWins, createProgressAward, createTokenProgressAward, createTutorialProgressAward, isClassUnlocked, type ProgressAward } from '../src/core/progression';
+import { countNewestClassRoundWins, createProgressAward, createTokenProgressAward, createTutorialProgressAward, isClassUnlocked, progressionForTotal, type ProgressAward } from '../src/core/progression';
 import { ABM_CLASS_IDS, type AbmCommand, type AbmClassId, type AbmState } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 import { WhiteboardRateLimiter, type WhiteboardRateCategory } from '../src/whiteboard/rateLimiter';
 import { LOBBY_SOCKET_PROTOCOL, MATCH_SOCKET_PROTOCOL, socketCredential, WHITEBOARD_SOCKET_PROTOCOL } from '../src/protocol/webSocketAuth';
@@ -342,8 +342,8 @@ export class MatchmakerObject extends DurableObject<Env> {
     const id = this.env.MATCHES.newUniqueId();
     const matchId = id.toString();
     const initialized = await this.env.MATCHES.get(id).initialize(matchId, {
-      p1: { name: opponent.name, platform: 'Web', rating: opponent.rating },
-      p2: { name, platform: 'Web', rating: player.rating },
+      p1: { name: opponent.name, platform: 'Web', rating: opponent.rating, level: progressionForTotal(opponent.totalProgressUnits ?? 0).level },
+      p2: { name, platform: 'Web', rating: player.rating, level: progressionForTotal(player.totalProgressUnits).level },
     }, { p1: opponent.guestId, p2: guestId }, 'abm-only', {
       p1: opponent.totalProgressUnits ?? 0, p2: player.totalProgressUnits,
     }, {

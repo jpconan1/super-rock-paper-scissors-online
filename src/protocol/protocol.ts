@@ -38,7 +38,8 @@ export interface ServerSnapshot<TProjection = unknown> {
 }
 
 export type MatchPhase = 'match-found' | 'selecting' | 'scoreboard' | 'playing' | 'banning' | 'final-scoreboard' | 'complete';
-export interface MatchPlayer { name: string; platform: string; rating: number }
+export type PlayerEmblem = 'new-player' | 'bot';
+export interface MatchPlayer { name: string; platform: string; rating: number; level?: number; emblem?: PlayerEmblem }
 export interface CompletedGame extends VariantGameResult { slotId: SlotId }
 export interface MatchProjection {
   phase: MatchPhase;
