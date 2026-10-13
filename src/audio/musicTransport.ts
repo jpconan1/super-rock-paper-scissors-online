@@ -3,6 +3,11 @@ import type { MusicBase, MusicManifest, MusicTrackDefinition } from './musicMani
 interface LoadedTrack { definition: MusicTrackDefinition; buffer: AudioBuffer; startSeconds: number }
 interface ScheduledTrack { startsAt: number }
 
+export interface ScheduledMusicTransition {
+  boundaryDelayMs: number;
+  wipeDelayMs: number;
+}
+
 export interface MusicTransportOptions {
   context: AudioContext;
   output: AudioNode;
@@ -81,7 +86,46 @@ export class MusicTransport {
     this.stopProgram();
     this.restoreProgram();
     this.requestedBase = this.activeBase = base;
-    void this.prepare(this.manifest.bases[base]).then(() => this.tick()).catch(() => {});
+    const definition = this.manifest.bases[base];
+    if (this.loaded.has(definition.src)) this.tick();
+    else void this.prepare(definition).then(() => this.tick()).catch(() => {});
+  }
+
+  async scheduleBaseAtNextMeasure(base: MusicBase, measureSamples: number, leadMilliseconds: number): Promise<ScheduledMusicTransition | undefined> {
+    const generation = ++this.startGeneration;
+    const definition = this.manifest.bases[base];
+    await this.prepare(definition);
+    if (generation !== this.startGeneration || this.context.state !== 'running') return undefined;
+    if (this.origin === undefined) {
+      this.tick();
+      if (this.origin === undefined) return undefined;
+    }
+    const now = this.context.currentTime;
+    const measureSeconds = measureSamples / this.manifest.sampleRate;
+    const leadSeconds = Math.max(0, leadMilliseconds / 1_000);
+    const elapsedAtEarliestBoundary = now + leadSeconds - this.origin;
+    const measureIndex = Math.max(0, Math.ceil(elapsedAtEarliestBoundary / measureSeconds - 1e-9));
+    const boundary = this.origin + measureIndex * measureSeconds;
+
+    this.cancelInterrupt();
+    this.restoreProgram();
+    if (this.scheduledThrough < boundary) {
+      const currentDefinition = this.manifest.bases[this.activeBase];
+      this.scheduleTrack(currentDefinition, this.scheduledThrough, 0, boundary - this.scheduledThrough);
+    }
+    for (const source of this.scheduled.keys()) {
+      try { source.stop(boundary); } catch {}
+    }
+    this.requestedBase = this.activeBase = base;
+    this.origin = boundary;
+    const duration = definition.lengthSamples / this.definitionSampleRate(definition);
+    this.scheduleTrack(definition, boundary, 0, duration);
+    this.scheduledThrough = boundary + duration;
+
+    return {
+      boundaryDelayMs: Math.max(0, (boundary - now) * 1_000),
+      wipeDelayMs: Math.max(0, (boundary - now) * 1_000 - leadMilliseconds),
+    };
   }
 
   async playIntroThenLoop(intro: MusicBase, loop: MusicBase): Promise<void> {

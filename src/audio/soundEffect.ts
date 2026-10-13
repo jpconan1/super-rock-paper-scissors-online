@@ -1,5 +1,5 @@
 import { musicManifest, type MusicBase } from './musicManifest';
-import { MusicTransport } from './musicTransport';
+import { MusicTransport, type ScheduledMusicTransition } from './musicTransport';
 
 export interface SoundEffect {
   play(options?: SoundPlaybackOptions): SoundPlayback;
@@ -261,6 +261,12 @@ export function setMusicBaseAtCurrentLoopPhase(base: MusicBase): void {
 export function startPreloadedMusic(base: MusicBase, group: string): Promise<void> {
   requestedBase = base;
   return ensureMusicTransport()?.startPreloaded(base, group) ?? Promise.resolve();
+}
+
+export async function scheduleMusicBaseAtNextMeasure(base: MusicBase, measureSamples: number, leadMilliseconds: number): Promise<ScheduledMusicTransition | undefined> {
+  const timing = await ensureMusicTransport()?.scheduleBaseAtNextMeasure(base, measureSamples, leadMilliseconds);
+  if (timing) requestedBase = base;
+  return timing;
 }
 
 export function playMusicIntroThenLoop(intro: MusicBase, loop: MusicBase): Promise<void> {

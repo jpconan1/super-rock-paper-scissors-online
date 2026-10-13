@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const audio = vi.hoisted(() => ({
-  playMusicIntroThenLoop: vi.fn(async () => {}), playMusicInterrupt: vi.fn(async () => true), preloadMusic: vi.fn(async () => {}),
+  playMusicInterrupt: vi.fn(async () => true), preloadMusic: vi.fn(async () => {}),
+  scheduleMusicBaseAtNextMeasure: vi.fn(async () => ({ boundaryDelayMs: 1_000, wipeDelayMs: 420 })),
   setMusicBaseAtCurrentLoopPhase: vi.fn(), setMusicBaseAtCurrentMeasurePhase: vi.fn(), setMusicBaseImmediately: vi.fn(),
   startPreloadedMusic: vi.fn(async () => {}), stopMusic: vi.fn(),
 }));
@@ -44,28 +45,34 @@ describe('MusicDirector', () => {
     expect(audio.preloadMusic).toHaveBeenCalledWith('online-battle');
   });
 
-  it('plays the online intro once per match and ignores local ABM base changes', () => {
+  it('loops the online intro once per match and schedules main on the first battle boundary', async () => {
     const director = new MusicDirector(); director.enterOnlineMatchFound(); director.enterOnlineAbm();
-    expect(audio.playMusicIntroThenLoop).toHaveBeenCalledWith('battle-intro', 'battle-loop');
-    director.updateAbm(projection({ phase: 'counter-picking' }));
-    director.updateAbm(projection({ phase: 'idle' }));
-    expect(audio.setMusicBaseAtCurrentLoopPhase).not.toHaveBeenCalled();
+    expect(audio.startPreloadedMusic).toHaveBeenCalledWith('battle-intro', 'online-battle');
+    expect(await director.scheduleFirstBattleTransition()).toBe(1_000);
+    expect(audio.scheduleMusicBaseAtNextMeasure).toHaveBeenCalledWith('battle-main', 84_672, 0);
     director.leaveAbm(); director.enterOnlineAbm();
-    expect(audio.playMusicIntroThenLoop).toHaveBeenCalledTimes(1);
-    expect(audio.setMusicBaseImmediately).toHaveBeenCalledWith('battle-loop');
+    expect(audio.startPreloadedMusic).toHaveBeenCalledTimes(1);
+    expect(audio.setMusicBaseImmediately).toHaveBeenCalledWith('battle-main');
     director.enterOnlineMatchFound(); director.enterOnlineAbm();
-    expect(audio.playMusicIntroThenLoop).toHaveBeenCalledTimes(2);
+    expect(audio.startPreloadedMusic).toHaveBeenCalledTimes(2);
   });
 
-  it('uses the battle sequence for practice and ignores tutorial phase switching', () => {
+  it('loops the intro and schedules main for practice', async () => {
     const director = new MusicDirector();
     director.preparePracticeAbm();
     expect(audio.preloadMusic).toHaveBeenCalledWith('online-battle');
     director.enterPracticeAbm();
-    expect(audio.playMusicIntroThenLoop).toHaveBeenCalledWith('battle-intro', 'battle-loop');
+    expect(audio.startPreloadedMusic).toHaveBeenCalledWith('battle-intro', 'online-battle');
+    expect(await director.scheduleFirstBattleTransition()).toBe(1_000);
     director.updateAbm(projection({ phase: 'counter-picking' }));
-    director.updateAbm(projection({ phase: 'idle' }));
     expect(audio.setMusicBaseAtCurrentLoopPhase).not.toHaveBeenCalled();
+  });
+
+  it('keeps tutorial on its existing short class-select and battle loops', () => {
+    const director = new MusicDirector(); director.enterAbm();
+    director.updateAbm(projection({ phase: 'idle' }));
+    expect(audio.setMusicBaseAtCurrentLoopPhase).toHaveBeenLastCalledWith('battle');
+    expect(audio.scheduleMusicBaseAtNextMeasure).not.toHaveBeenCalled();
   });
 
   it('plays perspective round stings and does not repeat a final sting', () => {

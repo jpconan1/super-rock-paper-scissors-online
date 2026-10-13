@@ -694,14 +694,31 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     // Gameplay entry already arrives under the shell's starburst. Consume any
     // active initial cue so the timeline cannot replay a second wipe afterward.
     if (reveal && !shownProjection) playedTransitionIds.add(reveal.id);
+    const leavingInitialClassSelect = isInitialClassSelectionTransition(shownProjection?.phase, nextProjection.phase);
+    if (leavingInitialClassSelect && music?.usesBeatAlignedFirstBattleTransition()) {
+      if (reveal) playedTransitionIds.add(reveal.id);
+      startWipe(true);
+      return;
+    }
     if ((reveal || forceWipe) && shownProjection) {
       if (reveal) playedTransitionIds.add(reveal.id);
-      wipeRunning = true;
-      void playStarburstWipe(container, clock, () => paint(newestProjection!, now(), newestEvents, newestProgressAward), transitionAbort.signal)
-        .then(() => { wipeRunning = false; if (newestProjection) paint(newestProjection, now(), newestEvents, newestProgressAward); });
+      startWipe();
       return;
     }
     paint(nextProjection, serverTime, events, newestProgressAward);
+  }
+
+  function startWipe(alignFirstBattleAtPeak = false) {
+    wipeRunning = true;
+    void playStarburstWipe(container, clock, async () => {
+      if (alignFirstBattleAtPeak && music) {
+        const boundaryDelayMs = await music.scheduleFirstBattleTransition().catch(() => undefined);
+        if (boundaryDelayMs === undefined) await waitForAbort(transitionAbort.signal);
+        else if (scheduleTimers) await waitFor(boundaryDelayMs, transitionAbort.signal);
+      }
+      if (!transitionAbort.signal.aborted) paint(newestProjection!, now(), newestEvents, newestProgressAward);
+    }, transitionAbort.signal)
+      .then(() => { wipeRunning = false; if (newestProjection) paint(newestProjection, now(), newestEvents, newestProgressAward); });
   }
 
   function paint(nextProjection: AbmProjection, serverTime: number, events: readonly TimedSemanticEvent[] = [], progressAward?: ProgressAward) {
@@ -951,6 +968,29 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
 
   applyVariantLayout(); updatePicker();
   return { render, destroy() { transitionAbort.abort(); unsubscribeCounterpickEntrance(); xpBar?.destroy(); tagEntrance.destroy(); if (revealTimer) clearTimeout(revealTimer); if (waitingTimer) clearTimeout(waitingTimer); ruleCopies.forEach(({ box }) => box.destroy()); layout.destroy(); copy.destroy(); for (const button of buttons) button.destroy(); for (const sprite of sprites) sprite.destroy(); } };
+}
+
+export function isInitialClassSelectionTransition(previous: AbmProjection['phase'] | undefined, next: AbmProjection['phase']): boolean {
+  return (previous === 'selecting-classes' || previous === 'waiting-for-class')
+    && next !== 'selecting-classes' && next !== 'waiting-for-class';
+}
+
+function waitFor(milliseconds: number, signal: AbortSignal): Promise<void> {
+  if (milliseconds <= 0 || signal.aborted) return Promise.resolve();
+  return new Promise((resolve) => {
+    const timer = setTimeout(done, milliseconds);
+    signal.addEventListener('abort', done, { once: true });
+    function done() {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', done);
+      resolve();
+    }
+  });
+}
+
+function waitForAbort(signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.resolve();
+  return new Promise((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
 }
 
 export function soundForAbmMoves(moves: Readonly<Record<'p1' | 'p2', AbmMove>>): SoundId | undefined {

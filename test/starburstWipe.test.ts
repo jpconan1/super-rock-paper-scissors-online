@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { STARBURST_WIPE_STEPS } from '../src/renderer/starburstWipe';
+import { STARBURST_WIPE_COVER_MS, STARBURST_WIPE_MS } from '../src/core/time';
 
 describe('starburst wipe', () => {
   test('preserves the original composite layer order and covered frame', () => {
@@ -8,5 +9,7 @@ describe('starburst wipe', () => {
       ['4-w'], ['4', '3-w'], ['3', '2-w'], ['2', '1-w'], ['1'],
     ]);
     expect(STARBURST_WIPE_STEPS[5]).toEqual(['4-w']);
+    expect(STARBURST_WIPE_COVER_MS).toBe(348);
+    expect(STARBURST_WIPE_MS - STARBURST_WIPE_COVER_MS).toBe(232);
   });
 });

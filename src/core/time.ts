@@ -2,6 +2,7 @@
 export const BEAT_MS = 750;
 export const ANIMATION_FRAME_MS = 58;
 export const STARBURST_WIPE_MS = ANIMATION_FRAME_MS * 10;
+export const STARBURST_WIPE_COVER_MS = ANIMATION_FRAME_MS * 6;
 
 /** Converts beats to milliseconds for clocks, deadlines, and timers. */
 export function beats(count: number): number {

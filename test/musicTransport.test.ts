@@ -16,7 +16,7 @@ const manifest: MusicManifest = {
   bases: {
     'title-loop': track('/title', 100), 'lobby-loop': track('/lobby', 400),
     'class-select': track('/class', 200), battle: track('/battle', 200),
-    'battle-intro': track('/battle-intro', 100), 'battle-loop': track('/battle-loop', 400),
+    'battle-intro': track('/battle-intro', 400), 'battle-main': track('/battle-main', 400),
   },
   stings: { win: track('/win', 50) }, preloadGroups: { menu: ['/title', '/lobby'] },
 };
@@ -74,15 +74,48 @@ describe('MusicTransport', () => {
     expect(sources.at(-1)!.starts[0]![2]).toBeCloseTo(0.35); transport.destroy();
   });
 
-  it('plays an intro once and schedules the repeating loop at its exact end', async () => {
+  it('loops the four-measure intro during first class selection', async () => {
     const { context, transport, sources } = setup();
-    await transport.playIntroThenLoop('battle-intro', 'battle-loop');
+    await transport.startPreloaded('battle-intro', 'online-battle'); await flush();
     expect((sources[0]!.buffer as AudioBuffer & { id: string }).id).toBe('/battle-intro');
-    expect(sources[0]!.starts[0]).toEqual([0, 0, 1]);
-    context.currentTime = 0.85; transport.tick();
-    const loop = sources.at(-1)!;
-    expect((loop.buffer as AudioBuffer & { id: string }).id).toBe('/battle-loop');
-    expect(loop.starts[0]).toEqual([1, 0, 4]);
+    expect(sources[0]!.starts[0]).toEqual([0.05, 0, 4]);
+    context.currentTime = 3.9; transport.tick();
+    expect(sources.at(-1)!.starts[0]).toEqual([4.05, 0, 4]);
+    transport.destroy();
+  });
+
+  it('schedules main at the next measure with enough room for the wipe', async () => {
+    const { context, transport, sources } = setup();
+    await transport.startPreloaded('battle-intro', 'online-battle'); await flush();
+    const intro = sources[0]!;
+    context.currentTime = 0.3;
+    const timing = await transport.scheduleBaseAtNextMeasure('battle-main', 100, 200);
+    expect(timing).toEqual({ boundaryDelayMs: 750, wipeDelayMs: 550 });
+    expect(intro.stop).toHaveBeenCalledWith(1.05);
+    expect((sources.at(-1)!.buffer as AudioBuffer & { id: string }).id).toBe('/battle-main');
+    expect(sources.at(-1)!.starts[0]).toEqual([1.05, 0, 4]);
+    transport.destroy();
+  });
+
+  it('skips a measure break when it is too close for the wipe', async () => {
+    const { context, transport } = setup();
+    await transport.startPreloaded('battle-intro', 'online-battle'); await flush();
+    context.currentTime = 0.9;
+    const timing = await transport.scheduleBaseAtNextMeasure('battle-main', 100, 200);
+    expect(timing).toEqual({ boundaryDelayMs: 1150, wipeDelayMs: 950 });
+    transport.destroy();
+  });
+
+  it('keeps the intro playing when the chosen boundary is beyond its current loop', async () => {
+    const { context, transport, sources } = setup();
+    await transport.startPreloaded('battle-intro', 'online-battle'); await flush();
+    context.currentTime = 3.9;
+    const timing = await transport.scheduleBaseAtNextMeasure('battle-main', 100, 200);
+    expect(timing).toEqual({ boundaryDelayMs: 1150, wipeDelayMs: 950 });
+    const continuation = sources.at(-2)!;
+    expect((continuation.buffer as AudioBuffer & { id: string }).id).toBe('/battle-intro');
+    expect(continuation.starts[0]).toEqual([4.05, 0, 1]);
+    expect(sources.at(-1)!.starts[0]).toEqual([5.05, 0, 4]);
     transport.destroy();
   });
 

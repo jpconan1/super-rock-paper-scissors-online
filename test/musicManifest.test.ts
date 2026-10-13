@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BATTLE_INTRO_SAMPLES, BATTLE_LOOP_SAMPLES, LOBBY_LOOP_SAMPLES, MENU_MEASURE_SAMPLES, musicManifest, validateMusicManifest } from '../src/audio/musicManifest';
+import { BATTLE_COUNTDOWN_FRAMES, BATTLE_COUNTDOWN_FRAME_MS, BATTLE_INTRO_SAMPLES, BATTLE_LOOP_SAMPLES, BATTLE_MEASURE_SAMPLES, LOBBY_LOOP_SAMPLES, MENU_MEASURE_SAMPLES, musicManifest, validateMusicManifest } from '../src/audio/musicManifest';
 
 describe('musicManifest', () => {
   it('defines valid one-measure title and four-measure lobby loops', () => {
@@ -12,8 +12,11 @@ describe('musicManifest', () => {
 
   it('defines the authored online battle intro and loop regions', () => {
     expect(musicManifest.bases['battle-intro']).toMatchObject({ startSample: 528, lengthSamples: BATTLE_INTRO_SAMPLES });
-    expect(musicManifest.bases['battle-loop']).toMatchObject({ startSample: 528, lengthSamples: BATTLE_LOOP_SAMPLES });
+    expect(musicManifest.bases['battle-main']).toMatchObject({ startSample: 528, lengthSamples: BATTLE_LOOP_SAMPLES });
+    expect(BATTLE_MEASURE_SAMPLES).toBe(84_672);
     expect(BATTLE_INTRO_SAMPLES / musicManifest.sampleRate).toBe(7.68);
+    expect(BATTLE_MEASURE_SAMPLES / musicManifest.sampleRate).toBe(1.92);
+    expect(BATTLE_COUNTDOWN_FRAMES * BATTLE_COUNTDOWN_FRAME_MS).toBe(1_920);
     expect(BATTLE_LOOP_SAMPLES / musicManifest.sampleRate).toBe(67.2);
   });
 });

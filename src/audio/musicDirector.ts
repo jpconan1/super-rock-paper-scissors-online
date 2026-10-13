@@ -1,11 +1,14 @@
 import type { AbmProjection } from '../variants/attackBlockMana/attackBlockManaTypes';
-import { playMusicIntroThenLoop, playMusicInterrupt, preloadMusic, setMusicBaseAtCurrentLoopPhase, setMusicBaseAtCurrentMeasurePhase, setMusicBaseImmediately, startPreloadedMusic, stopMusic } from './soundEffect';
+import { playMusicInterrupt, preloadMusic, scheduleMusicBaseAtNextMeasure, setMusicBaseAtCurrentLoopPhase, setMusicBaseAtCurrentMeasurePhase, setMusicBaseImmediately, startPreloadedMusic, stopMusic } from './soundEffect';
+import { BATTLE_MEASURE_SAMPLES } from './musicManifest';
 
 export class MusicDirector {
   private mode: 'title' | 'lobby' | 'abm' | 'practice-abm' | 'online-abm' | 'stopped' = 'stopped';
   private score = { p1: 0, p2: 0 };
   private winner: AbmProjection['winner'];
   private abmBase: 'class-select' | 'battle' = 'class-select';
+  private fullBattleStarted = false;
+  private battleIntroReady: Promise<void> = Promise.resolve();
   private onlineIntroPlayed = false;
 
   enterTitle(): void {
@@ -45,10 +48,11 @@ export class MusicDirector {
   enterOnlineAbm(): void {
     this.mode = 'online-abm';
     this.resetMatchState();
-    if (this.onlineIntroPlayed) setMusicBaseImmediately('battle-loop');
+    this.fullBattleStarted = this.onlineIntroPlayed;
+    if (this.onlineIntroPlayed) setMusicBaseImmediately('battle-main');
     else {
       this.onlineIntroPlayed = true;
-      void playMusicIntroThenLoop('battle-intro', 'battle-loop');
+      this.battleIntroReady = startPreloadedMusic('battle-intro', 'online-battle');
     }
   }
 
@@ -59,7 +63,22 @@ export class MusicDirector {
   enterPracticeAbm(): void {
     this.mode = 'practice-abm';
     this.resetMatchState();
-    void playMusicIntroThenLoop('battle-intro', 'battle-loop');
+    this.fullBattleStarted = false;
+    this.battleIntroReady = startPreloadedMusic('battle-intro', 'online-battle');
+  }
+
+  async scheduleFirstBattleTransition(): Promise<number | undefined> {
+    if ((this.mode !== 'practice-abm' && this.mode !== 'online-abm') || this.fullBattleStarted) return undefined;
+    await this.battleIntroReady;
+    if ((this.mode !== 'practice-abm' && this.mode !== 'online-abm') || this.fullBattleStarted) return undefined;
+    const timing = await scheduleMusicBaseAtNextMeasure('battle-main', BATTLE_MEASURE_SAMPLES, 0);
+    if (!timing || (this.mode !== 'practice-abm' && this.mode !== 'online-abm')) return undefined;
+    this.fullBattleStarted = true;
+    return timing.boundaryDelayMs;
+  }
+
+  usesBeatAlignedFirstBattleTransition(): boolean {
+    return (this.mode === 'practice-abm' || this.mode === 'online-abm') && !this.fullBattleStarted;
   }
 
   updateAbm(projection: AbmProjection): void {

@@ -10,7 +10,7 @@ const tracks = [
   ['assets/audio/music-loops/class-select.mp3', 528, 460_174, sampleRate],
   ['assets/audio/music-loops/battle.mp3', 528, 460_174, sampleRate],
   ['assets/audio/music-loops/battle-intro.mp3', 528, 338_688, sampleRate],
-  ['assets/audio/music-loops/battle-loop.mp3', 528, 2_963_520, sampleRate],
+  ['assets/audio/music-loops/battle-main.mp3', 528, 2_963_520, sampleRate],
   ['assets/audio/lose_jingle.mp3', 0, 68_936, 48_000],
   ['assets/audio/win_sound.mp3', 0, 55_723, 48_000],
 ];
