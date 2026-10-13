@@ -50,6 +50,7 @@ export interface VariantPresentationContext<TCommand> {
   music?: MusicDirector;
   unlockedClassIds?: readonly AbmClassId[];
   showOpponentCounterpick?: boolean;
+  setOpeningCountdownActive?(active: boolean): void;
 }
 
 export interface PresentationAssetLease {

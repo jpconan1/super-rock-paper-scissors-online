@@ -104,6 +104,13 @@ export class LocalAbmMatch {
     this.scheduleNextAction();
   }
 
+  pauseComputer(): void {
+    if (this.stopped || this.computerPaused) return;
+    this.computerPaused = true;
+    if (this.timer !== undefined) this.clearTimer(this.timer);
+    this.timer = undefined;
+  }
+
   continueAfterTutorialEnding(ending: TutorialEnding): void {
     if (this.stopped || this.tutorialStage !== 'ended' || this.completedTutorialEnding !== ending) return;
     const game = this.state.gameState as AbmState;

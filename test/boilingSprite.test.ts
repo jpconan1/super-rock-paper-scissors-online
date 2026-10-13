@@ -16,4 +16,8 @@ describe('vertical boiling sheet dimensions', () => {
   test('rejects malformed sheets', () => {
     expect(() => getVerticalSheetFrameSize({ width: 100, height: 100 })).toThrow(/3 equal vertical frames/);
   });
+
+  test('supports authored frame counts', () => {
+    expect(getVerticalSheetFrameSize({ width: 512, height: 3_072 }, 12)).toEqual({ width: 512, height: 256 });
+  });
 });

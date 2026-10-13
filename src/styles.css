@@ -1095,6 +1095,40 @@ input {
 .game-layout__player-info--p2 .game-layout__player-name { right: 0; left: auto; justify-content: flex-end; }
 .game-layout__player-info--p2 .game-layout__player-level { right: auto; left: 0; }
 
+.game-layout__player-info--compact .game-layout__player-emblem { display: none; }
+.game-layout__player-info--compact .game-layout__player-heading {
+  top: 29px;
+  right: 22px;
+  left: 22px;
+  height: 58px;
+  text-align: center;
+}
+.game-layout__player-info--compact .game-layout__player-name,
+.game-layout__player-info--compact .game-layout__player-level {
+  right: 0;
+  left: 0;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  border: 0;
+  background: transparent;
+  justify-content: center;
+  padding: 0;
+}
+.game-layout__player-info--compact .game-layout__player-name {
+  top: 0;
+  display: block;
+  overflow: hidden;
+  font-size: 24px;
+  line-height: 1.1;
+}
+.game-layout__player-info--compact .game-layout__player-level {
+  top: 33px;
+  min-width: 0;
+  font-size: 18px;
+  line-height: 1;
+}
+
 .game-layout__turn { width: 200px; flex: none; }
 .game-layout__wins-label { width: 96px; }
 .game-layout__win-counter { width: 64px; }

@@ -1,4 +1,4 @@
-import type { BoilClock, BoilFrame } from '../animation/boilClock';
+import type { BoilClock } from '../animation/boilClock';
 
 export const BOIL_FRAME_COUNT = 3;
 
@@ -7,19 +7,22 @@ export interface SheetDimensions {
   height: number;
 }
 
-export function getVerticalSheetFrameSize(sheet: SheetDimensions): SheetDimensions {
+export function getVerticalSheetFrameSize(sheet: SheetDimensions, frameCount = BOIL_FRAME_COUNT): SheetDimensions {
   if (!Number.isFinite(sheet.width) || !Number.isFinite(sheet.height) || sheet.width <= 0 || sheet.height <= 0) {
     throw new Error('Sprite sheet dimensions must be positive finite numbers.');
   }
-  if (sheet.height % BOIL_FRAME_COUNT !== 0) {
-    throw new Error(`Expected ${BOIL_FRAME_COUNT} equal vertical frames; received ${sheet.width}x${sheet.height}.`);
+  if (!Number.isInteger(frameCount) || frameCount <= 0) throw new Error('Frame count must be a positive integer.');
+  if (sheet.height % frameCount !== 0) {
+    throw new Error(`Expected ${frameCount} equal vertical frames; received ${sheet.width}x${sheet.height}.`);
   }
-  return { width: sheet.width, height: sheet.height / BOIL_FRAME_COUNT };
+  return { width: sheet.width, height: sheet.height / frameCount };
 }
 
 export interface BoilingSpriteOptions {
   src: string;
   clock: BoilClock;
+  frameCount?: number;
+  autoAnimate?: boolean;
   className?: string;
   alt?: string;
   onFrameSize?(size: SheetDimensions, src: string): void;
@@ -29,7 +32,7 @@ export interface BoilingSprite {
   element: HTMLDivElement;
   setSource(src: string): void;
   whenReady(): Promise<void>;
-  setFrame(frame: BoilFrame): void;
+  setFrame(frame: number): void;
   destroy(): void;
 }
 
@@ -47,8 +50,9 @@ export function createBoilingSprite(options: BoilingSpriteOptions): BoilingSprit
   const context = canvas.getContext('2d') ?? failCanvasContext();
 
   const image = new Image();
+  const frameCount = options.frameCount ?? BOIL_FRAME_COUNT;
 
-  let frame: BoilFrame = 0;
+  let frame = 0;
   let sourceRevision = 0;
   let ready: Promise<void> = Promise.resolve();
 
@@ -68,8 +72,8 @@ export function createBoilingSprite(options: BoilingSpriteOptions): BoilingSprit
     );
   }
 
-  function setFrame(nextFrame: BoilFrame): void {
-    frame = nextFrame;
+  function setFrame(nextFrame: number): void {
+    frame = Math.max(0, Math.min(frameCount - 1, Math.floor(nextFrame)));
     drawFrame();
   }
 
@@ -79,7 +83,7 @@ export function createBoilingSprite(options: BoilingSpriteOptions): BoilingSprit
       image.onload = () => {
         if (revision !== sourceRevision) return;
         try {
-          const frameSize = getVerticalSheetFrameSize({ width: image.naturalWidth, height: image.naturalHeight });
+          const frameSize = getVerticalSheetFrameSize({ width: image.naturalWidth, height: image.naturalHeight }, frameCount);
           canvas.width = frameSize.width;
           canvas.height = frameSize.height;
           element.style.aspectRatio = `${frameSize.width} / ${frameSize.height}`;
@@ -101,7 +105,7 @@ export function createBoilingSprite(options: BoilingSpriteOptions): BoilingSprit
   }
 
   setSource(options.src);
-  const unsubscribe = options.clock.subscribe(setFrame);
+  const unsubscribe = options.autoAnimate === false ? () => {} : options.clock.subscribe(setFrame);
 
   return {
     element,

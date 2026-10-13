@@ -205,6 +205,11 @@ export class AppController {
       matchProgressComplete: () => void this.completeMatchProgressFlow(),
       self: this.matchProjection?.self ?? 'p1', players: this.matchProjection?.players,
       showOpponentCounterpick: this.localMatchAwardMode !== 'computer',
+      setOpeningCountdownActive: (active) => {
+        if (this.localMatchAwardMode !== 'computer') return;
+        if (active) this.localMatch?.pauseComputer();
+        else this.localMatch?.resumeComputer();
+      },
       music: this.music, ...(isControllerOptions(this.optionsOrRegistry)
         ? { unlockedClassIds: this.optionsOrRegistry.session.accountState().unlockedClassIds } : {}),
     });

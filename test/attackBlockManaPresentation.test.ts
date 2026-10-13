@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { ABM_CLASSES, startingResourcesForClass } from '../src/variants/attackBlockMana/attackBlockManaCatalog';
-import { ABM_BONUS_XP_ART, ABM_COUNTERPICK_ENTRANCE_TICKS_PER_STAGE, ABM_LAYOUTS, ABM_RESULT_SCENES, ABM_SELECT_ART, ABM_TAG_CATEGORIES, ABM_TAG_ORDERS, abmTagSlotId, blockSegments, displayedAbmMove, getAbmAttackCostDisplay, getAbmClassBadgeGeometry, getAbmClassReadyFrame, getAbmClassResourceControlGeometry, getAbmClassResourceGeometry, getAbmClassSelectChrome, getAbmCounterpickCloudPlayer, getAbmCounterpickEntranceVisibility, getAbmLimitedResource, getAbmObservedCounterpickClass, getAbmPickerEntries, getAbmPickerStatus, getAbmPlayerResourceGeometry, getAbmResultScene, getAbmWaitingLayoutIds, getAbmWaitingVisual, initialManaForClass, isInitialClassSelectionTransition, latestClassPreview, reconcileAbmArmedAbility, sceneForMoves, shouldShowAbmBonusXp, shouldShowAbmClassPicker, shouldShowAbmContinuingRoundProcTags, shouldShowAbmRules, shouldShowAbmYouTag, shouldShowClassBadge, shouldShowClassReadyOpponentTag, tutorialBlockTagSource, winArtwork } from '../src/variants/attackBlockMana/attackBlockManaPresentation';
+import { ABM_BONUS_XP_ART, ABM_COUNTERPICK_ENTRANCE_TICKS_PER_STAGE, ABM_LAYOUTS, ABM_RESULT_SCENES, ABM_SELECT_ART, ABM_TAG_CATEGORIES, ABM_TAG_ORDERS, abmTagSlotId, blockSegments, displayedAbmMove, getAbmAttackCostDisplay, getAbmClassBadgeGeometry, getAbmClassReadyFrame, getAbmClassResourceControlGeometry, getAbmClassResourceGeometry, getAbmClassSelectChrome, getAbmCounterpickCloudPlayer, getAbmCounterpickEntranceVisibility, getAbmLimitedResource, getAbmObservedCounterpickClass, getAbmOpeningStateAfterCountdown, getAbmPickerEntries, getAbmPickerStatus, getAbmPlayerResourceGeometry, getAbmResultScene, getAbmWaitingLayoutIds, getAbmWaitingVisual, initialManaForClass, isInitialClassSelectionTransition, latestClassPreview, reconcileAbmArmedAbility, sceneForMoves, shouldShowAbmBonusXp, shouldShowAbmClassPicker, shouldShowAbmContinuingRoundProcTags, shouldShowAbmRules, shouldShowAbmYouTag, shouldShowClassBadge, shouldShowClassReadyOpponentTag, tutorialBlockTagSource, winArtwork } from '../src/variants/attackBlockMana/attackBlockManaPresentation';
 import type { AbmProjection } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 import { ABM_CLASS_IDS } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 import { ABM_SCENE_URLS, resolveAbmProcBackgrounds, resolveAbmScene, resolveAbmSplitScene, resolveAbmTags, resolveConjureScene, resolveJoeScene, resolveNullScene } from '../src/variants/attackBlockMana/attackBlockManaScenes';
@@ -13,6 +13,12 @@ describe('Attack Block Mana presentation data', () => {
     expect(isInitialClassSelectionTransition('selecting-classes', 'idle')).toBe(true);
     expect(isInitialClassSelectionTransition('waiting-for-class', 'idle')).toBe(true);
     expect(isInitialClassSelectionTransition('counter-picking', 'idle')).toBe(false);
+  });
+
+  test('shows GO, READY-only, or normal play after the opening countdown', () => {
+    expect(getAbmOpeningStateAfterCountdown({ phase: 'idle', turn: 1 })).toBe('go');
+    expect(getAbmOpeningStateAfterCountdown({ phase: 'waiting', turn: 1 })).toBe('ready');
+    expect(getAbmOpeningStateAfterCountdown({ phase: 'idle', turn: 2, lastCompleteMoves: { p1: 'attack', p2: 'mana' } })).toBe('inactive');
   });
   test('shows bonus XP art only behind the newest selectable class', () => {
     expect(ABM_BONUS_XP_ART).toBe('/variants/abm/bonus-xp-sheet.webp');

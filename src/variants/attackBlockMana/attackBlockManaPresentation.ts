@@ -1,5 +1,6 @@
 import { assetLoader, type AssetLease } from '../../assets/assetLoader';
 import type { BoilClock } from '../../animation/boilClock';
+import { AnimationPlayer } from '../../animation/animationPlayer';
 import type { VariantPresentation } from '../../core/variant';
 import type { TimedSemanticEvent } from '../../protocol/protocol';
 import { createGameButton, type GameButton } from '../../input/gameButton';
@@ -16,6 +17,7 @@ import { ABM_SCENE_URLS, resolveAbmProcBackgrounds, resolveAbmScene, resolveAbmS
 import type { AbmAbilityId, AbmClassId, AbmCommand, AbmMove, AbmPlayerState, AbmProjection } from './attackBlockManaTypes';
 import { playCatalogSound, type SoundId } from '../../audio/soundCatalog';
 import type { MusicDirector } from '../../audio/musicDirector';
+import { BATTLE_COUNTDOWN_FRAMES, BATTLE_COUNTDOWN_FRAME_MS } from '../../audio/musicManifest';
 import { AbmTagEntranceSequence } from './abmTagEntrance';
 import { createXpProgressBar, type XpProgressBar } from '../../app/xpProgressBar';
 import { beats } from '../../core/time';
@@ -26,6 +28,8 @@ const STUNNED_BUTTON_TAG = `${ABM_ROOT}/stunned-button-tag-sheet.webp`;
 const COUNTERPICK_TAG = `${ABM_ROOT}/counterpick-tag-sheet.webp`;
 const PICK_CLASS_HEADER = `${ABM_ROOT}/pick-class-sheet.webp`;
 const LOCKED_CLASS_ART = `${ABM_ROOT}/locked-sheet.webp`;
+export const ABM_OPENING_COUNTDOWN_ART = `${ABM_ROOT}/scenes/opening/countdown-sheet.webp`;
+export const ABM_OPENING_GO_ART = `${ABM_ROOT}/scenes/opening/countdown-go-sheet.webp`;
 const COUNTERPICK_CLOUD_ART = {
   big: `${ABM_ROOT}/counterpick-cloud-big-sheet.webp`,
   mask: `${ABM_ROOT}/counterpick-cloud-mask.webp`,
@@ -284,11 +288,12 @@ export function createAttackBlockManaPresentation(
         ...Array.from({ length: 10 }, (_, index) => `/visual-elements/resource-counters/times${index}-sheet.webp`),
         ...Array.from({ length: 5 }, (_, index) => `/visual-elements/ready-waiting/countdown${index + 1}-sheet.webp`),
         ...Object.values(ABM_RESULT_SCENES), '/visual-elements/progress-bar-empty-sheet.webp', '/visual-elements/progress-bar-full-sheet.webp',
-        STUNNED_BUTTON_TAG, COUNTERPICK_TAG, PICK_CLASS_HEADER, LOCKED_CLASS_ART, ...Object.values(COUNTERPICK_CLOUD_ART), ...ABM_SCENE_URLS];
+        STUNNED_BUTTON_TAG, COUNTERPICK_TAG, PICK_CLASS_HEADER, LOCKED_CLASS_ART, ABM_OPENING_COUNTDOWN_ART, ABM_OPENING_GO_ART,
+        ...Object.values(COUNTERPICK_CLOUD_ART), ...ABM_SCENE_URLS];
       const lease = assetLoader.retainUrls(urls); await lease.ready; return lease;
     },
-    mount({ container, send, openMenu, matchProgressComplete, self, players, music, unlockedClassIds, showOpponentCounterpick }) {
-      screen = mountAttackBlockManaScreen(container, clock, send, openMenu, matchProgressComplete, self ?? 'p1', players, options, music, unlockedClassIds, showOpponentCounterpick);
+    mount({ container, send, openMenu, matchProgressComplete, self, players, music, unlockedClassIds, showOpponentCounterpick, setOpeningCountdownActive }) {
+      screen = mountAttackBlockManaScreen(container, clock, send, openMenu, matchProgressComplete, self ?? 'p1', players, options, music, unlockedClassIds, showOpponentCounterpick, setOpeningCountdownActive);
     },
     render(projection, events, serverTime, progressAward) { if (projection) screen?.render(projection, events, serverTime, false, progressAward); },
     unmount() { screen?.destroy(); screen = undefined; },
@@ -308,7 +313,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   matchProgressComplete: (() => void) | undefined, viewer: 'p1' | 'p2',
   players: Readonly<Record<'p1' | 'p2', { name: string; platform: string; rating: number; level?: number; emblem?: import('../../protocol/protocol').PlayerEmblem }>> | undefined,
   options: AttackBlockManaPresentationOptions, music?: MusicDirector, unlockedClassIds?: readonly AbmClassId[],
-  showOpponentCounterpick = true) {
+  showOpponentCounterpick = true, setOpeningCountdownActive?: (active: boolean) => void) {
   const layoutDocument = options.layoutDocument ?? getLayoutDocument('variant-abm');
   const now = options.now ?? Date.now;
   const scheduleTimers = options.scheduleTimers !== false;
@@ -332,6 +337,10 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   const playedTransitionIds = new Set<string>();
   const playedSoundIds = new Set<string>();
   let wipeRunning = false;
+  let openingState: 'inactive' | 'countdown' | 'go' | 'ready' = 'inactive';
+  let openingSequencePlayed = false;
+  let openingGateActive = false;
+  let openingCountdownPlayer: AnimationPlayer<number> | undefined;
   let armedAbility: AbmAbilityId | undefined;
   let usingClassResourceControls = false;
   let playerHasLimitedResource: Record<'p1' | 'p2', boolean> = { p1: false, p2: false };
@@ -560,6 +569,11 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   counterpickTag.element.hidden = true; sprites.push(counterpickTag); layout.composition.append(counterpickTag.element);
   sceneArtwork = layout.slots.scene.querySelector<HTMLElement>('.game-layout__scene')!;
   sceneArtwork.hidden = true;
+  const openingCountdown = createBoilingSprite({ src: ABM_OPENING_COUNTDOWN_ART, clock, frameCount: BATTLE_COUNTDOWN_FRAMES, autoAnimate: false, className: 'abm-opening-scene', alt: '' });
+  const openingGo = createBoilingSprite({ src: ABM_OPENING_GO_ART, clock, className: 'abm-opening-scene', alt: 'Go' });
+  openingCountdown.element.hidden = true; openingGo.element.hidden = true;
+  sprites.push(openingCountdown, openingGo); layout.slots.scene.append(openingCountdown.element, openingGo.element);
+  openingCountdownPlayer = new AnimationPlayer<number>({ commit: (frame) => openingCountdown.setFrame(frame) });
   controls.append(previous.element, next.element);
   classBadges = (['p1', 'p2'] as const).map((player) => {
     const item: { player: 'p1' | 'p2'; badge: BoilingSprite; asset: string; frame?: { width: number; height: number } } = { player, badge: undefined!, asset: '' };
@@ -625,6 +639,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
       ...counterpickTrailClouds.map(({ player, size, cloud }) => [`counterpick-cloud-${player}-${size}`, cloud.element] as [string, HTMLElement]),
       ...(counterpickTag ? [['p2-counterpick-tag', counterpickTag.element] as [string, HTMLElement]] : []),
       ...(sceneArtwork ? [['scene-art', sceneArtwork] as [string, HTMLElement]] : []),
+      ...(sceneArtwork ? [['scene-art', openingCountdown.element] as [string, HTMLElement], ['scene-art', openingGo.element] as [string, HTMLElement]] : []),
       ['picker-portrait', bonusXp.element], ['picker-portrait', portrait.element], ['picker-copy', copy.element],
       ...p1Resources.bindings, ...p2Resources.bindings,
       ...tagSlots,
@@ -697,6 +712,8 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     const leavingInitialClassSelect = isInitialClassSelectionTransition(shownProjection?.phase, nextProjection.phase);
     if (leavingInitialClassSelect && music?.usesBeatAlignedFirstBattleTransition()) {
       if (reveal) playedTransitionIds.add(reveal.id);
+      openingGateActive = true;
+      setOpeningCountdownActive?.(true);
       startWipe(true);
       return;
     }
@@ -716,9 +733,27 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
         if (boundaryDelayMs === undefined) await waitForAbort(transitionAbort.signal);
         else if (scheduleTimers) await waitFor(boundaryDelayMs, transitionAbort.signal);
       }
-      if (!transitionAbort.signal.aborted) paint(newestProjection!, now(), newestEvents, newestProgressAward);
+      if (!transitionAbort.signal.aborted) {
+        if (alignFirstBattleAtPeak) beginOpeningCountdown();
+        paint(newestProjection!, now(), newestEvents, newestProgressAward);
+      }
     }, transitionAbort.signal)
       .then(() => { wipeRunning = false; if (newestProjection) paint(newestProjection, now(), newestEvents, newestProgressAward); });
+  }
+
+  function beginOpeningCountdown() {
+    if (openingSequencePlayed || !openingCountdownPlayer) return;
+    openingSequencePlayed = true;
+    openingState = 'countdown';
+    openingCountdown.element.hidden = false;
+    openingGo.element.hidden = true;
+    void openingCountdownPlayer.play(Array.from({ length: BATTLE_COUNTDOWN_FRAMES }, (_, frame) => ({ value: frame, durationMs: BATTLE_COUNTDOWN_FRAME_MS }))).then(() => {
+      if (transitionAbort.signal.aborted) return;
+      openingState = newestProjection ? getAbmOpeningStateAfterCountdown(newestProjection) : 'go';
+      openingGateActive = false;
+      setOpeningCountdownActive?.(false);
+      if (newestProjection) paint(newestProjection, now(), newestEvents, newestProgressAward);
+    });
   }
 
   function paint(nextProjection: AbmProjection, serverTime: number, events: readonly TimedSemanticEvent[] = [], progressAward?: ProgressAward) {
@@ -741,6 +776,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
       revealTimer = setTimeout(() => render(nextProjection, events, nextBoundary, boundaryNeedsWipe, newestProgressAward), nextBoundary - serverTime);
     }
     const picking = shouldShowAbmClassPicker(nextProjection, counterLocked, showOpponentCounterpick);
+    layout.setPlayerInfoState(picking ? 'emblem' : 'compact');
     const classSelectChrome = getAbmClassSelectChrome(nextProjection);
     const counterpickCloudPlayer = !counterLocked && showOpponentCounterpick ? getAbmCounterpickCloudPlayer(nextProjection) : undefined;
     layout.composition.classList.toggle('is-class-picking', picking);
@@ -788,7 +824,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     for (const [abilityId, button] of abilityButtons) {
       button.element.hidden = picking || transitioning || ownAbility?.id !== abilityId || abilityFeedback
         || nextProjection.phase === 'conjurer-choosing' || Boolean(nextProjection.conjureStalemate);
-      button.setDisabled(!nextProjection.legalActions.includes(abilityId));
+      button.setDisabled(openingState === 'countdown' || !nextProjection.legalActions.includes(abilityId));
       button.setLockedDepressed(armedAbility === abilityId);
     }
     matchProgress.hidden = !complete || !showingResult || !progressAward;
@@ -898,7 +934,16 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     const previewResources = startingResourcesForClass(selectedEntry.kind === 'class' ? selectedEntry.definition.id : undefined);
     renderResources(p1Resources, nextProjection, 'p1', picking ? previewResources : undefined, picking ? previewClassId ?? null : undefined);
     renderResources(p2Resources, nextProjection, 'p2', picking ? previewResources : undefined, picking ? previewClassId ?? null : undefined);
-    const showWaiting = nextProjection.phase === 'waiting';
+    if (openingState === 'go') {
+      if (nextProjection.phase === 'waiting') openingState = 'ready';
+      else if (nextProjection.turn > 1 || nextProjection.lastCompleteMoves) openingState = 'inactive';
+    } else if (openingState === 'ready' && nextProjection.phase !== 'waiting') openingState = 'inactive';
+    const openingCountdownVisible = openingState === 'countdown';
+    const openingGoVisible = openingState === 'go';
+    const openingReadyVisible = openingState === 'ready' && nextProjection.phase === 'waiting';
+    openingCountdown.element.hidden = !openingCountdownVisible;
+    openingGo.element.hidden = !openingGoVisible;
+    const showWaiting = nextProjection.phase === 'waiting' && !openingCountdownVisible && !openingGoVisible;
     const showClassReady = picking && nextProjection.classReadyPlayer !== undefined && nextProjection.classReadyAt !== undefined;
     waiting.hidden = !showWaiting;
     classReadyArt.element.hidden = !showClassReady;
@@ -920,7 +965,12 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     }
     for (const [move, button] of moves) {
       button.setLockedDepressed(nextProjection.ownPendingMove === move);
-      button.setDisabled(transitioning || !nextProjection.legalActions.includes(move));
+      button.setDisabled(openingCountdownVisible || transitioning || !nextProjection.legalActions.includes(move));
+    }
+    if (openingCountdownVisible || openingGoVisible || openingReadyVisible) sceneArtwork.hidden = true;
+    if (openingReadyVisible) {
+      dotsArt.element.hidden = true;
+      countdownArt.element.hidden = true;
     }
     const attackCostDisplay = getAbmAttackCostDisplay(ownPlayer);
     stunnedCost.hidden = !attackCostDisplay.visible;
@@ -967,12 +1017,17 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   }
 
   applyVariantLayout(); updatePicker();
-  return { render, destroy() { transitionAbort.abort(); unsubscribeCounterpickEntrance(); xpBar?.destroy(); tagEntrance.destroy(); if (revealTimer) clearTimeout(revealTimer); if (waitingTimer) clearTimeout(waitingTimer); ruleCopies.forEach(({ box }) => box.destroy()); layout.destroy(); copy.destroy(); for (const button of buttons) button.destroy(); for (const sprite of sprites) sprite.destroy(); } };
+  return { render, destroy() { transitionAbort.abort(); openingCountdownPlayer?.cancel(); if (openingGateActive) setOpeningCountdownActive?.(false); unsubscribeCounterpickEntrance(); xpBar?.destroy(); tagEntrance.destroy(); if (revealTimer) clearTimeout(revealTimer); if (waitingTimer) clearTimeout(waitingTimer); ruleCopies.forEach(({ box }) => box.destroy()); layout.destroy(); copy.destroy(); for (const button of buttons) button.destroy(); for (const sprite of sprites) sprite.destroy(); } };
 }
 
 export function isInitialClassSelectionTransition(previous: AbmProjection['phase'] | undefined, next: AbmProjection['phase']): boolean {
   return (previous === 'selecting-classes' || previous === 'waiting-for-class')
     && next !== 'selecting-classes' && next !== 'waiting-for-class';
+}
+
+export function getAbmOpeningStateAfterCountdown(projection: Pick<AbmProjection, 'phase' | 'turn' | 'lastCompleteMoves'>): 'go' | 'ready' | 'inactive' {
+  if (projection.phase === 'waiting') return 'ready';
+  return projection.turn > 1 || projection.lastCompleteMoves ? 'inactive' : 'go';
 }
 
 function waitFor(milliseconds: number, signal: AbortSignal): Promise<void> {

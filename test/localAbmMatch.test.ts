@@ -87,6 +87,22 @@ describe('LocalAbmMatch', () => {
     match.destroy();
   });
 
+  test('pauses and resumes an already scheduled computer move for the opening countdown', () => {
+    const snapshots: ServerSnapshot[] = [];
+    const match = new LocalAbmMatch({
+      playerName: 'JP', publish: (snapshot) => snapshots.push(snapshot), random: () => 0,
+      startingClasses: { p1: 'lucky', p2: 'lucky' },
+    });
+    match.start();
+    match.pauseComputer();
+    vi.advanceTimersByTime(3_000);
+    expect(variant(snapshots).phase).toBe('idle');
+    match.resumeComputer();
+    vi.advanceTimersByTime(1_000);
+    expect(variant(snapshots).phase).toBe('waiting');
+    match.destroy();
+  });
+
   test('breaks the repeated Attack loop after the forced Mana reset', () => {
     const snapshots: ServerSnapshot[] = []; const ending = vi.fn();
     const match = new LocalAbmMatch({
