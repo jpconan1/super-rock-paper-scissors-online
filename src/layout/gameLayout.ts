@@ -102,11 +102,8 @@ export interface GameLayout {
   setArtwork(slot: 'turn' | 'p1Wins' | 'p2Wins' | 'scene', artwork: GameLayoutArtwork): void;
   setRulesVisible(visible: boolean): void;
   setYouTagVisible(visible: boolean): void;
-  setPlayerInfoState(state: PlayerInfoState): void;
   destroy(): void;
 }
-
-export type PlayerInfoState = 'emblem' | 'compact';
 
 export function pickedLabelFor(
   viewer: PlayerId,
@@ -271,13 +268,6 @@ export function createGameLayout<TLayoutName extends string>(
     },
     setRulesVisible(visible) { toolsByAsset.get('rulebook-button')!.hidden = !visible; },
     setYouTagVisible(visible) { youTag.element.hidden = !visible; },
-    setPlayerInfoState(state) {
-      for (const info of [p1Info, p2Info]) {
-        info.element.classList.toggle('game-layout__player-info--compact', state === 'compact');
-        info.element.classList.toggle('game-layout__player-info--emblem', state === 'emblem');
-        info.emblem.element.hidden = state === 'compact';
-      }
-    },
     destroy() {
       stopLayout();
       for (const button of buttons) button.destroy();

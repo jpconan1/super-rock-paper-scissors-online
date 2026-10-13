@@ -69,12 +69,17 @@ export class MusicDirector {
 
   async scheduleFirstBattleTransition(): Promise<number | undefined> {
     if ((this.mode !== 'practice-abm' && this.mode !== 'online-abm') || this.fullBattleStarted) return undefined;
-    await this.battleIntroReady;
+    try {
+      await this.battleIntroReady;
+    } catch {
+      this.failOpenFirstBattleTransition();
+      return undefined;
+    }
     if ((this.mode !== 'practice-abm' && this.mode !== 'online-abm') || this.fullBattleStarted) return undefined;
-    const timing = await scheduleMusicBaseAtNextMeasure('battle-main', BATTLE_MEASURE_SAMPLES, 0);
-    if (!timing || (this.mode !== 'practice-abm' && this.mode !== 'online-abm')) return undefined;
+    const timing = await scheduleMusicBaseAtNextMeasure('battle-main', BATTLE_MEASURE_SAMPLES, 0).catch(() => undefined);
+    if (this.mode !== 'practice-abm' && this.mode !== 'online-abm') return undefined;
     this.fullBattleStarted = true;
-    return timing.boundaryDelayMs;
+    return timing?.boundaryDelayMs;
   }
 
   usesBeatAlignedFirstBattleTransition(): boolean {
@@ -108,6 +113,10 @@ export class MusicDirector {
   private resetMatchState(): void {
     this.score = { p1: 0, p2: 0 };
     this.winner = undefined;
+  }
+
+  private failOpenFirstBattleTransition(): void {
+    if (this.mode === 'practice-abm' || this.mode === 'online-abm') this.fullBattleStarted = true;
   }
 }
 

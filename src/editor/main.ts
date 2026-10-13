@@ -2,6 +2,7 @@ import './editor.css';
 import { BoilClock } from '../animation/boilClock';
 import { createProgressAward } from '../core/progression';
 import { ABM_TUTORIAL_SLIDES } from '../app/tutorialSlideshow';
+import { getAccountProviderVisibility } from '../app/accountScreen';
 import { createXpProgressBar } from '../app/xpProgressBar';
 import { createGameButton } from '../input/gameButton';
 import { applyLayoutGeometry, validateLayoutDocument, type LayoutDocument, type LayoutElement, type LayoutOrientation } from '../layout/layoutDocument';
@@ -15,16 +16,18 @@ const hostElement = document.querySelector<HTMLElement>('#editor');
 if (!hostElement) throw new Error('Missing editor mount.');
 const host: HTMLElement = hostElement;
 const clock = new BoilClock(document, true);
-type EditorScreen = 'variant-abm' | 'class-reward' | 'tutorial-slide-one';
+type EditorScreen = 'account' | 'variant-abm' | 'class-reward' | 'tutorial-slide-one';
 type RewardState = 'unlocked' | 'next';
 type AbmState = 'battle' | 'waiting' | 'counterpick-thought-bubble' | 'tutorial-block-tags' | 'post-match';
+type AccountState = 'google' | 'email' | 'guest';
 const drafts = new Map<EditorScreen, LayoutDocument>();
 const savedDocuments = new Map<EditorScreen, LayoutDocument>();
-for (const id of ['variant-abm', 'class-reward', 'tutorial-slide-one'] as const) {
+for (const id of ['account', 'variant-abm', 'class-reward', 'tutorial-slide-one'] as const) {
   drafts.set(id, clone(getLayoutDocument(id)));
   savedDocuments.set(id, clone(getLayoutDocument(id)));
 }
-let screen: EditorScreen = 'variant-abm';
+let screen: EditorScreen = 'account';
+let accountState: AccountState = 'email';
 let rewardState: RewardState = 'unlocked';
 let abmState: AbmState = 'battle';
 let working = drafts.get(screen)!;
@@ -37,8 +40,8 @@ let future: LayoutDocument[] = [];
 let cleanups: (() => void)[] = [];
 
 host.innerHTML = `<main class="abm-editor">
-  <header class="abm-editor__toolbar"><strong data-title>Attack Block Mana · Game screen</strong>
-    <label>Screen <select data-screen><option value="variant-abm">ABM game</option><option value="class-reward">Class reward</option><option value="tutorial-slide-one">Tutorial slide 1</option></select></label>
+  <header class="abm-editor__toolbar"><strong data-title>Profile · Account screen</strong>
+    <label>Screen <select data-screen><option value="account">Account</option><option value="variant-abm">ABM game</option><option value="class-reward">Class reward</option><option value="tutorial-slide-one">Tutorial slide 1</option></select></label>
     <label data-state-label>State <select data-state></select></label>
     <label>View <select data-orientation><option value="landscape">Landscape</option><option value="portrait">Portrait</option></select></label>
     <span>Drag to move · bottom-right handle resizes</span><button data-undo disabled>Undo</button><button data-redo disabled>Redo</button><button data-reset disabled>Reset</button>
@@ -51,16 +54,28 @@ host.innerHTML = `<main class="abm-editor">
 const $ = <T extends Element>(selector: string) => host.querySelector<T>(selector)!;
 const selected = () => working.elements.find(({ id }) => id === selectedId);
 const editorGeometry = (element: LayoutElement) => abmEditorGeometry(element, orientation, abmState !== 'tutorial-block-tags');
+const accountElementVisible = (element: LayoutElement) => {
+  const visibility = getAccountProviderVisibility(accountState);
+  if (element.id === 'google') return visibility.protectWithGoogle;
+  if (element.id === 'sign-up') return visibility.signUpWithEmail;
+  if (element.id === 'connected') return visibility.googleConnected;
+  if (['password', 'remove-password'].includes(element.id)) return accountState === 'email';
+  return true;
+};
 const visibleElements = () => working.elements.filter((element) => screen === 'variant-abm'
   ? (abmState === 'post-match' ? isAbmPostMatchEditorElement(element)
     : abmState === 'waiting' ? isAbmWaitingEditorElement(element)
       : abmState === 'counterpick-thought-bubble' ? isAbmCounterpickThoughtBubbleEditorContext(element)
         : abmState === 'tutorial-block-tags' ? isAbmTutorialBlockTagEditorContext(element)
         : isAbmBattleEditorElement(element))
-  : screen === 'class-reward' ? isEditorElementVisible(element, rewardState) : true);
-const editableElements = () => visibleElements().filter((element) => screen !== 'variant-abm'
-  || (abmState !== 'counterpick-thought-bubble' && abmState !== 'tutorial-block-tags')
-  || (abmState === 'counterpick-thought-bubble' ? isAbmCounterpickThoughtBubbleEditorElement(element) : isAbmTutorialBlockTagEditorElement(element)));
+  : screen === 'class-reward' ? isEditorElementVisible(element, rewardState)
+    : screen === 'account' ? accountElementVisible(element) : true);
+const editableElements = () => visibleElements().filter((element) => {
+  if (element.id.startsWith('curtain-')) return false;
+  return screen !== 'variant-abm'
+    || (abmState !== 'counterpick-thought-bubble' && abmState !== 'tutorial-block-tags')
+    || (abmState === 'counterpick-thought-bubble' ? isAbmCounterpickThoughtBubbleEditorElement(element) : isAbmTutorialBlockTagEditorElement(element));
+});
 
 function render(): void {
   cleanups.forEach((cleanup) => cleanup()); cleanups = [];
@@ -97,7 +112,7 @@ function render(): void {
   $('[data-title]').textContent = screen === 'variant-abm'
     ? `Attack Block Mana · ${abmState === 'battle' ? 'Game screen' : abmState === 'waiting' ? 'Waiting' : abmState === 'counterpick-thought-bubble' ? 'Counterpick thought bubble' : abmState === 'tutorial-block-tags' ? 'Tutorial Block tags' : 'Post-match XP'}`
     : screen === 'class-reward' ? `Class Reward · ${rewardState === 'unlocked' ? 'Class Unlocked' : 'Next Class'}`
-      : 'Tutorial · Slide 1';
+      : screen === 'account' ? `Profile · ${accountState === 'google' ? 'Google account' : accountState === 'email' ? 'Email account' : 'Guest account'}` : 'Tutorial · Slide 1';
 }
 
 function renderTutorialBackdrop(canvas: HTMLElement): void {
@@ -148,7 +163,9 @@ function makeNode(config: LayoutElement): HTMLElement {
   if (config.type === 'button' && config.assets?.up && config.assets.between && config.assets.depressed) {
     const button = createGameButton({ label: config.label ?? name(config.id), onActivate: () => {}, clock,
       upSheet: config.assets.up, betweenSheet: config.assets.between, depressedSheet: config.assets.depressed });
-    button.element.className += ` ${className}`; button.element.tabIndex = -1; cleanups.push(() => button.destroy()); return button.element;
+    button.element.className += ` ${className}`;
+    if (config.properties?.bakedLabel === true) button.element.classList.add('game-button--baked-label');
+    button.element.tabIndex = -1; cleanups.push(() => button.destroy()); return button.element;
   }
   const node = document.createElement('div'); node.className = className;
   if (config.className === 'tutorial-slide-one__comparison-copy') {
@@ -159,6 +176,9 @@ function makeNode(config: LayoutElement): HTMLElement {
 
 function previewText(config: LayoutElement): string {
   return ({ 'account-status': 'Logged in as PLAYER', 'password-form': 'EMAIL · PASSWORD · SIGN IN · BACK', 'online-count': 'players online: 123', 'sound-toggle': 'SOUND',
+    'player-id': 'Account ID: spark-funky-pickle-panda-16',
+    'account-type': accountState === 'google' ? 'Google Account' : accountState === 'email' ? 'Email Account' : 'Guest Account',
+    'connected': 'Signed in with Google', 'error': '',
     'music-slider': 'MUSIC', 'sfx-slider': 'SFX', 'boil-toggle': 'ANIMATION',
     'unlocked-copy': 'LUCKY\nHas a 1/4 chance to survive a lethal attack.',
     'next-copy': 'ADVANTAGED\nFor the first three turns, Mana gives 2 instead of 1.' } as Record<string, string>)[config.id]
@@ -265,7 +285,8 @@ $<HTMLSelectElement>('[data-screen]').onchange = (event) => {
   selectedId = undefined; history = []; future = []; syncStateOptions(); render(); fit(); status('');
 };
 $<HTMLSelectElement>('[data-state]').onchange = (event) => {
-  if (screen === 'class-reward') rewardState = (event.target as HTMLSelectElement).value as RewardState;
+  if (screen === 'account') accountState = (event.target as HTMLSelectElement).value as AccountState;
+  else if (screen === 'class-reward') rewardState = (event.target as HTMLSelectElement).value as RewardState;
   else abmState = (event.target as HTMLSelectElement).value as AbmState;
   selectedId = undefined; render();
 };
@@ -273,10 +294,12 @@ function syncStateOptions(): void {
   const select = $<HTMLSelectElement>('[data-state]');
   $<HTMLElement>('[data-state-label]').hidden = screen === 'tutorial-slide-one';
   if (screen === 'tutorial-slide-one') { select.replaceChildren(); return; }
-  select.innerHTML = screen === 'class-reward'
+  select.innerHTML = screen === 'account'
+    ? '<option value="google">Logged in with Google</option><option value="email">Logged in with email</option><option value="guest">Guest</option>'
+    : screen === 'class-reward'
     ? '<option value="unlocked">Class Unlocked</option><option value="next">Next Class</option>'
     : '<option value="battle">Battle</option><option value="waiting">Waiting</option><option value="counterpick-thought-bubble">Counterpick thought bubble</option><option value="tutorial-block-tags">Tutorial Block tags</option><option value="post-match">Post-match XP fill</option>';
-  select.value = screen === 'class-reward' ? rewardState : abmState;
+  select.value = screen === 'account' ? accountState : screen === 'class-reward' ? rewardState : abmState;
 }
 $<HTMLSelectElement>('[data-orientation]').onchange = (event) => { orientation = (event.target as HTMLSelectElement).value as LayoutOrientation; selectedId = undefined; render(); fit(); };
 $<HTMLButtonElement>('[data-undo]').onclick = undo; $<HTMLButtonElement>('[data-redo]').onclick = redo; $<HTMLButtonElement>('[data-reset]').onclick = reset;

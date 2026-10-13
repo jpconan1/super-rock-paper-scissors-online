@@ -20,7 +20,11 @@ export interface EmailSignupActions {
   resend(displayName: string, email: string): Promise<void>;
 }
 
-export function showSignUpDialog(alerts: AlertSystem, clock: BoilClock, actions: EmailSignupActions): Promise<boolean> {
+export function resolveInitialSignupDisplayName(initialDisplayName: string | undefined, chosenDisplayName: string, generate: () => string): string {
+  return chosenDisplayName || initialDisplayName?.trim() || generate();
+}
+
+export function showSignUpDialog(alerts: AlertSystem, clock: BoilClock, actions: EmailSignupActions, initialDisplayName?: string): Promise<boolean> {
   const content = document.createElement('section'); content.className = 'sign-up-dialog';
   const heading = document.createElement('h2'); heading.className = 'sign-up-dialog__heading'; heading.textContent = 'New Account Creation';
   const status = document.createElement('p'); status.className = 'sign-up-dialog__status'; status.setAttribute('aria-live', 'polite');
@@ -40,7 +44,7 @@ export function showSignUpDialog(alerts: AlertSystem, clock: BoilClock, actions:
 
   const renderRequest = () => {
     destroyControls();
-    const displayName = createTextEntry({ label: 'Display name', value: generateRandomName(), placeholder: 'Display name', required: true,
+    const displayName = createTextEntry({ label: 'Display name', value: resolveInitialSignupDisplayName(initialDisplayName, chosenDisplayName, generateRandomName), placeholder: 'Display name', required: true,
       maxLength: 24, autocomplete: 'nickname', sheet, clock });
     const randomName = createGameButton({ label: 'Random name', onActivate: () => { displayName.setValue(generateRandomName()); displayName.focus(); }, clock,
       upSheet: '/interactive-elements/menu-buttons/name-button-up-sheet.webp',

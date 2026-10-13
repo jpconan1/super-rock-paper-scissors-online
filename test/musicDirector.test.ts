@@ -68,6 +68,21 @@ describe('MusicDirector', () => {
     expect(audio.setMusicBaseAtCurrentLoopPhase).not.toHaveBeenCalled();
   });
 
+  it('fails open when the battle intro cannot load', async () => {
+    audio.startPreloadedMusic.mockRejectedValueOnce(new Error('audio unavailable'));
+    const director = new MusicDirector(); director.enterPracticeAbm();
+    expect(await director.scheduleFirstBattleTransition()).toBeUndefined();
+    expect(director.usesBeatAlignedFirstBattleTransition()).toBe(false);
+    expect(audio.scheduleMusicBaseAtNextMeasure).not.toHaveBeenCalled();
+  });
+
+  it('fails open when the battle boundary cannot be scheduled', async () => {
+    audio.scheduleMusicBaseAtNextMeasure.mockRejectedValueOnce(new Error('audio clock unavailable'));
+    const director = new MusicDirector(); director.enterPracticeAbm();
+    expect(await director.scheduleFirstBattleTransition()).toBeUndefined();
+    expect(director.usesBeatAlignedFirstBattleTransition()).toBe(false);
+  });
+
   it('keeps tutorial on its existing short class-select and battle loops', () => {
     const director = new MusicDirector(); director.enterAbm();
     director.updateAbm(projection({ phase: 'idle' }));

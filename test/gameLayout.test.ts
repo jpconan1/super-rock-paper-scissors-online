@@ -227,27 +227,6 @@ describe('shared game layout contract', () => {
     expect(container.children).toHaveLength(0);
   });
 
-  test('switches both player cards between emblem and compact states', () => {
-    useFakeDocument();
-    const content = Object.fromEntries(['p1-move', 'p2-move', 'p1-resources', 'p2-resources', 'controls'].map((name) => [name, new FakeElement()]));
-    const layout = createGameLayout({
-      container: new FakeElement() as unknown as HTMLElement, clock: {} as never, layouts: FIREBALL_WAR_LAYOUTS,
-      screenClassName: 'test', compositionClassName: 'test', ariaLabel: 'Test',
-      players: { p1: { heading: 'One', rating: '', platform: '' }, p2: { heading: 'Two', rating: '', platform: '' } },
-      artwork: { turn: { src: 'turn', alt: '' }, p1Wins: { src: 'one', alt: '' }, p2Wins: { src: 'two', alt: '' }, scene: { src: 'scene', alt: '' } },
-      variantContent: content as never,
-    });
-    const cards = ['p1-info', 'p2-info'].map((slot) => (layout.slots[slot as 'p1-info' | 'p2-info'] as unknown as FakeElement).children[0]!);
-
-    layout.setPlayerInfoState('compact');
-    expect(cards.every((card) => card.classList.values.has('game-layout__player-info--compact'))).toBe(true);
-    expect(cards.every((card) => card.children[1]!.hidden === true)).toBe(true);
-    layout.setPlayerInfoState('emblem');
-    expect(cards.every((card) => card.classList.values.has('game-layout__player-info--emblem'))).toBe(true);
-    expect(cards.every((card) => card.children[1]!.hidden === false)).toBe(true);
-    layout.destroy();
-  });
-
   test('connects and controls the Rules button', () => {
     useFakeDocument();
     const onRules = vi.fn();

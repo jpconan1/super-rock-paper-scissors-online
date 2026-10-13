@@ -45,6 +45,13 @@ describe('layout documents', () => {
     });
     expect(deletion?.layouts.landscape).toBeTruthy();
     expect(deletion?.layouts.portrait).toBeTruthy();
+    expect(account.elements.find(({ id }) => id === 'header')).toMatchObject({
+      type: 'sprite', label: 'Profile', assets: { src: '/account/profile-sheet.webp' },
+    });
+    for (const id of ['password', 'remove-password']) {
+      expect(account.elements.find((element) => element.id === id)?.properties?.bakedLabel).toBe(true);
+    }
+    expect(account.elements.find(({ id }) => id === 'sign-up')?.assets?.up).toBe('/title/auth/sign-up-button-up-sheet.webp');
   });
 
   it('defines separate reward states with one card-flip box', () => {

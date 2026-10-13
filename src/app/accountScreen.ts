@@ -20,6 +20,18 @@ export const DELETE_ACCOUNT_BUTTON_SHEETS = {
   depressed: '/account/delete-account-button-depressed-sheet.webp',
 } as const;
 
+export const CHANGE_PASSWORD_BUTTON_SHEETS = {
+  up: '/account/change-password-button-up-sheet.webp',
+  between: '/account/change-password-button-between-sheet.webp',
+  depressed: '/account/change-password-button-depressed-sheet.webp',
+} as const;
+
+export const REMOVE_PASSWORD_BUTTON_SHEETS = {
+  up: '/account/remove-password-button-up-sheet.webp',
+  between: '/account/remove-password-button-between-sheet.webp',
+  depressed: '/account/remove-password-button-depressed-sheet.webp',
+} as const;
+
 const DELETE_ALERT_GEOMETRY: ResponsiveAlertGeometry = {
   landscape: { x: 200, y: 85, width: 560, height: 370 },
   portrait: { x: 35, y: 260, width: 470, height: 440 },
@@ -40,7 +52,7 @@ export function isDeleteAccountConfirmation(value: string): boolean {
 }
 
 export function getAccountProviderVisibility(accountType: PlayerAccountType) {
-  return { protectWithGoogle: accountType === 'guest', googleConnected: accountType === 'google' };
+  return { protectWithGoogle: accountType === 'guest', signUpWithEmail: accountType === 'guest', googleConnected: accountType === 'google' };
 }
 
 function showDeleteAccountAlert(alerts: AlertSystem, clock: BoilClock, guest: boolean,
@@ -93,26 +105,36 @@ function showDeleteAccountAlert(alerts: AlertSystem, clock: BoilClock, guest: bo
 
 function showPasswordAlert(alerts: AlertSystem, clock: BoilClock, email: string, remove: boolean,
   onRequestCode: (email: string) => Promise<void>, onUpdate: (email: string, code: string, password?: string, remove?: boolean) => Promise<void>): void {
-  const content = document.createElement('section'); content.className = 'delete-account-dialog';
+  const content = document.createElement('section'); content.className = 'password-dialog';
   const heading = document.createElement('h2'); heading.textContent = remove ? 'Remove Password?' : 'Set Password';
   const instruction = document.createElement('p'); instruction.textContent = `A verification code will be sent to ${email}.`;
   const code = createTextEntry({ label: 'Six-digit code', placeholder: '123 456', autocomplete: 'one-time-code', maxLength: 7,
     sheet: '/interactive-elements/text-entry/text-frame-sheet.webp', clock, validate: isCompleteEmailCode });
+  code.element.classList.add('password-dialog__entry');
   code.input.inputMode = 'numeric'; code.input.disabled = true;
   const password = createTextEntry({ label: 'New password', type: 'password', placeholder: 'New password', autocomplete: 'new-password', maxLength: 128,
     sheet: '/interactive-elements/text-entry/text-frame-sheet.webp', clock, validate: (value) => remove || (value.length >= 8 && value.length <= 128) });
+  password.element.classList.add('password-dialog__entry');
   password.element.hidden = remove;
   content.append(heading, instruction, code.element, password.element);
   let sent = false; let handle: ReturnType<AlertSystem['show']>;
-  handle = alerts.show({ ariaLabel: remove ? 'Remove password' : 'Set password', geometry: DELETE_ALERT_GEOMETRY, content, dismissible: true,
+  handle = alerts.show({ ariaLabel: remove ? 'Remove password' : 'Set password', geometry: DELETE_ALERT_GEOMETRY, content,
+    className: 'password-alert', dismissible: true,
     actions: [{ label: 'Back', value: false, sheets: BACK_SHEETS }, { label: 'Send Code', value: true, sheets: CONFIRM_SHEETS, onActivate: async () => {
       if (!sent) {
         await onRequestCode(email); sent = true; code.input.disabled = false; handle.setActionLabel(1, remove ? 'Remove Password' : 'Save Password');
+        handle.setActionDisabled(1, true);
         instruction.textContent = 'Enter the code from your email.'; queueMicrotask(() => code.focus()); return false;
       }
-      if (!code.validate() || !password.validate()) return false;
+      if (!code.validate() || !password.validate()) { (!code.validate() ? code : password).focus(); return false; }
       await onUpdate(email, normalizeEmailCode(code.value()), remove ? undefined : password.value(), remove); return true;
     } }] });
+  const updateAction = () => {
+    if (!sent) return;
+    handle.setActionDisabled(1, !isCompleteEmailCode(code.value()) || (!remove && (password.value().length < 8 || password.value().length > 128)));
+  };
+  code.input.addEventListener('input', updateAction);
+  password.input.addEventListener('input', updateAction);
   void handle.result.finally(() => { code.destroy(); password.destroy(); });
 }
 
@@ -120,7 +142,8 @@ export function mountAccountScreen(container: HTMLElement, clock: BoilClock, ale
   onChangeName: (name: string) => Promise<AccountState>, onClaim: () => void, onLogout: () => void,
   onBack: () => void, onRequestDeleteCode: () => Promise<void>, onDelete: (code?: string) => Promise<void>,
   onRequestPasswordCode: (email: string) => Promise<void> = async () => {},
-  onUpdatePassword: (email: string, code: string, password?: string, remove?: boolean) => Promise<void> = async () => {}): AccountScreenMount {
+  onUpdatePassword: (email: string, code: string, password?: string, remove?: boolean) => Promise<void> = async () => {},
+  onSignUp: (displayName: string) => Promise<AccountState | undefined> = async () => undefined): AccountScreenMount {
   const layout = getLayoutDocument('account');
   let orientation: 'landscape' | 'portrait' = 'landscape';
   const bindings: { id: string; element: HTMLElement }[] = [];
@@ -128,7 +151,7 @@ export function mountAccountScreen(container: HTMLElement, clock: BoilClock, ale
   const screen = document.createElement('section'); screen.className = 'menu-canvas-screen account-screen'; screen.setAttribute('aria-label', 'Account Settings');
   const canvas = createMenuCanvas(screen, 'account-screen', (next) => { orientation = next; applyLayout(); });
   const composition = canvas.composition;
-  const heading = document.createElement('h1'); heading.className = 'account-screen__heading'; heading.textContent = layout.elements.find((item) => item.id === 'header')!.label!;
+  const heading = createBoilingSprite({ src: layout.elements.find((item) => item.id === 'header')!.assets!.src!, clock, className: 'account-screen__heading', alt: 'Profile' });
   const nameEntry = createTextEntry({ label: 'New player name', value: initial.displayName, maxLength: 24, autocomplete: 'nickname', validate: (value) => normalizePlayerDisplayName(value) !== null,
     sheet: '/interactive-elements/text-entry/text-frame-sheet.webp', clock });
   nameEntry.element.classList.add('account-screen__name');
@@ -148,28 +171,33 @@ export function mountAccountScreen(container: HTMLElement, clock: BoilClock, ale
   }, 'account-screen__change');
   const back = button('Back to lobby', '/interactive-elements/menu-buttons/back-button-w', onBack, 'account-screen__back');
   const logout = button('Log out', '/account/log-out-button', onLogout, 'account-screen__logout');
-  const playerId = document.createElement('p'); playerId.className = 'account-screen__player-id'; playerId.textContent = account.playerId;
+  const playerId = document.createElement('p'); playerId.className = 'account-screen__player-id'; playerId.textContent = `Account ID: ${account.playerId}`;
   const accountType = document.createElement('p'); accountType.className = 'account-screen__account-type';
   const google = button('Protect with Google', '/title/google-sign-in/google-sign-in-button', onClaim, 'account-screen__google');
+  const signUp = button('Sign up', '/title/auth/sign-up-button', () => {
+    error.textContent = '';
+    void onSignUp(account.displayName).then((next) => {
+      if (!next) return;
+      account = next;
+      nameEntry.setValue(next.displayName);
+      renderProvider();
+    }).catch((reason) => { error.textContent = reason instanceof Error ? reason.message : 'Sign up failed.'; });
+  }, 'account-screen__sign-up');
   const connected = document.createElement('p'); connected.className = 'account-screen__connected'; connected.textContent = 'Signed in with Google';
-  const emailDetails = document.createElement('p'); emailDetails.className = 'account-screen__connected';
-  const managePassword = button('Set Password', '/interactive-elements/generic-buttons/generic3', () => {
+  const managePassword = button('Set Password', '/account/change-password-button', () => {
     showPasswordAlert(alerts, clock, account.email, false, onRequestPasswordCode, async (...args) => { await onUpdatePassword(...args); account.hasPassword = true; renderProvider(); });
   }, 'account-screen__password');
-  const removePassword = button('Remove Password', '/interactive-elements/generic-buttons/generic3', () => {
+  const removePassword = button('Remove Password', '/account/remove-password-button', () => {
     showPasswordAlert(alerts, clock, account.email, true, onRequestPasswordCode, async (...args) => { await onUpdatePassword(...args); account.hasPassword = false; renderProvider(); });
   }, 'account-screen__remove-password');
-  managePassword.element.classList.remove('game-button--baked-label');
-  removePassword.element.classList.remove('game-button--baked-label');
   const renderProvider = () => {
     const guest = account.accountType === 'guest';
     const visibility = getAccountProviderVisibility(account.accountType);
-    playerId.textContent = account.playerId;
-    accountType.textContent = guest ? 'Guest account' : account.accountType === 'google' ? 'Google account' : `${account.accountType} account`;
+    playerId.textContent = `Account ID: ${account.playerId}`;
+    accountType.textContent = guest ? 'Guest Account' : account.accountType === 'google' ? 'Google Account' : 'Email Account';
     google.element.hidden = !visibility.protectWithGoogle;
+    signUp.element.hidden = !visibility.signUpWithEmail;
     connected.hidden = !visibility.googleConnected;
-    emailDetails.hidden = account.accountType !== 'email';
-    emailDetails.textContent = account.accountType === 'email' ? `${account.email} · Email cannot be changed · ${account.hasPassword ? 'Password enabled' : 'Email-code login'}` : '';
     managePassword.element.hidden = account.accountType !== 'email';
     managePassword.setLabel(account.hasPassword ? 'Change Password' : 'Add Password');
     removePassword.element.hidden = account.accountType !== 'email' || !account.hasPassword;
@@ -182,17 +210,17 @@ export function mountAccountScreen(container: HTMLElement, clock: BoilClock, ale
   const left = decoration('curtain-left', 'account-screen__curtain-left');
   const right = decoration('curtain-right', 'account-screen__curtain-right');
   renderProvider();
-  composition.append(heading, nameEntry.element, random.element, change.element, playerId, accountType, google.element, connected, emailDetails, managePassword.element, removePassword.element, deleteAccount.element, error, logout.element, back.element, openCurtain.element, left.element, right.element);
-  bindings.push({ id: 'header', element: heading }, { id: 'name-entry', element: nameEntry.element },
+  composition.append(heading.element, nameEntry.element, random.element, change.element, playerId, accountType, google.element, signUp.element, connected, managePassword.element, removePassword.element, deleteAccount.element, error, logout.element, back.element, openCurtain.element, left.element, right.element);
+  bindings.push({ id: 'header', element: heading.element }, { id: 'name-entry', element: nameEntry.element },
     { id: 'random-name', element: random.element }, { id: 'change-name', element: change.element }, { id: 'player-id', element: playerId },
-    { id: 'account-type', element: accountType }, { id: 'google', element: google.element }, { id: 'connected', element: connected },
-    { id: 'email-details', element: emailDetails }, { id: 'password', element: managePassword.element }, { id: 'remove-password', element: removePassword.element },
+    { id: 'account-type', element: accountType }, { id: 'google', element: google.element }, { id: 'sign-up', element: signUp.element }, { id: 'connected', element: connected },
+    { id: 'password', element: managePassword.element }, { id: 'remove-password', element: removePassword.element },
     { id: 'delete-account', element: deleteAccount.element }, { id: 'error', element: error }, { id: 'logout', element: logout.element }, { id: 'back', element: back.element }, { id: 'curtain-open', element: openCurtain.element },
     { id: 'curtain-left', element: left.element }, { id: 'curtain-right', element: right.element });
   applyLayout();
   container.replaceChildren(screen);
   return {
     update(next) { account = next; nameEntry.setValue(next.displayName); renderProvider(); },
-    destroy() { canvas.destroy(); nameEntry.destroy(); for (const item of buttons) item.destroy(); openCurtain.destroy(); left.destroy(); right.destroy(); screen.remove(); },
+    destroy() { canvas.destroy(); nameEntry.destroy(); for (const item of buttons) item.destroy(); heading.destroy(); openCurtain.destroy(); left.destroy(); right.destroy(); screen.remove(); },
   };
 }

@@ -31,7 +31,7 @@ import { mountAccountScreen } from './accountScreen';
 import { mountProgressScreen } from './progressScreen';
 import type { ProgressAward } from '../core/progression';
 import { createClassRewardFlow, mountClassRewardScreen } from './classRewardScreen';
-import { AlertSystem } from '../ui/alertSystem';
+import { AlertSystem, STANDARD_CONFIRMATION_GEOMETRY } from '../ui/alertSystem';
 import { ABM_TUTORIAL_SLIDES, mountTutorialSlideshow, tutorialEndingSlide, type TutorialSlideshow } from './tutorialSlideshow';
 import type { AbmProjection } from '../variants/attackBlockMana/attackBlockManaTypes';
 import { generateRandomName } from '../title/randomName';
@@ -386,7 +386,19 @@ export class AppController {
         this.playerName = '';
         void this.navigate('title');
       }, (email) => options.session.requestPasswordCode(email),
-      (email, code, password, remove) => options.session.updateEmailPassword(email, code, password, remove));
+      (email, code, password, remove) => options.session.updateEmailPassword(email, code, password, remove),
+      async (displayName) => {
+        if (!this.alertSystem) return undefined;
+        const complete = await showSignUpDialog(this.alertSystem, options.clock, {
+          request: (name, email, legalAccepted) => options.session.requestEmailSignup(name, email, legalAccepted),
+          verify: (email, code, password) => options.session.verifyEmailSignup(email, code, password),
+          resend: (name, email) => options.session.resendEmailSignup(name, email),
+        }, displayName);
+        if (!complete) return undefined;
+        const next = options.session.accountState();
+        this.playerName = next.displayName;
+        return next;
+      });
       this.screenCleanup = () => account.destroy();
     } else if (destination === 'match-found') {
       const projection = this.matchProjection;
@@ -579,7 +591,14 @@ export class AppController {
         : await this.options.session.requestGuestClaimWithGoogle(callbackURL, errorCallbackURL);
       popup.location.replace(authorizationUrl);
       const result = await waitForGoogleAuthPopup(popup, nonce, location.origin, controller.signal);
-      if (result === 'error') throw new Error('Google sign-in was not completed.');
+      if (result.result === 'error') {
+        if (isExistingGoogleAccountError(result.error)) {
+          await curtain.open();
+          this.showExistingAccountAlert();
+          return;
+        }
+        throw new Error('Google sign-in was not completed.');
+      }
       const player = await this.options.session.finishGoogleSignIn();
       if (!player) throw new Error('Google sign-in completed without a player session.');
       this.playerName = player.displayName;
@@ -593,6 +612,16 @@ export class AppController {
       if (!popup.closed) popup.close();
       if (this.googleSignIn === controller) this.googleSignIn = undefined;
     }
+  }
+
+  private showExistingAccountAlert(): void {
+    this.alertSystem?.show({
+      ariaLabel: 'Account already exists',
+      geometry: STANDARD_CONFIRMATION_GEOMETRY,
+      content: 'Account already exists.',
+      dismissible: true,
+      actions: [],
+    });
   }
 
   private async quitToTitle(): Promise<void> {
@@ -929,6 +958,13 @@ function waitFor(milliseconds: number, signal?: AbortSignal): Promise<void> {
 
 export const GOOGLE_AUTH_POPUP_MESSAGE = 'super-rps-google-auth-complete';
 type GoogleAuthPopupResult = 'success' | 'error';
+interface GoogleAuthPopupMessage { type: typeof GOOGLE_AUTH_POPUP_MESSAGE; nonce: string; result: GoogleAuthPopupResult; error?: string }
+
+const EXISTING_GOOGLE_ACCOUNT_ERRORS = new Set(['account_not_linked', 'account_already_linked_to_different_user']);
+
+export function isExistingGoogleAccountError(error: string | undefined): boolean {
+  return error !== undefined && EXISTING_GOOGLE_ACCOUNT_ERRORS.has(error);
+}
 
 export function googlePopupCallbackUrl(result: GoogleAuthPopupResult, nonce: string): string {
   const url = new URL('/auth-complete.html', location.origin);
@@ -938,15 +974,16 @@ export function googlePopupCallbackUrl(result: GoogleAuthPopupResult, nonce: str
 }
 
 export function isGoogleAuthPopupMessage(event: MessageEvent, popup: Window, nonce: string, origin: string):
-  event is MessageEvent<{ type: typeof GOOGLE_AUTH_POPUP_MESSAGE; nonce: string; result: GoogleAuthPopupResult }> {
+  event is MessageEvent<GoogleAuthPopupMessage> {
   const data: unknown = event.data;
   return event.origin === origin && event.source === popup && typeof data === 'object' && data !== null
     && (data as { type?: unknown }).type === GOOGLE_AUTH_POPUP_MESSAGE
     && (data as { nonce?: unknown }).nonce === nonce
-    && ((data as { result?: unknown }).result === 'success' || (data as { result?: unknown }).result === 'error');
+    && ((data as { result?: unknown }).result === 'success' || (data as { result?: unknown }).result === 'error')
+    && ((data as { error?: unknown }).error === undefined || typeof (data as { error?: unknown }).error === 'string');
 }
 
-function waitForGoogleAuthPopup(popup: Window, nonce: string, origin: string, signal: AbortSignal): Promise<GoogleAuthPopupResult> {
+function waitForGoogleAuthPopup(popup: Window, nonce: string, origin: string, signal: AbortSignal): Promise<Pick<GoogleAuthPopupMessage, 'result' | 'error'>> {
   return new Promise((resolve, reject) => {
     let closeTimer: ReturnType<typeof setTimeout> | undefined;
     const cleanup = () => {
@@ -955,8 +992,8 @@ function waitForGoogleAuthPopup(popup: Window, nonce: string, origin: string, si
       clearInterval(closedPoll);
       if (closeTimer) clearTimeout(closeTimer);
     };
-    const finish = (result: GoogleAuthPopupResult) => { cleanup(); resolve(result); };
-    const onMessage = (event: MessageEvent) => { if (isGoogleAuthPopupMessage(event, popup, nonce, origin)) finish(event.data.result); };
+    const finish = (result: Pick<GoogleAuthPopupMessage, 'result' | 'error'>) => { cleanup(); resolve(result); };
+    const onMessage = (event: MessageEvent) => { if (isGoogleAuthPopupMessage(event, popup, nonce, origin)) finish({ result: event.data.result, error: event.data.error }); };
     const onAbort = () => { cleanup(); reject(new DOMException('Google sign-in cancelled.', 'AbortError')); };
     const closedPoll = setInterval(() => {
       if (!popup.closed || closeTimer) return;

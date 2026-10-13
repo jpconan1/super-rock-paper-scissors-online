@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from 'vitest';
-import { AppController, GOOGLE_AUTH_POPUP_MESSAGE, googlePopupCallbackUrl, isGoogleAuthPopupMessage, isTutorialMoveCommand } from '../src/app/appController';
+import { AppController, GOOGLE_AUTH_POPUP_MESSAGE, googlePopupCallbackUrl, isExistingGoogleAccountError, isGoogleAuthPopupMessage, isTutorialMoveCommand } from '../src/app/appController';
 import type { VariantPresentation } from '../src/core/variant';
 import { PROTOCOL_VERSION } from '../src/protocol/protocol';
 
@@ -27,6 +27,17 @@ describe('AppController', () => {
     expect(isGoogleAuthPopupMessage(valid, popup, 'another-attempt', 'https://game.test')).toBe(false);
     expect(isGoogleAuthPopupMessage(valid, {} as Window, 'attempt-1', 'https://game.test')).toBe(false);
     expect(isGoogleAuthPopupMessage(valid, popup, 'attempt-1', 'https://evil.test')).toBe(false);
+    const collision = { ...valid, data: { ...valid.data, result: 'error', error: 'account_not_linked' } } as MessageEvent;
+    expect(isGoogleAuthPopupMessage(collision, popup, 'attempt-1', 'https://game.test')).toBe(true);
+    const invalidError = { ...valid, data: { ...valid.data, result: 'error', error: 42 } } as unknown as MessageEvent;
+    expect(isGoogleAuthPopupMessage(invalidError, popup, 'attempt-1', 'https://game.test')).toBe(false);
+  });
+
+  test('recognizes only existing-account Google failures', () => {
+    expect(isExistingGoogleAccountError('account_not_linked')).toBe(true);
+    expect(isExistingGoogleAccountError('account_already_linked_to_different_user')).toBe(true);
+    expect(isExistingGoogleAccountError('access_denied')).toBe(false);
+    expect(isExistingGoogleAccountError(undefined)).toBe(false);
   });
 
   test('loads opaque slots through the presentation contract', async () => {

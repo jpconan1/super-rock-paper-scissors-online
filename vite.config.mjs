@@ -7,6 +7,7 @@ const virtualAssetBundles = 'virtual:asset-bundles';
 const resolvedVirtualAssetBundles = `\0${virtualAssetBundles}`;
 const imageExtensions = /\.(?:avif|gif|jpe?g|png|svg|webp)$/i;
 const writableLayoutFiles = {
+  account: 'src/layout/documents/account.json',
   title: 'src/layout/documents/title.json',
   lobby: 'src/layout/documents/lobby.json',
   'variant-abm': 'src/layout/documents/variants/abm.json',

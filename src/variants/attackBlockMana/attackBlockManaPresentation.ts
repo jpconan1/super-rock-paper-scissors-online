@@ -730,8 +730,9 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     void playStarburstWipe(container, clock, async () => {
       if (alignFirstBattleAtPeak && music) {
         const boundaryDelayMs = await music.scheduleFirstBattleTransition().catch(() => undefined);
-        if (boundaryDelayMs === undefined) await waitForAbort(transitionAbort.signal);
-        else if (scheduleTimers) await waitFor(boundaryDelayMs, transitionAbort.signal);
+        // Audio is optional. If loading or scheduling fails, open the wipe at
+        // its peak instead of trapping the match behind a boundary that cannot arrive.
+        if (boundaryDelayMs !== undefined && scheduleTimers) await waitFor(boundaryDelayMs, transitionAbort.signal);
       }
       if (!transitionAbort.signal.aborted) {
         if (alignFirstBattleAtPeak) beginOpeningCountdown();
@@ -776,7 +777,6 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
       revealTimer = setTimeout(() => render(nextProjection, events, nextBoundary, boundaryNeedsWipe, newestProgressAward), nextBoundary - serverTime);
     }
     const picking = shouldShowAbmClassPicker(nextProjection, counterLocked, showOpponentCounterpick);
-    layout.setPlayerInfoState(picking ? 'emblem' : 'compact');
     const classSelectChrome = getAbmClassSelectChrome(nextProjection);
     const counterpickCloudPlayer = !counterLocked && showOpponentCounterpick ? getAbmCounterpickCloudPlayer(nextProjection) : undefined;
     layout.composition.classList.toggle('is-class-picking', picking);
@@ -1041,11 +1041,6 @@ function waitFor(milliseconds: number, signal: AbortSignal): Promise<void> {
       resolve();
     }
   });
-}
-
-function waitForAbort(signal: AbortSignal): Promise<void> {
-  if (signal.aborted) return Promise.resolve();
-  return new Promise((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
 }
 
 export function soundForAbmMoves(moves: Readonly<Record<'p1' | 'p2', AbmMove>>): SoundId | undefined {

@@ -562,9 +562,9 @@ input {
 .title-screen__email-dialog::backdrop { background: rgb(0 0 0 / 55%); }
 .game-button.title-screen__discord { position: absolute; width: auto; max-width: none; }
 
-.account-screen__heading { position: absolute; margin: 0; color: #222; font-size: 42px; text-align: center; }
+.account-screen__heading { position: absolute; }
 .account-screen__name, .game-button.account-screen__random, .game-button.account-screen__change,
-.game-button.account-screen__google, .account-screen__connected, .game-button.account-screen__back,
+.game-button.account-screen__google, .game-button.account-screen__sign-up, .account-screen__connected, .game-button.account-screen__back,
 .game-button.account-screen__logout, .game-button.account-screen__delete,
 .game-button.account-screen__password, .game-button.account-screen__remove-password,
 .account-screen__player-id, .account-screen__account-type,
@@ -575,13 +575,19 @@ input {
 .account-screen__account-type { font-size: 20px; font-weight: 900; text-transform: capitalize; }
 .account-screen__error { margin: 0; color: #ac3235; text-align: center; }
 .account-screen__curtain-open, .account-screen__curtain-left, .account-screen__curtain-right { pointer-events: none; }
-.menu-canvas__composition[data-layout='portrait'] .account-screen__heading { font-size: 38px; }
 .alert-system__box.delete-account-alert { gap: 12px; padding: 22px 28px; }
 .delete-account-alert .alert-system__content { width: 100%; color: #171412; font-size: 19px; }
 .delete-account-dialog { display: grid; justify-items: center; gap: 10px; }
 .delete-account-dialog h2, .delete-account-dialog p { margin: 0; }
 .delete-account-dialog h2 { color: #ac3235; font-size: 32px; }
 .delete-account-dialog__entry { width: 340px; height: 50px; }
+.alert-system__box.password-alert { gap: 12px; padding: 22px 28px; }
+.password-alert .alert-system__content { width: 100%; color: #171412; font-size: 19px; }
+.password-dialog { display: grid; justify-items: center; gap: 10px; }
+.password-dialog h2, .password-dialog p { margin: 0; }
+.password-dialog h2 { color: #ac3235; font-size: 32px; }
+.password-dialog__entry { width: 340px; height: 50px; }
+.fixed-alert-canvas__content[data-layout='portrait'] .password-dialog__entry { width: 320px; }
 .title-screen__account-status { position: absolute; display: grid; place-items: center; margin: 0; color: #24533d; font-size: 17px; font-weight: 950; line-height: 1.05; text-align: center; transform: rotate(-.4deg); }
 .title-screen__account-status[hidden] { display: none; }
 .local-reward-notice { position: fixed; z-index: 90; left: 50%; bottom: 24px; max-width: min(520px, calc(100vw - 32px)); margin: 0; padding: 12px 18px; transform: translateX(-50%) rotate(-.4deg); border: 3px solid #1f1712; border-radius: 8px; background: #fff3b0; color: #1f1712; font-weight: 900; text-align: center; pointer-events: none; box-shadow: 4px 5px 0 #1f1712; }
@@ -1094,40 +1100,6 @@ input {
 .game-layout__slot--p2-info { justify-content: flex-end; }
 .game-layout__player-info--p2 .game-layout__player-name { right: 0; left: auto; justify-content: flex-end; }
 .game-layout__player-info--p2 .game-layout__player-level { right: auto; left: 0; }
-
-.game-layout__player-info--compact .game-layout__player-emblem { display: none; }
-.game-layout__player-info--compact .game-layout__player-heading {
-  top: 29px;
-  right: 22px;
-  left: 22px;
-  height: 58px;
-  text-align: center;
-}
-.game-layout__player-info--compact .game-layout__player-name,
-.game-layout__player-info--compact .game-layout__player-level {
-  right: 0;
-  left: 0;
-  width: 100%;
-  max-width: 100%;
-  height: auto;
-  border: 0;
-  background: transparent;
-  justify-content: center;
-  padding: 0;
-}
-.game-layout__player-info--compact .game-layout__player-name {
-  top: 0;
-  display: block;
-  overflow: hidden;
-  font-size: 24px;
-  line-height: 1.1;
-}
-.game-layout__player-info--compact .game-layout__player-level {
-  top: 33px;
-  min-width: 0;
-  font-size: 18px;
-  line-height: 1;
-}
 
 .game-layout__turn { width: 200px; flex: none; }
 .game-layout__wins-label { width: 96px; }
