@@ -8,7 +8,7 @@ const audio = vi.hoisted(() => ({
 }));
 vi.mock('../src/audio/soundEffect', () => audio);
 
-import { MusicDirector } from '../src/audio/musicDirector';
+import { FIRST_BATTLE_WIPE_OPEN_MS, MusicDirector } from '../src/audio/musicDirector';
 import type { AbmProjection } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 
 const projection = (overrides: Partial<AbmProjection> = {}): AbmProjection => ({
@@ -48,8 +48,8 @@ describe('MusicDirector', () => {
   it('loops the online intro once per match and schedules main on the first battle boundary', async () => {
     const director = new MusicDirector(); director.enterOnlineMatchFound(); director.enterOnlineAbm();
     expect(audio.startPreloadedMusic).toHaveBeenCalledWith('battle-intro', 'online-battle');
-    expect(await director.scheduleFirstBattleTransition()).toBe(1_000);
-    expect(audio.scheduleMusicBaseAtNextMeasure).toHaveBeenCalledWith('battle-main', 84_672, 0);
+    expect(await director.scheduleFirstBattleTransition()).toEqual({ boundaryDelayMs: 1_000, wipeDelayMs: 420 });
+    expect(audio.scheduleMusicBaseAtNextMeasure).toHaveBeenCalledWith('battle-main', 84_672, FIRST_BATTLE_WIPE_OPEN_MS);
     director.leaveAbm(); director.enterOnlineAbm();
     expect(audio.startPreloadedMusic).toHaveBeenCalledTimes(1);
     expect(audio.setMusicBaseImmediately).toHaveBeenCalledWith('battle-main');
@@ -63,7 +63,7 @@ describe('MusicDirector', () => {
     expect(audio.preloadMusic).toHaveBeenCalledWith('online-battle');
     director.enterPracticeAbm();
     expect(audio.startPreloadedMusic).toHaveBeenCalledWith('battle-intro', 'online-battle');
-    expect(await director.scheduleFirstBattleTransition()).toBe(1_000);
+    expect(await director.scheduleFirstBattleTransition()).toEqual({ boundaryDelayMs: 1_000, wipeDelayMs: 420 });
     director.updateAbm(projection({ phase: 'counter-picking' }));
     expect(audio.setMusicBaseAtCurrentLoopPhase).not.toHaveBeenCalled();
   });

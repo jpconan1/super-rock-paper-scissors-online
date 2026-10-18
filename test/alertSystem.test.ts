@@ -96,6 +96,11 @@ const key = (value: string, shift = false) => {
   return event;
 };
 const buttons = (element: HTMLElement) => (element as unknown as FakeElement).querySelectorAll<FakeElement>('button:not(:disabled)');
+const findByClass = (element: HTMLElement, className: string): FakeElement | undefined => {
+  const root = element as unknown as FakeElement;
+  return [root, ...root.children.flatMap(function collect(child: FakeElement): FakeElement[] { return [child, ...child.children.flatMap(collect)]; })]
+    .find((candidate) => candidate.className.split(/\s+/).includes(className));
+};
 
 describe('AlertSystem', () => {
   beforeEach(() => { listeners.clear(); fakeDocument.activeElement = undefined; });
@@ -121,6 +126,23 @@ describe('AlertSystem', () => {
     const excepted = system.show({ ariaLabel: 'Excepted', geometry, content: 'Excepted', actions: [], showCloseButton: false });
     expect(buttons(excepted.element)).toHaveLength(0);
     excepted.close();
+  });
+
+  test('titled alerts associate a semantic heading and place the unchanged close control in its title bar', async () => {
+    const system = new AlertSystem(new FakeElement() as unknown as HTMLElement, new FakeElement() as unknown as HTMLElement, {} as never);
+    const handle = system.show({ title: 'Lose Guest Account?', ariaLabel: 'Fallback label', geometry, content: 'Warning', actions: [] });
+    const box = findByClass(handle.element, 'alert-system__box')!;
+    const titleBar = findByClass(handle.element, 'alert-system__title-bar')!;
+    const heading = findByClass(handle.element, 'alert-system__title')!;
+    const close = findByClass(handle.element, 'alert-system__close')!;
+
+    expect(box.className).toContain('alert-system__box--titled');
+    expect(box.attributes.has('aria-label')).toBe(false);
+    expect(box.attributes.get('aria-labelledby')).toBe(heading.attributes.get('id'));
+    expect(heading.textContent).toBe('Lose Guest Account?');
+    expect(close.parent).toBe(titleBar);
+    close.activate!();
+    await expect(handle.result).resolves.toBeUndefined();
   });
 
   test('Escape closes only the top alert and restores its prior focus', async () => {

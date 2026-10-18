@@ -29,15 +29,16 @@ import {
   PLAYER_NAME_MAX_LENGTH, normalizePlayerDisplayName, playerProfile,
 } from '../src/protocol/playerProfile';
 import { claimReadablePlayerId, type PlayerAccountType } from '../src/protocol/playerId';
+import { isPlayerEmblem, type PlayerEmblem } from '../src/core/playerEmblem';
 import { createAuth, type AuthEnv } from './auth';
 import { createResendMailer, type AuthMailer } from './resendMailer';
-import { accountDeletionChallengeStatus, accountDeletionCodeHash, purgeAccountData } from './accountDeletion';
+import { accountDeletionCodeHash, consumeAccountDeletionChallenge, purgeAccountData } from './accountDeletion';
 import { adminRoute } from './admin';
 import { maintenanceCookie, maintenancePassExpiry, readMaintenanceState, verifyMaintenancePass } from './maintenance';
 import { hashPassword } from 'better-auth/crypto';
 import {
-  emailChallengeHash, emailChallengeStatus, generateEmailCode, normalizeAuthEmail, validEmailPassword,
-  type EmailChallengePurpose, type EmailChallengeRecord,
+  consumeEmailChallenge, emailChallengeHash, generateEmailCode, normalizeAuthEmail, validEmailPassword,
+  type EmailChallengePurpose,
 } from './emailAccounts';
 import {
   hasFullLocalMatchAwardAllowance, LOCAL_MATCH_AWARD_WINDOW_MS, LOCAL_MATCH_GRANT_TTL_MS,
@@ -327,7 +328,7 @@ export class MatchmakerObject extends DurableObject<Env> {
       await this.ctx.storage.delete(ticketKey);
     }
     const queue = (await this.ctx.storage.get<MatchmakingQueueEntry[]>('queue')) ?? [];
-    const refreshed = refreshMatchmakingQueue(queue, guestId, attemptId, name, player.rating, now, MATCHMAKING_QUEUE_TTL_MS, player.totalProgressUnits, player.unlockAllClasses);
+    const refreshed = refreshMatchmakingQueue(queue, guestId, attemptId, name, player.rating, now, MATCHMAKING_QUEUE_TTL_MS, player.totalProgressUnits, player.unlockAllClasses, player.equippedEmblem);
     if (refreshed.ownedElsewhere) return { status: 'owned-elsewhere' };
     await this.env.DB.prepare(`INSERT OR IGNORE INTO matchmaking_attempts (attempt_id, player_id, started_at) VALUES (?, ?, ?)`)
       .bind(attemptId, guestId, now).run();
@@ -342,8 +343,8 @@ export class MatchmakerObject extends DurableObject<Env> {
     const id = this.env.MATCHES.newUniqueId();
     const matchId = id.toString();
     const initialized = await this.env.MATCHES.get(id).initialize(matchId, {
-      p1: { name: opponent.name, platform: 'Web', rating: opponent.rating, level: progressionForTotal(opponent.totalProgressUnits ?? 0).level },
-      p2: { name, platform: 'Web', rating: player.rating, level: progressionForTotal(player.totalProgressUnits).level },
+      p1: { name: opponent.name, platform: 'Web', rating: opponent.rating, level: progressionForTotal(opponent.totalProgressUnits ?? 0).level, emblem: opponent.equippedEmblem ?? 'beta-og' },
+      p2: { name, platform: 'Web', rating: player.rating, level: progressionForTotal(player.totalProgressUnits).level, emblem: player.equippedEmblem },
     }, { p1: opponent.guestId, p2: guestId }, 'abm-only', {
       p1: opponent.totalProgressUnits ?? 0, p2: player.totalProgressUnits,
     }, {
@@ -754,24 +755,24 @@ export async function applyLocalProgressAward(db: D1Database, playerId: string, 
 class GuestAuthError extends Error {}
 class LocalProgressAwardConflictError extends Error {}
 
-interface AuthenticatedPlayer { playerId: string; displayName: string; rating: number; totalProgressUnits: number; unlockAllClasses: boolean; accountType: PlayerAccountType; isTest: boolean }
+interface AuthenticatedPlayer { playerId: string; displayName: string; rating: number; totalProgressUnits: number; unlockAllClasses: boolean; equippedEmblem: PlayerEmblem; accountType: PlayerAccountType; isTest: boolean }
 
-async function getPlayer(db: D1Database, playerId: string): Promise<{ displayName: string; rating: number; totalProgressUnits: number; unlockAllClasses: boolean }> {
-  const player = await db.prepare('SELECT display_name, rating, total_progress_units, unlock_all_classes FROM players WHERE player_id = ?').bind(playerId)
-    .first<{ display_name: string; rating: number; total_progress_units: number; unlock_all_classes: number }>();
+async function getPlayer(db: D1Database, playerId: string): Promise<{ displayName: string; rating: number; totalProgressUnits: number; unlockAllClasses: boolean; equippedEmblem: PlayerEmblem }> {
+  const player = await db.prepare('SELECT display_name, rating, total_progress_units, unlock_all_classes, equipped_emblem FROM players WHERE player_id = ?').bind(playerId)
+    .first<{ display_name: string; rating: number; total_progress_units: number; unlock_all_classes: number; equipped_emblem: PlayerEmblem }>();
   if (!player) throw new GuestAuthError('Player not found.');
-  return { displayName: player.display_name, rating: player.rating, totalProgressUnits: player.total_progress_units, unlockAllClasses: player.unlock_all_classes === 1 };
+  return { displayName: player.display_name, rating: player.rating, totalProgressUnits: player.total_progress_units, unlockAllClasses: player.unlock_all_classes === 1, equippedEmblem: player.equipped_emblem };
 }
 
 async function authenticateRequestPlayer(request: Request, env: Env): Promise<AuthenticatedPlayer> {
   const session = await createAuth(env).api.getSession({ headers: request.headers });
   if (!session) throw new GuestAuthError('Authentication required.');
-  const player = await env.DB.prepare(`SELECT p.player_id, p.display_name, p.rating, p.total_progress_units, p.unlock_all_classes, p.account_type,
+  const player = await env.DB.prepare(`SELECT p.player_id, p.display_name, p.rating, p.total_progress_units, p.unlock_all_classes, p.equipped_emblem, p.account_type,
     CASE WHEN t.player_id IS NULL THEN 0 ELSE 1 END is_test FROM players p LEFT JOIN test_players t ON t.player_id = p.player_id WHERE p.auth_user_id = ?`)
-    .bind(session.user.id).first<{ player_id: string; display_name: string; rating: number; total_progress_units: number; unlock_all_classes: number; account_type: PlayerAccountType; is_test: number }>();
+    .bind(session.user.id).first<{ player_id: string; display_name: string; rating: number; total_progress_units: number; unlock_all_classes: number; equipped_emblem: PlayerEmblem; account_type: PlayerAccountType; is_test: number }>();
   if (!player) throw new GuestAuthError('Player not found.');
   return { playerId: player.player_id, displayName: player.display_name, rating: player.rating, totalProgressUnits: player.total_progress_units,
-    unlockAllClasses: player.unlock_all_classes === 1, accountType: player.account_type, isTest: player.is_test === 1 };
+    unlockAllClasses: player.unlock_all_classes === 1, equippedEmblem: player.equipped_emblem, accountType: player.account_type, isTest: player.is_test === 1 };
 }
 
 async function createPlayerRow(env: Env, authUserId: string, displayName: string, accountType: PlayerAccountType): Promise<string> {
@@ -827,14 +828,6 @@ async function anonymousSignupSession(request: Request, env: Env) {
   return player ? session : null;
 }
 
-interface StoredEmailChallenge extends EmailChallengeRecord {
-  challenge_key: string;
-  purpose: EmailChallengePurpose;
-  user_id: string | null;
-  email: string;
-  context_json: string;
-}
-
 function emailMailer(env: Env): AuthMailer | undefined {
   if (env.RESEND_API_KEY) return createResendMailer(env.RESEND_API_KEY);
   if (env.BETTER_AUTH_URL.startsWith('http://localhost') && /^\d{6}$/.test(env.DEV_AUTH_EMAIL_CODE ?? '')) {
@@ -879,19 +872,8 @@ async function storeEmailLoginOtp(env: Env, email: string, now: number): Promise
 }
 
 async function verifyStoredEmailChallenge(env: Env, challengeKey: string, purpose: EmailChallengePurpose, binding: string,
-  code: string): Promise<StoredEmailChallenge | null> {
-  const row = await env.DB.prepare(`SELECT challenge_key, purpose, user_id, email, code_hash, context_json, expires_at, failed_attempts
-    FROM email_auth_challenges WHERE challenge_key = ? AND purpose = ?`).bind(challengeKey, purpose).first<StoredEmailChallenge>();
-  const candidate = await emailChallengeHash(env.BETTER_AUTH_SECRET, purpose, binding, code);
-  const status = emailChallengeStatus(row, candidate, Date.now());
-  if (status === 'valid') return row;
-  if (row) {
-    const attempts = row.failed_attempts + 1;
-    if (status === 'expired' || status === 'exhausted' || attempts >= 3) {
-      await env.DB.prepare('DELETE FROM email_auth_challenges WHERE challenge_key = ?').bind(challengeKey).run();
-    } else await env.DB.prepare('UPDATE email_auth_challenges SET failed_attempts = ? WHERE challenge_key = ?').bind(attempts, challengeKey).run();
-  }
-  return null;
+  email: string, code: string) {
+  return consumeEmailChallenge(env.DB, env.BETTER_AUTH_SECRET, challengeKey, purpose, binding, email, code);
 }
 
 async function requestEmailSignup(request: Request, env: Env, clientKey: string): Promise<Response> {
@@ -952,7 +934,7 @@ async function verifyEmailSignup(request: Request, env: Env, url: URL, clientKey
       allowed(env.SIGNUP_VERIFY_RATE, ipKey), useSignupRateLimit(env.DB, ipKey, 20, now),
     ]);
     if (!bindingAllowed || !ipAllowed) return rateLimited(15 * 60);
-    const pending = await verifyStoredEmailChallenge(env, `signup:${session.user.id}`, 'signup', session.user.id, code);
+    const pending = await verifyStoredEmailChallenge(env, `signup:${session.user.id}`, 'signup', session.user.id, email, code);
     const context = pending ? JSON.parse(pending.context_json) as { available?: boolean; displayName?: string } : null;
     if (!pending || pending.email !== email || context?.available !== true || !context.displayName) return json({ error: 'Code invalid or expired.' }, 400);
     const headers = new Headers(request.headers);
@@ -1075,7 +1057,7 @@ async function updateEmailPassword(request: Request, env: Env, clientKey: string
     const user = await env.DB.prepare(`SELECT u.id FROM user u JOIN players p ON p.auth_user_id = u.id
       WHERE u.email = ? AND p.account_type = 'email'`).bind(email).first<{ id: string }>();
     if (!user) return json({ error: 'Code invalid or expired.' }, 400);
-    const challenge = await verifyStoredEmailChallenge(env, `password:${user.id}`, 'password', user.id, code);
+    const challenge = await verifyStoredEmailChallenge(env, `password:${user.id}`, 'password', user.id, email, code);
     if (!challenge || challenge.email !== email) return json({ error: 'Code invalid or expired.' }, 400);
     const session = await createAuth(env).api.getSession({ headers: request.headers });
     if (body.remove === true && session?.user.id !== user.id) return json({ error: 'Sign in before removing your password.' }, 401);
@@ -1159,21 +1141,9 @@ async function deleteAccount(request: Request, env: Env): Promise<Response> {
     catch (error) { return error instanceof RequestBodyError ? json({ error: error.message }, error.status) : json({ error: 'Invalid request.' }, 400); }
     const code = typeof body.code === 'string' ? body.code.replace(/\s/g, '') : '';
     if (!/^\d{6}$/.test(code)) return json({ error: 'Enter the six-digit code.' }, 400);
-    const now = Date.now();
-    const challenge = await env.DB.prepare(`SELECT code_hash, expires_at, failed_attempts FROM account_deletion_challenges WHERE user_id = ?`)
-      .bind(session.user.id).first<{ code_hash: string; expires_at: number; failed_attempts: number }>();
-    const candidate = await accountDeletionCodeHash(env.BETTER_AUTH_SECRET, session.user.id, code);
-    const status = accountDeletionChallengeStatus(challenge, candidate, now, ACCOUNT_DELETION_MAX_ATTEMPTS);
-    if (!challenge || status === 'expired' || status === 'exhausted') {
-      if (challenge) await env.DB.prepare('DELETE FROM account_deletion_challenges WHERE user_id = ?').bind(session.user.id).run();
-      return json({ error: 'Code invalid or expired.' }, 400);
-    }
-    if (status !== 'valid') {
-      const attempts = challenge.failed_attempts + 1;
-      if (attempts >= ACCOUNT_DELETION_MAX_ATTEMPTS) await env.DB.prepare('DELETE FROM account_deletion_challenges WHERE user_id = ?').bind(session.user.id).run();
-      else await env.DB.prepare('UPDATE account_deletion_challenges SET failed_attempts = ? WHERE user_id = ?').bind(attempts, session.user.id).run();
-      return json({ error: 'Code invalid or expired.' }, 400);
-    }
+    const valid = await consumeAccountDeletionChallenge(env.DB, env.BETTER_AUTH_SECRET, session.user.id, code,
+      Date.now(), ACCOUNT_DELETION_MAX_ATTEMPTS);
+    if (!valid) return json({ error: 'Code invalid or expired.' }, 400);
   }
   await purgeAccountData(env.DB, session.user.id, session.user.email);
   return json({ success: true });
@@ -1272,12 +1242,12 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
           await env.DB.prepare('UPDATE players SET display_name = ?, updated_at = ? WHERE auth_user_id = ?')
             .bind(displayName, Date.now(), authSession.user.id).run();
         } else if (request.method !== 'GET') return json({ error: 'Method not allowed.' }, 405);
-        const player = await env.DB.prepare(`SELECT p.player_id, p.display_name, p.rating, p.total_progress_units, p.unlock_all_classes, p.account_type,
+        const player = await env.DB.prepare(`SELECT p.player_id, p.display_name, p.rating, p.total_progress_units, p.unlock_all_classes, p.equipped_emblem, p.account_type,
           CASE WHEN EXISTS (SELECT 1 FROM account a WHERE a.userId = p.auth_user_id AND a.providerId = 'credential' AND a.password IS NOT NULL) THEN 1 ELSE 0 END has_password
           FROM players p WHERE p.auth_user_id = ?`)
-          .bind(authSession.user.id).first<{ player_id: string; display_name: string; rating: number; total_progress_units: number; unlock_all_classes: number; account_type: PlayerAccountType; has_password: number }>();
+          .bind(authSession.user.id).first<{ player_id: string; display_name: string; rating: number; total_progress_units: number; unlock_all_classes: number; equipped_emblem: PlayerEmblem; account_type: PlayerAccountType; has_password: number }>();
         if (!player) return json({ error: 'Player not found.' }, 404);
-        return json({ ...playerProfile(player.player_id, player.account_type, player.display_name, player.rating, player.total_progress_units, player.unlock_all_classes === 1),
+        return json({ ...playerProfile(player.player_id, player.account_type, player.display_name, player.rating, player.total_progress_units, player.unlock_all_classes === 1, player.equipped_emblem),
           email: player.account_type === 'email' ? authSession.user.email : undefined,
           hasPassword: player.account_type === 'email' && player.has_password === 1 });
       } catch (error) {
@@ -1293,13 +1263,30 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
         if (typeof body.unlockAllClasses !== 'boolean') return json({ error: 'unlockAllClasses must be a boolean.' }, 400);
         await env.DB.prepare('UPDATE players SET unlock_all_classes = ?, updated_at = ? WHERE auth_user_id = ?')
           .bind(body.unlockAllClasses ? 1 : 0, Date.now(), authSession.user.id).run();
-        const player = await env.DB.prepare('SELECT player_id, display_name, rating, total_progress_units, unlock_all_classes, account_type FROM players WHERE auth_user_id = ?')
-          .bind(authSession.user.id).first<{ player_id: string; display_name: string; rating: number; total_progress_units: number; unlock_all_classes: number; account_type: PlayerAccountType }>();
+        const player = await env.DB.prepare('SELECT player_id, display_name, rating, total_progress_units, unlock_all_classes, equipped_emblem, account_type FROM players WHERE auth_user_id = ?')
+          .bind(authSession.user.id).first<{ player_id: string; display_name: string; rating: number; total_progress_units: number; unlock_all_classes: number; equipped_emblem: PlayerEmblem; account_type: PlayerAccountType }>();
         if (!player) return json({ error: 'Player not found.' }, 404);
-        return json(playerProfile(player.player_id, player.account_type, player.display_name, player.rating, player.total_progress_units, player.unlock_all_classes === 1));
+        return json(playerProfile(player.player_id, player.account_type, player.display_name, player.rating, player.total_progress_units, player.unlock_all_classes === 1, player.equipped_emblem));
       } catch (error) {
         if (error instanceof RequestBodyError) return json({ error: error.message }, error.status);
         return json({ error: 'Progression update failed.' }, 500);
+      }
+    }
+    if (url.pathname === '/player-emblem' && request.method === 'PUT') {
+      try {
+        const authSession = await createAuth(env).api.getSession({ headers: request.headers });
+        if (!authSession) return json({ error: 'Authentication required.' }, 401);
+        const body = await readJsonBody<{ emblem?: unknown }>(request, 1_000);
+        if (!isPlayerEmblem(body.emblem)) return json({ error: 'Unknown emblem.' }, 400);
+        await env.DB.prepare('UPDATE players SET equipped_emblem = ?, updated_at = ? WHERE auth_user_id = ?')
+          .bind(body.emblem, Date.now(), authSession.user.id).run();
+        const player = await env.DB.prepare('SELECT player_id, display_name, rating, total_progress_units, unlock_all_classes, equipped_emblem, account_type FROM players WHERE auth_user_id = ?')
+          .bind(authSession.user.id).first<{ player_id: string; display_name: string; rating: number; total_progress_units: number; unlock_all_classes: number; equipped_emblem: PlayerEmblem; account_type: PlayerAccountType }>();
+        if (!player) return json({ error: 'Player not found.' }, 404);
+        return json(playerProfile(player.player_id, player.account_type, player.display_name, player.rating, player.total_progress_units, player.unlock_all_classes === 1, player.equipped_emblem));
+      } catch (error) {
+        if (error instanceof RequestBodyError) return json({ error: error.message }, error.status);
+        return json({ error: 'Emblem update failed.' }, 500);
       }
     }
     if (url.pathname === '/local-match-grant' && request.method === 'POST') {

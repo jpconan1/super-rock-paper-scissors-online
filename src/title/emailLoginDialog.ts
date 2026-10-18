@@ -16,7 +16,6 @@ export interface EmailLoginActions {
 export function showEmailLoginDialog(alerts: AlertSystem, clock: BoilClock, email: string,
   actions: EmailLoginActions): Promise<boolean> {
   const content = document.createElement('section'); content.className = 'email-login-dialog';
-  const heading = document.createElement('h2'); heading.className = 'email-login-dialog__heading'; heading.textContent = 'Check Your Email';
   const instruction = document.createElement('p'); instruction.className = 'email-login-dialog__instruction';
   instruction.textContent = `Enter the code sent to ${email}.`;
   const status = document.createElement('p'); status.className = 'email-login-dialog__status'; status.setAttribute('aria-live', 'polite');
@@ -62,8 +61,8 @@ export function showEmailLoginDialog(alerts: AlertSystem, clock: BoilClock, emai
       .catch((reason) => { status.textContent = reason instanceof Error ? reason.message : 'Could not send code. Try again.'; })
       .finally(() => setBusy(false));
   };
-  content.append(heading, instruction, form, status);
-  handle = alerts.show({ ariaLabel: 'Enter Email Code', geometry: EMAIL_LOGIN_GEOMETRY, content,
+  content.append(instruction, form, status);
+  handle = alerts.show({ ariaLabel: 'Enter Email Code', title: 'Check Your Email', geometry: EMAIL_LOGIN_GEOMETRY, content,
     className: 'email-login-alert', dismissible: true, actions: [] });
   queueMicrotask(() => code.focus());
   return handle.result.finally(() => { code.destroy(); resend.destroy(); enter.destroy(); }).then((value) => value === true);

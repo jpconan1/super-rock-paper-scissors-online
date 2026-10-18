@@ -3,23 +3,14 @@ import {
   CHANGE_PASSWORD_BUTTON_SHEETS,
   DELETE_ACCOUNT_BUTTON_SHEETS,
   REMOVE_PASSWORD_BUTTON_SHEETS,
+  SET_PASSWORD_BUTTON_SHEETS,
   getAccountProviderVisibility,
-  isDeleteAccountConfirmation,
 } from '../src/app/accountScreen';
 import { getLayoutDocument } from '../src/layout/layoutDocuments';
 import { resolveInitialSignupDisplayName } from '../src/title/signUpDialog';
 import { isCompleteEmailCode, normalizeEmailCode } from '../src/auth/emailCodeChallenge';
 
 describe('account screen deletion', () => {
-  test('requires the delete confirmation word and ignores case and surrounding space', () => {
-    expect(isDeleteAccountConfirmation('')).toBe(false);
-    expect(isDeleteAccountConfirmation('del')).toBe(false);
-    expect(isDeleteAccountConfirmation('deleted')).toBe(false);
-    expect(isDeleteAccountConfirmation('delete')).toBe(true);
-    expect(isDeleteAccountConfirmation('  DELETE  ')).toBe(true);
-    expect(isDeleteAccountConfirmation('DeLeTe')).toBe(true);
-  });
-
   test('accepts a complete six-digit email challenge with optional spacing', () => {
     expect(isCompleteEmailCode('123456')).toBe(true);
     expect(isCompleteEmailCode('123 456')).toBe(true);
@@ -41,6 +32,11 @@ describe('account screen deletion', () => {
       between: '/account/change-password-button-between-sheet.webp',
       depressed: '/account/change-password-button-depressed-sheet.webp',
     });
+    expect(SET_PASSWORD_BUTTON_SHEETS).toEqual({
+      up: '/account/set-password-button-up-sheet.webp',
+      between: '/account/set-password-button-between-sheet.webp',
+      depressed: '/account/set-password-button-depressed-sheet.webp',
+    });
     expect(REMOVE_PASSWORD_BUTTON_SHEETS).toEqual({
       up: '/account/remove-password-button-up-sheet.webp',
       between: '/account/remove-password-button-between-sheet.webp',
@@ -50,7 +46,7 @@ describe('account screen deletion', () => {
     expect(account.elements.find(({ id }) => id === 'header')).toMatchObject({
       type: 'sprite', label: 'Profile', assets: { src: '/account/profile-sheet.webp' },
     });
-    expect(account.elements.find(({ id }) => id === 'password')?.assets).toEqual(CHANGE_PASSWORD_BUTTON_SHEETS);
+    expect(account.elements.find(({ id }) => id === 'password')?.assets).toEqual(SET_PASSWORD_BUTTON_SHEETS);
     expect(account.elements.find(({ id }) => id === 'remove-password')?.assets).toEqual(REMOVE_PASSWORD_BUTTON_SHEETS);
   });
 

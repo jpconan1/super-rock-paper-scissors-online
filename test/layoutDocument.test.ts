@@ -107,12 +107,13 @@ describe('layout documents', () => {
     expect(ids).not.toContain('name-entry');
     expect(ids).not.toContain('random-name');
     expect(ids).toEqual(expect.arrayContaining([
-      'sign-up', 'enter-lobby', 'password-sign-in', 'email-sign-in', 'google-sign-in', 'apple-sign-in', 'password-form', 'account-status',
+      'sign-up', 'enter-lobby', 'claim-account', 'password-sign-in', 'email-sign-in', 'google-sign-in', 'apple-sign-in', 'password-form', 'account-status',
       'password-email', 'password-password', 'password-submit', 'password-back', 'forgot-password', 'password-error',
       'email-code-form', 'email-code-email', 'email-code-send', 'email-code-back',
     ]));
     expect(title.elements.find(({ id }) => id === 'enter-lobby')?.assets).toMatchObject({ up: '/title/auth/lobby-guest-button-up-sheet.webp' });
     expect(title.elements.find(({ id }) => id === 'sign-up')?.assets).toMatchObject({ up: '/title/auth/sign-up-button-up-sheet.webp' });
+    expect(title.elements.find(({ id }) => id === 'claim-account')?.assets).toMatchObject({ up: '/title/auth/claim-account-button-up-sheet.webp' });
     expect(title.elements.find(({ id }) => id === 'apple-sign-in')?.assets).toMatchObject({ up: '/title/auth/apple-sign-in-button-up.webp' });
     expect(title.elements.find(({ id }) => id === 'password-email')?.assets).toMatchObject({ src: '/title/auth/password-entry-landscape-sheet.webp' });
     expect(title.elements.find(({ id }) => id === 'password-email')?.layouts.landscape).toMatchObject({ x: 195, width: 450 });

@@ -126,6 +126,20 @@
       }
     },
     {
+      "id": "claim-account",
+      "type": "button",
+      "protected": true,
+      "assets": {
+        "up": "/title/auth/claim-account-button-up-sheet.webp",
+        "between": "/title/auth/claim-account-button-between-sheet.webp",
+        "depressed": "/title/auth/claim-account-button-depressed-sheet.webp"
+      },
+      "layouts": {
+        "landscape": { "x": 410, "y": 235, "width": 140, "height": 70, "aspectLock": true },
+        "portrait": { "x": 195, "y": 700, "width": 150, "height": 75, "aspectLock": true }
+      }
+    },
+    {
       "id": "password-sign-in", "type": "button", "protected": true,
       "assets": { "up": "/title/auth/sign-in-password-up-sheet.webp", "between": "/title/auth/sign-in-password-between-sheet.webp", "depressed": "/title/auth/sign-in-password-depressed-sheet.webp" },
       "layouts": { "landscape": { "x": 278, "y": 320, "width": 120, "height": 60 }, "portrait": { "x": 83, "y": 575, "width": 115, "height": 60 } }

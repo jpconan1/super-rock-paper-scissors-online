@@ -25,6 +25,8 @@ import {
 } from '../whiteboard/flipAnimation';
 import { mountClassCardDrag, type ClassCardDragController } from '../lobby/classCardDrag';
 import { randomId } from '../core/randomId';
+import { nextPlayerEmblem, type PlayerEmblem } from '../core/playerEmblem';
+import { createPlayerEmblemCard } from '../ui/playerEmblemCard';
 
 export type ScreenCleanup = () => void;
 export type LobbyScreenMount = ScreenCleanup & {
@@ -114,6 +116,9 @@ export function mountLobbyScreen(
   unlockedClassCount = playerLevel,
   progressUnitsInLevel = 0,
   tutorialDisabled = false,
+  equippedEmblem: PlayerEmblem = 'beta-og',
+  onEmblemChange: (emblem: PlayerEmblem) => Promise<void> = async () => {},
+  onEmblemError: (error: unknown) => void = console.error,
   faceOptions: { initialFace?: LobbyFace } = {},
 ): LobbyScreenMount {
   const initialFace = faceOptions.initialFace ?? 'whiteboard';
@@ -167,8 +172,32 @@ export function mountLobbyScreen(
   const lobbyElement = (id: string) => layoutDocument.elements.find((item) => item.id === id)!;
 
   const header = sprite(layoutDocument.elements.find((item) => item.id === 'header')!.assets!.src!, 'lobby-screen__header', layoutDocument.copy!.heading);
-  const playerNameDisplay = document.createElement('strong'); playerNameDisplay.className = 'lobby-screen__player-name'; playerNameDisplay.textContent = playerName;
-  const playerLevelDisplay = document.createElement('strong'); playerLevelDisplay.className = 'lobby-screen__player-level'; playerLevelDisplay.textContent = `Level ${playerLevel}`;
+  const emblemCard = createPlayerEmblemCard({ name: playerName, level: playerLevel, emblem: equippedEmblem }, clock);
+  emblemCard.element.classList.add('lobby-screen__emblem-card');
+  sprites.push(emblemCard.emblem);
+  let activeEmblem = equippedEmblem;
+  let emblemSaving = false;
+  const emblemButton = createGameButton({
+    label: 'Change your Emblem', clock,
+    upSheet: '/interactive-elements/emblem-button-up-sheet.webp',
+    betweenSheet: '/interactive-elements/emblem-button-between-sheet.webp',
+    depressedSheet: '/interactive-elements/emblem-button-depressed-sheet.webp',
+    onActivate: () => {
+      if (emblemSaving) return;
+      emblemSaving = true;
+      emblemButton.setDisabled(true);
+      const next = nextPlayerEmblem(activeEmblem);
+      void onEmblemChange(next).then(() => {
+        activeEmblem = next;
+        emblemCard.setEmblem(next);
+      }).catch(onEmblemError).finally(() => {
+        emblemSaving = false;
+        emblemButton.setDisabled(false);
+      });
+    },
+  });
+  emblemButton.element.classList.add('lobby-screen__emblem-button', 'game-button--baked-label');
+  gameButtons.push(emblemButton);
   const progressBar = document.createElement('canvas'); progressBar.className = 'lobby-screen__progress-bar'; progressBar.width = 512; progressBar.height = 256;
   progressBar.setAttribute('role', 'progressbar'); progressBar.setAttribute('aria-valuemin', '0'); progressBar.setAttribute('aria-valuemax', '10000'); progressBar.setAttribute('aria-valuenow', String(progressUnitsInLevel));
   const progressCopy = document.createElement('span'); progressCopy.className = 'lobby-screen__progress-copy'; progressCopy.textContent = `${progressUnitsInLevel.toLocaleString()} / 10,000 XP`;
@@ -184,7 +213,7 @@ export function mountLobbyScreen(
       element: cardSprite.element,
     };
   });
-  const progressElements = [playerNameDisplay, playerLevelDisplay, progressBar, progressCopy, nextUnlock, ...classCards.map((item) => item.element)];
+  const progressElements = [emblemCard.element, emblemButton.element, progressBar, progressCopy, nextUnlock, ...classCards.map((item) => item.element)];
   const curtainLeft = sprite(layoutDocument.elements.find((item) => item.id === 'curtain-left')!.assets!.src!, 'portrait-curtain-piece');
   const curtainRight = sprite(layoutDocument.elements.find((item) => item.id === 'curtain-right')!.assets!.src!, 'portrait-curtain-piece');
   const whiteboard = document.createElement('div');
@@ -307,7 +336,7 @@ export function mountLobbyScreen(
     ...actions.map((item) => item.element), roster, ...(scoreboard ? [scoreboard] : []), curtainLeft, curtainRight);
   composition.append(rosterToggle.element);
   layoutBindings.push(
-    { id: 'header', element: header }, { id: 'player-name', element: playerNameDisplay }, { id: 'player-level', element: playerLevelDisplay },
+    { id: 'header', element: header }, { id: 'player-name', element: emblemCard.element }, { id: 'player-level', element: emblemButton.element },
     { id: 'xp-bar', element: progressBar }, { id: 'xp-count', element: progressCopy }, { id: 'next-unlock', element: nextUnlock }, ...classCards, { id: 'whiteboard', element: whiteboard },
     { id: 'whiteboard-blank-face', element: flip }, { id: 'whiteboard-button', element: whiteboardFaceButton.element },
     { id: 'progression', element: progressionFaceButton.element }, { id: 'more-variants', element: moreVariantsFaceButton.element },

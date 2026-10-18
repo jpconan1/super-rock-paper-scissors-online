@@ -1,5 +1,6 @@
 import { progressionForTotal, type PlayerProgression } from '../core/progression';
 import { isReadablePlayerId, type PlayerAccountType } from './playerId';
+import { isPlayerEmblem, type PlayerEmblem } from '../core/playerEmblem';
 
 export const PLAYER_NAME_MAX_LENGTH = 24;
 
@@ -15,6 +16,7 @@ export interface PlayerProfile extends PlayerProgression {
   displayName: string;
   rating: number;
   unlockAllClasses: boolean;
+  equippedEmblem: PlayerEmblem;
 }
 
 export function isPlayerProfile(value: unknown): value is PlayerProfile {
@@ -24,11 +26,12 @@ export function isPlayerProfile(value: unknown): value is PlayerProfile {
     && (candidate.accountType === 'guest' || candidate.accountType === 'google' || candidate.accountType === 'apple' || candidate.accountType === 'email')
     && normalizePlayerDisplayName(candidate.displayName) === candidate.displayName
     && typeof candidate.rating === 'number' && Number.isFinite(candidate.rating)
+    && isPlayerEmblem(candidate.equippedEmblem)
     && ensureProgression(candidate);
 }
 
-export function playerProfile(playerId: string, accountType: PlayerAccountType, displayName: string, rating: number, totalProgressUnits = 0, unlockAllClasses = false): PlayerProfile {
-  return { playerId, accountType, displayName, rating, unlockAllClasses, ...progressionForTotal(totalProgressUnits) };
+export function playerProfile(playerId: string, accountType: PlayerAccountType, displayName: string, rating: number, totalProgressUnits = 0, unlockAllClasses = false, equippedEmblem: PlayerEmblem = 'beta-og'): PlayerProfile {
+  return { playerId, accountType, displayName, rating, unlockAllClasses, equippedEmblem, ...progressionForTotal(totalProgressUnits) };
 }
 
 function ensureProgression(candidate: Partial<PlayerProfile>): boolean {

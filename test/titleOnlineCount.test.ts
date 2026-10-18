@@ -1,5 +1,5 @@
 import { expect, test, vi } from 'vitest';
-import { DISCORD_INVITE_URL, formatOnlinePlayerCount, getTitleAuthControlVisibility, openDiscordInvite } from '../src/title/titleScreen';
+import { DISCORD_INVITE_URL, formatOnlinePlayerCount, getTitleAccountControlVisibility, getTitleAuthControlVisibility, normalizeForgotPasswordEmail, openDiscordInvite } from '../src/title/titleScreen';
 
 test('title online count formats known and unavailable counts', () => {
   expect(formatOnlinePlayerCount(0)).toBe('players online: 0');
@@ -24,4 +24,22 @@ test('title authentication modes swap the primary controls for the active form',
   expect(getTitleAuthControlVisibility('email-code')).toEqual({
     primaryButtons: false, providers: false, onlineCount: false, passwordForm: false, emailCodeForm: true,
   });
+});
+
+test('title account session distinguishes logged-out, guest, and protected states', () => {
+  expect(getTitleAccountControlVisibility('none')).toEqual({
+    accountStatus: false, logout: false, enterExistingAccount: false, claimAccount: false, loggedOutAuthentication: true,
+  });
+  expect(getTitleAccountControlVisibility('guest')).toEqual({
+    accountStatus: true, logout: true, enterExistingAccount: true, claimAccount: true, loggedOutAuthentication: false,
+  });
+  expect(getTitleAccountControlVisibility('protected')).toEqual({
+    accountStatus: true, logout: true, enterExistingAccount: true, claimAccount: false, loggedOutAuthentication: false,
+  });
+});
+
+test('forgot password requires a valid email and normalizes it', () => {
+  expect(normalizeForgotPasswordEmail('', false)).toBeUndefined();
+  expect(normalizeForgotPasswordEmail('not-an-email', false)).toBeUndefined();
+  expect(normalizeForgotPasswordEmail('  Player@Example.COM  ', true)).toBe('player@example.com');
 });

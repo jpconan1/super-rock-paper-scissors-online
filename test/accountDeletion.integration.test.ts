@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { convertV4MiniflareOptions, Miniflare } from 'miniflare';
-import { accountDeletionChallengeStatus, accountDeletionCodeHash, purgeAccountData } from '../worker/accountDeletion';
+import { accountDeletionChallengeStatus, accountDeletionCodeHash, consumeAccountDeletionChallenge, purgeAccountData } from '../worker/accountDeletion';
+import { consumeEmailChallenge, emailChallengeHash } from '../worker/emailAccounts';
 import migration1 from '../worker/migrations/0001_initial.sql?raw';
 import migration2 from '../worker/migrations/0002_public_abm_test.sql?raw';
 import migration3 from '../worker/migrations/0003_better_auth.sql?raw';
@@ -14,8 +15,9 @@ import migration10 from '../worker/migrations/0010_admin_dashboard.sql?raw';
 import migration11 from '../worker/migrations/0011_maintenance_mode.sql?raw';
 import migration12 from '../worker/migrations/0012_fixed_account_identity.sql?raw';
 import migration13 from '../worker/migrations/0013_email_accounts.sql?raw';
+import migration14 from '../worker/migrations/0014_player_emblems.sql?raw';
 
-const migrations = [migration1, migration2, migration3, migration4, migration5, migration6, migration7, migration8, migration9, migration10, migration11, migration12, migration13];
+const migrations = [migration1, migration2, migration3, migration4, migration5, migration6, migration7, migration8, migration9, migration10, migration11, migration12, migration13, migration14];
 let miniflare: Miniflare;
 let db: Awaited<ReturnType<Miniflare['getD1Database']>>;
 
@@ -110,9 +112,9 @@ describe('account deletion D1 lifecycle', () => {
 
     expect(await db.prepare('SELECT * FROM user WHERE id = ?').bind('user-a').first()).toBeNull();
     expect(await db.prepare('SELECT match_id FROM match_results WHERE match_id = ?').bind('match-1').first()).toEqual({ match_id: 'match-1' });
-    expect(await db.prepare(`SELECT display_name, auth_user_id, account_type, rating, total_progress_units, unlock_all_classes,
+    expect(await db.prepare(`SELECT display_name, auth_user_id, account_type, rating, total_progress_units, unlock_all_classes, equipped_emblem,
       terms_version, privacy_version, legal_accepted_at FROM players WHERE player_id = 'player-a'`).first()).toEqual({
-      display_name: 'Deleted player', auth_user_id: null, account_type: null, rating: 1500, total_progress_units: 0, unlock_all_classes: 0,
+      display_name: 'Deleted player', auth_user_id: null, account_type: null, rating: 1500, total_progress_units: 0, unlock_all_classes: 0, equipped_emblem: 'beta-og',
       terms_version: 'terms-v1', privacy_version: 'privacy-v1', legal_accepted_at: 777,
     });
     expect(await db.prepare("SELECT display_name, auth_user_id FROM players WHERE player_id = 'player-b'").first()).toEqual({
@@ -148,5 +150,32 @@ describe('account deletion D1 lifecycle', () => {
     expect(accountDeletionChallengeStatus({ code_hash: 'new', expires_at: 20, failed_attempts: 3 }, 'new', 10)).toBe('exhausted');
     expect(accountDeletionChallengeStatus({ code_hash: 'new', expires_at: 20, failed_attempts: 0 }, 'old', 10)).toBe('invalid');
     expect(accountDeletionChallengeStatus({ code_hash: 'new', expires_at: 20, failed_attempts: 0 }, 'new', 10)).toBe('valid');
+  });
+
+  test('atomically exhausts a deletion code under parallel wrong guesses', async () => {
+    const hash = await accountDeletionCodeHash('secret', 'user-a', '123456');
+    await db.prepare(`INSERT INTO account_deletion_challenges
+      (user_id, code_hash, expires_at, failed_attempts, requested_at, last_sent_at) VALUES ('user-a', ?, 999999, 0, 1, 1)`)
+      .bind(hash).run();
+
+    const guesses = await Promise.all(Array.from({ length: 10 }, (_, index) =>
+      consumeAccountDeletionChallenge(db, 'secret', 'user-a', String(index).padStart(6, '0'), 10)));
+
+    expect(guesses.every((valid) => !valid)).toBe(true);
+    expect(await db.prepare("SELECT user_id FROM account_deletion_challenges WHERE user_id = 'user-a'").first()).toBeNull();
+    expect(await consumeAccountDeletionChallenge(db, 'secret', 'user-a', '123456', 10)).toBe(false);
+  });
+
+  test('atomically consumes an email code only once under parallel verification', async () => {
+    const hash = await emailChallengeHash('secret', 'password', 'user-a', '123456');
+    await db.prepare(`INSERT INTO email_auth_challenges
+      (challenge_key, purpose, user_id, email, code_hash, context_json, expires_at, failed_attempts, requested_at, last_sent_at)
+      VALUES ('password:user-a', 'password', 'user-a', 'a@example.com', ?, '{}', 999999, 0, 1, 1)`).bind(hash).run();
+
+    const results = await Promise.all(Array.from({ length: 10 }, () =>
+      consumeEmailChallenge(db, 'secret', 'password:user-a', 'password', 'user-a', 'a@example.com', '123456', 10)));
+
+    expect(results.filter(Boolean)).toHaveLength(1);
+    expect(await db.prepare("SELECT challenge_key FROM email_auth_challenges WHERE challenge_key = 'password:user-a'").first()).toBeNull();
   });
 });

@@ -9,7 +9,7 @@ import { getLayoutDocument } from '../../layout/layoutDocuments';
 import { applyConfiguredElement } from '../../layout/layoutRuntime';
 import { applyLayoutGeometry, type LayoutDocument, type LayoutElement, type LayoutGeometry, type LayoutOrientation } from '../../layout/layoutDocument';
 import type { ResponsiveScaleBoxLayout } from '../../layout/scaleBox';
-import { createBoilingSprite, type BoilingSprite } from '../../renderer/boilingSprite';
+import { BOIL_FRAME_COUNT, createBoilingSprite, type BoilingSprite } from '../../renderer/boilingSprite';
 import { playStarburstWipe } from '../../renderer/starburstWipe';
 import { createTextbox } from '../../ui/textbox';
 import { ABM_CLASSES, ABM_CLASS_BY_ID, startingResourcesForClass, type AbmStartingResources } from './attackBlockManaCatalog';
@@ -30,6 +30,8 @@ const PICK_CLASS_HEADER = `${ABM_ROOT}/pick-class-sheet.webp`;
 const LOCKED_CLASS_ART = `${ABM_ROOT}/locked-sheet.webp`;
 export const ABM_OPENING_COUNTDOWN_ART = `${ABM_ROOT}/scenes/opening/countdown-sheet.webp`;
 export const ABM_OPENING_GO_ART = `${ABM_ROOT}/scenes/opening/countdown-go-sheet.webp`;
+export const ABM_OPENING_READY_ART = `${ABM_ROOT}/scenes/opening/ready-sheet.webp`;
+export const ABM_OPENING_NUMBER_FRAME_COUNT = BATTLE_COUNTDOWN_FRAMES - BOIL_FRAME_COUNT;
 const COUNTERPICK_CLOUD_ART = {
   big: `${ABM_ROOT}/counterpick-cloud-big-sheet.webp`,
   mask: `${ABM_ROOT}/counterpick-cloud-mask.webp`,
@@ -288,7 +290,7 @@ export function createAttackBlockManaPresentation(
         ...Array.from({ length: 10 }, (_, index) => `/visual-elements/resource-counters/times${index}-sheet.webp`),
         ...Array.from({ length: 5 }, (_, index) => `/visual-elements/ready-waiting/countdown${index + 1}-sheet.webp`),
         ...Object.values(ABM_RESULT_SCENES), '/visual-elements/progress-bar-empty-sheet.webp', '/visual-elements/progress-bar-full-sheet.webp',
-        STUNNED_BUTTON_TAG, COUNTERPICK_TAG, PICK_CLASS_HEADER, LOCKED_CLASS_ART, ABM_OPENING_COUNTDOWN_ART, ABM_OPENING_GO_ART,
+        STUNNED_BUTTON_TAG, COUNTERPICK_TAG, PICK_CLASS_HEADER, LOCKED_CLASS_ART, ABM_OPENING_READY_ART, ABM_OPENING_COUNTDOWN_ART, ABM_OPENING_GO_ART,
         ...Object.values(COUNTERPICK_CLOUD_ART), ...ABM_SCENE_URLS];
       const lease = assetLoader.retainUrls(urls); await lease.ready; return lease;
     },
@@ -337,7 +339,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   const playedTransitionIds = new Set<string>();
   const playedSoundIds = new Set<string>();
   let wipeRunning = false;
-  let openingState: 'inactive' | 'countdown' | 'go' | 'ready' = 'inactive';
+  let openingState: 'inactive' | 'sync-ready' | 'countdown' | 'go' | 'ready' = 'inactive';
   let openingSequencePlayed = false;
   let openingGateActive = false;
   let openingCountdownPlayer: AnimationPlayer<number> | undefined;
@@ -569,10 +571,11 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   counterpickTag.element.hidden = true; sprites.push(counterpickTag); layout.composition.append(counterpickTag.element);
   sceneArtwork = layout.slots.scene.querySelector<HTMLElement>('.game-layout__scene')!;
   sceneArtwork.hidden = true;
+  const openingReady = createBoilingSprite({ src: ABM_OPENING_READY_ART, clock, className: 'abm-opening-scene', alt: 'Ready?' });
   const openingCountdown = createBoilingSprite({ src: ABM_OPENING_COUNTDOWN_ART, clock, frameCount: BATTLE_COUNTDOWN_FRAMES, autoAnimate: false, className: 'abm-opening-scene', alt: '' });
   const openingGo = createBoilingSprite({ src: ABM_OPENING_GO_ART, clock, className: 'abm-opening-scene', alt: 'Go' });
-  openingCountdown.element.hidden = true; openingGo.element.hidden = true;
-  sprites.push(openingCountdown, openingGo); layout.slots.scene.append(openingCountdown.element, openingGo.element);
+  openingReady.element.hidden = true; openingCountdown.element.hidden = true; openingGo.element.hidden = true;
+  sprites.push(openingReady, openingCountdown, openingGo); layout.slots.scene.append(openingReady.element, openingCountdown.element, openingGo.element);
   openingCountdownPlayer = new AnimationPlayer<number>({ commit: (frame) => openingCountdown.setFrame(frame) });
   controls.append(previous.element, next.element);
   classBadges = (['p1', 'p2'] as const).map((player) => {
@@ -639,7 +642,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
       ...counterpickTrailClouds.map(({ player, size, cloud }) => [`counterpick-cloud-${player}-${size}`, cloud.element] as [string, HTMLElement]),
       ...(counterpickTag ? [['p2-counterpick-tag', counterpickTag.element] as [string, HTMLElement]] : []),
       ...(sceneArtwork ? [['scene-art', sceneArtwork] as [string, HTMLElement]] : []),
-      ...(sceneArtwork ? [['scene-art', openingCountdown.element] as [string, HTMLElement], ['scene-art', openingGo.element] as [string, HTMLElement]] : []),
+      ...(sceneArtwork ? [['scene-art', openingReady.element] as [string, HTMLElement], ['scene-art', openingCountdown.element] as [string, HTMLElement], ['scene-art', openingGo.element] as [string, HTMLElement]] : []),
       ['picker-portrait', bonusXp.element], ['picker-portrait', portrait.element], ['picker-copy', copy.element],
       ...p1Resources.bindings, ...p2Resources.bindings,
       ...tagSlots,
@@ -725,17 +728,18 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     paint(nextProjection, serverTime, events, newestProgressAward);
   }
 
-  function startWipe(alignFirstBattleAtPeak = false) {
+  function startWipe(syncFirstBattle = false) {
     wipeRunning = true;
     void playStarburstWipe(container, clock, async () => {
-      if (alignFirstBattleAtPeak && music) {
-        const boundaryDelayMs = await music.scheduleFirstBattleTransition().catch(() => undefined);
-        // Audio is optional. If loading or scheduling fails, open the wipe at
-        // its peak instead of trapping the match behind a boundary that cannot arrive.
-        if (boundaryDelayMs !== undefined && scheduleTimers) await waitFor(boundaryDelayMs, transitionAbort.signal);
-      }
       if (!transitionAbort.signal.aborted) {
-        if (alignFirstBattleAtPeak) beginOpeningCountdown();
+        if (syncFirstBattle && music) {
+          const timing = await music.scheduleFirstBattleTransition().catch(() => undefined);
+          if (timing && scheduleTimers) {
+            openingState = 'sync-ready';
+            paint(newestProjection!, now(), newestEvents, newestProgressAward);
+            void waitFor(timing.boundaryDelayMs, transitionAbort.signal).then(() => beginOpeningCountdown());
+          } else beginOpeningCountdown();
+        }
         paint(newestProjection!, now(), newestEvents, newestProgressAward);
       }
     }, transitionAbort.signal)
@@ -746,9 +750,12 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     if (openingSequencePlayed || !openingCountdownPlayer) return;
     openingSequencePlayed = true;
     openingState = 'countdown';
+    openingReady.element.hidden = true;
     openingCountdown.element.hidden = false;
     openingGo.element.hidden = true;
-    void openingCountdownPlayer.play(Array.from({ length: BATTLE_COUNTDOWN_FRAMES }, (_, frame) => ({ value: frame, durationMs: BATTLE_COUNTDOWN_FRAME_MS }))).then(() => {
+    // The final three frames of the authored countdown sheet already display
+    // GO. Hand off to the looping GO sprite at that exact visual boundary.
+    void openingCountdownPlayer.play(Array.from({ length: ABM_OPENING_NUMBER_FRAME_COUNT }, (_, frame) => ({ value: frame, durationMs: BATTLE_COUNTDOWN_FRAME_MS }))).then(() => {
       if (transitionAbort.signal.aborted) return;
       openingState = newestProjection ? getAbmOpeningStateAfterCountdown(newestProjection) : 'go';
       openingGateActive = false;
@@ -791,10 +798,12 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     if (!rulesVisible && !rulesOverlay.hidden) setRulesOpen(false);
     const showingResult = (counterLocked || complete) && resultRevealed;
     const transitioning = counterLocked || complete;
+    const syncingOpening = openingState === 'sync-ready';
+    const openingControlsHidden = syncingOpening || openingState === 'countdown';
     const thiefFeedback = Boolean(nextProjection.thiefAttemptPlayers?.length);
     const waitingOnConjurer = nextProjection.phase === 'conjurer-choosing' && nextProjection.conjurer !== nextProjection.self;
-    picker.hidden = !picking; sceneArtwork.hidden = picking; lock.element.hidden = !picking; for (const [, button] of moves) button.element.hidden = picking || transitioning || waitingOnConjurer;
-    for (const [, arrow] of arrows) arrow.hidden = picking || transitioning || waitingOnConjurer;
+    picker.hidden = !picking; sceneArtwork.hidden = picking; lock.element.hidden = !picking; for (const [, button] of moves) button.element.hidden = picking || transitioning || openingControlsHidden || waitingOnConjurer;
+    for (const [, arrow] of arrows) arrow.hidden = picking || transitioning || openingControlsHidden || waitingOnConjurer;
     previous.element.hidden = !picking; next.element.hidden = !picking;
     const ownPlayer = nextProjection.players[nextProjection.self];
     const ownAbility = ownPlayer.classId ? ABM_CLASS_BY_ID.get(ownPlayer.classId)?.ability : undefined;
@@ -822,7 +831,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     const abilityFeedback = thiefFeedback || Boolean(nextProjection.taxmanCollectPlayers?.length);
     armedAbility = reconcileAbmArmedAbility(armedAbility, nextProjection, abilityFeedback);
     for (const [abilityId, button] of abilityButtons) {
-      button.element.hidden = picking || transitioning || ownAbility?.id !== abilityId || abilityFeedback
+      button.element.hidden = picking || transitioning || openingControlsHidden || ownAbility?.id !== abilityId || abilityFeedback
         || nextProjection.phase === 'conjurer-choosing' || Boolean(nextProjection.conjureStalemate);
       button.setDisabled(openingState === 'countdown' || !nextProjection.legalActions.includes(abilityId));
       button.setLockedDepressed(armedAbility === abilityId);
@@ -938,12 +947,14 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
       if (nextProjection.phase === 'waiting') openingState = 'ready';
       else if (nextProjection.turn > 1 || nextProjection.lastCompleteMoves) openingState = 'inactive';
     } else if (openingState === 'ready' && nextProjection.phase !== 'waiting') openingState = 'inactive';
+    const openingSyncReadyVisible = syncingOpening;
     const openingCountdownVisible = openingState === 'countdown';
     const openingGoVisible = openingState === 'go';
     const openingReadyVisible = openingState === 'ready' && nextProjection.phase === 'waiting';
+    openingReady.element.hidden = !openingSyncReadyVisible;
     openingCountdown.element.hidden = !openingCountdownVisible;
     openingGo.element.hidden = !openingGoVisible;
-    const showWaiting = nextProjection.phase === 'waiting' && !openingCountdownVisible && !openingGoVisible;
+    const showWaiting = nextProjection.phase === 'waiting' && !openingSyncReadyVisible && !openingCountdownVisible && !openingGoVisible;
     const showClassReady = picking && nextProjection.classReadyPlayer !== undefined && nextProjection.classReadyAt !== undefined;
     waiting.hidden = !showWaiting;
     classReadyArt.element.hidden = !showClassReady;
@@ -967,7 +978,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
       button.setLockedDepressed(nextProjection.ownPendingMove === move);
       button.setDisabled(openingCountdownVisible || transitioning || !nextProjection.legalActions.includes(move));
     }
-    if (openingCountdownVisible || openingGoVisible || openingReadyVisible) sceneArtwork.hidden = true;
+    if (openingSyncReadyVisible || openingCountdownVisible || openingGoVisible || openingReadyVisible) sceneArtwork.hidden = true;
     if (openingReadyVisible) {
       dotsArt.element.hidden = true;
       countdownArt.element.hidden = true;

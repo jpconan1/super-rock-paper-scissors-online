@@ -10,6 +10,8 @@ import { mountTitleScreen } from '../title/titleScreen';
 import { showSignUpDialog } from '../title/signUpDialog';
 import { showEmailLoginDialog } from '../title/emailLoginDialog';
 import { showGuestNameDialog } from '../title/guestNameDialog';
+import { showClaimAccountDialog } from '../title/claimAccountDialog';
+import { showGuestLogoutDialog } from '../title/guestLogoutDialog';
 import { playStarburstWipe } from '../renderer/starburstWipe';
 import { CurtainWipe } from '../renderer/curtainWipe';
 import { mountVariantSelectScreen } from '../variantSelect/variantSelectScreen';
@@ -35,6 +37,7 @@ import { AlertSystem, STANDARD_CONFIRMATION_GEOMETRY } from '../ui/alertSystem';
 import { ABM_TUTORIAL_SLIDES, mountTutorialSlideshow, tutorialEndingSlide, type TutorialSlideshow } from './tutorialSlideshow';
 import type { AbmProjection } from '../variants/attackBlockMana/attackBlockManaTypes';
 import { generateRandomName } from '../title/randomName';
+import { showPasswordAlert } from '../auth/passwordAlert';
 
 export type ConnectionState = 'connected' | 'reconnecting' | 'offline';
 export type ShellDestination = 'title' | 'lobby' | 'account' | 'match-found' | 'slot-picker' | 'scoreboard' | 'gameplay' | 'progress' | 'reward';
@@ -308,7 +311,8 @@ export class AppController {
         void showGuestNameDialog(this.alertSystem, options.clock).then((name) => { if (name) enterLobby(name); });
       },
       () => options.session.getOnlinePlayerCount(), (trigger) => this.openAbmLetter(trigger), {
-        signedIn: titleAccount.signedIn, displayName: titleAccount.displayName, emailAuthAvailable: titleAccount.emailAuthAvailable,
+        session: titleAccount.playerId ? (titleAccount.accountType === 'guest' ? 'guest' : 'protected') : 'none',
+        displayName: titleAccount.displayName, emailAuthAvailable: titleAccount.emailAuthAvailable,
         emailSignupAvailable: titleAccount.emailSignupAvailable,
       }, () => enterLobby(titleAccount.displayName), () => {
         if (titleAccount.accountType === 'guest' && titleAccount.playerId) void this.startGoogleSignIn('claim', '', 'lobby');
@@ -317,8 +321,12 @@ export class AppController {
         await options.session.signInWithEmail(email, password);
         this.playerName = options.session.accountState().displayName;
         await this.navigate('lobby');
-      }, (email) => options.session.requestPasswordCode(email),
-      (email, code, password) => options.session.updateEmailPassword(email, code, password),
+      }, (email) => {
+        if (!this.alertSystem) return;
+        showPasswordAlert(this.alertSystem, options.clock, email, 'forgot',
+          (address) => options.session.requestPasswordCode(address),
+          (address, code, password) => options.session.updateEmailPassword(address, code, password));
+      },
       async (email) => {
         await options.session.requestEmailLogin(email);
         if (!this.alertSystem) return;
@@ -342,7 +350,27 @@ export class AppController {
           this.playerName = options.session.accountState().displayName;
           await this.navigate('lobby');
         }).catch((error) => { this.music.enterTitle(); this.showError(error, 'title'); });
-      }, () => void this.logOutToTitle());
+      }, () => {
+        if (titleAccount.accountType !== 'guest') { void this.logOutToTitle(); return; }
+        if (!this.alertSystem) return;
+        void showGuestLogoutDialog(this.alertSystem).then((confirmed) => { if (confirmed) void this.logOutToTitle(); });
+      }, () => {
+        if (!this.alertSystem) return;
+        void showClaimAccountDialog(this.alertSystem).then((method) => {
+          if (method === 'google') { void this.startGoogleSignIn('claim', '', 'lobby'); return; }
+          if (method !== 'email') return;
+          this.music.enterLobby();
+          void showSignUpDialog(this.alertSystem!, options.clock, {
+            request: (displayName, email, legalAccepted) => options.session.requestEmailSignup(displayName, email, legalAccepted),
+            verify: (email, code, password) => options.session.verifyEmailSignup(email, code, password),
+            resend: (displayName, email) => options.session.resendEmailSignup(displayName, email),
+          }, titleAccount.displayName).then(async (complete) => {
+            if (!complete) { this.music.enterTitle(); return; }
+            this.playerName = options.session.accountState().displayName;
+            await this.navigate('lobby');
+          }).catch((error) => { this.music.enterTitle(); this.showError(error, 'title'); });
+        });
+      });
       this.screenCleanup = title;
       this.screenReady = title.ready;
     } else if (destination === 'lobby') {
@@ -366,6 +394,9 @@ export class AppController {
         account.unlockedClassIds.length,
         account.level === 21 ? 10_000 : account.totalProgressUnits % 10_000,
         account.unlockAllClasses,
+        account.equippedEmblem,
+        (emblem) => options.session.setEquippedEmblem(emblem),
+        (error) => this.showError(error),
         {},
       );
       lobby.receiveWhiteboard({ type: 'snapshot', board: this.whiteboard });
@@ -693,6 +724,7 @@ export class AppController {
     this.localMatch = new LocalAbmMatch({
       playerName: this.playerName,
       playerLevel: this.options.session.accountState().level,
+      playerEmblem: this.options.session.accountState().equippedEmblem,
       ...(grant ? { matchId: grant.receipt } : {}),
       unlockedClassIds: this.options.session.accountState().unlockedClassIds,
       publish: (snapshot) => this.receiveSnapshot(snapshot, true),
@@ -716,6 +748,7 @@ export class AppController {
     this.localMatch = new LocalAbmMatch({
       playerName: this.playerName,
       playerLevel: this.options.session.accountState().level,
+      playerEmblem: this.options.session.accountState().equippedEmblem,
       ...(grant ? { matchId: grant.receipt } : {}),
       startingClasses: { p1: 'lucky', p2: 'lucky' },
       unlockedClassIds: this.options.session.accountState().unlockedClassIds,

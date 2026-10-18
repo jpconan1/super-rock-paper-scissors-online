@@ -12,7 +12,7 @@ describe('matchmaking queue heartbeat', () => {
 
   test('refreshes an existing guest heartbeat and current player data', () => {
     const result = refreshMatchmakingQueue([entry('self', 1)], 'self', 'self-attempt', 'New Name', 1600, 4_000, 5_000);
-    expect(result.queue).toEqual([{ guestId: 'self', attemptId: 'self-attempt', name: 'New Name', rating: 1600, queuedAt: 4_000 }]);
+    expect(result.queue).toEqual([{ guestId: 'self', attemptId: 'self-attempt', name: 'New Name', rating: 1600, equippedEmblem: 'beta-og', queuedAt: 4_000 }]);
   });
 
   test('matches an active opponent and removes both queue entries', () => {

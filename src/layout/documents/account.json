@@ -278,9 +278,9 @@
       "protected": true,
       "label": "Set Password",
       "assets": {
-        "up": "/account/change-password-button-up-sheet.webp",
-        "between": "/account/change-password-button-between-sheet.webp",
-        "depressed": "/account/change-password-button-depressed-sheet.webp"
+        "up": "/account/set-password-button-up-sheet.webp",
+        "between": "/account/set-password-button-between-sheet.webp",
+        "depressed": "/account/set-password-button-depressed-sheet.webp"
       },
       "properties": {
         "bakedLabel": true

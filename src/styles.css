@@ -108,11 +108,27 @@ body::before {
 .fixed-alert-canvas__content { overflow: visible; }
 .fixed-alert-canvas__content { position: relative; width: 100%; height: 100%; }
 .alert-system__box {
+  position: relative;
   display: grid;
   padding: 28px;
   place-items: center;
   gap: 28px;
 }
+.alert-system__box--titled { padding-top: 84px; }
+.alert-system__title-bar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  display: flex;
+  box-sizing: border-box;
+  min-height: 56px;
+  align-items: center;
+  padding: 8px 60px 8px 16px;
+  border-radius: 2px 2px 0 0;
+  background: rgba(255, 248, 226, .88);
+}
+.alert-system__title { margin: 0; color: #ac3235; font-size: 25px; font-weight: 950; line-height: 1; text-align: left; }
 .game-button.alert-system__close { position: absolute; z-index: 4; top: 8px; right: 8px; width: 40px; }
 .alert-system__content { color: #ac3235; font-size: 32px; font-weight: 900; text-align: center; }
 .alert-system__content > :first-child { margin-top: 0; }
@@ -121,10 +137,18 @@ body::before {
 .alert-system__actions { display: flex; width: 100%; flex-wrap: wrap; align-items: center; justify-content: center; gap: 24px; }
 .game-button.alert-system__action { width: 160px; }
 .alert-system__box.sign-up-alert { gap: 8px; padding: 14px 24px; }
+.alert-system__box--titled.sign-up-alert { padding: 70px 24px 14px; }
 .sign-up-alert .alert-system__content { width: 100%; color: #171412; text-align: left; }
 .sign-up-alert .alert-system__actions:empty { display: none; }
+.alert-system__box.claim-account-alert { gap: 22px; }
+.claim-account-alert .alert-system__content { width: 100%; text-align: center; }
+.claim-account-dialog__heading { margin: 0; color: #24533d; font-size: 30px; line-height: 1.1; }
+.claim-account-alert .alert-system__actions { justify-content: center; gap: 20px; }
+.alert-system__box.guest-logout-alert { gap: 18px; }
+.guest-logout-alert .alert-system__content { width: 100%; text-align: center; }
+.guest-logout-dialog__warning { margin: 0; color: #171412; font-size: 24px; font-weight: 900; line-height: 1.2; text-wrap: balance; }
+.guest-logout-alert .alert-system__actions { justify-content: center; }
 .sign-up-dialog { display: grid; width: 100%; justify-items: start; gap: 7px; }
-.sign-up-dialog__heading { margin: 0 0 4px; color: #ac3235; font-size: 30px; line-height: 1; }
 .sign-up-dialog .text-entry { width: 340px; height: 50px; flex: none; }
 .sign-up-dialog__form { display: grid; width: 100%; justify-items: start; gap: 7px; }
 .sign-up-dialog__name-row, .sign-up-dialog__password-row { display: flex; width: 100%; align-items: center; justify-content: flex-start; gap: 10px; }
@@ -157,10 +181,10 @@ body::before {
 .game-button.guest-name-dialog__button { width: 140px; flex: none; }
 .fixed-alert-canvas__content[data-layout='portrait'] .guest-name-dialog__entry { width: 370px; }
 .alert-system__box.email-login-alert { gap: 0; padding: 24px; }
+.alert-system__box--titled.email-login-alert { padding: 70px 24px 24px; }
 .email-login-alert .alert-system__content { width: 100%; color: #171412; }
 .email-login-alert .alert-system__actions:empty { display: none; }
 .email-login-dialog, .email-login-dialog__form { display: grid; width: 100%; justify-items: center; gap: 16px; }
-.email-login-dialog__heading { margin: 0; color: #ac3235; font-size: 34px; line-height: 1; }
 .email-login-dialog__instruction, .email-login-dialog__status { margin: 0; font-size: 17px; line-height: 1.25; }
 .email-login-dialog__status { min-height: 22px; color: #ac3235; font-weight: 900; }
 .email-login-dialog__entry { width: 360px; height: 50px; }
@@ -358,6 +382,9 @@ body::before {
 
 .universal-menu { position: absolute; z-index: 100; inset: 0; display: grid; padding: 20px; place-items: center; background: rgba(29, 27, 24, .48); pointer-events: auto; }
 .universal-menu__box { position: relative; width: min(700px, 100%); min-height: 360px; padding: clamp(20px, 5vw, 42px); }
+.universal-menu__box--titled { padding-top: 84px; }
+.universal-menu__box--lobby .alert-system__title-bar { justify-content: center; padding-inline: 60px; }
+.universal-menu__box--lobby .alert-system__title { text-align: center; }
 .game-button.universal-menu__close { position: absolute; z-index: 4; top: 8px; right: 8px; width: 40px; }
 .universal-menu__controls { display: grid; grid-template-columns: 170px repeat(2, minmax(0, 1fr)); align-items: center; justify-items: center; gap: 26px 30px; }
 .universal-menu__controls .title-volume-slider { width: min(10rem, 100%); }
@@ -375,6 +402,9 @@ body::before {
 .game-button.universal-menu__continue { grid-column: 2; }
 .game-button.universal-menu__quit { grid-column: 3; }
 .universal-menu__box--game { width: min(470px, 100%); min-height: 0; padding: clamp(18px, 4vw, 28px); }
+.universal-menu__box--titled.universal-menu__box--game { padding-top: 72px; }
+.universal-menu__box--game .alert-system__title-bar { justify-content: center; padding-inline: 60px; }
+.universal-menu__box--game .alert-system__title { text-align: center; }
 .universal-menu__controls--game { grid-template-columns: repeat(2, minmax(0, 170px)); justify-content: center; gap: 16px 20px; }
 .universal-menu__controls--game .universal-menu__slider:first-child,
 .universal-menu__controls--game .universal-menu__toggle:nth-child(3),
@@ -576,16 +606,16 @@ input {
 .account-screen__error { margin: 0; color: #ac3235; text-align: center; }
 .account-screen__curtain-open, .account-screen__curtain-left, .account-screen__curtain-right { pointer-events: none; }
 .alert-system__box.delete-account-alert { gap: 12px; padding: 22px 28px; }
+.alert-system__box--titled.delete-account-alert { padding: 70px 28px 22px; }
 .delete-account-alert .alert-system__content { width: 100%; color: #171412; font-size: 19px; }
 .delete-account-dialog { display: grid; justify-items: center; gap: 10px; }
-.delete-account-dialog h2, .delete-account-dialog p { margin: 0; }
-.delete-account-dialog h2 { color: #ac3235; font-size: 32px; }
+.delete-account-dialog p { margin: 0; }
 .delete-account-dialog__entry { width: 340px; height: 50px; }
 .alert-system__box.password-alert { gap: 12px; padding: 22px 28px; }
+.alert-system__box--titled.password-alert { padding: 70px 28px 22px; }
 .password-alert .alert-system__content { width: 100%; color: #171412; font-size: 19px; }
 .password-dialog { display: grid; justify-items: center; gap: 10px; }
-.password-dialog h2, .password-dialog p { margin: 0; }
-.password-dialog h2 { color: #ac3235; font-size: 32px; }
+.password-dialog p { margin: 0; }
 .password-dialog__entry { width: 340px; height: 50px; }
 .fixed-alert-canvas__content[data-layout='portrait'] .password-dialog__entry { width: 320px; }
 .title-screen__account-status { position: absolute; display: grid; place-items: center; margin: 0; color: #24533d; font-size: 17px; font-weight: 950; line-height: 1.05; text-align: center; transform: rotate(-.4deg); }
@@ -680,13 +710,13 @@ input {
 .lobby-screen__header { position: absolute; }
 .lobby-screen__face { position: absolute; inset: 0; }
 .lobby-screen__face[hidden] { display: none; }
-.lobby-screen__player-name,
-.lobby-screen__player-level,
+.lobby-screen__emblem-card,
+.lobby-screen__emblem-button,
 .lobby-screen__progress-bar,
 .lobby-screen__progress-copy,
 .lobby-screen__progress-next { position: absolute; z-index: 4; text-align: center; }
-.lobby-screen__player-name,
-.lobby-screen__player-level { display: grid; place-items: center; font-size: 25px; }
+.lobby-screen__emblem-card { position: absolute; z-index: 4; }
+.lobby-screen__emblem-button { position: absolute; z-index: 5; }
 .lobby-screen__progress-bar { display: block; }
 .lobby-screen__progress-copy { display: grid; place-items: center; font-size: 18px; font-weight: 900; }
 .lobby-screen__progress-next { display: grid; place-items: center; font-size: 15px; font-weight: 900; }
@@ -716,8 +746,8 @@ input {
   -webkit-mask-size: 100% 300%;
 }
 .lobby-screen__class-card > .boiling-sprite__canvas { width: 100%; height: 100%; object-fit: contain; }
-.lobby-screen__player-name[hidden],
-.lobby-screen__player-level[hidden],
+.lobby-screen__emblem-card[hidden],
+.lobby-screen__emblem-button[hidden],
 .lobby-screen__progress-bar[hidden],
 .lobby-screen__progress-copy[hidden],
 .lobby-screen__progress-next[hidden],
@@ -1041,11 +1071,17 @@ input {
   white-space: nowrap;
   transform: translateY(5px);
 }
+.player-emblem-card {
+  color: #000;
+  font-size: 15px;
+  line-height: 1;
+  white-space: nowrap;
+}
 .game-layout:not([data-layout='portrait']) .game-layout__player-info { transform: translateY(14px); }
-.game-layout__player-emblem,
-.game-layout__player-emblem-border,
-.game-layout__player-heading { position: absolute; }
-.game-layout__player-emblem {
+.player-emblem-card__emblem,
+.player-emblem-card__border,
+.player-emblem-card__heading { position: absolute; }
+.player-emblem-card__emblem {
   z-index: 2;
   left: 19px;
   top: 24px;
@@ -1053,8 +1089,8 @@ input {
   height: 82px;
   object-fit: contain;
 }
-.game-layout__player-emblem > .boiling-sprite__canvas { object-fit: contain; }
-.game-layout__player-emblem-border {
+.player-emblem-card__emblem > .boiling-sprite__canvas { object-fit: contain; }
+.player-emblem-card__border {
   z-index: 1;
   position: absolute;
   inset: 0;
@@ -1062,15 +1098,15 @@ input {
   height: 120px;
   object-fit: fill;
 }
-.game-layout__player-heading {
+.player-emblem-card__heading {
   z-index: 3;
   top: -8px;
   right: -6px;
   left: -6px;
   height: 24px;
 }
-.game-layout__player-name,
-.game-layout__player-level {
+.player-emblem-card__name,
+.player-emblem-card__level {
   position: absolute;
   top: 0;
   box-sizing: border-box;
@@ -1081,14 +1117,14 @@ input {
   align-items: center;
   padding: 0 5px;
 }
-.game-layout__player-name {
+.player-emblem-card__name {
   left: 0;
   width: max-content;
   max-width: calc(100% - 43px);
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.game-layout__player-level {
+.player-emblem-card__level {
   right: 0;
   min-width: 46px;
   justify-content: center;
@@ -1098,8 +1134,8 @@ input {
 
 .game-layout__slot--p1-info { justify-content: flex-start; }
 .game-layout__slot--p2-info { justify-content: flex-end; }
-.game-layout__player-info--p2 .game-layout__player-name { right: 0; left: auto; justify-content: flex-end; }
-.game-layout__player-info--p2 .game-layout__player-level { right: auto; left: 0; }
+.game-layout__player-info--p2 .player-emblem-card__name { right: 0; left: auto; justify-content: flex-end; }
+.game-layout__player-info--p2 .player-emblem-card__level { right: auto; left: 0; }
 
 .game-layout__turn { width: 200px; flex: none; }
 .game-layout__wins-label { width: 96px; }
@@ -1324,22 +1360,22 @@ input {
   transform-origin: top left;
 }
 .game-layout[data-layout='portrait'] .game-layout__player-info--p2 { transform-origin: top right; }
-.game-layout[data-layout='portrait'] .game-layout__player-emblem {
+.game-layout[data-layout='portrait'] .player-emblem-card__emblem {
   left: 17px;
   top: 22px;
   width: 182px;
   height: 74px;
 }
-.game-layout[data-layout='portrait'] .game-layout__player-emblem-border { width: 216px; height: 108px; }
-.game-layout[data-layout='portrait'] .game-layout__player-name,
-.game-layout[data-layout='portrait'] .game-layout__player-level {
+.game-layout[data-layout='portrait'] .player-emblem-card__border { width: 216px; height: 108px; }
+.game-layout[data-layout='portrait'] .player-emblem-card__name,
+.game-layout[data-layout='portrait'] .player-emblem-card__level {
   height: 20px;
   border-width: 2px;
   padding-inline: 4px;
 }
-.game-layout[data-layout='portrait'] .game-layout__player-heading { top: -7px; right: -5px; left: -5px; height: 20px; }
-.game-layout[data-layout='portrait'] .game-layout__player-name { max-width: calc(100% - 35px); }
-.game-layout[data-layout='portrait'] .game-layout__player-level { min-width: 38px; }
+.game-layout[data-layout='portrait'] .player-emblem-card__heading { top: -7px; right: -5px; left: -5px; height: 20px; }
+.game-layout[data-layout='portrait'] .player-emblem-card__name { max-width: calc(100% - 35px); }
+.game-layout[data-layout='portrait'] .player-emblem-card__level { min-width: 38px; }
 .game-layout[data-layout='portrait'] .game-layout__turn { width: 150px; }
 .game-layout[data-layout='portrait'] .game-layout__wins-label { width: 72px; }
 .game-layout[data-layout='portrait'] .game-layout__win-counter { width: 48px; }

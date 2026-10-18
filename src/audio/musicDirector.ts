@@ -1,6 +1,10 @@
 import type { AbmProjection } from '../variants/attackBlockMana/attackBlockManaTypes';
 import { playMusicInterrupt, preloadMusic, scheduleMusicBaseAtNextMeasure, setMusicBaseAtCurrentLoopPhase, setMusicBaseAtCurrentMeasurePhase, setMusicBaseImmediately, startPreloadedMusic, stopMusic } from './soundEffect';
+import type { ScheduledMusicTransition } from './musicTransport';
 import { BATTLE_MEASURE_SAMPLES } from './musicManifest';
+import { STARBURST_WIPE_COVER_MS, STARBURST_WIPE_MS } from '../core/time';
+
+export const FIRST_BATTLE_WIPE_OPEN_MS = STARBURST_WIPE_MS - STARBURST_WIPE_COVER_MS;
 
 export class MusicDirector {
   private mode: 'title' | 'lobby' | 'abm' | 'practice-abm' | 'online-abm' | 'stopped' = 'stopped';
@@ -67,7 +71,7 @@ export class MusicDirector {
     this.battleIntroReady = startPreloadedMusic('battle-intro', 'online-battle');
   }
 
-  async scheduleFirstBattleTransition(): Promise<number | undefined> {
+  async scheduleFirstBattleTransition(): Promise<ScheduledMusicTransition | undefined> {
     if ((this.mode !== 'practice-abm' && this.mode !== 'online-abm') || this.fullBattleStarted) return undefined;
     try {
       await this.battleIntroReady;
@@ -76,10 +80,10 @@ export class MusicDirector {
       return undefined;
     }
     if ((this.mode !== 'practice-abm' && this.mode !== 'online-abm') || this.fullBattleStarted) return undefined;
-    const timing = await scheduleMusicBaseAtNextMeasure('battle-main', BATTLE_MEASURE_SAMPLES, 0).catch(() => undefined);
+    const timing = await scheduleMusicBaseAtNextMeasure('battle-main', BATTLE_MEASURE_SAMPLES, FIRST_BATTLE_WIPE_OPEN_MS).catch(() => undefined);
     if (this.mode !== 'practice-abm' && this.mode !== 'online-abm') return undefined;
     this.fullBattleStarted = true;
-    return timing?.boundaryDelayMs;
+    return timing;
   }
 
   usesBeatAlignedFirstBattleTransition(): boolean {

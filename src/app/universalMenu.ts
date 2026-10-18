@@ -23,6 +23,8 @@ export type UniversalMenuOptions = LobbyUniversalMenuOptions | GameUniversalMenu
 export const QUIT_CONFIRMATION_COPY = 'Are you sure you want to quit to the title screen?';
 export const GAME_QUIT_CONFIRMATION_COPY = 'Quit this match and return to the lobby?';
 export const UNLOCK_CONFIRMATION_COPY = 'Unlock everything?';
+export const LOBBY_SETTINGS_TITLE = 'Lobby Settings';
+export const GAME_SETTINGS_TITLE = 'Game Settings';
 export const ALERT_BUTTON_SHEETS = {
   back: { up: '/interactive-elements/menu-buttons/back-button-w-up-sheet.webp', between: '/interactive-elements/menu-buttons/back-button-w-between-sheet.webp', depressed: '/interactive-elements/menu-buttons/back-button-w-depressed-sheet.webp' },
   quit: { up: '/new-buttons/quit-button-up-sheet.webp', between: '/new-buttons/quit-button-between-sheet.webp', depressed: '/new-buttons/quit-button-depressed-sheet.webp' },
@@ -39,6 +41,21 @@ export const MENU_QUIT_BUTTONS = {
     sheets: { up: '/new-buttons/quit-lobby-button-up-sheet.webp', between: '/new-buttons/quit-lobby-button-between-sheet.webp', depressed: '/new-buttons/quit-lobby-button-depressed-sheet.webp' },
   },
 } as const satisfies Readonly<Record<UniversalMenuMode, { label: string; sheets: AlertButtonSheets }>>;
+
+export const LOBBY_ACCOUNT_BUTTONS = {
+  account: {
+    label: 'Account settings',
+    sheets: { up: '/account/account-button-up-sheet.webp', between: '/account/account-button-between-sheet.webp', depressed: '/account/account-button-depressed-sheet.webp' },
+  },
+  claim: {
+    label: 'Claim account',
+    sheets: { up: '/account/claim-account-button-up-sheet.webp', between: '/account/claim-account-button-between-sheet.webp', depressed: '/account/claim-account-button-depressed-sheet.webp' },
+  },
+} as const satisfies Readonly<Record<string, { label: string; sheets: AlertButtonSheets }>>;
+
+export function lobbyAccountButtonFor(signedIn: boolean) {
+  return signedIn ? LOBBY_ACCOUNT_BUTTONS.account : LOBBY_ACCOUNT_BUTTONS.claim;
+}
 
 export function selectUniversalMenuMode(hasLocalMatch: boolean, hasMatchProjection: boolean): UniversalMenuMode {
   return hasLocalMatch || hasMatchProjection ? 'game' : 'lobby';
@@ -119,8 +136,9 @@ export function mountUniversalMenu(container: HTMLElement, background: HTMLEleme
     resumeProgression = createGameButton({ label: 'Resume progression', onActivate: () => void updateUnlockAll(false), clock,
       upSheet: '/interactive-elements/resume-progression/lock-button-up-sheet.webp', betweenSheet: '/interactive-elements/resume-progression/lock-button-between-sheet.webp', depressedSheet: '/interactive-elements/resume-progression/lock-button-depressed-sheet.webp' });
     resumeProgression.element.classList.add('universal-menu__resume-progression', 'game-button--baked-label');
-    const accountButton = createGameButton({ label: 'Account settings', onActivate: options.onAccount, clock,
-      upSheet: '/account/account-button-up-sheet.webp', betweenSheet: '/account/account-button-between-sheet.webp', depressedSheet: '/account/account-button-depressed-sheet.webp' });
+    const accountButtonConfig = lobbyAccountButtonFor(options.account.signedIn);
+    const accountButton = createGameButton({ label: accountButtonConfig.label, onActivate: options.onAccount, clock,
+      upSheet: accountButtonConfig.sheets.up, betweenSheet: accountButtonConfig.sheets.between, depressedSheet: accountButtonConfig.sheets.depressed });
     accountButton.element.classList.add('universal-menu__account-button', 'game-button--baked-label');
     const accountPanel = document.createElement('div'); accountPanel.className = 'universal-menu__account';
     const accountLabel = document.createElement('p');
@@ -132,9 +150,23 @@ export function mountUniversalMenu(container: HTMLElement, background: HTMLEleme
     renderUnlockControl();
   }
   controls.append(continueButton.element, quit.element);
-  const box = createTextbox({ className: `universal-menu__box universal-menu__box--${options.mode}`, role: 'dialog', ariaLabel: 'Menu', content: controls });
+  let titleBar: HTMLElement | undefined;
+  if (options.mode === 'lobby' || options.mode === 'game') {
+    const title = document.createElement('h2');
+    title.id = `${options.mode}-settings-title`;
+    title.className = 'alert-system__title';
+    title.textContent = options.mode === 'lobby' ? LOBBY_SETTINGS_TITLE : GAME_SETTINGS_TITLE;
+    titleBar = document.createElement('header');
+    titleBar.className = 'alert-system__title-bar';
+    titleBar.append(title, closeButton.element);
+  }
+  const box = createTextbox({
+    className: `universal-menu__box universal-menu__box--${options.mode}${titleBar ? ' universal-menu__box--titled' : ''}`,
+    role: 'dialog', ariaLabel: titleBar ? undefined : 'Menu', content: [...(titleBar ? [titleBar] : []), controls],
+  });
   box.element.setAttribute('aria-modal', 'true');
-  box.element.append(closeButton.element);
+  if (titleBar) box.element.setAttribute('aria-labelledby', `${options.mode}-settings-title`);
+  else box.element.append(closeButton.element);
   if (lobbyDecorations.length) box.element.prepend(...lobbyDecorations);
   overlay.append(box.element); container.append(overlay); background.inert = true;
   const unsubscribe = subscribeAudioState(({ enabled }) => { music.setDisabled(!enabled); sfx.setDisabled(!enabled); });

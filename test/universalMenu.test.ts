@@ -2,14 +2,22 @@ import { describe, expect, test } from 'vitest';
 import {
   ALERT_BUTTON_SHEETS,
   GAME_QUIT_CONFIRMATION_COPY,
+  GAME_SETTINGS_TITLE,
+  LOBBY_ACCOUNT_BUTTONS,
+  LOBBY_SETTINGS_TITLE,
   MENU_QUIT_BUTTONS,
   QUIT_CONFIRMATION_COPY,
   selectUniversalMenuMode,
   UNLOCK_CONFIRMATION_COPY,
   universalMenuFeatures,
+  lobbyAccountButtonFor,
 } from '../src/app/universalMenu';
 
 describe('universal menu', () => {
+  test('uses the lobby settings title', () => {
+    expect(LOBBY_SETTINGS_TITLE).toBe('Lobby Settings');
+    expect(GAME_SETTINGS_TITLE).toBe('Game Settings');
+  });
   test('confirms quitting to the title screen', () => {
     expect(QUIT_CONFIRMATION_COPY).toBe('Are you sure you want to quit to the title screen?');
     expect(GAME_QUIT_CONFIRMATION_COPY).toBe('Quit this match and return to the lobby?');
@@ -44,5 +52,17 @@ describe('universal menu', () => {
     });
     expect(MENU_QUIT_BUTTONS.game.label).toBe('Quit to Lobby');
     expect(MENU_QUIT_BUTTONS.game.sheets.up).toBe('/new-buttons/quit-lobby-button-up-sheet.webp');
+  });
+  test('uses claim-account artwork for guests and account-settings artwork for protected accounts', () => {
+    expect(lobbyAccountButtonFor(false)).toBe(LOBBY_ACCOUNT_BUTTONS.claim);
+    expect(lobbyAccountButtonFor(false)).toEqual({
+      label: 'Claim account',
+      sheets: {
+        up: '/account/claim-account-button-up-sheet.webp',
+        between: '/account/claim-account-button-between-sheet.webp',
+        depressed: '/account/claim-account-button-depressed-sheet.webp',
+      },
+    });
+    expect(lobbyAccountButtonFor(true)).toBe(LOBBY_ACCOUNT_BUTTONS.account);
   });
 });

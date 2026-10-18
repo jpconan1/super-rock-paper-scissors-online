@@ -2,7 +2,8 @@ import type { BoilClock } from '../animation/boilClock';
 import { createGameButton, type GameButton } from '../input/gameButton';
 import { createBoilingSprite, type BoilingSprite } from '../renderer/boilingSprite';
 import type { PlayerId } from '../core/variant';
-import type { PlayerEmblem } from '../protocol/protocol';
+import { PLAYER_EMBLEM_BY_ID, type PlayerEmblem } from '../core/playerEmblem';
+import { createPlayerEmblemCard, emblemBorderNumber } from '../ui/playerEmblemCard';
 import {
   createScaleBox,
   observeResponsiveScaleBox,
@@ -48,18 +49,7 @@ export interface GameLayoutPlayer {
   emblem?: PlayerEmblem;
 }
 
-const EMBLEM_BORDER_COUNT = 44;
-
-/** Temporary stable assignment until emblem borders become persisted account data. */
-export function emblemBorderNumber(displayName: string): number {
-  const normalized = displayName.normalize('NFKC').trim().replace(/\s+/gu, ' ').toLocaleLowerCase('en-US');
-  let hash = 0x811c9dc5;
-  for (const character of normalized) {
-    hash ^= character.codePointAt(0)!;
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return (hash >>> 0) % EMBLEM_BORDER_COUNT + 1;
-}
+export { emblemBorderNumber } from '../ui/playerEmblemCard';
 
 export interface GameLayoutArtwork {
   src: string;
@@ -283,36 +273,10 @@ export function createPlayerInfo(player: GameLayoutPlayer, side: 'p1' | 'p2', cl
 } {
   const info = document.createElement('div');
   info.className = `game-layout__player-info game-layout__player-info--${side}`;
+  const card = createPlayerEmblemCard({ name: player.heading, level: player.level, emblem: player.emblem }, clock);
+  card.element.classList.add('game-layout__player-card');
+  info.replaceChildren(...card.element.children);
   const level = Number.isSafeInteger(player.level) && player.level! > 0 ? player.level! : 1;
-  const emblemKind = player.emblem ?? 'new-player';
-  const emblemName = emblemKind === 'bot' ? 'Bot' : 'New Player';
-  const borderNumber = emblemBorderNumber(player.heading);
-  info.setAttribute('aria-label', `${player.heading}, level ${level}, ${emblemName} emblem`);
-
-  const emblem = createBoilingSprite({
-    src: `/emblems/${emblemKind === 'bot' ? 'bot-emblem' : 'new-player'}-sheet.webp`,
-    clock,
-    className: 'game-layout__player-emblem',
-    alt: '',
-  });
-
-  const border = document.createElement('img');
-  border.className = 'game-layout__player-emblem-border';
-  border.src = `/emblems/borders/${borderNumber}.webp`;
-  border.alt = '';
-  border.draggable = false;
-
-  const name = document.createElement('strong');
-  name.className = 'game-layout__player-name';
-  name.textContent = player.heading;
-  name.title = player.heading;
-
-  const levelLabel = document.createElement('span');
-  levelLabel.className = 'game-layout__player-level';
-  levelLabel.textContent = `Lv ${level}`;
-  const heading = document.createElement('div');
-  heading.className = 'game-layout__player-heading';
-  heading.append(name, levelLabel);
-  info.append(border, emblem.element, heading);
-  return { element: info, emblem };
+  info.setAttribute('aria-label', `${player.heading}, level ${level}, ${PLAYER_EMBLEM_BY_ID.get(player.emblem ?? 'beta-og')!.name} emblem`);
+  return { element: info, emblem: card.emblem };
 }

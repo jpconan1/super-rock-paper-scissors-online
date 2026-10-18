@@ -32,6 +32,7 @@
       "/account-method",
       "/player-session",
       "/player-progression",
+      "/player-emblem",
       "/local-match-grant",
       "/local-progress-award",
       "/api/auth/*",

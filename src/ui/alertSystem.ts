@@ -26,6 +26,7 @@ export interface AlertAction<T> {
 
 export interface AlertOptions<T> {
   ariaLabel: string;
+  title?: string;
   geometry: ResponsiveAlertGeometry;
   content: string | Node;
   actions: readonly AlertAction<T>[];
@@ -54,6 +55,8 @@ const CLOSE_BUTTON_SHEETS: AlertButtonSheets = {
   between: '/interactive-elements/generic-buttons/close-button-between-sheet.webp',
   depressed: '/interactive-elements/generic-buttons/close-button-depressed-sheet.webp',
 };
+
+let alertTitleId = 0;
 
 interface ActiveAlert<T = unknown> {
   handle: AlertHandle<T>;
@@ -94,12 +97,25 @@ export class AlertSystem {
     error.hidden = true;
     const actions = document.createElement('div');
     actions.className = 'alert-system__actions';
+    let titleBar: HTMLElement | undefined;
+    let titleId: string | undefined;
+    if (options.title) {
+      titleId = `alert-system-title-${++alertTitleId}`;
+      const title = document.createElement('h2');
+      title.className = 'alert-system__title';
+      title.setAttribute('id', titleId);
+      title.textContent = options.title;
+      titleBar = document.createElement('header');
+      titleBar.className = 'alert-system__title-bar';
+      titleBar.append(title);
+    }
     const textbox = createTextbox({
-      className: ['alert-system__box', options.className].filter(Boolean).join(' '),
+      className: ['alert-system__box', titleBar ? 'alert-system__box--titled' : '', options.className].filter(Boolean).join(' '),
       role: options.role ?? 'alertdialog',
-      ariaLabel: options.ariaLabel,
-      content: [message, error, actions],
+      ariaLabel: titleBar ? undefined : options.ariaLabel,
+      content: [...(titleBar ? [titleBar] : []), message, error, actions],
     });
+    if (titleId) textbox.element.setAttribute('aria-labelledby', titleId);
     textboxElement = textbox.element;
     applyAlertGeometry(textbox.element, options.geometry, canvas.orientation);
     textbox.element.setAttribute('aria-modal', 'true');
@@ -190,7 +206,7 @@ export class AlertSystem {
         onActivate: () => close(options.dismissValue),
       });
       closeButton.element.classList.add('alert-system__close', 'game-button--baked-label');
-      textbox.element.append(closeButton.element);
+      (titleBar ?? textbox.element).append(closeButton.element);
     }
 
     if (!this.hasOpenAlert) this.backgroundWasInert = this.background.inert;

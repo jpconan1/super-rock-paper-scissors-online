@@ -141,22 +141,22 @@ describe('shared game layout contract', () => {
   test('builds boiling mirrored emblem cards with level fallback', () => {
     useFakeDocument();
     const p1Card = createPlayerInfo({ heading: 'A very long player name', rating: '', platform: '', level: 16 }, 'p1', {} as never);
-    const p2Card = createPlayerInfo({ heading: 'Computer', rating: '', platform: '', emblem: 'bot' }, 'p2', {} as never);
+    const p2Card = createPlayerInfo({ heading: 'Computer', rating: '', platform: '', emblem: 'computer' }, 'p2', {} as never);
     const p1 = p1Card.element as unknown as FakeElement;
     const p2 = p2Card.element as unknown as FakeElement;
 
     expect(p1.className).toContain('game-layout__player-info--p1');
     expect(p2.className).toContain('game-layout__player-info--p2');
-    expect(p1.attributes.get('aria-label')).toBe('A very long player name, level 16, New Player emblem');
-    expect(p2.attributes.get('aria-label')).toBe('Computer, level 1, Bot emblem');
+    expect(p1.attributes.get('aria-label')).toBe('A very long player name, level 16, Beta OG emblem');
+    expect(p2.attributes.get('aria-label')).toBe('Computer, level 1, Computer emblem');
     expect(p1.children.map((child) => child.className)).toEqual([
-      'game-layout__player-emblem-border', 'game-layout__player-emblem', 'game-layout__player-heading',
+      'player-emblem-card__border', 'player-emblem-card__emblem', 'player-emblem-card__heading',
     ]);
     expect(p1.children[2]!.children[0]!.textContent).toBe('A very long player name');
     expect(p1.children[2]!.children[1]!.textContent).toBe('Lv 16');
     expect(p2.children[2]!.children[1]!.textContent).toBe('Lv 1');
-    expect(p1.children[1]!.dataset.src).toBe('/emblems/new-player-sheet.webp');
-    expect(p2.children[1]!.dataset.src).toBe('/emblems/bot-emblem-sheet.webp');
+    expect(p1.children[1]!.dataset.src).toBe('/emblems/beta-og-sheet.webp');
+    expect(p2.children[1]!.dataset.src).toBe('/emblems/computer-sheet.webp');
     expect(mocks.spriteDestroys).toHaveLength(2);
   });
 

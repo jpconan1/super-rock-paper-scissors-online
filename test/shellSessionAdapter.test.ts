@@ -84,7 +84,7 @@ describe('matchmaking session adapters', () => {
   });
 
   test('clears a stale guest cookie before creating a replacement guest', async () => {
-    const profile = { playerId: 'ticket-bright-cookie-otter-08', accountType: 'guest', displayName: 'Player One', rating: 1500 };
+    const profile = { playerId: 'ticket-bright-cookie-otter-08', accountType: 'guest', displayName: 'Player One', rating: 1500, equippedEmblem: 'beta-og' };
     let anonymousStarted = false;
     let playerCreated = false;
     const calls: string[] = [];
@@ -122,7 +122,7 @@ describe('matchmaking session adapters', () => {
   });
 
   test('repairs an authenticated guest session whose player row is missing', async () => {
-    const profile = { playerId: 'anchor-chill-pizza-turtle-00', accountType: 'guest', displayName: 'Player One', rating: 1500 };
+    const profile = { playerId: 'anchor-chill-pizza-turtle-00', accountType: 'guest', displayName: 'Player One', rating: 1500, equippedEmblem: 'beta-og' };
     let created = false;
     const fetchMock = vi.fn((input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);
@@ -142,7 +142,7 @@ describe('matchmaking session adapters', () => {
   });
 
   test('persists a cookie-backed guest and suggests its harmless saved name after reload', async () => {
-    const profile = { playerId: 'beacon-cozy-waffle-otter-12', accountType: 'guest', displayName: 'Saved Player', rating: 1512 };
+    const profile = { playerId: 'beacon-cozy-waffle-otter-12', accountType: 'guest', displayName: 'Saved Player', rating: 1512, equippedEmblem: 'beta-og' };
     let playerCreated = false;
     vi.stubGlobal('fetch', vi.fn((input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);
@@ -163,7 +163,7 @@ describe('matchmaking session adapters', () => {
 
   test('resumes a cookie-backed guest using its canonical server name', async () => {
     storageValues.set('local:super-rps-guest-name', 'Typed Name');
-    const profile = { playerId: 'comet-steady-mochi-fox-23', accountType: 'guest', displayName: 'Canonical Name', rating: 1620 };
+    const profile = { playerId: 'comet-steady-mochi-fox-23', accountType: 'guest', displayName: 'Canonical Name', rating: 1620, equippedEmblem: 'beta-og' };
     const fetchMock = vi.fn((input: string | URL | Request) => {
       const url = String(input);
       if (url.endsWith('/player-session')) return Promise.resolve(new Response(JSON.stringify(profile), { status: 200 }));
@@ -195,7 +195,7 @@ describe('matchmaking session adapters', () => {
   test('restores a connected account on the title screen without logging out', async () => {
     const fetchMock = vi.fn((input: string | URL | Request) => Promise.resolve(new Response(JSON.stringify(
       String(input).endsWith('/player-session')
-        ? { playerId: 'crystal-omega-pizza-turtle-45', accountType: 'google', displayName: 'Google Player', rating: 1700 }
+        ? { playerId: 'crystal-omega-pizza-turtle-45', accountType: 'google', displayName: 'Google Player', rating: 1700, equippedEmblem: 'beta-og' }
         : { success: true },
     ), { status: 200 })));
     vi.stubGlobal('fetch', fetchMock);
@@ -204,6 +204,23 @@ describe('matchmaking session adapters', () => {
     await adapter.prepareTitle();
 
     expect(adapter.accountState()).toMatchObject({ signedIn: true, displayName: 'Google Player', rating: 1700 });
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/api/auth/sign-out'))).toBe(false);
+  });
+
+  test('restores a cookie-backed guest on the title screen', async () => {
+    const fetchMock = vi.fn((input: string | URL | Request) => Promise.resolve(new Response(JSON.stringify(
+      String(input).endsWith('/player-session')
+        ? { playerId: 'quiet-bold-toast-otter-12', accountType: 'guest', displayName: 'Returning Guest', rating: 1580, equippedEmblem: 'beta-og' }
+        : { success: true },
+    ), { status: 200 })));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const adapter = new WebSocketShellSessionAdapter('https://example.test');
+    await adapter.prepareTitle();
+
+    expect(adapter.accountState()).toMatchObject({
+      signedIn: false, accountType: 'guest', playerId: 'quiet-bold-toast-otter-12', displayName: 'Returning Guest', rating: 1580,
+    });
     expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/api/auth/sign-out'))).toBe(false);
   });
 
@@ -228,7 +245,7 @@ describe('matchmaking session adapters', () => {
   test('creates a player after a new title-screen Google account returns', async () => {
     storageValues.set('super-rps-google-flow', 'title');
     storageValues.set('super-rps-google-title-name', 'Google Name');
-    const player = { playerId: 'crystal-omega-pizza-turtle-45', accountType: 'google', displayName: 'Google Name', rating: 1500 };
+    const player = { playerId: 'crystal-omega-pizza-turtle-45', accountType: 'google', displayName: 'Google Name', rating: 1500, equippedEmblem: 'beta-og' };
     let playerGets = 0;
     const fetchMock = vi.fn((input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);
@@ -260,7 +277,7 @@ describe('matchmaking session adapters', () => {
     vi.stubGlobal('WebSocket', vi.fn(() => ({ addEventListener: vi.fn(), close: vi.fn() })));
     vi.stubGlobal('fetch', vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({
-        playerId: 'crystal-omega-pizza-turtle-45', accountType: 'google', displayName: 'Google Player', rating: 1700,
+        playerId: 'crystal-omega-pizza-turtle-45', accountType: 'google', displayName: 'Google Player', rating: 1700, equippedEmblem: 'beta-og',
       }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 })));
 
@@ -279,7 +296,7 @@ describe('matchmaking session adapters', () => {
     storageValues.set('super-rps-google-flow', 'claim');
     vi.stubGlobal('WebSocket', vi.fn(() => ({ addEventListener: vi.fn(), close: vi.fn() })));
     vi.stubGlobal('fetch', vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ playerId: 'shield-mighty-taco-wolf-77', accountType: 'google', displayName: 'Claimed Guest', rating: 1600 }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ playerId: 'shield-mighty-taco-wolf-77', accountType: 'google', displayName: 'Claimed Guest', rating: 1600, equippedEmblem: 'beta-og' }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 })));
 
     const adapter = new WebSocketShellSessionAdapter('https://example.test');
@@ -290,7 +307,7 @@ describe('matchmaking session adapters', () => {
   });
 
   test('updates the authenticated display name and local account state', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ playerId: 'wheel-fresh-toast-owl-14', accountType: 'guest', displayName: 'New Name', rating: 1550 }), { status: 200 }));
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ playerId: 'wheel-fresh-toast-owl-14', accountType: 'guest', displayName: 'New Name', rating: 1550, equippedEmblem: 'beta-og' }), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
     const adapter = new WebSocketShellSessionAdapter('https://example.test');
 
@@ -304,7 +321,7 @@ describe('matchmaking session adapters', () => {
     const fetchMock = vi.fn((input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith('/player-session')) return Promise.resolve(new Response(JSON.stringify({
-        playerId: 'torch-bold-bagel-badger-11', accountType: 'google', displayName: 'Player', rating: 1500,
+        playerId: 'torch-bold-bagel-badger-11', accountType: 'google', displayName: 'Player', rating: 1500, equippedEmblem: 'beta-og',
       }), { status: 200 }));
       if (url.endsWith('/auth-capabilities')) return Promise.resolve(new Response(JSON.stringify({ emailSignup: true, emailCodeLogin: true, password: true }), { status: 200 }));
       return Promise.resolve(new Response(JSON.stringify({ success: true }), { status: 200 }));
@@ -336,7 +353,7 @@ describe('matchmaking session adapters', () => {
   });
 
   test('persists unlock-all mode and exposes every class without changing XP', async () => {
-    const player = { playerId: 'wheel-fresh-toast-owl-14', accountType: 'guest', displayName: 'Player', rating: 1500, totalProgressUnits: 20_000, unlockAllClasses: true,
+    const player = { playerId: 'wheel-fresh-toast-owl-14', accountType: 'guest', displayName: 'Player', rating: 1500, totalProgressUnits: 20_000, unlockAllClasses: true, equippedEmblem: 'beta-og',
       level: 3, progressUnitsInLevel: 0, nextUnlock: 'juggernaut', unlockedClassIds: ['lucky', 'advantaged', 'thief'] };
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(player), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
@@ -348,6 +365,21 @@ describe('matchmaking session adapters', () => {
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ unlockAllClasses: true });
     expect(adapter.accountState()).toMatchObject({ totalProgressUnits: 20_000, level: 3, unlockAllClasses: true });
     expect(adapter.accountState().unlockedClassIds).toHaveLength(21);
+  });
+
+  test('persists a server-authoritative equipped emblem', async () => {
+    const player = { playerId: 'wheel-fresh-toast-owl-14', accountType: 'guest', displayName: 'Player', rating: 1500,
+      totalProgressUnits: 0, unlockAllClasses: false, equippedEmblem: 'computer', level: 1, progressUnitsInLevel: 0,
+      nextUnlock: 'advantaged', unlockedClassIds: ['lucky'] };
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(player), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const adapter = new WebSocketShellSessionAdapter('https://example.test');
+
+    await adapter.setEquippedEmblem('computer');
+
+    expect(fetchMock).toHaveBeenCalledWith('https://example.test/player-emblem', expect.objectContaining({ method: 'PUT', credentials: 'include' }));
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ emblem: 'computer' });
+    expect(adapter.accountState().equippedEmblem).toBe('computer');
   });
 
   test('persists tutorial awards through the server before updating local progression', async () => {
@@ -406,7 +438,7 @@ describe('matchmaking session adapters', () => {
       if (url.includes('/api/auth/sign-in/anonymous')) return Promise.resolve(new Response(JSON.stringify({ token: 'cookie-session', user: { isAnonymous: true } }), { status: 200 }));
       if (url.endsWith('/player-session') && init?.method === 'POST') { created = true; return Promise.resolve(new Response(null, { status: 200 })); }
       if (url.endsWith('/player-session')) return Promise.resolve(created
-        ? new Response(JSON.stringify({ playerId: 'lantern-jolly-noodle-frog-31', accountType: 'guest', displayName: 'Player One', rating: 1500 }), { status: 200 })
+        ? new Response(JSON.stringify({ playerId: 'lantern-jolly-noodle-frog-31', accountType: 'guest', displayName: 'Player One', rating: 1500, equippedEmblem: 'beta-og' }), { status: 200 })
         : new Response(null, { status: 401 }));
       return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
     }));

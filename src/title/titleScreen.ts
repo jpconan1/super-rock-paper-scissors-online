@@ -15,6 +15,7 @@ import { createMenuCanvas } from '../layout/menuLayout';
 import { createVolumeSlider } from './volumeSlider';
 import { getLayoutDocument } from '../layout/layoutDocuments';
 import { applyDocumentLayout } from '../layout/layoutRuntime';
+import { applyLayoutGeometry } from '../layout/layoutDocument';
 
 const TITLE_LAYOUT = getLayoutDocument('title');
 const titleElement = (id: string) => TITLE_LAYOUT.elements.find((element) => element.id === id)!;
@@ -27,8 +28,19 @@ export function openDiscordInvite(openWindow: typeof window.open = window.open.b
 
 export type TitleScreenMount = (() => void) & { readonly ready: Promise<void> };
 export function formatOnlinePlayerCount(count: number | null): string { return `players online: ${count ?? '?'}`; }
-export interface TitleAccountState { signedIn: boolean; displayName: string; emailAuthAvailable: boolean; emailSignupAvailable: boolean }
+export type TitleAccountSession = 'none' | 'guest' | 'protected';
+export interface TitleAccountState { session: TitleAccountSession; displayName: string; emailAuthAvailable: boolean; emailSignupAvailable: boolean }
 export type TitleAuthMode = 'none' | 'password' | 'email-code';
+
+export function getTitleAccountControlVisibility(session: TitleAccountSession) {
+  return {
+    accountStatus: session !== 'none',
+    logout: session !== 'none',
+    enterExistingAccount: session !== 'none',
+    claimAccount: session === 'guest',
+    loggedOutAuthentication: session === 'none',
+  };
+}
 
 export function getTitleAuthControlVisibility(mode: TitleAuthMode) {
   return {
@@ -40,15 +52,19 @@ export function getTitleAuthControlVisibility(mode: TitleAuthMode) {
   };
 }
 
+export function normalizeForgotPasswordEmail(value: string, valid: boolean): string | undefined {
+  const email = value.trim().toLowerCase();
+  return valid && email ? email : undefined;
+}
+
 export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onEnterGuest: () => void,
   getOnlinePlayerCount: () => Promise<number | null> = async () => null,
-  onOpenLetter: (trigger: HTMLElement) => void = () => {}, account: TitleAccountState = { signedIn: false, displayName: '', emailAuthAvailable: false, emailSignupAvailable: false },
+  onOpenLetter: (trigger: HTMLElement) => void = () => {}, account: TitleAccountState = { session: 'none', displayName: '', emailAuthAvailable: false, emailSignupAvailable: false },
   onEnterAccount: () => void = () => {}, onGoogleSignIn: () => void = () => {},
   onPasswordSignIn: (email: string, password: string) => Promise<void> = async () => {},
-  onPasswordCodeRequest: (email: string) => Promise<void> = async () => {},
-  onPasswordUpdate: (email: string, code: string, password: string) => Promise<void> = async () => {},
+  onForgotPassword: (email: string) => void = () => {},
   onEmailCodeSignIn: (email: string) => Promise<void> = async () => {},
-  onSignUp: () => void = () => {}, onLogout: () => void = () => {}): TitleScreenMount {
+  onSignUp: () => void = () => {}, onLogout: () => void = () => {}, onClaimAccount: () => void = () => {}): TitleScreenMount {
   const screen = document.createElement('section');
   screen.className = 'title-screen';
   screen.setAttribute('aria-labelledby', 'title-screen-heading');
@@ -58,9 +74,11 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onEnt
   let landscapeDiscordElement: HTMLElement | undefined;
   let portraitDiscordElement: HTMLElement | undefined;
   let updateAuthEntrySheets: ((orientation: 'landscape' | 'portrait') => void) | undefined;
+  let updateGuestActionLayout: ((orientation: 'landscape' | 'portrait') => void) | undefined;
   const applyLayout = () => {
     applyDocumentLayout(TITLE_LAYOUT, layoutName, bindings);
     updateAuthEntrySheets?.(layoutName);
+    updateGuestActionLayout?.(layoutName);
     if (landscapeDiscordElement) landscapeDiscordElement.hidden = layoutName === 'portrait';
     if (portraitDiscordElement) portraitDiscordElement.hidden = layoutName !== 'portrait';
   };
@@ -116,13 +134,18 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onEnt
     label: 'Sign up', onActivate: onSignUp, clock,
     upSheet: titleElement('sign-up').assets!.up!, betweenSheet: titleElement('sign-up').assets!.between!, depressedSheet: titleElement('sign-up').assets!.depressed!,
   });
-  signUp.element.classList.add('game-button--baked-label'); signUp.element.hidden = account.signedIn;
-  const lobbyAssets = account.signedIn ? {
+  const accountVisibility = getTitleAccountControlVisibility(account.session);
+  const hasSession = accountVisibility.enterExistingAccount;
+  const isGuestSession = accountVisibility.claimAccount;
+  signUp.element.classList.add('game-button--baked-label'); signUp.element.hidden = hasSession;
+  const lobbyAssets = isGuestSession ? {
+    up: '/interactive-elements/menu-buttons/lobby-button-up-sheet.webp', between: '/interactive-elements/menu-buttons/lobby-button-between-sheet.webp', depressed: '/interactive-elements/menu-buttons/lobby-button-depressed-sheet.webp',
+  } : hasSession ? {
     up: '/title/auth/lobby-logged-in-button-up-sheet.webp', between: '/title/auth/lobby-logged-in-button-between-sheet.webp', depressed: '/title/auth/lobby-logged-in-button-depressed-sheet.webp',
   } : titleElement('enter-lobby').assets!;
   const enterLobby = createGameButton({
-    label: account.signedIn ? 'Enter lobby' : 'Lobby as guest',
-    onActivate: account.signedIn ? onEnterAccount : onEnterGuest,
+    label: hasSession ? 'Enter lobby' : 'Lobby as guest',
+    onActivate: hasSession ? onEnterAccount : onEnterGuest,
     upSheet: lobbyAssets.up!, betweenSheet: lobbyAssets.between!, depressedSheet: lobbyAssets.depressed!,
     clock,
   });
@@ -134,13 +157,29 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onEnt
     clock,
   });
   logout.element.classList.add('game-button--baked-label');
-  logout.element.hidden = !account.signedIn;
+  logout.element.hidden = !hasSession;
+  const claimElement = titleElement('claim-account');
+  const claimAccount = createGameButton({
+    label: 'Claim account', onActivate: onClaimAccount,
+    upSheet: claimElement.assets!.up!, betweenSheet: claimElement.assets!.between!, depressedSheet: claimElement.assets!.depressed!,
+    clock,
+  });
+  claimAccount.element.classList.add('game-button--baked-label');
+  claimAccount.element.hidden = !isGuestSession;
+  if (isGuestSession) {
+    updateGuestActionLayout = (orientation) => {
+      const geometries = orientation === 'landscape'
+        ? [{ x: 250, y: 235, width: 140, height: 70 }, { x: 410, y: 235, width: 140, height: 70 }, { x: 570, y: 235, width: 140, height: 70 }]
+        : [{ x: 25, y: 700, width: 150, height: 75 }, { x: 195, y: 700, width: 150, height: 75 }, { x: 365, y: 700, width: 150, height: 75 }];
+      [logout.element, claimAccount.element, enterLobby.element].forEach((element, index) => applyLayoutGeometry(element, geometries[index]!));
+    };
+  }
 
   const authButton = (id: string, label: string, activate: () => void) => {
     const element = titleElement(id);
     const button = createGameButton({ label, onActivate: activate, upSheet: element.assets!.up!, betweenSheet: element.assets!.between!, depressedSheet: element.assets!.depressed!, clock });
     button.element.classList.add('title-screen__auth-button', 'game-button--baked-label');
-    button.element.hidden = account.signedIn;
+    button.element.hidden = hasSession;
     return button;
   };
   const passwordButton = authButton('password-sign-in', 'Sign in with password', () => setPasswordMode(true));
@@ -151,7 +190,7 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onEnt
   const accountStatus = document.createElement('p');
   accountStatus.className = 'title-screen__account-status';
   accountStatus.textContent = `Logged in as ${account.displayName}`;
-  accountStatus.hidden = !account.signedIn;
+  accountStatus.hidden = !hasSession;
   const passwordForm = document.createElement('form'); passwordForm.className = 'title-screen__password-form'; passwordForm.hidden = true;
   const entrySheet = titleElement('password-email').assets!.src!;
   const emailEntry = createTextEntry({ label: 'Email', type: 'email', placeholder: 'Email', required: true, autocomplete: 'email', sheet: entrySheet, clock });
@@ -166,6 +205,9 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onEnt
   passwordSubmit.element.type = 'submit';
   const passwordBack = formButton('password-back', 'Back', () => setPasswordMode(false));
   const resetPassword = formButton('forgot-password', 'Forgot password', () => requestPasswordReset());
+  const updateResetAvailability = () => resetPassword.setDisabled(!account.emailAuthAvailable || !normalizeForgotPasswordEmail(emailEntry.value(), emailEntry.input.validity.valid));
+  emailEntry.input.addEventListener('input', updateResetAvailability);
+  updateResetAvailability();
   const passwordError = document.createElement('p'); passwordError.className = 'title-screen__password-error'; passwordError.setAttribute('aria-live', 'polite');
   const emailCodeForm = document.createElement('form'); emailCodeForm.className = 'title-screen__email-code-form'; emailCodeForm.hidden = true;
   const emailCodeEntry = createTextEntry({ label: 'Email', type: 'email', placeholder: 'Email', required: true, autocomplete: 'email', sheet: entrySheet, clock });
@@ -200,10 +242,10 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onEnt
   });
   function requestPasswordReset() {
     passwordError.textContent = '';
-    if (!emailEntry.input.reportValidity()) { emailEntry.focus(); return; }
-    resetEmail = emailEntry.value().trim().toLowerCase();
-    void onPasswordCodeRequest(resetEmail).then(() => { passwordError.textContent = 'If that account exists, a code was sent.'; resetDialog.showModal(); })
-      .catch((reason) => { passwordError.textContent = reason instanceof Error ? reason.message : 'Recovery failed.'; });
+    const valid = emailEntry.input.reportValidity();
+    const email = normalizeForgotPasswordEmail(emailEntry.value(), valid);
+    if (!email) { emailEntry.focus(); return; }
+    onForgotPassword(email);
   }
   function setPasswordMode(enabled: boolean) {
     setAuthMode(enabled ? 'password' : 'none');
@@ -216,7 +258,7 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onEnt
   }
   let authMode: TitleAuthMode = 'none';
   function setAuthMode(mode: typeof authMode) {
-    if (account.signedIn) return;
+    if (hasSession) return;
     authMode = mode;
     const visible = getTitleAuthControlVisibility(mode);
     signUp.element.hidden = !visible.primaryButtons;
@@ -230,21 +272,6 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onEnt
     if (event.key === 'Escape' && authMode !== 'none') { event.preventDefault(); setAuthMode('none'); }
   };
   document.addEventListener('keydown', onTitleKeyDown);
-
-  const resetDialog = document.createElement('dialog'); resetDialog.className = 'title-screen__email-dialog';
-  let resetEmail = '';
-  const resetCode = document.createElement('input'); resetCode.inputMode = 'numeric'; resetCode.autocomplete = 'one-time-code'; resetCode.placeholder = 'Six-digit code';
-  const resetInput = document.createElement('input'); resetInput.type = 'password'; resetInput.autocomplete = 'new-password'; resetInput.placeholder = 'New password';
-  const resetSubmit = document.createElement('button'); resetSubmit.type = 'button'; resetSubmit.textContent = 'Set new password';
-  const resetClose = document.createElement('button'); resetClose.type = 'button'; resetClose.textContent = 'Close'; resetClose.addEventListener('click', () => resetDialog.close());
-  const resetError = document.createElement('p'); resetError.setAttribute('aria-live', 'polite');
-  resetSubmit.addEventListener('click', () => {
-    const code = resetCode.value.replace(/\s/g, ''); resetError.textContent = '';
-    if (!/^\d{6}$/.test(code) || resetInput.value.length < 8 || resetInput.value.length > 128) { resetError.textContent = 'Enter the code and an 8-128 character password.'; return; }
-    void onPasswordUpdate(resetEmail, code, resetInput.value).then(() => resetDialog.close())
-      .catch((reason) => { resetError.textContent = reason instanceof Error ? reason.message : 'Password reset failed.'; });
-  });
-  resetDialog.append(resetCode, resetInput, resetSubmit, resetClose, resetError);
 
   const discord = createGameButton({
     label: 'Join the ABM Community Discord',
@@ -267,11 +294,11 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onEnt
   landscapeDiscordElement = discord.element;
   portraitDiscordElement = discordPortrait.element;
 
-  composition.append(logo.element, signUp.element, enterLobby.element, logout.element, ...providers.map((button) => button.element), passwordForm, emailCodeForm, accountStatus, discord.element, discordPortrait.element,
+  composition.append(logo.element, signUp.element, enterLobby.element, logout.element, claimAccount.element, ...providers.map((button) => button.element), passwordForm, emailCodeForm, accountStatus, discord.element, discordPortrait.element,
     soundToggle.element, musicVolume.element, sfxVolume.element, boilToggle.element, onlineCount);
   bindings.push(
     { id: 'logo', element: logo.element }, { id: 'sign-up', element: signUp.element },
-    { id: 'enter-lobby', element: enterLobby.element }, { id: 'logout', element: logout.element }, { id: 'password-sign-in', element: passwordButton.element },
+    { id: 'enter-lobby', element: enterLobby.element }, { id: 'logout', element: logout.element }, { id: 'claim-account', element: claimAccount.element }, { id: 'password-sign-in', element: passwordButton.element },
     { id: 'email-sign-in', element: emailCodeButton.element }, { id: 'google-sign-in', element: google.element },
     { id: 'apple-sign-in', element: apple.element }, { id: 'password-form', element: passwordForm },
     { id: 'password-email', element: emailEntry.element }, { id: 'password-password', element: passwordEntry.element },
@@ -286,7 +313,7 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onEnt
     { id: 'online-count', element: onlineCount },
   );
   applyLayout();
-  screen.append(heading, legalLinks, resetDialog);
+  screen.append(heading, legalLinks);
   container.replaceChildren(screen);
 
   const cleanup = (() => {
@@ -301,7 +328,9 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onEnt
     signUp.destroy();
     enterLobby.destroy();
     logout.destroy();
+    claimAccount.destroy();
     providers.forEach((button) => button.destroy());
+    emailEntry.input.removeEventListener('input', updateResetAvailability);
     emailEntry.destroy();
     passwordEntry.destroy();
     passwordSubmit.destroy();

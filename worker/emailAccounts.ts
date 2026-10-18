@@ -6,7 +6,21 @@ export interface EmailChallengeRecord {
   failed_attempts: number;
 }
 
+export interface StoredEmailChallenge extends EmailChallengeRecord {
+  challenge_key: string;
+  purpose: EmailChallengePurpose;
+  user_id: string | null;
+  email: string;
+  context_json: string;
+}
+
 export type EmailChallengeStatus = 'valid' | 'invalid' | 'expired' | 'exhausted';
+
+interface AtomicStatement { bind(...values: unknown[]): AtomicStatement }
+interface AtomicDatabase {
+  prepare(query: string): AtomicStatement;
+  batch<T = unknown>(statements: AtomicStatement[]): Promise<Array<{ results: T[] }>>;
+}
 
 export function normalizeAuthEmail(value: unknown): string | null {
   if (typeof value !== 'string') return null;
@@ -35,6 +49,25 @@ export function emailChallengeStatus(record: EmailChallengeRecord | null | undef
   if (record.expires_at <= now) return 'expired';
   if (record.failed_attempts >= maxAttempts) return 'exhausted';
   return constantTimeEqual(record.code_hash, candidateHash) ? 'valid' : 'invalid';
+}
+
+export async function consumeEmailChallenge(db: AtomicDatabase, secret: string, challengeKey: string,
+  purpose: EmailChallengePurpose, binding: string, email: string, code: string, now = Date.now(), maxAttempts = 3,
+): Promise<StoredEmailChallenge | null> {
+  const candidateHash = await emailChallengeHash(secret, purpose, binding, code);
+  const [consumed] = await db.batch<StoredEmailChallenge>([
+    db.prepare(`DELETE FROM email_auth_challenges
+      WHERE challenge_key = ? AND purpose = ? AND email = ? AND code_hash = ? AND expires_at > ? AND failed_attempts < ?
+      RETURNING challenge_key, purpose, user_id, email, code_hash, context_json, expires_at, failed_attempts`)
+      .bind(challengeKey, purpose, email, candidateHash, now, maxAttempts),
+    db.prepare(`UPDATE email_auth_challenges SET failed_attempts = failed_attempts + 1
+      WHERE challenge_key = ? AND purpose = ? AND email = ? AND code_hash <> ? AND expires_at > ? AND failed_attempts < ?`)
+      .bind(challengeKey, purpose, email, candidateHash, now, maxAttempts),
+    db.prepare(`DELETE FROM email_auth_challenges
+      WHERE challenge_key = ? AND purpose = ? AND (expires_at <= ? OR failed_attempts >= ?)`)
+      .bind(challengeKey, purpose, now, maxAttempts),
+  ]);
+  return consumed?.results[0] ?? null;
 }
 
 function constantTimeEqual(left: string, right: string): boolean {

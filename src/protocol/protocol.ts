@@ -3,6 +3,7 @@ export const PROTOCOL_VERSION = 1 as const;
 import type { SlotId } from '../core/slots';
 import type { PlayerId, VariantGameResult } from '../core/variant';
 import type { ProgressAward } from '../core/progression';
+import type { PlayerEmblem } from '../core/playerEmblem';
 
 export interface ClientCommand<TPayload = unknown> {
   protocolVersion: typeof PROTOCOL_VERSION;
@@ -38,7 +39,7 @@ export interface ServerSnapshot<TProjection = unknown> {
 }
 
 export type MatchPhase = 'match-found' | 'selecting' | 'scoreboard' | 'playing' | 'banning' | 'final-scoreboard' | 'complete';
-export type PlayerEmblem = 'new-player' | 'bot';
+export type { PlayerEmblem } from '../core/playerEmblem';
 export interface MatchPlayer { name: string; platform: string; rating: number; level?: number; emblem?: PlayerEmblem }
 export interface CompletedGame extends VariantGameResult { slotId: SlotId }
 export interface MatchProjection {

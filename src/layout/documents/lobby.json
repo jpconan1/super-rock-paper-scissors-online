@@ -129,21 +129,21 @@
     },
     {
       "id": "player-name",
-      "type": "dynamic-text",
-      "label": "Player Name",
+      "type": "group",
+      "label": "Player Emblem",
       "protected": true,
       "layouts": {
         "landscape": {
-          "x": 400,
-          "y": 280,
-          "width": 145,
-          "height": 40
+          "x": 600,
+          "y": 245,
+          "width": 240,
+          "height": 120
         },
         "portrait": {
-          "x": 155,
-          "y": 535,
-          "width": 230,
-          "height": 34
+          "x": 275,
+          "y": 510,
+          "width": 240,
+          "height": 120
         }
       }
     },
@@ -717,21 +717,26 @@
     },
     {
       "id": "player-level",
-      "type": "dynamic-text",
-      "label": "Player Level",
+      "type": "button",
+      "label": "Change your Emblem",
       "protected": true,
+      "assets": {
+        "up": "/interactive-elements/emblem-button-up-sheet.webp",
+        "between": "/interactive-elements/emblem-button-between-sheet.webp",
+        "depressed": "/interactive-elements/emblem-button-depressed-sheet.webp"
+      },
       "layouts": {
         "landscape": {
-          "x": 600,
-          "y": 365,
-          "width": 95,
-          "height": 20
+          "x": 595,
+          "y": 370,
+          "width": 170,
+          "height": 85
         },
         "portrait": {
-          "x": 360,
-          "y": 575,
-          "width": 150,
-          "height": 45
+          "x": 340,
+          "y": 635,
+          "width": 170,
+          "height": 85
         }
       }
     },

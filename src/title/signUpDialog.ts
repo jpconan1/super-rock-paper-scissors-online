@@ -26,7 +26,6 @@ export function resolveInitialSignupDisplayName(initialDisplayName: string | und
 
 export function showSignUpDialog(alerts: AlertSystem, clock: BoilClock, actions: EmailSignupActions, initialDisplayName?: string): Promise<boolean> {
   const content = document.createElement('section'); content.className = 'sign-up-dialog';
-  const heading = document.createElement('h2'); heading.className = 'sign-up-dialog__heading'; heading.textContent = 'New Account Creation';
   const status = document.createElement('p'); status.className = 'sign-up-dialog__status'; status.setAttribute('aria-live', 'polite');
   const sheet = '/title/auth/password-entry-landscape-sheet.webp';
   let entries: TextEntry[] = [];
@@ -112,7 +111,7 @@ export function showSignUpDialog(alerts: AlertSystem, clock: BoilClock, actions:
         busy = false; send.setDisabled(false); randomName.setDisabled(false);
       });
     });
-    content.replaceChildren(heading, form, status); queueMicrotask(() => displayName.focus());
+    content.replaceChildren(form, status); queueMicrotask(() => displayName.focus());
   };
 
   const renderCode = () => {
@@ -143,11 +142,11 @@ export function showSignUpDialog(alerts: AlertSystem, clock: BoilClock, actions:
         .finally(() => { setBusy(resend, false); verify.disabled = false; change.disabled = false; });
     });
     change.addEventListener('click', () => { if (!busy) { status.textContent = ''; renderRequest(); } });
-    content.replaceChildren(heading, form, status); queueMicrotask(() => code.focus());
+    content.replaceChildren(form, status); queueMicrotask(() => code.focus());
   };
 
   renderRequest();
-  handle = alerts.show({ ariaLabel: 'New Account Creation', geometry: SIGN_UP_GEOMETRY, content, className: 'sign-up-alert', dismissible: true,
+  handle = alerts.show({ ariaLabel: 'New Account Creation', title: 'New Account Creation', geometry: SIGN_UP_GEOMETRY, content, className: 'sign-up-alert', dismissible: true,
     actions: [] });
   return handle.result.finally(() => { chosenPassword = ''; destroyControls(); }).then((value) => value === true);
 }
