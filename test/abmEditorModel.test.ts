@@ -33,6 +33,13 @@ describe('ABM editor model', () => {
     expect(resizeEditorGeometry(item, 'portrait', 'width', 90, 73)).toMatchObject({ width: 90, height: 73 });
   });
 
+  it('keeps the composed player card at its authored aspect ratio', () => {
+    const item = element('player-name', 'group');
+    item.layouts.landscape = { x: 1, y: 2, width: 240, height: 120 };
+    expect(resizeEditorGeometry(item, 'landscape', 'width', 360)).toMatchObject({ width: 360, height: 180, aspectLock: true });
+    expect(resizeEditorGeometry(item, 'landscape', 'height', 60)).toMatchObject({ width: 120, height: 60, aspectLock: true });
+  });
+
   it('reads and writes runtime class-resource geometry for editor pieces that use it', () => {
     const sceneArt = element('scene-art');
     sceneArt.alternateLayouts = { 'class-resource': {

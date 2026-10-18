@@ -728,7 +728,7 @@ input {
   pointer-events: none;
 }
 .lobby-screen__class-card { position: absolute; z-index: 5; cursor: grab; pointer-events: auto; touch-action: none; }
-.lobby-screen__class-card.is-dragging { cursor: grabbing; }
+.lobby-screen__class-card.is-dragging { width: 256px !important; height: 362px !important; cursor: grabbing; }
 .lobby-screen__class-card-string { position: absolute; z-index: 4; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
 .lobby-screen__class-card-shadow {
   position: absolute;
@@ -807,8 +807,29 @@ input {
 .lobby-screen__roster-row.is-ready small { color: #118040; font-weight: 900; }
 .lobby-screen__roster-row:is(.is-playing-computer,.is-in-match) { opacity: .62; }
 .lobby-screen__roster-empty { margin: 8px 0; text-align: center; opacity: .7; }
-.lobby-screen__scoreboard-preview { position: absolute; min-width: 110px; min-height: 42px; }
-
+.lobby-screen__missions {
+  position: absolute;
+  z-index: 31;
+  top: 60px;
+  right: 8px;
+  box-sizing: border-box;
+  width: 230px;
+  overflow: hidden;
+  border: 3px solid #211d19;
+  border-radius: 6px;
+  background: rgba(247,239,217,.96);
+  box-shadow: 6px 8px 0 rgba(29,27,24,.2);
+  color: #171412;
+  text-align: left;
+  transform: rotate(-.35deg);
+}
+.lobby-screen__missions[hidden] { display: none; }
+.lobby-screen__missions-title-bar { padding: 8px 12px; background: rgba(255,248,226,.88); }
+.lobby-screen__missions-title { margin: 0; color: #ac3235; font-size: 21px; font-weight: 950; line-height: 1; }
+.lobby-screen__mission-list { display: grid; gap: 4px; margin: 0; padding: 9px 12px 11px; list-style: none; }
+.lobby-screen__mission { display: grid; grid-template-columns: 17px 1fr; align-items: center; gap: 7px; font-size: 15px; font-weight: 900; line-height: 1.15; }
+.lobby-screen__mission input { width: 15px; height: 15px; margin: 0; accent-color: #ac3235; opacity: 1; }
+.menu-canvas__composition[data-layout='portrait'] .lobby-screen__missions { top: 190px; right: 12px; width: 230px; }
 .lobby-screen__whiteboard,
 .lobby-screen__whiteboard-button,
 .lobby-screen__tool,
@@ -1129,6 +1150,28 @@ input {
   min-width: 46px;
   justify-content: center;
 }
+.lobby-screen__emblem-card { container-type: size; }
+.lobby-screen__emblem-card .player-emblem-card__emblem {
+  left: 7.9167%;
+  top: 20%;
+  width: 84.1667%;
+  height: 68.3333%;
+}
+.lobby-screen__emblem-card .player-emblem-card__border { width: 100%; height: 100%; }
+.lobby-screen__emblem-card .player-emblem-card__heading {
+  top: -6.6667%;
+  right: -2.5%;
+  left: -2.5%;
+  height: 20%;
+}
+.lobby-screen__emblem-card :is(.player-emblem-card__name, .player-emblem-card__level) {
+  height: 100%;
+  border-width: 1.25cqw;
+  padding-inline: 2.0833cqw;
+  font-size: 6.25cqw;
+}
+.lobby-screen__emblem-card .player-emblem-card__name { max-width: calc(100% - 17.9167%); }
+.lobby-screen__emblem-card .player-emblem-card__level { min-width: 19.1667%; }
 .game-layout__you-tag { z-index: 4; overflow: visible; }
 .game-layout__you-tag[hidden] { display: none; }
 

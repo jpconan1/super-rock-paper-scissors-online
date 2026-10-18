@@ -10,23 +10,25 @@ import { getLayoutDocument } from '../layout/layoutDocuments';
 import { createBoilingSprite } from '../renderer/boilingSprite';
 import { curtainOpenAsset } from '../renderer/curtainWipe';
 import { applyAlertGeometry } from '../ui/fixedAlertCanvas';
+import { createPlayerEmblemCard } from '../ui/playerEmblemCard';
 import { abmEditorGeometry, getEditorMirrorUpdate, isAbmBattleEditorElement, isAbmCounterpickThoughtBubbleEditorContext, isAbmCounterpickThoughtBubbleEditorElement, isAbmPostMatchEditorElement, isAbmTutorialBlockTagEditorContext, isAbmTutorialBlockTagEditorElement, isAbmWaitingEditorElement, isEditorElementVisible, resizeEditorGeometry, setAbmEditorGeometry } from './abmEditorModel';
+import { isLobbyEditorElementEditable, isLobbyProgressionEditorElement } from './lobbyEditorModel';
 
 const hostElement = document.querySelector<HTMLElement>('#editor');
 if (!hostElement) throw new Error('Missing editor mount.');
 const host: HTMLElement = hostElement;
 const clock = new BoilClock(document, true);
-type EditorScreen = 'account' | 'variant-abm' | 'class-reward' | 'tutorial-slide-one';
+type EditorScreen = 'lobby' | 'account' | 'variant-abm' | 'class-reward' | 'tutorial-slide-one';
 type RewardState = 'unlocked' | 'next';
 type AbmState = 'battle' | 'waiting' | 'counterpick-thought-bubble' | 'tutorial-block-tags' | 'post-match';
 type AccountState = 'google' | 'email' | 'guest';
 const drafts = new Map<EditorScreen, LayoutDocument>();
 const savedDocuments = new Map<EditorScreen, LayoutDocument>();
-for (const id of ['account', 'variant-abm', 'class-reward', 'tutorial-slide-one'] as const) {
+for (const id of ['lobby', 'account', 'variant-abm', 'class-reward', 'tutorial-slide-one'] as const) {
   drafts.set(id, clone(getLayoutDocument(id)));
   savedDocuments.set(id, clone(getLayoutDocument(id)));
 }
-let screen: EditorScreen = 'account';
+let screen: EditorScreen = 'lobby';
 let accountState: AccountState = 'email';
 let rewardState: RewardState = 'unlocked';
 let abmState: AbmState = 'battle';
@@ -40,8 +42,8 @@ let future: LayoutDocument[] = [];
 let cleanups: (() => void)[] = [];
 
 host.innerHTML = `<main class="abm-editor">
-  <header class="abm-editor__toolbar"><strong data-title>Profile · Account screen</strong>
-    <label>Screen <select data-screen><option value="account">Account</option><option value="variant-abm">ABM game</option><option value="class-reward">Class reward</option><option value="tutorial-slide-one">Tutorial slide 1</option></select></label>
+  <header class="abm-editor__toolbar"><strong data-title>Lobby · Progression</strong>
+    <label>Screen <select data-screen><option value="lobby">Lobby</option><option value="account">Account</option><option value="variant-abm">ABM game</option><option value="class-reward">Class reward</option><option value="tutorial-slide-one">Tutorial slide 1</option></select></label>
     <label data-state-label>State <select data-state></select></label>
     <label>View <select data-orientation><option value="landscape">Landscape</option><option value="portrait">Portrait</option></select></label>
     <span>Drag to move · bottom-right handle resizes</span><button data-undo disabled>Undo</button><button data-redo disabled>Redo</button><button data-reset disabled>Reset</button>
@@ -68,9 +70,11 @@ const visibleElements = () => working.elements.filter((element) => screen === 'v
       : abmState === 'counterpick-thought-bubble' ? isAbmCounterpickThoughtBubbleEditorContext(element)
         : abmState === 'tutorial-block-tags' ? isAbmTutorialBlockTagEditorContext(element)
         : isAbmBattleEditorElement(element))
-  : screen === 'class-reward' ? isEditorElementVisible(element, rewardState)
+  : screen === 'lobby' ? isLobbyProgressionEditorElement(element)
+    : screen === 'class-reward' ? isEditorElementVisible(element, rewardState)
     : screen === 'account' ? accountElementVisible(element) : true);
 const editableElements = () => visibleElements().filter((element) => {
+  if (screen === 'lobby') return isLobbyEditorElementEditable(element);
   if (element.id.startsWith('curtain-')) return false;
   return screen !== 'variant-abm'
     || (abmState !== 'counterpick-thought-bubble' && abmState !== 'tutorial-block-tags')
@@ -92,7 +96,7 @@ function render(): void {
     else node.classList.add('is-reference');
     node.classList.toggle('is-selected', config.id === selectedId);
     if (configs.some(({ parent }) => parent === config.id)) { node.classList.add('is-structural'); node.textContent = ''; }
-    applyLayoutGeometry(node, screen === 'variant-abm' ? editorGeometry(config) : config.layouts[orientation]); node.style.zIndex = String(config.layer ?? 0); nodes.set(config.id, node);
+    applyEditorNodeGeometry(node, config, screen === 'variant-abm' ? editorGeometry(config) : config.layouts[orientation]); node.style.zIndex = String(config.layer ?? 0); nodes.set(config.id, node);
   }
   for (const config of configs) {
     const node = nodes.get(config.id)!;
@@ -101,7 +105,7 @@ function render(): void {
     else canvas.append(node);
   }
   const grid = document.createElement('div'); grid.className = 'abm-editor__grid'; canvas.append(grid);
-  if (screen === 'class-reward') {
+  if (screen === 'class-reward' || (screen === 'lobby' && orientation === 'landscape')) {
     const curtain = createBoilingSprite({
       src: curtainOpenAsset(orientation), clock, className: 'abm-editor__curtain-decoration', alt: '',
     });
@@ -111,7 +115,8 @@ function render(): void {
   renderList(); renderInspector(); updateToolbar(); applyZoom();
   $('[data-title]').textContent = screen === 'variant-abm'
     ? `Attack Block Mana · ${abmState === 'battle' ? 'Game screen' : abmState === 'waiting' ? 'Waiting' : abmState === 'counterpick-thought-bubble' ? 'Counterpick thought bubble' : abmState === 'tutorial-block-tags' ? 'Tutorial Block tags' : 'Post-match XP'}`
-    : screen === 'class-reward' ? `Class Reward · ${rewardState === 'unlocked' ? 'Class Unlocked' : 'Next Class'}`
+    : screen === 'lobby' ? 'Lobby · Progression'
+      : screen === 'class-reward' ? `Class Reward · ${rewardState === 'unlocked' ? 'Class Unlocked' : 'Next Class'}`
       : screen === 'account' ? `Profile · ${accountState === 'google' ? 'Google account' : accountState === 'email' ? 'Email account' : 'Guest account'}` : 'Tutorial · Slide 1';
 }
 
@@ -132,6 +137,12 @@ function renderTutorialBackdrop(canvas: HTMLElement): void {
 
 function makeNode(config: LayoutElement): HTMLElement {
   const className = `abm-editor__node abm-editor__node--${config.type}${config.className ? ` ${config.className}` : ''}`;
+  if (screen === 'lobby' && config.id === 'player-name') {
+    const card = createPlayerEmblemCard({ name: '-Monkey D. Vega-', level: 7, emblem: 'new-player' }, clock);
+    const wrapper = document.createElement('div'); wrapper.className = className;
+    card.element.classList.add('abm-editor__player-card-preview'); wrapper.append(card.element);
+    cleanups.push(() => card.emblem.destroy()); return wrapper;
+  }
   if (isAbmTutorialBlockTagEditorElement(config)) {
     const p2 = config.id.startsWith('p2-');
     const useP2Art = orientation === 'portrait' ? !p2 : p2;
@@ -175,7 +186,8 @@ function makeNode(config: LayoutElement): HTMLElement {
 }
 
 function previewText(config: LayoutElement): string {
-  return ({ 'account-status': 'Logged in as PLAYER', 'password-form': 'EMAIL · PASSWORD · SIGN IN · BACK', 'online-count': 'players online: 123', 'sound-toggle': 'SOUND',
+  return ({ 'xp-count': '7,250 / 10,000 XP', 'next-unlock': 'Next class: Sumo',
+    'account-status': 'Logged in as PLAYER', 'password-form': 'EMAIL · PASSWORD · SIGN IN · BACK', 'online-count': 'players online: 123', 'sound-toggle': 'SOUND',
     'player-id': 'Account ID: spark-funky-pickle-panda-16',
     'account-type': accountState === 'google' ? 'Google Account' : accountState === 'email' ? 'Email Account' : 'Guest Account',
     'connected': 'Signed in with Google', 'error': '',
@@ -227,7 +239,7 @@ function beginPieceDrag(event: PointerEvent, id: string, target: HTMLElement): v
     const dx = (next.clientX - origin.x) / zoom; const dy = (next.clientY - origin.y) / zoom;
     if (resize) {
       const width = Math.max(5, snap(original.width + dx)); const height = Math.max(5, snap(original.height + dy));
-      const artwork = ['sprite', 'decoration', 'button', 'control'].includes(item.type);
+      const artwork = item.id === 'player-name' || ['sprite', 'decoration', 'button', 'control'].includes(item.type);
       if (artwork) {
         const dimension = Math.abs(dx / original.width) >= Math.abs(dy / original.height) ? 'width' : 'height';
         const geometry = resizeEditorGeometry(item, orientation, dimension, dimension === 'width' ? width : height, undefined, original);
@@ -240,7 +252,7 @@ function beginPieceDrag(event: PointerEvent, id: string, target: HTMLElement): v
       const geometry = { ...original, x: snap(original.x + dx), y: snap(original.y + dy) };
       if (screen === 'variant-abm') setAbmEditorGeometry(item, orientation, geometry); else item.layouts[orientation] = geometry;
     }
-    applyLayoutGeometry(target, screen === 'variant-abm' ? editorGeometry(item) : item.layouts[orientation]); renderInspector(); updateToolbar();
+    applyEditorNodeGeometry(target, item, screen === 'variant-abm' ? editorGeometry(item) : item.layouts[orientation]); renderInspector(); updateToolbar();
   };
   const end = (next: PointerEvent) => {
     if (next.pointerId !== event.pointerId) return;
@@ -252,6 +264,12 @@ function beginPieceDrag(event: PointerEvent, id: string, target: HTMLElement): v
 }
 
 function change(run: () => void): void { const before = clone(working); run(); commit(before); render(); }
+function applyEditorNodeGeometry(target: HTMLElement, item: LayoutElement, geometry: LayoutElement['layouts'][LayoutOrientation]): void {
+  applyLayoutGeometry(target, geometry);
+  if (item.id !== 'player-name') return;
+  target.style.setProperty('--player-card-scale-x', String(geometry.width / 240));
+  target.style.setProperty('--player-card-scale-y', String(geometry.height / 120));
+}
 function commit(before: LayoutDocument): void { if (serialize(before) !== serialize(working)) { history.push(before); future = []; } }
 function undo(): void { const prior = history.pop(); if (prior) { future.push(clone(working)); working = prior; render(); } }
 function redo(): void { const next = future.pop(); if (next) { history.push(clone(working)); working = next; render(); } }
@@ -292,8 +310,8 @@ $<HTMLSelectElement>('[data-state]').onchange = (event) => {
 };
 function syncStateOptions(): void {
   const select = $<HTMLSelectElement>('[data-state]');
-  $<HTMLElement>('[data-state-label]').hidden = screen === 'tutorial-slide-one';
-  if (screen === 'tutorial-slide-one') { select.replaceChildren(); return; }
+  $<HTMLElement>('[data-state-label]').hidden = screen === 'tutorial-slide-one' || screen === 'lobby';
+  if (screen === 'tutorial-slide-one' || screen === 'lobby') { select.replaceChildren(); return; }
   select.innerHTML = screen === 'account'
     ? '<option value="google">Logged in with Google</option><option value="email">Logged in with email</option><option value="guest">Guest</option>'
     : screen === 'class-reward'

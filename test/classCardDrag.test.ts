@@ -59,6 +59,7 @@ describe('lobby class card dragging', () => {
     const firstGeometry = () => portrait ? { x: 20, y: 300, width: 64, height: 90.5 } : { x: 100, y: 50, width: 72, height: 102, rotation: -5 };
     const secondGeometry = () => portrait ? { x: 220, y: 500, width: 64, height: 90.5 } : { x: 240, y: 80, width: 72, height: 102, rotation: 5 };
     const shadows: FakeElement[] = [];
+    const heldStates: boolean[] = [];
     const string = new FakeElement();
     let stringBounds = { width: 0, height: 0 };
     let stringPoints: readonly { x: number; y: number }[] = [];
@@ -68,7 +69,7 @@ describe('lobby class card dragging', () => {
       setPoints: (value) => { stringPoints = value.map((point) => ({ ...point })); },
     };
     const controller = mountClassCardDrag([
-      { element: first as unknown as HTMLElement, geometry: firstGeometry },
+      { element: first as unknown as HTMLElement, geometry: firstGeometry, setHeld: (held) => heldStates.push(held) },
       { element: second as unknown as HTMLElement, geometry: secondGeometry },
     ], composition as unknown as HTMLElement, () => ({ width: 960, height: 540 }), {
       reducedMotion: true,
@@ -86,7 +87,8 @@ describe('lobby class card dragging', () => {
     first.dispatchEvent(pointer('pointerdown', { clientX: 10, clientY: 20 }));
     expect(first.style.zIndex).toBe('7');
     expect(first.classes.has('is-dragging')).toBe(true);
-    expect(first.style.transform).toContain('scale(1.5)');
+    expect(first.style.transform).toContain('rotate(0deg) scale(1)');
+    expect(heldStates).toEqual([true]);
     expect(shadows).toHaveLength(1);
     first.dispatchEvent(pointer('pointermove', { clientX: 34, clientY: 32 }));
     expect(first.style.left).toBe('148px');
@@ -97,6 +99,7 @@ describe('lobby class card dragging', () => {
     expect(second.style.left).toBe('240px'); expect(second.style.top).toBe('80px');
     expect(first.style.transform).toContain('scale(1)');
     expect(first.style.transform).toContain('rotate(-5deg)');
+    expect(heldStates).toEqual([true, false]);
     expect(shadows[0]!.removed).toBe(true);
     expect(first.capturedPointer).toBeUndefined();
 

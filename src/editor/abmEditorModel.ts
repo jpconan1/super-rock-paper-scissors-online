@@ -87,7 +87,7 @@ export function resizeEditorGeometry(
   source: LayoutGeometry = element.layouts[orientation],
 ): LayoutGeometry {
   const next = { ...source };
-  const locked = ['sprite', 'decoration', 'button', 'control'].includes(element.type);
+  const locked = element.id === 'player-name' || ['sprite', 'decoration', 'button', 'control'].includes(element.type);
   if (!locked) {
     next[dimension] = value;
     if (dimension === 'width' && freeHeight !== undefined) next.height = freeHeight;

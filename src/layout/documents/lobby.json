@@ -26,8 +26,7 @@
     "moreVariants": "More Variants",
     "progression": "Progression",
     "ready": "Ready to Play",
-    "settings": "Settings",
-    "scoreboard": "Scoreboard"
+    "settings": "Settings"
   },
   "elements": [
     {
@@ -96,7 +95,7 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 25,
+          "x": 30,
           "y": 875,
           "width": 145,
           "height": 72.5,
@@ -134,16 +133,18 @@
       "protected": true,
       "layouts": {
         "landscape": {
-          "x": 600,
-          "y": 245,
-          "width": 240,
-          "height": 120
+          "x": 400,
+          "y": 375,
+          "width": 160,
+          "height": 80,
+          "aspectLock": true
         },
         "portrait": {
-          "x": 275,
-          "y": 510,
-          "width": 240,
-          "height": 120
+          "x": 190,
+          "y": 705,
+          "width": 160,
+          "height": 80,
+          "aspectLock": true
         }
       }
     },
@@ -727,16 +728,18 @@
       },
       "layouts": {
         "landscape": {
-          "x": 595,
-          "y": 370,
-          "width": 170,
-          "height": 85
+          "x": 565,
+          "y": 380,
+          "width": 145,
+          "height": 72.5,
+          "aspectLock": true
         },
         "portrait": {
-          "x": 340,
-          "y": 635,
-          "width": 170,
-          "height": 85
+          "x": 195,
+          "y": 620,
+          "width": 145,
+          "height": 72.5,
+          "aspectLock": true
         }
       }
     },
@@ -750,17 +753,17 @@
       },
       "layouts": {
         "landscape": {
-          "x": 245,
-          "y": 290,
-          "width": 340,
-          "height": 170,
+          "x": 255,
+          "y": 390,
+          "width": 140,
+          "height": 70,
           "aspectLock": true
         },
         "portrait": {
-          "x": 30,
-          "y": 530,
-          "width": 335,
-          "height": 167.5,
+          "x": 25,
+          "y": 640,
+          "width": 160,
+          "height": 80,
           "aspectLock": true
         }
       }
@@ -772,16 +775,16 @@
       "protected": true,
       "layouts": {
         "landscape": {
-          "x": 295,
-          "y": 420,
+          "x": 210,
+          "y": 385,
           "width": 220,
           "height": 26
         },
         "portrait": {
-          "x": 65,
-          "y": 655,
-          "width": 250,
-          "height": 28
+          "x": 20,
+          "y": 630,
+          "width": 165,
+          "height": 45
         }
       }
     },
@@ -792,14 +795,14 @@
       "protected": true,
       "layouts": {
         "landscape": {
-          "x": 590,
-          "y": 395,
+          "x": 420,
+          "y": 250,
           "width": 120,
           "height": 35
         },
         "portrait": {
-          "x": 370,
-          "y": 600,
+          "x": 30,
+          "y": 555,
           "width": 130,
           "height": 65
         }
@@ -1067,8 +1070,8 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 25,
-          "y": 795,
+          "x": 195,
+          "y": 875,
           "width": 145,
           "height": 72.5,
           "aspectLock": true
@@ -1093,8 +1096,8 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 25,
-          "y": 715,
+          "x": 365,
+          "y": 795,
           "width": 145,
           "height": 72.5,
           "aspectLock": true
@@ -1119,8 +1122,8 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 370,
-          "y": 880,
+          "x": 30,
+          "y": 710,
           "width": 145,
           "height": 72.5,
           "aspectLock": true
@@ -1145,8 +1148,8 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 195,
-          "y": 880,
+          "x": 30,
+          "y": 795,
           "width": 145,
           "height": 72.5,
           "aspectLock": true
@@ -1197,8 +1200,8 @@
           "aspectLock": true
         },
         "portrait": {
-          "x": 370,
-          "y": 795,
+          "x": 365,
+          "y": 875,
           "width": 145,
           "height": 72.5,
           "aspectLock": true
@@ -1218,31 +1221,10 @@
           "height": 372
         },
         "portrait": {
-          "x": 210,
-          "y": 320,
+          "x": 220,
+          "y": 330,
           "width": 290,
           "height": 460
-        }
-      }
-    },
-    {
-      "id": "scoreboard-preview",
-      "type": "button",
-      "layer": 22,
-      "protected": true,
-      "behavior": "preview-scoreboard",
-      "layouts": {
-        "landscape": {
-          "x": 840,
-          "y": 8,
-          "width": 110,
-          "height": 42
-        },
-        "portrait": {
-          "x": 416,
-          "y": 92,
-          "width": 110,
-          "height": 42
         }
       }
     },

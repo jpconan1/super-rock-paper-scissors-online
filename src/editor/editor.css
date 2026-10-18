@@ -35,6 +35,7 @@ button, select, input { font: inherit; }
 .abm-editor__node.boiling-sprite { pointer-events: auto; }
 .abm-editor__node.boiling-sprite > .boiling-sprite__canvas { pointer-events: none; }
 .abm-editor__node#card-flip, .abm-editor__node[data-id='card-flip'] { object-fit: contain; }
+.abm-editor__player-card-preview { position: absolute; top: 0; left: 0; width: 240px; height: 120px; transform: scale(var(--player-card-scale-x, 1), var(--player-card-scale-y, 1)); transform-origin: top left; pointer-events: none; font-family: 'Architects Daughter', cursive; }
 .abm-editor__node--group, .abm-editor__node--collection { border: 1px dashed rgba(30, 100, 190, .48); }
 .abm-editor__node.is-structural { border: 0; outline: 0; pointer-events: none; }
 .abm-editor__node.is-structural > [data-id] { pointer-events: auto; }
@@ -46,6 +47,7 @@ button, select, input { font: inherit; }
 .abm-editor__grid { position: absolute; z-index: 9998; inset: 0; pointer-events: none; background: linear-gradient(to right, transparent calc(50% - .5px), #ff2da966 calc(50% - .5px), #ff2da966 calc(50% + .5px), transparent calc(50% + .5px)), linear-gradient(to bottom, transparent calc(50% - .5px), #ff2da966 calc(50% - .5px), #ff2da966 calc(50% + .5px), transparent calc(50% + .5px)); }
 .abm-editor__curtain-decoration { position: absolute; z-index: 9997; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .abm-editor__curtain-decoration > .boiling-sprite__canvas { pointer-events: none; }
+.abm-editor__node[data-layout-element^='curtain-'] { pointer-events: none !important; }
 .abm-editor__fields { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
 .abm-editor__fields label { display: grid; gap: 3px; color: #c7c3ba; text-transform: capitalize; }
 .abm-editor__fields input { width: 100%; box-sizing: border-box; }

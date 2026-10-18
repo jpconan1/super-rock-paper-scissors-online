@@ -1,5 +1,5 @@
 export interface CardGeometry { x: number; y: number; width: number; height: number; rotation?: number }
-export interface CardDragItem { element: HTMLElement; geometry(): CardGeometry }
+export interface CardDragItem { element: HTMLElement; geometry(): CardGeometry; setHeld?(held: boolean): void }
 export interface CardDragBounds { width: number; height: number }
 export interface ClassCardDragController { reset(): void; setEnabled(enabled: boolean): void; destroy(): void }
 export interface CardStringLayer { element: HTMLElement; setBounds(bounds: CardDragBounds): void; setPoints(points: readonly { x: number; y: number }[]): void }
@@ -21,8 +21,9 @@ interface DragState {
 
 const DRAG_THRESHOLD_PX = 4;
 const REACHABLE_CARD_EDGE = 24;
-const HELD_SCALE = 1.5;
 const HELD_LIFT = 10;
+const HELD_CARD_WIDTH = 256;
+const HELD_CARD_HEIGHT = 362;
 const SHADOW_OFFSET_X = 10;
 const SHADOW_OFFSET_Y = 20;
 const ELASTIC_PASSES = 4;
@@ -80,7 +81,9 @@ export function mountClassCardDrag(
   };
   const applyBody = (body: CardBody, held = false): void => {
     body.item.element.style.left = `${body.x}px`; body.item.element.style.top = `${body.y}px`;
-    body.item.element.style.transform = `translateY(${held ? -HELD_LIFT : 0}px) rotate(${body.rotation}deg) scale(${held ? HELD_SCALE : 1})`;
+    body.item.element.style.transform = held
+      ? `translate(${(body.width - HELD_CARD_WIDTH) / 2}px, ${(body.height - HELD_CARD_HEIGHT) / 2 - HELD_LIFT}px) rotate(0deg) scale(1)`
+      : `translateY(0px) rotate(${body.rotation}deg) scale(1)`;
   };
   const applyAll = (): void => { for (const body of bodies) applyBody(body, active?.body === body); updateString(); };
   const linksUnderTension = (): boolean => {
@@ -147,6 +150,7 @@ export function mountClassCardDrag(
   const finish = (event: PointerEvent): void => {
     if (!active || event.pointerId !== active.pointerId) return;
     const drag = active; active = undefined; drag.body.item.element.classList.remove('is-dragging');
+    drag.body.item.setHeld?.(false);
     if (drag.body.item.element.hasPointerCapture?.(event.pointerId)) drag.body.item.element.releasePointerCapture(event.pointerId);
     drag.shadow.remove(); if (reducedMotion) settle(); else ensureAnimation();
   };
@@ -154,7 +158,7 @@ export function mountClassCardDrag(
     if (!active) return;
     const drag = active; active = undefined;
     if (drag.body.item.element.hasPointerCapture?.(drag.pointerId)) drag.body.item.element.releasePointerCapture(drag.pointerId);
-    drag.body.item.element.classList.remove('is-dragging'); drag.shadow.remove();
+    drag.body.item.element.classList.remove('is-dragging'); drag.body.item.setHeld?.(false); drag.shadow.remove();
   };
   const reset = (): void => {
     cancelActive(); if (frame !== undefined) cancelFrame(frame); frame = undefined;
@@ -179,15 +183,15 @@ export function mountClassCardDrag(
       event.preventDefault(); const body = bodies[itemIndex]!;
       const shadow = createShadow(); shadow.className = 'lobby-screen__class-card-shadow';
       Object.assign(shadow.style, {
-        left: `${body.x}px`, top: `${body.y}px`, width: `${body.width}px`, height: `${body.height}px`,
-        transform: `translate(${SHADOW_OFFSET_X}px, ${SHADOW_OFFSET_Y}px) rotate(${body.rotation}deg) scale(${HELD_SCALE})`,
+        left: `${body.x}px`, top: `${body.y}px`, width: `${HELD_CARD_WIDTH}px`, height: `${HELD_CARD_HEIGHT}px`,
+        transform: `translate(${(body.width - HELD_CARD_WIDTH) / 2 + SHADOW_OFFSET_X}px, ${(body.height - HELD_CARD_HEIGHT) / 2 - HELD_LIFT + SHADOW_OFFSET_Y}px) rotate(0deg) scale(1)`,
         zIndex: String(Number(body.item.element.style.zIndex) - 1),
       });
       composition.append(shadow);
       active = { body, pointerId: event.pointerId, startClientX: event.clientX, startClientY: event.clientY, startX: body.x, startY: body.y, moved: false, shadow };
       apexIndex = itemIndex; updateLayers();
       body.previousX = body.x; body.previousY = body.y;
-      item.element.classList.add('is-dragging'); applyBody(body, true); item.element.setPointerCapture?.(event.pointerId); ensureAnimation();
+      item.setHeld?.(true); item.element.classList.add('is-dragging'); applyBody(body, true); item.element.setPointerCapture?.(event.pointerId); ensureAnimation();
     };
     const onPointerMove = (event: PointerEvent): void => {
       if (!active || active.body.item !== item || event.pointerId !== active.pointerId) return;

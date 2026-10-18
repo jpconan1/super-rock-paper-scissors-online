@@ -76,6 +76,40 @@ function renderLobbyRoster(roster: HTMLElement, players: readonly LobbyPlayer[],
   }
 }
 
+export function createLobbyMissionCard(): HTMLElement {
+  const card = document.createElement('aside');
+  card.className = 'lobby-screen__missions';
+  card.setAttribute('aria-labelledby', 'lobby-missions-title');
+  const titleBar = document.createElement('header');
+  titleBar.className = 'lobby-screen__missions-title-bar';
+  const title = document.createElement('h2');
+  title.id = 'lobby-missions-title';
+  title.className = 'lobby-screen__missions-title';
+  title.textContent = 'Missions';
+  titleBar.append(title);
+  const list = document.createElement('ul');
+  list.className = 'lobby-screen__mission-list';
+  for (const copy of ['Claim Your Account', 'Finish The Tutorial']) {
+    const item = document.createElement('li');
+    item.className = 'lobby-screen__mission';
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.disabled = true;
+    checkbox.setAttribute('aria-label', copy);
+    const label = document.createElement('span');
+    label.textContent = copy;
+    item.append(checkbox, label);
+    list.append(item);
+  }
+  card.append(titleBar, list);
+  return card;
+}
+
+export function setLobbyRosterOpen(roster: HTMLElement, missions: HTMLElement, open: boolean): void {
+  roster.hidden = !open;
+  missions.hidden = open;
+}
+
 function mountPanel(container: HTMLElement, title: string): { panel: HTMLElement; cleanup: ScreenCleanup } {
   const screen = document.createElement('section');
   screen.className = 'shell-screen menu-canvas-screen';
@@ -108,10 +142,8 @@ export function mountLobbyScreen(
   onMatchmakingChange: (active: boolean) => void,
   onComputer: () => void,
   onTutorial: () => void,
-  onScoreboard: () => void,
   onSettings: () => void,
   sendWhiteboard: (message: WhiteboardClientMessage) => void,
-  multiVariantFlow = true,
   playerLevel = 1,
   unlockedClassCount = playerLevel,
   progressUnitsInLevel = 0,
@@ -209,6 +241,8 @@ export function mountLobbyScreen(
     sprites.push(cardSprite);
     return {
       id: definition.id,
+      classId: definition.classId,
+      normalAsset: definition.asset,
       sprite: cardSprite,
       element: cardSprite.element,
     };
@@ -289,10 +323,11 @@ export function mountLobbyScreen(
   roster.className = 'textbox lobby-screen__roster';
   roster.hidden = true;
   renderLobbyRoster(roster, [], '');
+  const missions = createLobbyMissionCard();
   const rosterToggle = createToggleButton({
     label: layoutDocument.copy!.showPlayers!,
     pressed: false,
-    onChange: (open) => { roster.hidden = !open; },
+    onChange: (open) => { setLobbyRosterOpen(roster, missions, open); },
     offSheet: '/interactive-elements/toggle-list-off-sheet.webp',
     betweenSheet: '/interactive-elements/toggle-list-between-sheet.webp',
     onSheet: '/interactive-elements/toggle-list-on-sheet.webp',
@@ -327,13 +362,11 @@ export function mountLobbyScreen(
   ];
   const tutorialButton = gameButtonByElement.get(actions[1]!.element)!;
   tutorialButton.setDisabled(tutorialDisabled);
-  const scoreboard = multiVariantFlow ? action('Scoreboard', leaveQueue(onScoreboard)) : undefined;
-  scoreboard?.classList.add('lobby-screen__scoreboard-preview');
   progressionFace.append(...progressElements);
   whiteboardFace.append(whiteboard, ...tools.map((item) => item.element), chat);
   composition.append(header, ...faceLayers.values(), flip, whiteboardFaceButton.element,
     progressionFaceButton.element, moreVariantsFaceButton.element, comingSoon,
-    ...actions.map((item) => item.element), roster, ...(scoreboard ? [scoreboard] : []), curtainLeft, curtainRight);
+    ...actions.map((item) => item.element), roster, curtainLeft, curtainRight, missions);
   composition.append(rosterToggle.element);
   layoutBindings.push(
     { id: 'header', element: header }, { id: 'player-name', element: emblemCard.element }, { id: 'player-level', element: emblemButton.element },
@@ -343,13 +376,15 @@ export function mountLobbyScreen(
     { id: 'more-variants', element: comingSoon }, ...tools,
     { id: 'chat-input', element: chatEntry.element }, { id: 'chat-button', element: chatButton },
     { id: 'roster-toggle', element: rosterToggle.element }, ...actions, { id: 'roster', element: roster },
-    ...(scoreboard ? [{ id: 'scoreboard-preview', element: scoreboard }] : []), { id: 'curtain-left', element: curtainLeft },
-    { id: 'curtain-right', element: curtainRight },
+    { id: 'curtain-left', element: curtainLeft }, { id: 'curtain-right', element: curtainRight },
   );
   applyDocumentLayout(layoutDocument, layoutName, layoutBindings);
   classCardDrag = mountClassCardDrag(classCards.map((item) => ({
     element: item.element,
     geometry: () => lobbyElement(item.id).layouts[layoutName],
+    setHeld: (held: boolean) => item.sprite.setSource(held
+      ? `/rewards/class-flips/${item.classId}/frame-07.webp`
+      : item.normalAsset),
   })), progressionFace, () => layoutDocument.canvases[layoutName]);
   container.replaceChildren(screen);
   const whiteboardController = mountWhiteboard({
@@ -451,6 +486,7 @@ export function mountLobbyScreen(
     chat.removeEventListener('submit', submitChat);
     chatButton.removeEventListener('click', submitChat);
     whiteboardController.destroy();
+    missions.remove();
     screen.remove();
   }) as LobbyScreenMount;
   cleanup.setConnectionState = (state) => {
@@ -470,7 +506,10 @@ export function mountLobbyScreen(
   cleanup.updateRoster = (players, selfId) => renderLobbyRoster(roster, players, selfId);
   cleanup.setUnlockedClassCount = (count) => {
     const definitions = lobbyClassCardDefinitions(count);
-    for (let index = 0; index < classCards.length; index++) classCards[index]!.sprite.setSource(definitions[index]!.asset);
+    for (let index = 0; index < classCards.length; index++) {
+      classCards[index]!.normalAsset = definitions[index]!.asset;
+      classCards[index]!.sprite.setSource(definitions[index]!.asset);
+    }
   };
   cleanup.setTutorialDisabled = (disabled) => tutorialButton.setDisabled(disabled);
   return cleanup;
