@@ -14,12 +14,12 @@ describe('player profiles', () => {
   });
 
   test('accepts only complete, bounded server sessions', () => {
-    const profile = { playerId: 'anchor-chill-pizza-turtle-00', accountType: 'guest', displayName: 'Player', rating: 1500, equippedEmblem: 'beta-og' };
+    const profile = { playerId: 'anchor-chill-pizza-turtle-00', accountType: 'guest', displayName: 'Player', rating: 1500, equippedEmblem: 'beta-og', ownedEmblems: ['beta-og'] };
     expect(isPlayerProfile(profile)).toBe(true);
     expect(isPlayerProfile({ ...profile, playerId: '' })).toBe(false);
     expect(isPlayerProfile({ ...profile, displayName: 'Player\nTwo' })).toBe(false);
     expect(isPlayerProfile({ playerId: profile.playerId, accountType: profile.accountType, displayName: profile.displayName, rating: profile.rating })).toBe(false);
-    expect(isPlayerProfile({ ...profile, equippedEmblem: 'computer' })).toBe(true);
+    expect(isPlayerProfile({ ...profile, equippedEmblem: 'computer' })).toBe(false);
     expect(isPlayerProfile({ ...profile, equippedEmblem: 'unknown' })).toBe(false);
   });
 });

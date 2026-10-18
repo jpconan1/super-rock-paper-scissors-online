@@ -11,6 +11,7 @@ describe('lobby class cards', () => {
     const cards = lobbyClassCardDefinitions(1);
     expect(cards.filter(({ faceUp }) => faceUp).map(({ classId }) => classId)).toEqual(['lucky', 'advantaged']);
     expect(cards.filter(({ next }) => next).map(({ classId }) => classId)).toEqual(['advantaged']);
+    expect(cards.filter(({ newest }) => newest).map(({ classId }) => classId)).toEqual(['lucky']);
     expect(cards[0]!.asset).toBe('/lobby/class-cards/lucky-card-sheet.webp');
     expect(cards[1]!.asset).toBe('/lobby/class-cards/advantaged-card-sheet.webp');
   });
@@ -21,6 +22,7 @@ describe('lobby class cards', () => {
     expect(cards[7]!.asset).toBe('/lobby/class-cards/cheater-card-sheet.webp');
     expect(cards[8]!.asset).toBe('/lobby/class-cards/investor-card-sheet.webp');
     expect(cards[8]!.next).toBe(true);
+    expect(cards[7]!.newest).toBe(true);
     expect(cards[9]!.asset).toBe('/lobby/class-cards/gambler-back-sheet.webp');
   });
 
@@ -28,6 +30,7 @@ describe('lobby class cards', () => {
     const cards = lobbyClassCardDefinitions(21);
     expect(cards.every(({ faceUp }) => faceUp)).toBe(true);
     expect(cards.some(({ next }) => next)).toBe(false);
+    expect(cards.filter(({ newest }) => newest).map(({ classId }) => classId)).toEqual(['joe']);
     expect(cards.at(-1)!.asset).toBe('/lobby/class-cards/joe-card-sheet.webp');
   });
 

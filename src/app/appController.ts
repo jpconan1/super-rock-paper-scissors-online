@@ -393,6 +393,7 @@ export class AppController {
         account.level === 21 ? 10_000 : account.totalProgressUnits % 10_000,
         account.unlockAllClasses,
         account.equippedEmblem,
+        account.ownedEmblems,
         (emblem) => options.session.setEquippedEmblem(emblem),
         (error) => this.showError(error),
         {},
@@ -603,7 +604,7 @@ export class AppController {
         await curtain.close(this.lifecycle?.signal);
         if (flow === 'title') await this.options.session.signInWithGoogleFromTitle(name); else await this.options.session.claimGuestWithGoogle();
       }
-      catch (error) { await curtain.open(); console.error('Google sign-in failed.', error); }
+      catch (error) { await curtain.open(); this.showGoogleSignInError(); console.error('Google sign-in failed.', error); }
       return;
     }
     this.googleSignIn?.abort();
@@ -635,6 +636,7 @@ export class AppController {
     } catch (error) {
       if (!controller.signal.aborted) {
         await curtain.open();
+        this.showGoogleSignInError();
         console.error('Google sign-in failed.', error);
       }
     } finally {
@@ -648,6 +650,16 @@ export class AppController {
       ariaLabel: 'Account already exists',
       geometry: STANDARD_CONFIRMATION_GEOMETRY,
       content: 'Account already exists.',
+      dismissible: true,
+      actions: [],
+    });
+  }
+
+  private showGoogleSignInError(): void {
+    this.alertSystem?.show({
+      ariaLabel: 'Google sign-in failed',
+      geometry: STANDARD_CONFIRMATION_GEOMETRY,
+      content: 'Google sign-in failed. Please try again.',
       dismissible: true,
       actions: [],
     });

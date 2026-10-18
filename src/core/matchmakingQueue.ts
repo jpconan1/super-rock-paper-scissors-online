@@ -1,9 +1,9 @@
-import type { PlayerEmblem } from './playerEmblem';
+import type { OwnablePlayerEmblem } from './playerEmblem';
 
-export interface MatchmakingQueueEntry { guestId: string; attemptId: string; name: string; rating: number; totalProgressUnits?: number; unlockAllClasses?: boolean; equippedEmblem?: PlayerEmblem; queuedAt: number }
+export interface MatchmakingQueueEntry { guestId: string; attemptId: string; name: string; rating: number; totalProgressUnits?: number; unlockAllClasses?: boolean; equippedEmblem: OwnablePlayerEmblem | null; queuedAt: number }
 
 export function refreshMatchmakingQueue(
-  queue: MatchmakingQueueEntry[], guestId: string, attemptId: string, name: string, rating: number, now: number, ttlMs: number, totalProgressUnits = 0, unlockAllClasses = false, equippedEmblem: PlayerEmblem = 'beta-og',
+  queue: MatchmakingQueueEntry[], guestId: string, attemptId: string, name: string, rating: number, now: number, ttlMs: number, totalProgressUnits = 0, unlockAllClasses = false, equippedEmblem: OwnablePlayerEmblem | null = null,
 ): { queue: MatchmakingQueueEntry[]; opponent?: MatchmakingQueueEntry; ownedElsewhere?: boolean } {
   const active = queue.filter((entry) => now - entry.queuedAt < ttlMs);
   const existing = active.find((entry) => entry.guestId === guestId);

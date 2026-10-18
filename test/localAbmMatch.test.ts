@@ -34,7 +34,7 @@ describe('LocalAbmMatch', () => {
     expect(latest(snapshots).phase).toBe('playing');
     expect(latest(snapshots).activeSlot).toBe('slot-1');
     expect(latest(snapshots).players).toEqual({
-      p1: { name: 'JP', platform: 'Local', rating: 0, level: 1, emblem: 'beta-og' },
+      p1: { name: 'JP', platform: 'Local', rating: 0, level: 1, emblem: null },
       p2: { name: 'Computer', platform: 'CPU', rating: 0, level: 1, emblem: 'computer' },
     });
 

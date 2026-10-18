@@ -1,9 +1,10 @@
 import { betterAuth } from 'better-auth';
 import { anonymous, emailOTP } from 'better-auth/plugins';
 import { createResendMailer, type AuthMailer } from './resendMailer';
+import { completeEmblemMission } from './playerEmblems';
 
-const TERMS_VERSION = '2026-09-13';
-const PRIVACY_VERSION = '2026-09-13';
+export const TERMS_VERSION = '2026-09-13';
+export const PRIVACY_VERSION = '2026-09-13';
 
 export interface AuthEnv {
   DB: D1Database;
@@ -29,7 +30,7 @@ export function createAuth(env: AuthEnv, mailer: AuthMailer | undefined = env.RE
     trustedOrigins: ['http://localhost:5173', 'http://localhost:8787', 'https://abm.jpconan.ca'],
     advanced: { useSecureCookies: env.BETTER_AUTH_URL.startsWith('https://') },
     session: { freshAge: 5 * 60 },
-    account: { encryptOAuthTokens: true, accountLinking: { disableImplicitLinking: true } },
+    account: { encryptOAuthTokens: true, accountLinking: { disableImplicitLinking: true, allowDifferentEmails: true } },
     emailAndPassword: { enabled: true, disableSignUp: false, minPasswordLength: 8, maxPasswordLength: 128 },
     socialProviders: {
       google: {
@@ -65,19 +66,7 @@ export function createAuth(env: AuthEnv, mailer: AuthMailer | undefined = env.RE
           .bind(newId).first<{ providerId: string }>();
         if (provider?.providerId !== 'google' && provider?.providerId !== 'credential') throw new Error('Unsupported account protection type.');
         if (target) {
-          await env.DB.batch([
-            env.DB.prepare(`DELETE FROM players WHERE auth_user_id = ? AND NOT EXISTS (
-              SELECT 1 FROM match_results WHERE p1_id = players.player_id OR p2_id = players.player_id
-            )`).bind(anonymousId),
-            env.DB.prepare(`UPDATE players SET display_name = 'Deleted player', auth_user_id = NULL, account_type = NULL,
-              rating = 1500, total_progress_units = 0, unlock_all_classes = 0, updated_at = ? WHERE auth_user_id = ?`)
-              .bind(now, anonymousId),
-            env.DB.prepare(`INSERT OR IGNORE INTO analytics_events
-              (event_id, event_type, occurred_at, player_id, metadata_json, is_test)
-              SELECT ?, 'protected-account', ?, ?, '{}', CASE WHEN EXISTS (SELECT 1 FROM test_players WHERE player_id = ?) THEN 1 ELSE 0 END`)
-              .bind(`protected-account:${target.player_id}`, now, target.player_id, target.player_id),
-          ]);
-          return;
+          throw new Error('Protected account already exists.');
         }
         const emailProtection = provider?.providerId === 'credential';
         const pending = emailProtection ? await env.DB.prepare(`SELECT context_json FROM email_auth_challenges
@@ -96,6 +85,8 @@ export function createAuth(env: AuthEnv, mailer: AuthMailer | undefined = env.RE
             FROM players p LEFT JOIN test_players t ON t.player_id = p.player_id WHERE p.auth_user_id = ?`)
             .bind(`protected-account:${newId}`, now, newId),
         ]);
+        const claimed = await env.DB.prepare('SELECT player_id FROM players WHERE auth_user_id = ?').bind(newId).first<{ player_id: string }>();
+        if (claimed) await completeEmblemMission(env.DB, claimed.player_id, 'claim-account', now);
       },
     })],
   });

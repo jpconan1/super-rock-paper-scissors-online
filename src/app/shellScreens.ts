@@ -24,7 +24,7 @@ import {
 } from '../whiteboard/flipAnimation';
 import { mountClassCardDrag, type ClassCardDragController } from '../lobby/classCardDrag';
 import { randomId } from '../core/randomId';
-import { nextPlayerEmblem, type PlayerEmblem } from '../core/playerEmblem';
+import { nextOwnedPlayerEmblem, type OwnablePlayerEmblem } from '../core/playerEmblem';
 import { createPlayerEmblemCard } from '../ui/playerEmblemCard';
 
 export type ScreenCleanup = () => void;
@@ -43,6 +43,7 @@ export interface LobbyClassCardDefinition {
   asset: string;
   faceUp: boolean;
   next: boolean;
+  newest: boolean;
 }
 
 export function lobbyClassCardDefinitions(playerLevel: number): LobbyClassCardDefinition[] {
@@ -53,6 +54,7 @@ export function lobbyClassCardDefinitions(playerLevel: number): LobbyClassCardDe
     asset: `/lobby/class-cards/${classId}-${index <= unlockedCount ? 'card' : 'back'}-sheet.webp`,
     faceUp: index <= unlockedCount,
     next: index === unlockedCount,
+    newest: index === unlockedCount - 1,
   }));
 }
 
@@ -149,8 +151,9 @@ export function mountLobbyScreen(
   unlockedClassCount = playerLevel,
   progressUnitsInLevel = 0,
   tutorialDisabled = false,
-  equippedEmblem: PlayerEmblem = 'beta-og',
-  onEmblemChange: (emblem: PlayerEmblem) => Promise<void> = async () => {},
+  equippedEmblem: OwnablePlayerEmblem | null = null,
+  ownedEmblems: readonly OwnablePlayerEmblem[] = [],
+  onEmblemChange: (emblem: OwnablePlayerEmblem | null) => Promise<void> = async () => {},
   onEmblemError: (error: unknown) => void = console.error,
   faceOptions: { initialFace?: LobbyFace } = {},
 ): LobbyScreenMount {
@@ -219,7 +222,7 @@ export function mountLobbyScreen(
       if (emblemSaving) return;
       emblemSaving = true;
       emblemButton.setDisabled(true);
-      const next = nextPlayerEmblem(activeEmblem);
+      const next = nextOwnedPlayerEmblem(activeEmblem, ownedEmblems);
       void onEmblemChange(next).then(() => {
         activeEmblem = next;
         emblemCard.setEmblem(next);
@@ -234,7 +237,8 @@ export function mountLobbyScreen(
   const progressBar = document.createElement('canvas'); progressBar.className = 'lobby-screen__progress-bar'; progressBar.width = 512; progressBar.height = 256;
   progressBar.setAttribute('role', 'progressbar'); progressBar.setAttribute('aria-valuemin', '0'); progressBar.setAttribute('aria-valuemax', '10000'); progressBar.setAttribute('aria-valuenow', String(progressUnitsInLevel));
   const progressCopy = document.createElement('span'); progressCopy.className = 'lobby-screen__progress-copy'; progressCopy.textContent = `${progressUnitsInLevel.toLocaleString()} / 10,000 XP`;
-  const classCards = lobbyClassCardDefinitions(unlockedClassCount).map((definition) => {
+  let classCardDefinitions = lobbyClassCardDefinitions(unlockedClassCount);
+  const classCards = classCardDefinitions.map((definition) => {
     const item = lobbyElement(definition.id);
     const cardSprite = createBoilingSprite({ src: definition.asset, className: 'lobby-screen__class-card', alt: item.label ?? '', clock });
     const heldImage = document.createElement('img');
@@ -253,6 +257,13 @@ export function mountLobbyScreen(
       element: cardSprite.element,
     };
   });
+  const newestClassSpike = createBoilingSprite({ src: '/lobby/class-cards/card-spike-sheet.webp', className: 'lobby-screen__class-card-spike', alt: '', clock });
+  sprites.push(newestClassSpike);
+  const attachNewestClassSpike = () => {
+    const index = classCardDefinitions.findIndex(({ newest }) => newest);
+    if (index >= 0) classCards[index]!.element.prepend(newestClassSpike.element);
+  };
+  attachNewestClassSpike();
   const progressElements = [emblemCard.element, emblemButton.element, progressBar, progressCopy, ...classCards.map((item) => item.element)];
   const curtainLeft = sprite(layoutDocument.elements.find((item) => item.id === 'curtain-left')!.assets!.src!, 'portrait-curtain-piece');
   const curtainRight = sprite(layoutDocument.elements.find((item) => item.id === 'curtain-right')!.assets!.src!, 'portrait-curtain-piece');
@@ -509,7 +520,7 @@ export function mountLobbyScreen(
   cleanup.receiveWhiteboard = (message) => whiteboardController.receive(message);
   cleanup.updateRoster = (players, selfId) => renderLobbyRoster(roster, players, selfId);
   cleanup.setUnlockedClassCount = (count) => {
-    const definitions = lobbyClassCardDefinitions(count);
+    const definitions = lobbyClassCardDefinitions(count); classCardDefinitions = definitions;
     for (let index = 0; index < classCards.length; index++) {
       const card = classCards[index]!; const definition = definitions[index]!;
       card.heldImage.src = definition.faceUp
@@ -518,6 +529,7 @@ export function mountLobbyScreen(
       card.nextLabel.hidden = !definition.next;
       card.sprite.setSource(definition.asset);
     }
+    attachNewestClassSpike();
   };
   cleanup.setTutorialDisabled = (disabled) => tutorialButton.setDisabled(disabled);
   return cleanup;

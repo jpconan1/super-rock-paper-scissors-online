@@ -118,8 +118,29 @@ async function accounts(host: HTMLElement, baseUrl: string): Promise<void> {
   let search = ''; const render = async () => { const data = await api(baseUrl, `/admin/api/accounts?search=${encodeURIComponent(search)}`);
     const input = document.createElement('input'); input.className = 'admin-input'; input.placeholder = 'Search name or email'; input.value = search;
     input.onchange = () => { search = input.value; void render(); };
-    host.replaceChildren(titleRow('Accounts', `${data.totals?.total ?? 0} total`), input, panel('Players', table(
-      ['Name', 'Player ID', 'Email', 'Type', 'Test', 'Rating', 'Matches', 'Created'], data.rows.map((r: Json) => [r.displayName ?? '—', r.playerId ?? '—', r.email ?? '—', r.accountType, r.isTest ? 'TEST' : '', r.rating ?? '—', r.matches ?? 0, date(r.createdAt)])))); };
+    const controls = element('div', 'admin-toolbar');
+    const player = document.createElement('input'); player.className = 'admin-input'; player.placeholder = 'Player ID';
+    const emblem = document.createElement('select'); emblem.className = 'admin-select';
+    for (const id of ['beta-og', 'new-player']) { const option = document.createElement('option'); option.value = id; option.textContent = id; emblem.append(option); }
+    const reason = document.createElement('input'); reason.className = 'admin-input'; reason.placeholder = 'Required reason';
+    const history = element('pre', 'admin-operation-detail', 'Enter a player ID to inspect emblem history.');
+    const inspect = element('button', 'admin-button', 'Inspect') as HTMLButtonElement;
+    inspect.onclick = async () => {
+      if (!player.value.trim()) return;
+      const data = await api(baseUrl, `/admin/api/emblems?playerId=${encodeURIComponent(player.value.trim())}`);
+      history.textContent = data.rows.length ? JSON.stringify(data.rows, null, 2) : 'No emblem history.';
+    };
+    const action = (kind: 'grant' | 'revoke') => async () => {
+      if (!player.value.trim() || !reason.value.trim()) return;
+      await post(baseUrl, '/admin/api/emblems', { action: kind, playerId: player.value.trim(), emblemId: emblem.value, reason: reason.value.trim() });
+      await render();
+    };
+    const grant = element('button', 'admin-button', 'Grant') as HTMLButtonElement; grant.onclick = action('grant');
+    const revoke = element('button', 'admin-button', 'Revoke') as HTMLButtonElement; revoke.onclick = action('revoke');
+    controls.append(player, emblem, reason, inspect, grant, revoke);
+    const ownership = element('div', 'admin-maintenance'); ownership.append(controls, history);
+    host.replaceChildren(titleRow('Accounts', `${data.totals?.total ?? 0} total`), input, panel('Emblem ownership', ownership), panel('Players', table(
+      ['Name', 'Player ID', 'Email', 'Type', 'Test', 'Rating', 'Matches', 'Emblems', 'Created'], data.rows.map((r: Json) => [r.displayName ?? '—', r.playerId ?? '—', r.email ?? '—', r.accountType, r.isTest ? 'TEST' : '', r.rating ?? '—', r.matches ?? 0, r.emblems ?? '—', date(r.createdAt)])))); };
   await render();
 }
 

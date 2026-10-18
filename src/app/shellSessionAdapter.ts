@@ -14,10 +14,10 @@ import { generateRandomName } from '../title/randomName';
 import type { LocalMatchGrant, LocalMatchKind } from '../protocol/localMatchReceipt';
 import { trackLobbyEnter } from '../analytics/tracking';
 import type { PlayerAccountType } from '../protocol/playerId';
-import type { PlayerEmblem } from '../core/playerEmblem';
+import type { OwnablePlayerEmblem } from '../core/playerEmblem';
 export type { LocalMatchGrant, LocalMatchKind } from '../protocol/localMatchReceipt';
 
-export interface AccountState { signedIn: boolean; accountType: PlayerAccountType; displayName: string; playerId: string; rating: number; totalProgressUnits: number; level: number; unlockedClassIds: readonly import('../variants/attackBlockMana/attackBlockManaTypes').AbmClassId[]; unlockAllClasses: boolean; equippedEmblem: PlayerEmblem; email: string; hasPassword: boolean; emailAuthAvailable: boolean; emailSignupAvailable: boolean }
+export interface AccountState { signedIn: boolean; accountType: PlayerAccountType; displayName: string; playerId: string; rating: number; totalProgressUnits: number; level: number; unlockedClassIds: readonly import('../variants/attackBlockMana/attackBlockManaTypes').AbmClassId[]; unlockAllClasses: boolean; equippedEmblem: OwnablePlayerEmblem | null; ownedEmblems: OwnablePlayerEmblem[]; email: string; hasPassword: boolean; emailAuthAvailable: boolean; emailSignupAvailable: boolean }
 
 export interface ShellSessionListener {
   connection(state: ConnectionState): void;
@@ -36,7 +36,7 @@ export interface ShellSessionAdapter {
   suggestedPlayerName(): string;
   accountState(): AccountState;
   setUnlockAllClasses(enabled: boolean): Promise<void>;
-  setEquippedEmblem(emblem: PlayerEmblem): Promise<void>;
+  setEquippedEmblem(emblem: OwnablePlayerEmblem | null): Promise<void>;
   beginLocalMatch(kind: LocalMatchKind): Promise<LocalMatchGrant>;
   awardTutorialMatch(receipt: string, outcome: 'win' | 'loss'): Promise<ProgressAward>;
   awardComputerMatch(receipt: string, outcome: 'win' | 'loss', roundWinningClassIds?: readonly AbmClassId[]): Promise<ProgressAward>;
@@ -103,7 +103,8 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
   private rating = 1500;
   private totalProgressUnits = 0;
   private unlockAllClasses = false;
-  private equippedEmblem: PlayerEmblem = 'beta-og';
+  private equippedEmblem: OwnablePlayerEmblem | null = null;
+  private ownedEmblems: OwnablePlayerEmblem[] = [];
   private googleFlow?: 'title' | 'claim';
   private email = '';
   private hasPassword = false;
@@ -136,6 +137,10 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
   }
   async finishGoogleSignIn(): Promise<PlayerProfile | null> {
     const flow = this.googleFlow ?? loadGoogleFlow();
+    if (flow === 'claim') {
+      const response = await fetch(`${this.baseUrl}/claim-google-account`, { method: 'POST', credentials: 'include' });
+      if (!response.ok) throw new Error((await response.json().catch(() => ({})) as { error?: string }).error || 'Account claim failed.');
+    }
     let player = await this.loadAuthenticatedPlayer();
     if (!player && flow === 'title') player = await this.createAuthenticatedPlayer(loadGoogleTitleName());
     if (!player || this.authIsAnonymous) return null;
@@ -146,7 +151,7 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
   suggestedPlayerName(): string { return loadSavedGuestName(); }
   accountState(): AccountState {
     const progression = progressionForTotal(this.totalProgressUnits);
-    return { signedIn: this.accountType !== 'guest', accountType: this.accountType, displayName: this.playerName || loadSavedGuestName(), playerId: this.playerId, rating: this.rating, totalProgressUnits: this.totalProgressUnits, level: progression.level, unlockedClassIds: this.unlockAllClasses ? ABM_CLASS_IDS : progression.unlockedClassIds, unlockAllClasses: this.unlockAllClasses, equippedEmblem: this.equippedEmblem, email: this.email, hasPassword: this.hasPassword, emailAuthAvailable: this.emailAuthAvailable, emailSignupAvailable: this.emailSignupAvailable };
+    return { signedIn: this.accountType !== 'guest', accountType: this.accountType, displayName: this.playerName || loadSavedGuestName(), playerId: this.playerId, rating: this.rating, totalProgressUnits: this.totalProgressUnits, level: progression.level, unlockedClassIds: this.unlockAllClasses ? ABM_CLASS_IDS : progression.unlockedClassIds, unlockAllClasses: this.unlockAllClasses, equippedEmblem: this.equippedEmblem, ownedEmblems: [...this.ownedEmblems], email: this.email, hasPassword: this.hasPassword, emailAuthAvailable: this.emailAuthAvailable, emailSignupAvailable: this.emailSignupAvailable };
   }
   async setUnlockAllClasses(enabled: boolean): Promise<void> {
     const response = await fetch(`${this.baseUrl}/player-progression`, { method: 'PUT', credentials: 'include', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ unlockAllClasses: enabled }) });
@@ -155,12 +160,13 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
     if (player.unlockAllClasses !== enabled) throw new Error('Progression update returned invalid data.');
     this.totalProgressUnits = player.totalProgressUnits; this.unlockAllClasses = player.unlockAllClasses;
   }
-  async setEquippedEmblem(emblem: PlayerEmblem): Promise<void> {
+  async setEquippedEmblem(emblem: OwnablePlayerEmblem | null): Promise<void> {
     const response = await fetch(`${this.baseUrl}/player-emblem`, { method: 'PUT', credentials: 'include', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ emblem }) });
     if (!response.ok) throw new Error(`Emblem update failed: ${response.status}`);
     const player = await response.json() as PlayerProfile;
     if (!isPlayerProfile(player) || player.equippedEmblem !== emblem) throw new Error('Emblem update returned invalid data.');
     this.equippedEmblem = player.equippedEmblem;
+    this.ownedEmblems = player.ownedEmblems;
   }
   async beginLocalMatch(kind: LocalMatchKind): Promise<LocalMatchGrant> {
     const response = await fetch(`${this.baseUrl}/local-match-grant`, {
@@ -186,8 +192,12 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
       body: JSON.stringify(body),
     });
     if (!response.ok) throw new Error(`Progress award failed: ${response.status}`);
-    const award = await response.json() as ProgressAward;
+    const award = await response.json() as ProgressAward & { playerProfile?: PlayerProfile };
     if (!award || !Number.isSafeInteger(award.gainedProgressUnits) || !award.before || !award.after) throw new Error('Progress award returned invalid data.');
+    if (award.playerProfile && isPlayerProfile(award.playerProfile)) {
+      this.equippedEmblem = award.playerProfile.equippedEmblem;
+      this.ownedEmblems = award.playerProfile.ownedEmblems;
+    }
     return award;
   }
   async requestGoogleSignInFromTitle(playerName: string, callbackURL: string, errorCallbackURL: string): Promise<string> {
@@ -197,12 +207,15 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
   async requestGuestClaimWithGoogle(callbackURL: string, errorCallbackURL: string): Promise<string> {
     if (!this.playerId) throw new Error('A player account is required.');
     this.setGoogleFlow('claim');
-    return this.requestGoogleAuthorization(callbackURL, errorCallbackURL);
+    const result = await this.authClient.linkSocial({ provider: 'google', callbackURL, errorCallbackURL, disableRedirect: true });
+    if (result.error) throw new Error(result.error.message || 'Google sign-in could not start.');
+    if (!result.data?.url) throw new Error('Google sign-in returned no authorization URL.');
+    return result.data.url;
   }
   private async requestGoogleAuthorization(callbackURL: string, errorCallbackURL: string): Promise<string> {
     const result = this.authIsAnonymous
       ? await this.authClient.signIn.social({ provider: 'google', callbackURL, errorCallbackURL, disableRedirect: true })
-      : await this.authClient.linkSocial({ provider: 'google', callbackURL, errorCallbackURL });
+      : await this.authClient.linkSocial({ provider: 'google', callbackURL, errorCallbackURL, disableRedirect: true });
     if (result.error) throw new Error(result.error.message || 'Google sign-in could not start.');
     const authorizationUrl = result.data?.url;
     if (!authorizationUrl) throw new Error('Google sign-in returned no authorization URL.');
@@ -213,7 +226,11 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
   }
   async claimGuestWithGoogle(): Promise<void> {
     if (!this.playerId) throw new Error('A player account is required.');
-    this.setGoogleFlow('claim'); await this.redirectToGoogle();
+    this.setGoogleFlow('claim');
+    const callback = new URL(location.href); callback.searchParams.set(GOOGLE_RETURN_PARAM, '1');
+    const result = await this.authClient.linkSocial({ provider: 'google', callbackURL: callback.toString(), errorCallbackURL: callback.toString() });
+    if (result.error) throw new Error(result.error.message || 'Google sign-in could not start.');
+    if (result.data?.url) location.assign(result.data.url);
   }
   private async redirectToGoogle(): Promise<void> {
     const callback = new URL(location.href);
@@ -227,8 +244,8 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
     const response = await fetch(`${this.baseUrl}/player-session`, { method: 'PUT', credentials: 'include', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ displayName }) });
     if (!response.ok) throw new Error(`Name update failed: ${response.status}`);
     const player = await response.json() as PlayerProfile;
-    if (!player.playerId || !player.displayName || !Number.isFinite(player.rating)) throw new Error('Name update returned invalid data.');
-    this.playerName = player.displayName; this.playerId = player.playerId; this.rating = player.rating; this.totalProgressUnits = player.totalProgressUnits ?? 0; this.unlockAllClasses = player.unlockAllClasses ?? false; this.equippedEmblem = player.equippedEmblem; saveGuestName(player.displayName);
+    if (!isPlayerProfile(player)) throw new Error('Name update returned invalid data.');
+    this.playerName = player.displayName; this.playerId = player.playerId; this.rating = player.rating; this.totalProgressUnits = player.totalProgressUnits ?? 0; this.unlockAllClasses = player.unlockAllClasses ?? false; this.equippedEmblem = player.equippedEmblem; this.ownedEmblems = player.ownedEmblems; saveGuestName(player.displayName);
     return player;
   }
   async requestEmailSignup(displayName: string, email: string, legalAccepted: boolean): Promise<void> {
@@ -349,7 +366,7 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
       const player = await response.json() as PlayerProfile & { email?: string; hasPassword?: boolean };
       if (!isPlayerProfile(player)) return null;
       this.playerName = player.displayName;
-      this.playerId = player.playerId; this.rating = player.rating; this.totalProgressUnits = player.totalProgressUnits ?? 0; this.unlockAllClasses = player.unlockAllClasses ?? false; this.equippedEmblem = player.equippedEmblem;
+      this.playerId = player.playerId; this.rating = player.rating; this.totalProgressUnits = player.totalProgressUnits ?? 0; this.unlockAllClasses = player.unlockAllClasses ?? false; this.equippedEmblem = player.equippedEmblem; this.ownedEmblems = player.ownedEmblems;
       this.accountType = player.accountType;
       this.authIsAnonymous = player.accountType === 'guest';
       this.email = player.accountType === 'email' ? player.email ?? '' : '';
@@ -389,7 +406,7 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
     this.rating = 1500;
     this.totalProgressUnits = 0;
     this.unlockAllClasses = false;
-    this.equippedEmblem = 'beta-og';
+    this.equippedEmblem = null; this.ownedEmblems = [];
     this.authIsAnonymous = true;
     this.accountType = 'guest';
     this.email = '';
@@ -598,7 +615,8 @@ export class LocalShellSessionAdapter implements ShellSessionAdapter {
   private revision = 0;
   private matchId = 'local-match';
   private unlockAllClasses = false;
-  private equippedEmblem: PlayerEmblem = 'beta-og';
+  private equippedEmblem: OwnablePlayerEmblem | null = null;
+  private ownedEmblems: OwnablePlayerEmblem[] = [];
 
   subscribe(listener: ShellSessionListener): () => void {
     this.listener = listener;
@@ -610,9 +628,9 @@ export class LocalShellSessionAdapter implements ShellSessionAdapter {
   isGoogleSignInReturn(): boolean { return false; }
   async completeGoogleSignIn(): Promise<PlayerProfile | null> { return null; }
   suggestedPlayerName(): string { return ''; }
-  accountState(): AccountState { const progress = progressionForTotal(0); return { signedIn: false, accountType: 'guest', displayName: '', playerId: 'anchor-chill-pizza-turtle-00', rating: 1500, totalProgressUnits: 0, level: progress.level, unlockedClassIds: this.unlockAllClasses ? ABM_CLASS_IDS : progress.unlockedClassIds, unlockAllClasses: this.unlockAllClasses, equippedEmblem: this.equippedEmblem, email: '', hasPassword: false, emailAuthAvailable: false, emailSignupAvailable: false }; }
+  accountState(): AccountState { const progress = progressionForTotal(0); return { signedIn: false, accountType: 'guest', displayName: '', playerId: 'anchor-chill-pizza-turtle-00', rating: 1500, totalProgressUnits: 0, level: progress.level, unlockedClassIds: this.unlockAllClasses ? ABM_CLASS_IDS : progress.unlockedClassIds, unlockAllClasses: this.unlockAllClasses, equippedEmblem: this.equippedEmblem, ownedEmblems: [...this.ownedEmblems], email: '', hasPassword: false, emailAuthAvailable: false, emailSignupAvailable: false }; }
   async setUnlockAllClasses(enabled: boolean): Promise<void> { this.unlockAllClasses = enabled; }
-  async setEquippedEmblem(emblem: PlayerEmblem): Promise<void> { this.equippedEmblem = emblem; }
+  async setEquippedEmblem(emblem: OwnablePlayerEmblem | null): Promise<void> { this.equippedEmblem = emblem; }
   async beginLocalMatch(kind: LocalMatchKind): Promise<LocalMatchGrant> { const now = Date.now(); return { receipt: `local-${randomId()}`, kind, issuedAt: now, expiresAt: now + 30 * 60_000 }; }
   async awardTutorialMatch(_resultId: string, outcome: 'win' | 'loss'): Promise<ProgressAward> { return createTutorialProgressAward(0, outcome, true); }
   async awardComputerMatch(_resultId: string, outcome: 'win' | 'loss', roundWinningClassIds: readonly AbmClassId[] = []): Promise<ProgressAward> {
@@ -625,7 +643,7 @@ export class LocalShellSessionAdapter implements ShellSessionAdapter {
   async finishGoogleSignIn(): Promise<PlayerProfile | null> { return null; }
   async signInWithGoogleFromTitle(_playerName: string): Promise<void> {}
   async claimGuestWithGoogle(): Promise<void> {}
-  async updateDisplayName(displayName: string): Promise<PlayerProfile> { return { playerId: 'anchor-chill-pizza-turtle-00', accountType: 'guest', displayName, rating: 1500, unlockAllClasses: this.unlockAllClasses, equippedEmblem: this.equippedEmblem, ...progressionForTotal(0) }; }
+  async updateDisplayName(displayName: string): Promise<PlayerProfile> { return { playerId: 'anchor-chill-pizza-turtle-00', accountType: 'guest', displayName, rating: 1500, unlockAllClasses: this.unlockAllClasses, equippedEmblem: this.equippedEmblem, ownedEmblems: [...this.ownedEmblems], ...progressionForTotal(0) }; }
   async requestEmailSignup(_displayName: string, _email: string, _legalAccepted: boolean): Promise<void> {}
   async verifyEmailSignup(_email: string, _code: string, _password?: string): Promise<void> {}
   async resendEmailSignup(_displayName: string, _email: string): Promise<void> {}
@@ -640,7 +658,7 @@ export class LocalShellSessionAdapter implements ShellSessionAdapter {
   async signOut(): Promise<void> {}
   async enterLobby(playerName: string): Promise<PlayerProfile> {
     this.listener?.connection('connected');
-    return { playerId: 'anchor-chill-pizza-turtle-00', accountType: 'guest', displayName: playerName, rating: 1500, unlockAllClasses: this.unlockAllClasses, equippedEmblem: this.equippedEmblem, ...progressionForTotal(0) };
+    return { playerId: 'anchor-chill-pizza-turtle-00', accountType: 'guest', displayName: playerName, rating: 1500, unlockAllClasses: this.unlockAllClasses, equippedEmblem: this.equippedEmblem, ownedEmblems: [...this.ownedEmblems], ...progressionForTotal(0) };
   }
   async getOnlinePlayerCount(): Promise<number | null> { return 1; }
   leaveLobby(): void {}

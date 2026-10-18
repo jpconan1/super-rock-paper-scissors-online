@@ -1,6 +1,6 @@
 import { progressionForTotal, type PlayerProgression } from '../core/progression';
 import { isReadablePlayerId, type PlayerAccountType } from './playerId';
-import { isPlayerEmblem, type PlayerEmblem } from '../core/playerEmblem';
+import { isOwnablePlayerEmblem, type OwnablePlayerEmblem } from '../core/playerEmblem';
 
 export const PLAYER_NAME_MAX_LENGTH = 24;
 
@@ -16,22 +16,27 @@ export interface PlayerProfile extends PlayerProgression {
   displayName: string;
   rating: number;
   unlockAllClasses: boolean;
-  equippedEmblem: PlayerEmblem;
+  equippedEmblem: OwnablePlayerEmblem | null;
+  ownedEmblems: OwnablePlayerEmblem[];
 }
 
 export function isPlayerProfile(value: unknown): value is PlayerProfile {
   if (!value || typeof value !== 'object') return false;
   const candidate = value as Partial<PlayerProfile>;
+  if (candidate.ownedEmblems === undefined) candidate.ownedEmblems = isOwnablePlayerEmblem(candidate.equippedEmblem) ? [candidate.equippedEmblem] : [];
   return isReadablePlayerId(candidate.playerId)
     && (candidate.accountType === 'guest' || candidate.accountType === 'google' || candidate.accountType === 'apple' || candidate.accountType === 'email')
     && normalizePlayerDisplayName(candidate.displayName) === candidate.displayName
     && typeof candidate.rating === 'number' && Number.isFinite(candidate.rating)
-    && isPlayerEmblem(candidate.equippedEmblem)
+    && (candidate.equippedEmblem === null || isOwnablePlayerEmblem(candidate.equippedEmblem))
+    && Array.isArray(candidate.ownedEmblems) && candidate.ownedEmblems.every(isOwnablePlayerEmblem)
+    && (candidate.equippedEmblem === null || candidate.ownedEmblems.includes(candidate.equippedEmblem))
     && ensureProgression(candidate);
 }
 
-export function playerProfile(playerId: string, accountType: PlayerAccountType, displayName: string, rating: number, totalProgressUnits = 0, unlockAllClasses = false, equippedEmblem: PlayerEmblem = 'beta-og'): PlayerProfile {
-  return { playerId, accountType, displayName, rating, unlockAllClasses, equippedEmblem, ...progressionForTotal(totalProgressUnits) };
+export function playerProfile(playerId: string, accountType: PlayerAccountType, displayName: string, rating: number, totalProgressUnits = 0,
+  unlockAllClasses = false, equippedEmblem: OwnablePlayerEmblem | null = null, ownedEmblems: OwnablePlayerEmblem[] = []): PlayerProfile {
+  return { playerId, accountType, displayName, rating, unlockAllClasses, equippedEmblem, ownedEmblems, ...progressionForTotal(totalProgressUnits) };
 }
 
 function ensureProgression(candidate: Partial<PlayerProfile>): boolean {

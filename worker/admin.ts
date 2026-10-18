@@ -1,6 +1,8 @@
 import { createAuth, type AuthEnv } from './auth';
 import { isAllowedAdminEmail } from '../src/core/adminAccess';
 import { createMaintenancePass, maintenanceSetCookie, readMaintenanceState, rotateMaintenanceVersion, setMaintenanceState } from './maintenance';
+import { isOwnablePlayerEmblem } from '../src/core/playerEmblem';
+import { grantPlayerEmblem, revokePlayerEmblem } from './playerEmblems';
 
 interface AdminEnv extends AuthEnv {
   DB: D1Database;
@@ -40,6 +42,11 @@ export async function adminRoute(request: Request, env: AdminEnv, url: URL): Pro
     return result({ lobby, queue, whiteboard, refreshedAt: Date.now() });
   }
   if (url.pathname === '/admin/api/accounts') return accounts(env.DB, url);
+  if (url.pathname === '/admin/api/emblems') {
+    if (request.method === 'GET') return emblemHistory(env.DB, url);
+    if (request.method === 'POST') return updateEmblem(request, env.DB, session.user.email);
+    return result({ error: 'Method not allowed.' }, 405);
+  }
   if (url.pathname === '/admin/api/matches') return matches(env.DB, url);
   if (url.pathname === '/admin/api/whiteboard') return whiteboardHistory(env.DB, url);
   return result({ error: 'Not found.' }, 404);
@@ -86,7 +93,8 @@ async function accounts(db: D1Database, url: URL): Promise<Response> {
   const rows = await db.prepare(`SELECT u.createdAt createdAt,
     CASE WHEN p.account_type = 'email' THEN u.email ELSE NULL END email, p.account_type accountType,
     p.player_id playerId, p.display_name displayName, p.rating, p.updated_at lastActivity, CASE WHEN t.player_id IS NULL THEN 0 ELSE 1 END isTest,
-    (SELECT COUNT(*) FROM match_results m WHERE m.p1_id = p.player_id OR m.p2_id = p.player_id) matches
+    (SELECT COUNT(*) FROM match_results m WHERE m.p1_id = p.player_id OR m.p2_id = p.player_id) matches,
+    (SELECT GROUP_CONCAT(pe.emblem_id) FROM player_emblems pe WHERE pe.player_id = p.player_id AND pe.revoked_at IS NULL) emblems
     FROM user u LEFT JOIN players p ON p.auth_user_id = u.id LEFT JOIN test_players t ON t.player_id = p.player_id
     WHERE (? = '' OR u.email LIKE ? OR p.display_name LIKE ? OR p.player_id LIKE ?) ORDER BY u.createdAt DESC LIMIT 50 OFFSET ?`)
     .bind(search, like, like, like, page * 50).all();
@@ -94,6 +102,30 @@ async function accounts(db: D1Database, url: URL): Promise<Response> {
     SUM(CASE WHEN p.account_type <> 'guest' THEN 1 ELSE 0 END) protected FROM user u JOIN players p ON p.auth_user_id = u.id
     LEFT JOIN test_players t ON t.player_id = p.player_id WHERE t.player_id IS NULL`).first();
   return result({ rows: rows.results, totals, page });
+}
+
+async function updateEmblem(request: Request, db: D1Database, adminEmail: string): Promise<Response> {
+  const body = await request.json().catch(() => null) as { action?: unknown; playerId?: unknown; emblemId?: unknown; reason?: unknown } | null;
+  if (!body || (body.action !== 'grant' && body.action !== 'revoke') || typeof body.playerId !== 'string'
+    || !isOwnablePlayerEmblem(body.emblemId) || typeof body.reason !== 'string' || !body.reason.trim() || body.reason.length > 500) {
+    return result({ error: 'Action, player, emblem, and reason are required.' }, 400);
+  }
+  const player = await db.prepare('SELECT 1 present FROM players WHERE player_id = ? AND auth_user_id IS NOT NULL').bind(body.playerId).first();
+  if (!player) return result({ error: 'Player not found.' }, 404);
+  const changed = body.action === 'grant'
+    ? (await grantPlayerEmblem(db, body.playerId, body.emblemId, 'admin', body.reason.trim(), Date.now(), adminEmail, body.reason.trim()), true)
+    : await revokePlayerEmblem(db, body.playerId, body.emblemId, adminEmail, body.reason.trim());
+  return result({ changed });
+}
+
+async function emblemHistory(db: D1Database, url: URL): Promise<Response> {
+  const playerId = url.searchParams.get('playerId')?.trim();
+  if (!playerId) return result({ error: 'Player ID is required.' }, 400);
+  const rows = await db.prepare(`SELECT emblem_id emblemId, award_source awardSource, source_reference sourceReference,
+    awarded_at awardedAt, awarded_by awardedBy, award_reason awardReason, revoked_at revokedAt,
+    revoked_by revokedBy, revocation_reason revocationReason
+    FROM player_emblems WHERE player_id = ? ORDER BY awarded_at, emblem_id`).bind(playerId).all();
+  return result({ rows: rows.results });
 }
 
 async function matches(db: D1Database, url: URL): Promise<Response> {

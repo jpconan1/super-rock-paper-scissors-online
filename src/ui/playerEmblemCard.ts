@@ -17,15 +17,17 @@ export function emblemBorderNumber(displayName: string): number {
 export interface PlayerEmblemCard {
   element: HTMLDivElement;
   emblem: BoilingSprite;
-  setEmblem(emblem: PlayerEmblem): void;
+  setEmblem(emblem: PlayerEmblem | null): void;
 }
 
-export function createPlayerEmblemCard(player: { name: string; level?: number; emblem?: PlayerEmblem }, clock: BoilClock): PlayerEmblemCard {
+export function createPlayerEmblemCard(player: { name: string; level?: number; emblem?: PlayerEmblem | null }, clock: BoilClock): PlayerEmblemCard {
   const element = document.createElement('div');
   element.className = 'player-emblem-card';
   const level = Number.isSafeInteger(player.level) && player.level! > 0 ? player.level! : 1;
-  let emblemKind = player.emblem ?? 'beta-og';
-  const emblem = createBoilingSprite({ src: PLAYER_EMBLEM_BY_ID.get(emblemKind)!.sheet, clock, className: 'player-emblem-card__emblem', alt: '' });
+  let emblemKind = player.emblem ?? null;
+  const emblem = createBoilingSprite({ src: PLAYER_EMBLEM_BY_ID.get(emblemKind ?? 'beta-og')!.sheet, clock, className: 'player-emblem-card__emblem', alt: '' });
+  emblem.element.hidden = emblemKind === null;
+  const none = document.createElement('span'); none.className = 'player-emblem-card__none'; none.textContent = '(None)'; none.hidden = emblemKind !== null;
   const border = document.createElement('img');
   border.className = 'player-emblem-card__border';
   border.src = `/emblems/borders/${emblemBorderNumber(player.name)}.webp`;
@@ -41,8 +43,8 @@ export function createPlayerEmblemCard(player: { name: string; level?: number; e
   const heading = document.createElement('div');
   heading.className = 'player-emblem-card__heading';
   heading.append(name, levelLabel);
-  element.append(border, emblem.element, heading);
-  const updateLabel = () => element.setAttribute('aria-label', `${player.name}, level ${level}, ${PLAYER_EMBLEM_BY_ID.get(emblemKind)!.name} emblem`);
+  element.append(border, emblem.element, none, heading);
+  const updateLabel = () => element.setAttribute('aria-label', `${player.name}, level ${level}, ${emblemKind ? `${PLAYER_EMBLEM_BY_ID.get(emblemKind)!.name} emblem` : 'no emblem'}`);
   updateLabel();
   return {
     element,
@@ -50,7 +52,8 @@ export function createPlayerEmblemCard(player: { name: string; level?: number; e
     setEmblem(next) {
       if (next === emblemKind) return;
       emblemKind = next;
-      emblem.setSource(PLAYER_EMBLEM_BY_ID.get(next)!.sheet);
+      emblem.element.hidden = next === null; none.hidden = next !== null;
+      if (next) emblem.setSource(PLAYER_EMBLEM_BY_ID.get(next)!.sheet);
       updateLabel();
     },
   };

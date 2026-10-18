@@ -727,10 +727,12 @@ input {
 }
 .lobby-screen__class-card { position: absolute; z-index: 5; overflow: visible; cursor: grab; pointer-events: auto; touch-action: none; }
 .lobby-screen__class-card.is-dragging { width: 256px !important; height: 362px !important; cursor: grabbing; }
-.lobby-screen__class-card-held { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+.lobby-screen__class-card-spike { position: absolute; z-index: 0; top: 50%; left: 50%; width: 125%; height: 114.9171%; transform: translate(-50%, -50%); pointer-events: none; }
+.lobby-screen__class-card > .boiling-sprite__canvas, .lobby-screen__class-card-held { z-index: 1; }
+.lobby-screen__class-card-held { position: absolute; z-index: 1; inset: 0; display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
 .lobby-screen__class-card-held[hidden] { display: none; }
 .lobby-screen__class-card.is-dragging > .boiling-sprite__canvas { display: none; }
-.lobby-screen__class-card-next { position: absolute; bottom: calc(100% + 4px); left: 50%; color: #171412; font-size: 18px; font-weight: 900; line-height: 1; white-space: nowrap; transform: translateX(-50%); pointer-events: none; }
+.lobby-screen__class-card-next { position: absolute; z-index: 2; bottom: calc(100% + 4px); left: 50%; color: #171412; font-size: 18px; font-weight: 900; line-height: 1; white-space: nowrap; transform: translateX(-50%); pointer-events: none; }
 .lobby-screen__class-card-next[hidden], .lobby-screen__class-card.is-dragging > .lobby-screen__class-card-next { display: none; }
 .lobby-screen__class-card-string { position: absolute; z-index: 4; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
 .lobby-screen__class-card-shadow {
@@ -1102,6 +1104,7 @@ input {
 }
 .game-layout:not([data-layout='portrait']) .game-layout__player-info { transform: translateY(14px); }
 .player-emblem-card__emblem,
+.player-emblem-card__none,
 .player-emblem-card__border,
 .player-emblem-card__heading { position: absolute; }
 .player-emblem-card__emblem {
@@ -1113,6 +1116,8 @@ input {
   object-fit: contain;
 }
 .player-emblem-card__emblem > .boiling-sprite__canvas { object-fit: contain; }
+.player-emblem-card__none { inset: 25% 15%; display: grid; place-items: center; color: rgba(33, 29, 25, .42); font-weight: 900; font-style: italic; }
+.player-emblem-card__none[hidden] { display: none; }
 .player-emblem-card__border {
   z-index: 1;
   position: absolute;

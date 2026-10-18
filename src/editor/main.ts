@@ -169,6 +169,10 @@ function makeNode(config: LayoutElement): HTMLElement {
     const src = screen === 'variant-abm' && abmState === 'post-match' && config.id === 'scene-art'
       ? '/visual-elements/system-scenes/game-won-sheet.webp' : config.assets.src;
     const sprite = createBoilingSprite({ src, clock, className, alt: config.alt ?? '' });
+    if (screen === 'lobby' && config.id === 'class-card-sumo') {
+      const spike = createBoilingSprite({ src: '/lobby/class-cards/card-spike-sheet.webp', clock, className: 'lobby-screen__class-card-spike', alt: '' });
+      sprite.element.prepend(spike.element); cleanups.push(() => spike.destroy());
+    }
     if (screen === 'lobby' && config.id === 'class-card-cheater') {
       const nextLabel = document.createElement('span'); nextLabel.className = 'lobby-screen__class-card-next'; nextLabel.textContent = 'Next:'; sprite.element.append(nextLabel);
     }

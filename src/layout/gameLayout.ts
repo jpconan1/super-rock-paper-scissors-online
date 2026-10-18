@@ -46,7 +46,7 @@ export interface GameLayoutPlayer {
   rating: string;
   platform: string;
   level?: number;
-  emblem?: PlayerEmblem;
+  emblem?: PlayerEmblem | null;
 }
 
 export { emblemBorderNumber } from '../ui/playerEmblemCard';
@@ -277,6 +277,6 @@ export function createPlayerInfo(player: GameLayoutPlayer, side: 'p1' | 'p2', cl
   card.element.classList.add('game-layout__player-card');
   info.replaceChildren(...card.element.children);
   const level = Number.isSafeInteger(player.level) && player.level! > 0 ? player.level! : 1;
-  info.setAttribute('aria-label', `${player.heading}, level ${level}, ${PLAYER_EMBLEM_BY_ID.get(player.emblem ?? 'beta-og')!.name} emblem`);
+  info.setAttribute('aria-label', `${player.heading}, level ${level}, ${player.emblem ? `${PLAYER_EMBLEM_BY_ID.get(player.emblem)!.name} emblem` : 'no emblem'}`);
   return { element: info, emblem: card.emblem };
 }

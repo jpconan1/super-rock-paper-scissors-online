@@ -54,6 +54,9 @@ export async function purgeAccountData(db: DeletionDatabase, authUserId: string,
       (SELECT player_id FROM players WHERE auth_user_id = ?)` ).bind(authUserId),
     db.prepare('DELETE FROM local_match_grants WHERE player_id IN (SELECT player_id FROM players WHERE auth_user_id = ?)').bind(authUserId),
     db.prepare('DELETE FROM local_progress_awards WHERE player_id IN (SELECT player_id FROM players WHERE auth_user_id = ?)').bind(authUserId),
+    db.prepare('DELETE FROM player_emblems WHERE player_id IN (SELECT player_id FROM players WHERE auth_user_id = ?)').bind(authUserId),
+    db.prepare('DELETE FROM emblem_mission_completions WHERE player_id IN (SELECT player_id FROM players WHERE auth_user_id = ?)').bind(authUserId),
+    db.prepare('DELETE FROM unlock_all_class_finishes WHERE player_id IN (SELECT player_id FROM players WHERE auth_user_id = ?)').bind(authUserId),
     db.prepare('DELETE FROM email_signup_pending WHERE anonymous_user_id = ?').bind(authUserId),
     db.prepare('DELETE FROM email_auth_challenges WHERE user_id = ? OR email = ?').bind(authUserId, email?.toLowerCase() ?? ''),
     db.prepare('DELETE FROM account_deletion_challenges WHERE user_id = ?').bind(authUserId),
@@ -65,7 +68,7 @@ export async function purgeAccountData(db: DeletionDatabase, authUserId: string,
       SELECT 1 FROM match_results WHERE p1_id = players.player_id OR p2_id = players.player_id
     )`).bind(authUserId),
     db.prepare(`UPDATE players SET display_name = 'Deleted player', auth_user_id = NULL, account_type = NULL,
-      rating = 1500, total_progress_units = 0, unlock_all_classes = 0, equipped_emblem = 'beta-og', updated_at = ? WHERE auth_user_id = ?`).bind(now, authUserId),
+      rating = 1500, total_progress_units = 0, unlock_all_classes = 0, equipped_emblem = NULL, updated_at = ? WHERE auth_user_id = ?`).bind(now, authUserId),
     db.prepare('DELETE FROM user WHERE id = ?').bind(authUserId),
   ]);
 }

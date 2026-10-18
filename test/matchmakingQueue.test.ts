@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { refreshMatchmakingQueue, type MatchmakingQueueEntry } from '../src/core/matchmakingQueue';
 
-const entry = (guestId: string, queuedAt: number, attemptId = `${guestId}-attempt`): MatchmakingQueueEntry => ({ guestId, attemptId, name: guestId, rating: 1500, queuedAt });
+const entry = (guestId: string, queuedAt: number, attemptId = `${guestId}-attempt`): MatchmakingQueueEntry => ({ guestId, attemptId, name: guestId, rating: 1500, equippedEmblem: null, queuedAt });
 
 describe('matchmaking queue heartbeat', () => {
   test('does not match a guest whose heartbeat expired', () => {
@@ -12,7 +12,7 @@ describe('matchmaking queue heartbeat', () => {
 
   test('refreshes an existing guest heartbeat and current player data', () => {
     const result = refreshMatchmakingQueue([entry('self', 1)], 'self', 'self-attempt', 'New Name', 1600, 4_000, 5_000);
-    expect(result.queue).toEqual([{ guestId: 'self', attemptId: 'self-attempt', name: 'New Name', rating: 1600, equippedEmblem: 'beta-og', queuedAt: 4_000 }]);
+    expect(result.queue).toEqual([{ guestId: 'self', attemptId: 'self-attempt', name: 'New Name', rating: 1600, equippedEmblem: null, queuedAt: 4_000 }]);
   });
 
   test('matches an active opponent and removes both queue entries', () => {
