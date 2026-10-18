@@ -15,7 +15,6 @@ import { createTextbox } from '../ui/textbox';
 import { mountWhiteboard } from '../whiteboard/whiteboard';
 import type { WhiteboardClientMessage, WhiteboardServerMessage } from '../whiteboard/protocol';
 import type { LobbyPlayer } from '../lobby/protocol';
-import { ABM_CLASSES } from '../variants/attackBlockMana/attackBlockManaCatalog';
 import { ABM_CLASS_IDS, type AbmClassId } from '../variants/attackBlockMana/attackBlockManaTypes';
 import { AnimationPlayer } from '../animation/animationPlayer';
 import { assetLoader } from '../assets/assetLoader';
@@ -43,6 +42,7 @@ export interface LobbyClassCardDefinition {
   classId: AbmClassId;
   asset: string;
   faceUp: boolean;
+  next: boolean;
 }
 
 export function lobbyClassCardDefinitions(playerLevel: number): LobbyClassCardDefinition[] {
@@ -50,8 +50,9 @@ export function lobbyClassCardDefinitions(playerLevel: number): LobbyClassCardDe
   return ABM_CLASS_IDS.map((classId, index) => ({
     id: `class-card-${classId}`,
     classId,
-    asset: `/lobby/class-cards/${classId}-${index < unlockedCount ? 'card' : 'back'}-sheet.webp`,
-    faceUp: index < unlockedCount,
+    asset: `/lobby/class-cards/${classId}-${index <= unlockedCount ? 'card' : 'back'}-sheet.webp`,
+    faceUp: index <= unlockedCount,
+    next: index === unlockedCount,
   }));
 }
 
@@ -233,21 +234,26 @@ export function mountLobbyScreen(
   const progressBar = document.createElement('canvas'); progressBar.className = 'lobby-screen__progress-bar'; progressBar.width = 512; progressBar.height = 256;
   progressBar.setAttribute('role', 'progressbar'); progressBar.setAttribute('aria-valuemin', '0'); progressBar.setAttribute('aria-valuemax', '10000'); progressBar.setAttribute('aria-valuenow', String(progressUnitsInLevel));
   const progressCopy = document.createElement('span'); progressCopy.className = 'lobby-screen__progress-copy'; progressCopy.textContent = `${progressUnitsInLevel.toLocaleString()} / 10,000 XP`;
-  const nextClass = ABM_CLASSES[playerLevel];
-  const nextUnlock = document.createElement('small'); nextUnlock.className = 'lobby-screen__progress-next'; nextUnlock.textContent = nextClass ? `Next class: ${nextClass.name}` : 'All classes unlocked';
   const classCards = lobbyClassCardDefinitions(unlockedClassCount).map((definition) => {
     const item = lobbyElement(definition.id);
     const cardSprite = createBoilingSprite({ src: definition.asset, className: 'lobby-screen__class-card', alt: item.label ?? '', clock });
+    const heldImage = document.createElement('img');
+    heldImage.className = 'lobby-screen__class-card-held'; heldImage.alt = ''; heldImage.draggable = false; heldImage.hidden = true;
+    heldImage.src = definition.faceUp
+      ? `/rewards/class-flips/${definition.classId}/frame-07.webp`
+      : `/lobby/class-cards/held/${definition.classId}-back.webp`;
+    const nextLabel = document.createElement('span'); nextLabel.className = 'lobby-screen__class-card-next'; nextLabel.textContent = 'Next:'; nextLabel.hidden = !definition.next;
+    cardSprite.element.append(heldImage, nextLabel);
     sprites.push(cardSprite);
     return {
       id: definition.id,
-      classId: definition.classId,
-      normalAsset: definition.asset,
+      heldImage,
+      nextLabel,
       sprite: cardSprite,
       element: cardSprite.element,
     };
   });
-  const progressElements = [emblemCard.element, emblemButton.element, progressBar, progressCopy, nextUnlock, ...classCards.map((item) => item.element)];
+  const progressElements = [emblemCard.element, emblemButton.element, progressBar, progressCopy, ...classCards.map((item) => item.element)];
   const curtainLeft = sprite(layoutDocument.elements.find((item) => item.id === 'curtain-left')!.assets!.src!, 'portrait-curtain-piece');
   const curtainRight = sprite(layoutDocument.elements.find((item) => item.id === 'curtain-right')!.assets!.src!, 'portrait-curtain-piece');
   const whiteboard = document.createElement('div');
@@ -370,7 +376,7 @@ export function mountLobbyScreen(
   composition.append(rosterToggle.element);
   layoutBindings.push(
     { id: 'header', element: header }, { id: 'player-name', element: emblemCard.element }, { id: 'player-level', element: emblemButton.element },
-    { id: 'xp-bar', element: progressBar }, { id: 'xp-count', element: progressCopy }, { id: 'next-unlock', element: nextUnlock }, ...classCards, { id: 'whiteboard', element: whiteboard },
+    { id: 'xp-bar', element: progressBar }, { id: 'xp-count', element: progressCopy }, ...classCards, { id: 'whiteboard', element: whiteboard },
     { id: 'whiteboard-blank-face', element: flip }, { id: 'whiteboard-button', element: whiteboardFaceButton.element },
     { id: 'progression', element: progressionFaceButton.element }, { id: 'more-variants', element: moreVariantsFaceButton.element },
     { id: 'more-variants', element: comingSoon }, ...tools,
@@ -382,9 +388,7 @@ export function mountLobbyScreen(
   classCardDrag = mountClassCardDrag(classCards.map((item) => ({
     element: item.element,
     geometry: () => lobbyElement(item.id).layouts[layoutName],
-    setHeld: (held: boolean) => item.sprite.setSource(held
-      ? `/rewards/class-flips/${item.classId}/frame-07.webp`
-      : item.normalAsset),
+    setHeld: (held: boolean) => { item.heldImage.hidden = !held; },
   })), progressionFace, () => layoutDocument.canvases[layoutName]);
   container.replaceChildren(screen);
   const whiteboardController = mountWhiteboard({
@@ -507,8 +511,12 @@ export function mountLobbyScreen(
   cleanup.setUnlockedClassCount = (count) => {
     const definitions = lobbyClassCardDefinitions(count);
     for (let index = 0; index < classCards.length; index++) {
-      classCards[index]!.normalAsset = definitions[index]!.asset;
-      classCards[index]!.sprite.setSource(definitions[index]!.asset);
+      const card = classCards[index]!; const definition = definitions[index]!;
+      card.heldImage.src = definition.faceUp
+        ? `/rewards/class-flips/${definition.classId}/frame-07.webp`
+        : `/lobby/class-cards/held/${definition.classId}-back.webp`;
+      card.nextLabel.hidden = !definition.next;
+      card.sprite.setSource(definition.asset);
     }
   };
   cleanup.setTutorialDisabled = (disabled) => tutorialButton.setDisabled(disabled);

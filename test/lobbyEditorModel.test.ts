@@ -7,7 +7,7 @@ describe('lobby editor model', () => {
   const element = (id: string) => document.elements.find((item) => item.id === id)!;
 
   it('shows the progression face and shared lobby controls', () => {
-    for (const id of ['player-name', 'player-level', 'xp-bar', 'xp-count', 'next-unlock', 'class-card-lucky', 'header', 'ready', 'progression']) {
+    for (const id of ['player-name', 'player-level', 'xp-bar', 'xp-count', 'class-card-lucky', 'header', 'ready', 'progression']) {
       expect(isLobbyProgressionEditorElement(element(id)), id).toBe(true);
     }
   });

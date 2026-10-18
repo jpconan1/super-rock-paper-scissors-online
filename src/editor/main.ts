@@ -169,6 +169,9 @@ function makeNode(config: LayoutElement): HTMLElement {
     const src = screen === 'variant-abm' && abmState === 'post-match' && config.id === 'scene-art'
       ? '/visual-elements/system-scenes/game-won-sheet.webp' : config.assets.src;
     const sprite = createBoilingSprite({ src, clock, className, alt: config.alt ?? '' });
+    if (screen === 'lobby' && config.id === 'class-card-cheater') {
+      const nextLabel = document.createElement('span'); nextLabel.className = 'lobby-screen__class-card-next'; nextLabel.textContent = 'Next:'; sprite.element.append(nextLabel);
+    }
     cleanups.push(() => sprite.destroy()); return sprite.element;
   }
   if (config.type === 'button' && config.assets?.up && config.assets.between && config.assets.depressed) {
@@ -186,7 +189,7 @@ function makeNode(config: LayoutElement): HTMLElement {
 }
 
 function previewText(config: LayoutElement): string {
-  return ({ 'xp-count': '7,250 / 10,000 XP', 'next-unlock': 'Next class: Sumo',
+  return ({ 'xp-count': '7,250 / 10,000 XP',
     'account-status': 'Logged in as PLAYER', 'password-form': 'EMAIL · PASSWORD · SIGN IN · BACK', 'online-count': 'players online: 123', 'sound-toggle': 'SOUND',
     'player-id': 'Account ID: spark-funky-pickle-panda-16',
     'account-type': accountState === 'google' ? 'Google Account' : accountState === 'email' ? 'Email Account' : 'Guest Account',

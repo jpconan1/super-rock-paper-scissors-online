@@ -344,7 +344,7 @@
       "layer": 5,
       "protected": true,
       "assets": {
-        "src": "/lobby/class-cards/cheater-back-sheet.webp"
+        "src": "/lobby/class-cards/cheater-card-sheet.webp"
       },
       "layouts": {
         "landscape": {
@@ -785,26 +785,6 @@
           "y": 630,
           "width": 165,
           "height": 45
-        }
-      }
-    },
-    {
-      "id": "next-unlock",
-      "type": "dynamic-text",
-      "label": "Next Unlock",
-      "protected": true,
-      "layouts": {
-        "landscape": {
-          "x": 420,
-          "y": 250,
-          "width": 120,
-          "height": 35
-        },
-        "portrait": {
-          "x": 30,
-          "y": 555,
-          "width": 130,
-          "height": 65
         }
       }
     },

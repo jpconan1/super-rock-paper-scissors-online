@@ -713,13 +713,11 @@ input {
 .lobby-screen__emblem-card,
 .lobby-screen__emblem-button,
 .lobby-screen__progress-bar,
-.lobby-screen__progress-copy,
-.lobby-screen__progress-next { position: absolute; z-index: 4; text-align: center; }
+.lobby-screen__progress-copy { position: absolute; z-index: 4; text-align: center; }
 .lobby-screen__emblem-card { position: absolute; z-index: 4; }
 .lobby-screen__emblem-button { position: absolute; z-index: 5; }
 .lobby-screen__progress-bar { display: block; }
 .lobby-screen__progress-copy { display: grid; place-items: center; font-size: 18px; font-weight: 900; }
-.lobby-screen__progress-next { display: grid; place-items: center; font-size: 15px; font-weight: 900; }
 .boiling-sprite.lobby-screen__coming-soon {
   z-index: 8;
   width: 95px !important;
@@ -727,8 +725,13 @@ input {
   transform: translate(calc(-28% - 5px), calc(-32% - 30px)) rotate(-13deg) !important;
   pointer-events: none;
 }
-.lobby-screen__class-card { position: absolute; z-index: 5; cursor: grab; pointer-events: auto; touch-action: none; }
+.lobby-screen__class-card { position: absolute; z-index: 5; overflow: visible; cursor: grab; pointer-events: auto; touch-action: none; }
 .lobby-screen__class-card.is-dragging { width: 256px !important; height: 362px !important; cursor: grabbing; }
+.lobby-screen__class-card-held { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+.lobby-screen__class-card-held[hidden] { display: none; }
+.lobby-screen__class-card.is-dragging > .boiling-sprite__canvas { display: none; }
+.lobby-screen__class-card-next { position: absolute; bottom: calc(100% + 4px); left: 50%; color: #171412; font-size: 18px; font-weight: 900; line-height: 1; white-space: nowrap; transform: translateX(-50%); pointer-events: none; }
+.lobby-screen__class-card-next[hidden], .lobby-screen__class-card.is-dragging > .lobby-screen__class-card-next { display: none; }
 .lobby-screen__class-card-string { position: absolute; z-index: 4; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
 .lobby-screen__class-card-shadow {
   position: absolute;
@@ -750,7 +753,6 @@ input {
 .lobby-screen__emblem-button[hidden],
 .lobby-screen__progress-bar[hidden],
 .lobby-screen__progress-copy[hidden],
-.lobby-screen__progress-next[hidden],
 .lobby-screen__class-card[hidden] { display: none; }
 .lobby-screen__whiteboard { position: absolute; isolation: isolate; }
 .lobby-screen__whiteboard[hidden],
