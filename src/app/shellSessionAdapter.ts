@@ -14,7 +14,8 @@ import { generateRandomName } from '../title/randomName';
 import type { LocalMatchGrant, LocalMatchKind } from '../protocol/localMatchReceipt';
 import { trackLobbyEnter } from '../analytics/tracking';
 import type { PlayerAccountType } from '../protocol/playerId';
-import type { OwnablePlayerEmblem } from '../core/playerEmblem';
+import { FREE_PLAYER_EMBLEM_IDS, type OwnablePlayerEmblem } from '../core/playerEmblem';
+import { isEmblemMissionStatus, type EmblemMissionStatus } from '../core/emblemMission';
 export type { LocalMatchGrant, LocalMatchKind } from '../protocol/localMatchReceipt';
 
 export interface AccountState { signedIn: boolean; accountType: PlayerAccountType; displayName: string; playerId: string; rating: number; totalProgressUnits: number; level: number; unlockedClassIds: readonly import('../variants/attackBlockMana/attackBlockManaTypes').AbmClassId[]; unlockAllClasses: boolean; equippedEmblem: OwnablePlayerEmblem | null; ownedEmblems: OwnablePlayerEmblem[]; email: string; hasPassword: boolean; emailAuthAvailable: boolean; emailSignupAvailable: boolean }
@@ -37,6 +38,7 @@ export interface ShellSessionAdapter {
   accountState(): AccountState;
   setUnlockAllClasses(enabled: boolean): Promise<void>;
   setEquippedEmblem(emblem: OwnablePlayerEmblem | null): Promise<void>;
+  getEmblemMissions(): Promise<EmblemMissionStatus[]>;
   beginLocalMatch(kind: LocalMatchKind): Promise<LocalMatchGrant>;
   awardTutorialMatch(receipt: string, outcome: 'win' | 'loss'): Promise<ProgressAward>;
   awardComputerMatch(receipt: string, outcome: 'win' | 'loss', roundWinningClassIds?: readonly AbmClassId[]): Promise<ProgressAward>;
@@ -104,7 +106,7 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
   private totalProgressUnits = 0;
   private unlockAllClasses = false;
   private equippedEmblem: OwnablePlayerEmblem | null = null;
-  private ownedEmblems: OwnablePlayerEmblem[] = [];
+  private ownedEmblems: OwnablePlayerEmblem[] = [...FREE_PLAYER_EMBLEM_IDS];
   private googleFlow?: 'title' | 'claim';
   private email = '';
   private hasPassword = false;
@@ -167,6 +169,13 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
     if (!isPlayerProfile(player) || player.equippedEmblem !== emblem) throw new Error('Emblem update returned invalid data.');
     this.equippedEmblem = player.equippedEmblem;
     this.ownedEmblems = player.ownedEmblems;
+  }
+  async getEmblemMissions(): Promise<EmblemMissionStatus[]> {
+    const response = await fetch(`${this.baseUrl}/emblem-missions`, { credentials: 'include' });
+    if (!response.ok) throw new Error(`Emblem missions failed: ${response.status}`);
+    const value = await response.json() as unknown;
+    if (!Array.isArray(value) || !value.every(isEmblemMissionStatus)) throw new Error('Emblem missions returned invalid data.');
+    return value;
   }
   async beginLocalMatch(kind: LocalMatchKind): Promise<LocalMatchGrant> {
     const response = await fetch(`${this.baseUrl}/local-match-grant`, {
@@ -616,7 +625,7 @@ export class LocalShellSessionAdapter implements ShellSessionAdapter {
   private matchId = 'local-match';
   private unlockAllClasses = false;
   private equippedEmblem: OwnablePlayerEmblem | null = null;
-  private ownedEmblems: OwnablePlayerEmblem[] = [];
+  private ownedEmblems: OwnablePlayerEmblem[] = [...FREE_PLAYER_EMBLEM_IDS];
 
   subscribe(listener: ShellSessionListener): () => void {
     this.listener = listener;
@@ -631,6 +640,11 @@ export class LocalShellSessionAdapter implements ShellSessionAdapter {
   accountState(): AccountState { const progress = progressionForTotal(0); return { signedIn: false, accountType: 'guest', displayName: '', playerId: 'anchor-chill-pizza-turtle-00', rating: 1500, totalProgressUnits: 0, level: progress.level, unlockedClassIds: this.unlockAllClasses ? ABM_CLASS_IDS : progress.unlockedClassIds, unlockAllClasses: this.unlockAllClasses, equippedEmblem: this.equippedEmblem, ownedEmblems: [...this.ownedEmblems], email: '', hasPassword: false, emailAuthAvailable: false, emailSignupAvailable: false }; }
   async setUnlockAllClasses(enabled: boolean): Promise<void> { this.unlockAllClasses = enabled; }
   async setEquippedEmblem(emblem: OwnablePlayerEmblem | null): Promise<void> { this.equippedEmblem = emblem; }
+  async getEmblemMissions(): Promise<EmblemMissionStatus[]> { return [
+    { id: 'claim-account', completed: false, completedAt: null, placement: null, rewardEmblemId: 'beta-og' },
+    { id: 'finish-tutorial', completed: false, completedAt: null, placement: null, rewardEmblemId: 'new-player' },
+    { id: 'unlock-all-classes', completed: false, completedAt: null, placement: null, rewardEmblemId: null },
+  ]; }
   async beginLocalMatch(kind: LocalMatchKind): Promise<LocalMatchGrant> { const now = Date.now(); return { receipt: `local-${randomId()}`, kind, issuedAt: now, expiresAt: now + 30 * 60_000 }; }
   async awardTutorialMatch(_resultId: string, outcome: 'win' | 'loss'): Promise<ProgressAward> { return createTutorialProgressAward(0, outcome, true); }
   async awardComputerMatch(_resultId: string, outcome: 'win' | 'loss', roundWinningClassIds: readonly AbmClassId[] = []): Promise<ProgressAward> {

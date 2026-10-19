@@ -38,6 +38,7 @@ import { ABM_TUTORIAL_SLIDES, mountTutorialSlideshow, tutorialEndingSlide, type 
 import type { AbmProjection } from '../variants/attackBlockMana/attackBlockManaTypes';
 import { generateRandomName } from '../title/randomName';
 import { showPasswordAlert } from '../auth/passwordAlert';
+import { showEmblemMenuAlert } from './emblemMenuAlert';
 
 export type ConnectionState = 'connected' | 'reconnecting' | 'offline';
 export type ShellDestination = 'title' | 'lobby' | 'account' | 'match-found' | 'slot-picker' | 'scoreboard' | 'gameplay' | 'progress' | 'reward';
@@ -394,8 +395,12 @@ export class AppController {
         account.unlockAllClasses,
         account.equippedEmblem,
         account.ownedEmblems,
-        (emblem) => options.session.setEquippedEmblem(emblem),
-        (error) => this.showError(error),
+        ({ equipped, owned, onChosen }) => showEmblemMenuAlert(
+          this.alertSystem!, options.clock, equipped, owned,
+          () => options.session.getEmblemMissions(),
+          (emblem) => options.session.setEquippedEmblem(emblem),
+          onChosen,
+        ),
         {},
       );
       lobby.receiveWhiteboard({ type: 'snapshot', board: this.whiteboard });

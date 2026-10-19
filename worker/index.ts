@@ -29,7 +29,8 @@ import {
   PLAYER_NAME_MAX_LENGTH, normalizePlayerDisplayName, playerProfile,
 } from '../src/protocol/playerProfile';
 import { claimReadablePlayerId, type PlayerAccountType } from '../src/protocol/playerId';
-import { isOwnablePlayerEmblem, type OwnablePlayerEmblem } from '../src/core/playerEmblem';
+import { FREE_PLAYER_EMBLEM_IDS, isOwnablePlayerEmblem, type OwnablePlayerEmblem } from '../src/core/playerEmblem';
+import { EMBLEM_MISSION_IDS, type EmblemMissionStatus } from '../src/core/emblemMission';
 import { createAuth, PRIVACY_VERSION, TERMS_VERSION, type AuthEnv } from './auth';
 import { createResendMailer, type AuthMailer } from './resendMailer';
 import { accountDeletionCodeHash, consumeAccountDeletionChallenge, purgeAccountData } from './accountDeletion';
@@ -1337,7 +1338,7 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
         if (!authSession) return json({ error: 'Authentication required.' }, 401);
         const body = await readJsonBody<{ emblem?: unknown }>(request, 1_000);
         if (body.emblem !== null && !isOwnablePlayerEmblem(body.emblem)) return json({ error: 'Unknown emblem.' }, 400);
-        if (body.emblem !== null) {
+        if (body.emblem !== null && !FREE_PLAYER_EMBLEM_IDS.includes(body.emblem)) {
           const owned = await env.DB.prepare(`SELECT 1 present FROM player_emblems pe JOIN players p ON p.player_id = pe.player_id
             WHERE p.auth_user_id = ? AND pe.emblem_id = ? AND pe.revoked_at IS NULL`).bind(authSession.user.id, body.emblem).first();
           if (!owned) return json({ error: 'Emblem is not owned.' }, 403);
@@ -1351,6 +1352,27 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
       } catch (error) {
         if (error instanceof RequestBodyError) return json({ error: error.message }, error.status);
         return json({ error: 'Emblem update failed.' }, 500);
+      }
+    }
+    if (url.pathname === '/emblem-missions' && request.method === 'GET') {
+      try {
+        const authSession = await createAuth(env).api.getSession({ headers: request.headers });
+        if (!authSession) return json({ error: 'Authentication required.' }, 401);
+        const player = await env.DB.prepare('SELECT player_id FROM players WHERE auth_user_id = ?')
+          .bind(authSession.user.id).first<{ player_id: string }>();
+        if (!player) return json({ error: 'Player not found.' }, 404);
+        const rows = await env.DB.prepare(`SELECT mission_id, completed_at, reward_emblem_id, placement
+          FROM emblem_mission_completions WHERE player_id = ?`).bind(player.player_id)
+          .all<{ mission_id: string; completed_at: number; reward_emblem_id: OwnablePlayerEmblem | null; placement: number | null }>();
+        const byId = new Map(rows.results.map((row) => [row.mission_id, row]));
+        const rewardByMission = { 'claim-account': 'beta-og', 'finish-tutorial': 'new-player', 'unlock-all-classes': null } as const;
+        return json(EMBLEM_MISSION_IDS.map((id): EmblemMissionStatus => {
+          const row = byId.get(id);
+          return { id, completed: Boolean(row), completedAt: row?.completed_at ?? null, placement: row?.placement ?? null,
+            rewardEmblemId: row?.reward_emblem_id ?? rewardByMission[id] };
+        }));
+      } catch {
+        return json({ error: 'Emblem missions failed.' }, 500);
       }
     }
     if (url.pathname === '/local-match-grant' && request.method === 'POST') {

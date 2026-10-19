@@ -209,7 +209,7 @@ describe('emblem ownership D1 lifecycle', () => {
     expect(await completeEmblemMission(db, 'player-a', 'claim-account', 200)).toBeNull();
     expect(await completeEmblemMission(db, 'player-a', 'finish-tutorial', 300)).toBe('new-player');
 
-    expect(await ownedPlayerEmblems(db, 'player-a')).toEqual(['beta-og', 'new-player']);
+    expect(await ownedPlayerEmblems(db, 'player-a')).toEqual(['beta-og', 'new-player', 'prestige']);
     expect(await db.prepare("SELECT equipped_emblem FROM players WHERE player_id = 'player-a'").first()).toEqual({ equipped_emblem: 'beta-og' });
     expect(await db.prepare("SELECT COUNT(*) count FROM emblem_mission_completions WHERE player_id = 'player-a'").first()).toEqual({ count: 2 });
   });
@@ -218,17 +218,17 @@ describe('emblem ownership D1 lifecycle', () => {
     expect(activeEmblemCampaign('claim-account', 20, [{ missionId: 'claim-account', emblemId: 'beta-og', availableFrom: 0, availableUntil: 20 }])).toBeUndefined();
     await seedPlayer('player-a');
     await grantPlayerEmblem(db, 'player-a', 'beta-og', 'mission', 'claim-account', 10);
-    expect(await ownedPlayerEmblems(db, 'player-a')).toEqual(['beta-og']);
+    expect(await ownedPlayerEmblems(db, 'player-a')).toEqual(['beta-og', 'prestige']);
   });
 
   test('audits revocation and permits an admin re-grant', async () => {
     await seedPlayer('player-a');
     await grantPlayerEmblem(db, 'player-a', 'beta-og', 'admin', 'launch gift', 10, 'jp@example.com', 'launch gift');
     expect(await revokePlayerEmblem(db, 'player-a', 'beta-og', 'jp@example.com', 'mistake', 20)).toBe(true);
-    expect(await ownedPlayerEmblems(db, 'player-a')).toEqual([]);
+    expect(await ownedPlayerEmblems(db, 'player-a')).toEqual(['prestige']);
     expect(await db.prepare("SELECT equipped_emblem FROM players WHERE player_id = 'player-a'").first()).toEqual({ equipped_emblem: null });
     await grantPlayerEmblem(db, 'player-a', 'beta-og', 'admin', 'restored', 30, 'jp@example.com', 'restored');
-    expect(await ownedPlayerEmblems(db, 'player-a')).toEqual(['beta-og']);
+    expect(await ownedPlayerEmblems(db, 'player-a')).toEqual(['beta-og', 'prestige']);
     expect(await db.prepare("SELECT awarded_by, award_reason, revoked_at FROM player_emblems WHERE player_id = 'player-a'").first())
       .toEqual({ awarded_by: 'jp@example.com', award_reason: 'restored', revoked_at: null });
   });

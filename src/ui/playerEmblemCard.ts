@@ -2,7 +2,8 @@ import type { BoilClock } from '../animation/boilClock';
 import { PLAYER_EMBLEM_BY_ID, type PlayerEmblem } from '../core/playerEmblem';
 import { createBoilingSprite, type BoilingSprite } from '../renderer/boilingSprite';
 
-const EMBLEM_BORDER_COUNT = 44;
+const EMBLEM_BORDER_COUNT = 28;
+const EMBLEM_OUTLINE_CHROMA_KEY = [255, 64, 255] as const;
 
 export function emblemBorderNumber(displayName: string): number {
   const normalized = displayName.normalize('NFKC').trim().replace(/\s+/gu, ' ').toLocaleLowerCase('en-US');
@@ -25,14 +26,16 @@ export function createPlayerEmblemCard(player: { name: string; level?: number; e
   element.className = 'player-emblem-card';
   const level = Number.isSafeInteger(player.level) && player.level! > 0 ? player.level! : 1;
   let emblemKind = player.emblem ?? null;
-  const emblem = createBoilingSprite({ src: PLAYER_EMBLEM_BY_ID.get(emblemKind ?? 'beta-og')!.sheet, clock, className: 'player-emblem-card__emblem', alt: '' });
-  emblem.element.hidden = emblemKind === null;
+  const outline = `/emblems/borders/${emblemBorderNumber(player.name)}.png`;
+  const emblem = createBoilingSprite({
+    src: PLAYER_EMBLEM_BY_ID.get(emblemKind ?? 'beta-og')!.sheet,
+    clock,
+    className: 'player-emblem-card__emblem',
+    alt: '',
+    outline: { src: outline, chromaKey: EMBLEM_OUTLINE_CHROMA_KEY },
+  });
+  emblem.setArtworkVisible(emblemKind !== null);
   const none = document.createElement('span'); none.className = 'player-emblem-card__none'; none.textContent = '(None)'; none.hidden = emblemKind !== null;
-  const border = document.createElement('img');
-  border.className = 'player-emblem-card__border';
-  border.src = `/emblems/borders/${emblemBorderNumber(player.name)}.webp`;
-  border.alt = '';
-  border.draggable = false;
   const name = document.createElement('strong');
   name.className = 'player-emblem-card__name';
   name.textContent = player.name;
@@ -43,7 +46,7 @@ export function createPlayerEmblemCard(player: { name: string; level?: number; e
   const heading = document.createElement('div');
   heading.className = 'player-emblem-card__heading';
   heading.append(name, levelLabel);
-  element.append(border, emblem.element, none, heading);
+  element.append(emblem.element, none, heading);
   const updateLabel = () => element.setAttribute('aria-label', `${player.name}, level ${level}, ${emblemKind ? `${PLAYER_EMBLEM_BY_ID.get(emblemKind)!.name} emblem` : 'no emblem'}`);
   updateLabel();
   return {
@@ -52,7 +55,7 @@ export function createPlayerEmblemCard(player: { name: string; level?: number; e
     setEmblem(next) {
       if (next === emblemKind) return;
       emblemKind = next;
-      emblem.element.hidden = next === null; none.hidden = next !== null;
+      emblem.setArtworkVisible(next !== null); none.hidden = next !== null;
       if (next) emblem.setSource(PLAYER_EMBLEM_BY_ID.get(next)!.sheet);
       updateLabel();
     },

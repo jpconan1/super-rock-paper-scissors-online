@@ -24,7 +24,7 @@ import {
 } from '../whiteboard/flipAnimation';
 import { mountClassCardDrag, type ClassCardDragController } from '../lobby/classCardDrag';
 import { randomId } from '../core/randomId';
-import { nextOwnedPlayerEmblem, type OwnablePlayerEmblem } from '../core/playerEmblem';
+import type { OwnablePlayerEmblem } from '../core/playerEmblem';
 import { createPlayerEmblemCard } from '../ui/playerEmblemCard';
 
 export type ScreenCleanup = () => void;
@@ -153,8 +153,7 @@ export function mountLobbyScreen(
   tutorialDisabled = false,
   equippedEmblem: OwnablePlayerEmblem | null = null,
   ownedEmblems: readonly OwnablePlayerEmblem[] = [],
-  onEmblemChange: (emblem: OwnablePlayerEmblem | null) => Promise<void> = async () => {},
-  onEmblemError: (error: unknown) => void = console.error,
+  onOpenEmblems: (options: { equipped: OwnablePlayerEmblem | null; owned: readonly OwnablePlayerEmblem[]; onChosen(emblem: OwnablePlayerEmblem | null): void }) => void = () => {},
   faceOptions: { initialFace?: LobbyFace } = {},
 ): LobbyScreenMount {
   const initialFace = faceOptions.initialFace ?? 'whiteboard';
@@ -212,25 +211,15 @@ export function mountLobbyScreen(
   emblemCard.element.classList.add('lobby-screen__emblem-card');
   sprites.push(emblemCard.emblem);
   let activeEmblem = equippedEmblem;
-  let emblemSaving = false;
   const emblemButton = createGameButton({
     label: 'Change your Emblem', clock,
     upSheet: '/interactive-elements/emblem-button-up-sheet.webp',
     betweenSheet: '/interactive-elements/emblem-button-between-sheet.webp',
     depressedSheet: '/interactive-elements/emblem-button-depressed-sheet.webp',
-    onActivate: () => {
-      if (emblemSaving) return;
-      emblemSaving = true;
-      emblemButton.setDisabled(true);
-      const next = nextOwnedPlayerEmblem(activeEmblem, ownedEmblems);
-      void onEmblemChange(next).then(() => {
-        activeEmblem = next;
-        emblemCard.setEmblem(next);
-      }).catch(onEmblemError).finally(() => {
-        emblemSaving = false;
-        emblemButton.setDisabled(false);
-      });
-    },
+    onActivate: () => onOpenEmblems({ equipped: activeEmblem, owned: ownedEmblems, onChosen: (next) => {
+      activeEmblem = next;
+      emblemCard.setEmblem(next);
+    } }),
   });
   emblemButton.element.classList.add('lobby-screen__emblem-button', 'game-button--baked-label');
   gameButtons.push(emblemButton);

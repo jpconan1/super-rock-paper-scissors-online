@@ -614,6 +614,40 @@ input {
 .alert-system__box.password-alert { gap: 12px; padding: 22px 28px; }
 .alert-system__box--titled.password-alert { padding: 70px 28px 22px; }
 .password-alert .alert-system__content { width: 100%; color: #171412; font-size: 19px; }
+
+.alert-system__box.emblem-menu-alert { gap: 0; padding: 18px 28px 22px; }
+.alert-system__box--titled.emblem-menu-alert { padding-top: 72px; }
+.emblem-menu-alert .alert-system__title-bar { justify-content: center; padding-inline: 58px; }
+.emblem-menu-alert .alert-system__title { font-size: 30px; text-align: center; }
+.emblem-menu-alert .alert-system__content { width: 100%; height: 100%; color: #171412; font-size: 18px; text-align: left; }
+.emblem-menu-alert .alert-system__actions:empty { display: none; }
+.emblem-menu { display: grid; height: 100%; min-height: 0; grid-template: auto auto 1fr / 1fr; gap: 10px; }
+.emblem-menu__choices { display: flex; min-height: 132px; align-items: stretch; justify-content: center; gap: 18px; }
+.emblem-menu__choice {
+  display: grid; width: 145px; min-width: 0; grid-template-rows: 1fr auto; place-items: center; gap: 3px;
+  border: 3px solid transparent; border-radius: 10px; padding: 7px; color: #171412; background: rgba(255, 255, 255, .25); cursor: pointer;
+}
+.emblem-menu__choice[data-selected='true'] { border-color: #ac3235; background: rgba(172, 50, 53, .1); }
+.emblem-menu__choice:hover:not(:disabled) { background: rgba(255, 255, 255, .65); }
+.emblem-menu__choice:focus-visible { outline: 3px solid #1857a6; outline-offset: 2px; }
+.emblem-menu__choice:disabled { opacity: .55; cursor: wait; }
+.emblem-menu__choice-art { position: relative; display: grid; width: 106px; height: 84px; place-items: center; }
+.emblem-menu__choice-art--none { color: rgba(33, 29, 25, .55); font-size: 20px; font-style: italic; }
+.emblem-menu__emblem { position: absolute; inset: 0; }
+.emblem-menu__emblem > .boiling-sprite__canvas { width: 100%; height: 100%; object-fit: contain; }
+.emblem-menu h3 { margin: 2px 0 0; color: #ac3235; font-size: 22px; }
+.emblem-menu__status { margin: 18px 0; text-align: center; }
+.emblem-menu__missions { display: grid; min-height: 0; align-content: start; gap: 7px; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
+.emblem-menu__mission { display: grid; grid-template-columns: 35px 1fr; align-items: center; gap: 10px; border-bottom: 2px solid rgba(23, 20, 18, .15); padding: 6px 4px 8px; }
+.emblem-menu__mission-mark { display: grid; width: 28px; height: 28px; place-items: center; border: 3px solid #171412; font-size: 24px; line-height: 1; }
+.emblem-menu__mission[data-completed='true'] .emblem-menu__mission-mark { color: #f4ecd9; background: #58843d; }
+.emblem-menu__mission strong, .emblem-menu__mission small { display: block; }
+.emblem-menu__mission small { margin-top: 2px; font-size: 14px; font-weight: 700; }
+
+@media (orientation: portrait) {
+  .emblem-menu__choices { min-height: 190px; flex-wrap: wrap; align-content: start; gap: 10px; }
+  .emblem-menu__choice { width: 125px; height: 130px; }
+}
 .password-dialog { display: grid; justify-items: center; gap: 10px; }
 .password-dialog p { margin: 0; }
 .password-dialog__entry { width: 340px; height: 50px; }
@@ -1105,27 +1139,16 @@ input {
 .game-layout:not([data-layout='portrait']) .game-layout__player-info { transform: translateY(14px); }
 .player-emblem-card__emblem,
 .player-emblem-card__none,
-.player-emblem-card__border,
 .player-emblem-card__heading { position: absolute; }
 .player-emblem-card__emblem {
   z-index: 2;
-  left: 19px;
-  top: 24px;
-  width: 202px;
-  height: 82px;
-  object-fit: contain;
-}
-.player-emblem-card__emblem > .boiling-sprite__canvas { object-fit: contain; }
-.player-emblem-card__none { inset: 25% 15%; display: grid; place-items: center; color: rgba(33, 29, 25, .42); font-weight: 900; font-style: italic; }
-.player-emblem-card__none[hidden] { display: none; }
-.player-emblem-card__border {
-  z-index: 1;
-  position: absolute;
   inset: 0;
   width: 240px;
   height: 120px;
-  object-fit: fill;
 }
+.player-emblem-card__emblem > .boiling-sprite__canvas { width: 100%; height: 100%; object-fit: fill; }
+.player-emblem-card__none { inset: 25% 15%; display: grid; place-items: center; color: rgba(33, 29, 25, .42); font-weight: 900; font-style: italic; }
+.player-emblem-card__none[hidden] { display: none; }
 .player-emblem-card__heading {
   z-index: 3;
   top: -8px;
@@ -1159,12 +1182,10 @@ input {
 }
 .lobby-screen__emblem-card { container-type: size; }
 .lobby-screen__emblem-card .player-emblem-card__emblem {
-  left: 7.9167%;
-  top: 20%;
-  width: 84.1667%;
-  height: 68.3333%;
+  inset: 0;
+  width: 100%;
+  height: 100%;
 }
-.lobby-screen__emblem-card .player-emblem-card__border { width: 100%; height: 100%; }
 .lobby-screen__emblem-card .player-emblem-card__heading {
   top: -6.6667%;
   right: -2.5%;
@@ -1411,12 +1432,10 @@ input {
 }
 .game-layout[data-layout='portrait'] .game-layout__player-info--p2 { transform-origin: top right; }
 .game-layout[data-layout='portrait'] .player-emblem-card__emblem {
-  left: 17px;
-  top: 22px;
-  width: 182px;
-  height: 74px;
+  inset: 0;
+  width: 216px;
+  height: 108px;
 }
-.game-layout[data-layout='portrait'] .player-emblem-card__border { width: 216px; height: 108px; }
 .game-layout[data-layout='portrait'] .player-emblem-card__name,
 .game-layout[data-layout='portrait'] .player-emblem-card__level {
   height: 20px;

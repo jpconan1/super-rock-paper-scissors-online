@@ -26,7 +26,7 @@ vi.mock('../src/renderer/boilingSprite', () => ({
     const element = document.createElement('div');
     element.className = options.className ?? '';
     element.dataset.src = options.src ?? '';
-    return { element, setSource: vi.fn(), destroy };
+    return { element, setSource: vi.fn(), setArtworkVisible: vi.fn(), destroy };
   },
 }));
 
@@ -132,7 +132,7 @@ describe('shared game layout contract', () => {
     for (const name of ['', 'Player One', 'JÉAN 🪨', '   spaced   name   ']) {
       const assigned = emblemBorderNumber(name);
       expect(assigned).toBeGreaterThanOrEqual(1);
-      expect(assigned).toBeLessThanOrEqual(44);
+      expect(assigned).toBeLessThanOrEqual(28);
       expect(emblemBorderNumber(name)).toBe(assigned);
     }
     expect(emblemBorderNumber('  PLAYER   ONE ')).toBe(emblemBorderNumber('player one'));
@@ -150,13 +150,13 @@ describe('shared game layout contract', () => {
     expect(p1.attributes.get('aria-label')).toBe('A very long player name, level 16, no emblem');
     expect(p2.attributes.get('aria-label')).toBe('Computer, level 1, Computer emblem');
     expect(p1.children.map((child) => child.className)).toEqual([
-      'player-emblem-card__border', 'player-emblem-card__emblem', 'player-emblem-card__none', 'player-emblem-card__heading',
+      'player-emblem-card__emblem', 'player-emblem-card__none', 'player-emblem-card__heading',
     ]);
-    expect(p1.children[3]!.children[0]!.textContent).toBe('A very long player name');
-    expect(p1.children[3]!.children[1]!.textContent).toBe('Lv 16');
-    expect(p2.children[3]!.children[1]!.textContent).toBe('Lv 1');
-    expect(p1.children[1]!.dataset.src).toBe('/emblems/beta-og-sheet.webp');
-    expect(p2.children[1]!.dataset.src).toBe('/emblems/computer-sheet.webp');
+    expect(p1.children[2]!.children[0]!.textContent).toBe('A very long player name');
+    expect(p1.children[2]!.children[1]!.textContent).toBe('Lv 16');
+    expect(p2.children[2]!.children[1]!.textContent).toBe('Lv 1');
+    expect(p1.children[0]!.dataset.src).toBe('/emblems/beta-og-sheet.webp');
+    expect(p2.children[0]!.dataset.src).toBe('/emblems/computer-sheet.webp');
     expect(mocks.spriteDestroys).toHaveLength(2);
   });
 

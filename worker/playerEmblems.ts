@@ -1,7 +1,8 @@
-import { isOwnablePlayerEmblem, type OwnablePlayerEmblem } from '../src/core/playerEmblem';
+import { FREE_PLAYER_EMBLEM_IDS, isOwnablePlayerEmblem, type OwnablePlayerEmblem } from '../src/core/playerEmblem';
 import { MAX_PROGRESS_UNITS } from '../src/core/progression';
+import type { EmblemMissionId } from '../src/core/emblemMission';
 
-export type EmblemMissionId = 'claim-account' | 'finish-tutorial' | 'unlock-all-classes';
+export type { EmblemMissionId } from '../src/core/emblemMission';
 
 interface EmblemCampaign {
   missionId: EmblemMissionId;
@@ -36,7 +37,8 @@ export function activeEmblemCampaign(missionId: EmblemMissionId, now: number,
 export async function ownedPlayerEmblems(db: EmblemDatabase, playerId: string): Promise<OwnablePlayerEmblem[]> {
   const rows = await db.prepare(`SELECT emblem_id FROM player_emblems
     WHERE player_id = ? AND revoked_at IS NULL ORDER BY awarded_at, emblem_id`).bind(playerId).all<{ emblem_id: string }>();
-  return rows.results.flatMap(({ emblem_id }) => isOwnablePlayerEmblem(emblem_id) ? [emblem_id] : []);
+  const granted = rows.results.flatMap(({ emblem_id }) => isOwnablePlayerEmblem(emblem_id) ? [emblem_id] : []);
+  return [...new Set([...granted, ...FREE_PLAYER_EMBLEM_IDS])];
 }
 
 export async function grantPlayerEmblem(db: EmblemDatabase, playerId: string, emblemId: OwnablePlayerEmblem,

@@ -1,7 +1,8 @@
-export const PLAYER_EMBLEM_IDS = ['beta-og', 'new-player', 'computer'] as const;
+export const PLAYER_EMBLEM_IDS = ['beta-og', 'new-player', 'prestige', 'computer'] as const;
 export type PlayerEmblem = typeof PLAYER_EMBLEM_IDS[number];
-export const OWNABLE_PLAYER_EMBLEM_IDS = ['beta-og', 'new-player'] as const;
+export const OWNABLE_PLAYER_EMBLEM_IDS = ['beta-og', 'new-player', 'prestige'] as const;
 export type OwnablePlayerEmblem = typeof OWNABLE_PLAYER_EMBLEM_IDS[number];
+export const FREE_PLAYER_EMBLEM_IDS: readonly OwnablePlayerEmblem[] = ['prestige'];
 
 export interface PlayerEmblemDefinition {
   id: PlayerEmblem;
@@ -12,6 +13,7 @@ export interface PlayerEmblemDefinition {
 export const PLAYER_EMBLEMS: readonly PlayerEmblemDefinition[] = [
   { id: 'beta-og', name: 'Beta OG', sheet: '/emblems/beta-og-sheet.webp' },
   { id: 'new-player', name: 'New Player', sheet: '/emblems/new-player-sheet.webp' },
+  { id: 'prestige', name: 'Prestige', sheet: '/emblems/prestige-sheet.png' },
   { id: 'computer', name: 'Computer', sheet: '/emblems/computer-sheet.webp' },
 ];
 

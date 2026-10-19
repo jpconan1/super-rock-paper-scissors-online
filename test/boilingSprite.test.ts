@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { getVerticalSheetFrameSize } from '../src/renderer/boilingSprite';
+import { getVerticalSheetFrameSize, splitChromaOutlinePixels } from '../src/renderer/boilingSprite';
 
 describe('vertical boiling sheet dimensions', () => {
   test.each([
@@ -19,5 +19,29 @@ describe('vertical boiling sheet dimensions', () => {
 
   test('supports authored frame counts', () => {
     expect(getVerticalSheetFrameSize({ width: 512, height: 3_072 }, 12)).toEqual({ width: 512, height: 256 });
+  });
+});
+
+describe('emblem outline chroma key', () => {
+  test('turns exact magenta into a cutout while retaining visible outline pixels', () => {
+    const pixels = new Uint8ClampedArray([
+      255, 64, 255, 255,
+      0, 0, 0, 255,
+      0, 0, 0, 0,
+      254, 64, 255, 255,
+    ]);
+    const { mask, visible } = splitChromaOutlinePixels(pixels, [255, 64, 255]);
+    expect([...mask]).toEqual([
+      255, 255, 255, 255,
+      0, 0, 0, 0,
+      0, 0, 0, 0,
+      0, 0, 0, 0,
+    ]);
+    expect([...visible]).toEqual([
+      255, 64, 255, 0,
+      0, 0, 0, 255,
+      0, 0, 0, 0,
+      254, 64, 255, 255,
+    ]);
   });
 });
