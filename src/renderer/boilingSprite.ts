@@ -51,8 +51,10 @@ export function splitChromaOutlinePixels(
   const mask = new Uint8ClampedArray(pixels.length);
   const visible = new Uint8ClampedArray(pixels);
   for (let index = 0; index < pixels.length; index += 4) {
-    const keyed = pixels[index] === chromaKey[0] && pixels[index + 1] === chromaKey[1]
-      && pixels[index + 2] === chromaKey[2] && pixels[index + 3]! > 0;
+    const keyed = pixels[index]! - pixels[index + 1]! >= 8
+      && pixels[index + 2]! - pixels[index + 1]! >= 8
+      && Math.abs((pixels[index]! - pixels[index + 2]!) - (chromaKey[0] - chromaKey[2])) <= 48
+      && pixels[index + 3]! > 0;
     if (keyed) {
       mask[index] = 255; mask[index + 1] = 255; mask[index + 2] = 255; mask[index + 3] = pixels[index + 3]!;
       visible[index + 3] = 0;

@@ -26,7 +26,7 @@ export function createPlayerEmblemCard(player: { name: string; level?: number; e
   element.className = 'player-emblem-card';
   const level = Number.isSafeInteger(player.level) && player.level! > 0 ? player.level! : 1;
   let emblemKind = player.emblem ?? null;
-  const outline = `/emblems/borders/${emblemBorderNumber(player.name)}.png`;
+  const outline = `/emblems/borders/${emblemBorderNumber(player.name)}.webp`;
   const emblem = createBoilingSprite({
     src: PLAYER_EMBLEM_BY_ID.get(emblemKind ?? 'beta-og')!.sheet,
     clock,

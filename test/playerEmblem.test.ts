@@ -6,7 +6,7 @@ describe('player emblems', () => {
     expect(PLAYER_EMBLEMS).toEqual([
       { id: 'beta-og', name: 'Beta OG', sheet: '/emblems/beta-og-sheet.webp' },
       { id: 'new-player', name: 'New Player', sheet: '/emblems/new-player-sheet.webp' },
-      { id: 'prestige', name: 'Prestige', sheet: '/emblems/prestige-sheet.png' },
+      { id: 'prestige', name: 'Prestige', sheet: '/emblems/prestige-sheet.webp' },
       { id: 'computer', name: 'Computer', sheet: '/emblems/computer-sheet.webp' },
     ]);
   });
