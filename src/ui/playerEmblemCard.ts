@@ -22,14 +22,15 @@ export interface PlayerEmblemCard {
   setEmblem(emblem: EquippedPlayerEmblem | PlayerEmblem | null, customEmblem?: CustomEmblemMeta | null): void;
 }
 
-export function createPlayerEmblemCard(player: { name: string; level?: number; emblem?: PlayerEmblem | 'custom' | null; customEmblem?: CustomEmblemMeta | null }, clock: BoilClock): PlayerEmblemCard {
+export function createPlayerEmblemCard(player: { name: string; level?: number; prestigeCount?: number; emblem?: PlayerEmblem | 'custom' | null; customEmblem?: CustomEmblemMeta | null }, clock: BoilClock): PlayerEmblemCard {
   const element = document.createElement('div');
   element.className = 'player-emblem-card';
   const level = Number.isSafeInteger(player.level) && player.level! > 0 ? player.level! : 1;
   let emblemKind = player.emblem ?? null;
   let custom = player.customEmblem ?? null;
   const outline = `/emblems/borders/${custom?.borderNumber ?? emblemBorderNumber(player.name)}.webp`;
-  const initialDefinition = PLAYER_EMBLEM_BY_ID.get(emblemKind === 'custom' ? 'beta-og' : emblemKind ?? 'beta-og')!;
+  const initialDefinition = PLAYER_EMBLEM_BY_ID.get(emblemKind === 'custom' ? 'beta-og' : emblemKind ?? 'beta-og')
+    ?? { id: '', name: '', sheet: 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=', ownable: false, systemOnly: false };
   const emblem = createBoilingSprite({
     src: emblemKind === 'custom' && custom ? customEmblemImageUrl(custom) : initialDefinition.sheet,
     frameCount: initialDefinition.frameCount,
@@ -46,12 +47,12 @@ export function createPlayerEmblemCard(player: { name: string; level?: number; e
   name.title = player.name;
   const levelLabel = document.createElement('span');
   levelLabel.className = 'player-emblem-card__level';
-  levelLabel.textContent = `Lv ${level}`;
+  levelLabel.textContent = player.prestigeCount ? `P. ${player.prestigeCount}` : `Lv ${level}`;
   const heading = document.createElement('div');
   heading.className = 'player-emblem-card__heading';
   heading.append(name, levelLabel);
   element.append(emblem.element, none, heading);
-  const updateLabel = () => element.setAttribute('aria-label', `${player.name}, level ${level}, ${emblemKind === 'custom' ? 'custom emblem' : emblemKind ? `${PLAYER_EMBLEM_BY_ID.get(emblemKind)!.name} emblem` : 'no emblem'}`);
+  const updateLabel = () => element.setAttribute('aria-label', `${player.name}, ${player.prestigeCount ? `prestige ${player.prestigeCount}` : `level ${level}`}, ${emblemKind === 'custom' ? 'custom emblem' : emblemKind ? `${PLAYER_EMBLEM_BY_ID.get(emblemKind)?.name ?? emblemKind.replace(/(^|-)(\w)/g, (_all, _dash, letter: string) => ` ${letter.toUpperCase()}`).trim()} emblem` : 'no emblem'}`);
   updateLabel();
   return {
     element,
@@ -65,7 +66,8 @@ export function createPlayerEmblemCard(player: { name: string; level?: number; e
         emblem.setOutline({ src: `/emblems/borders/${custom.borderNumber}.webp`, chromaKey: EMBLEM_OUTLINE_CHROMA_KEY });
         emblem.setSource(customEmblemImageUrl(custom));
       } else if (next && next !== 'custom') {
-        const definition = PLAYER_EMBLEM_BY_ID.get(next)!;
+        const definition = PLAYER_EMBLEM_BY_ID.get(next);
+        if (!definition) return;
         emblem.setOutline({ src: `/emblems/borders/${emblemBorderNumber(player.name)}.webp`, chromaKey: EMBLEM_OUTLINE_CHROMA_KEY });
         emblem.setSource(definition.sheet, definition.frameCount);
       }

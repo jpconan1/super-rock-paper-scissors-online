@@ -1,8 +1,7 @@
 import { createAuth, type AuthEnv } from './auth';
 import { isAllowedAdminEmail } from '../src/core/adminAccess';
 import { createMaintenancePass, maintenanceSetCookie, readMaintenanceState, rotateMaintenanceVersion, setMaintenanceState } from './maintenance';
-import { isOwnablePlayerEmblem } from '../src/core/playerEmblem';
-import { grantPlayerEmblem, revokePlayerEmblem } from './playerEmblems';
+import { grantPlayerEmblem, isActiveOwnableEmblem, revokePlayerEmblem } from './playerEmblems';
 
 interface AdminEnv extends AuthEnv {
   DB: D1Database;
@@ -47,6 +46,8 @@ export async function adminRoute(request: Request, env: AdminEnv, url: URL): Pro
     if (request.method === 'POST') return updateEmblem(request, env.DB, session.user.email);
     return result({ error: 'Method not allowed.' }, 405);
   }
+  if (url.pathname === '/admin/api/emblem-monitor' && request.method === 'GET') return emblemMonitor(env.DB, url);
+  if (url.pathname === '/admin/api/contests/start' && request.method === 'POST') return startPrestigeContest(env.DB);
   if (url.pathname === '/admin/api/matches') return matches(env.DB, url);
   if (url.pathname === '/admin/api/whiteboard') return whiteboardHistory(env.DB, url);
   return result({ error: 'Not found.' }, 404);
@@ -107,7 +108,8 @@ async function accounts(db: D1Database, url: URL): Promise<Response> {
 async function updateEmblem(request: Request, db: D1Database, adminEmail: string): Promise<Response> {
   const body = await request.json().catch(() => null) as { action?: unknown; playerId?: unknown; emblemId?: unknown; reason?: unknown } | null;
   if (!body || (body.action !== 'grant' && body.action !== 'revoke') || typeof body.playerId !== 'string'
-    || !isOwnablePlayerEmblem(body.emblemId) || typeof body.reason !== 'string' || !body.reason.trim() || body.reason.length > 500) {
+    || typeof body.emblemId !== 'string' || !await isActiveOwnableEmblem(db, body.emblemId)
+    || typeof body.reason !== 'string' || !body.reason.trim() || body.reason.length > 500) {
     return result({ error: 'Action, player, emblem, and reason are required.' }, 400);
   }
   const player = await db.prepare('SELECT 1 present FROM players WHERE player_id = ? AND auth_user_id IS NOT NULL').bind(body.playerId).first();
@@ -116,6 +118,41 @@ async function updateEmblem(request: Request, db: D1Database, adminEmail: string
     ? (await grantPlayerEmblem(db, body.playerId, body.emblemId, 'admin', body.reason.trim(), Date.now(), adminEmail, body.reason.trim()), true)
     : await revokePlayerEmblem(db, body.playerId, body.emblemId, adminEmail, body.reason.trim());
   return result({ changed });
+}
+
+async function emblemMonitor(db: D1Database, url: URL): Promise<Response> {
+  const search = (url.searchParams.get('search') ?? '').trim().slice(0, 100); const like = `%${search}%`; const now = Date.now();
+  const emblems = await db.prepare(`SELECT ec.emblem_id emblemId, ec.display_name name, ec.active, ec.ownable, ec.system_only systemOnly,
+    COUNT(pe.player_id) owned FROM emblem_catalog ec LEFT JOIN player_emblems pe ON pe.emblem_id = ec.emblem_id AND pe.revoked_at IS NULL
+    LEFT JOIN test_players tp ON tp.player_id = pe.player_id WHERE tp.player_id IS NULL GROUP BY ec.emblem_id ORDER BY ec.sort_order`).all();
+  const missions = await db.prepare(`SELECT em.mission_id missionId, em.title, em.detail, em.active, em.available_from availableFrom,
+    em.available_until availableUntil, em.reward_kind rewardKind, em.reward_reference rewardReference,
+    (SELECT COUNT(*) FROM players p LEFT JOIN test_players t ON t.player_id = p.player_id WHERE t.player_id IS NULL
+      AND p.created_at < COALESCE(em.available_until, ?) AND (em.mission_id <> 'claim-account' OR p.account_type = 'guest'
+        OR EXISTS (SELECT 1 FROM emblem_mission_completions cc WHERE cc.player_id = p.player_id AND cc.mission_id = 'claim-account'))) eligible,
+    (SELECT COUNT(*) FROM emblem_mission_completions c LEFT JOIN test_players t ON t.player_id = c.player_id
+      WHERE c.mission_id = em.mission_id AND t.player_id IS NULL) completed
+    FROM emblem_missions em ORDER BY em.sort_order`).bind(now).all();
+  const completions = await db.prepare(`SELECT c.mission_id missionId, c.completed_at completedAt, c.reward_emblem_id rewardEmblemId,
+    c.placement, p.player_id playerId, p.display_name displayName, p.account_type accountType
+    FROM emblem_mission_completions c JOIN players p ON p.player_id = c.player_id LEFT JOIN test_players t ON t.player_id = p.player_id
+    WHERE t.player_id IS NULL AND (? = '' OR p.player_id LIKE ? OR p.display_name LIKE ? OR c.mission_id LIKE ?)
+    ORDER BY c.completed_at DESC LIMIT 500`).bind(search, like, like, like).all();
+  const contest = await db.prepare(`SELECT contest_id contestId, mission_id missionId, status, activated_at activatedAt,
+    closed_at closedAt, capacity FROM emblem_contests WHERE contest_id = 'first-prestige'`).first();
+  const standings = await db.prepare(`SELECT cp.placement, cp.completed_at completedAt, cp.prestige_count prestigeCount,
+    cp.emblem_id emblemId, p.player_id playerId, p.display_name displayName FROM emblem_contest_placements cp
+    JOIN players p ON p.player_id = cp.player_id WHERE cp.contest_id = 'first-prestige' ORDER BY cp.placement`).all();
+  return result({ emblems: emblems.results, missions: missions.results, completions: completions.results, contest, standings: standings.results });
+}
+
+async function startPrestigeContest(db: D1Database): Promise<Response> {
+  const now = Date.now();
+  const changed = await db.prepare(`UPDATE emblem_contests SET status = 'active', activated_at = ?
+    WHERE contest_id = 'first-prestige' AND status = 'inactive'`).bind(now).run();
+  if (changed.meta.changes !== 1) return result({ error: 'Contest has already started.' }, 409);
+  await db.prepare("UPDATE emblem_missions SET active = 1, available_from = ? WHERE mission_id IN ('prestige', 'prestige-contest')").bind(now).run();
+  return result({ started: true, activatedAt: now });
 }
 
 async function emblemHistory(db: D1Database, url: URL): Promise<Response> {

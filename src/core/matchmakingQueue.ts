@@ -1,10 +1,10 @@
 import type { EquippedPlayerEmblem } from './playerEmblem';
 import type { CustomEmblemMeta } from './customEmblem';
 
-export interface MatchmakingQueueEntry { guestId: string; attemptId: string; name: string; rating: number; totalProgressUnits?: number; unlockAllClasses?: boolean; equippedEmblem: EquippedPlayerEmblem | null; customEmblem?: CustomEmblemMeta | null; queuedAt: number }
+export interface MatchmakingQueueEntry { guestId: string; attemptId: string; name: string; rating: number; totalProgressUnits?: number; prestigeCount?: number; unlockAllClasses?: boolean; equippedEmblem: EquippedPlayerEmblem | null; customEmblem?: CustomEmblemMeta | null; queuedAt: number }
 
 export function refreshMatchmakingQueue(
-  queue: MatchmakingQueueEntry[], guestId: string, attemptId: string, name: string, rating: number, now: number, ttlMs: number, totalProgressUnits = 0, unlockAllClasses = false, equippedEmblem: EquippedPlayerEmblem | null = null, customEmblem: CustomEmblemMeta | null = null,
+  queue: MatchmakingQueueEntry[], guestId: string, attemptId: string, name: string, rating: number, now: number, ttlMs: number, totalProgressUnits = 0, unlockAllClasses = false, equippedEmblem: EquippedPlayerEmblem | null = null, customEmblem: CustomEmblemMeta | null = null, prestigeCount = 0,
 ): { queue: MatchmakingQueueEntry[]; opponent?: MatchmakingQueueEntry; ownedElsewhere?: boolean } {
   const active = queue.filter((entry) => now - entry.queuedAt < ttlMs);
   const existing = active.find((entry) => entry.guestId === guestId);
@@ -12,7 +12,7 @@ export function refreshMatchmakingQueue(
   const opponent = active.find((entry) => entry.guestId !== guestId);
   if (opponent) return { opponent, queue: active.filter((entry) => entry.guestId !== opponent.guestId && entry.guestId !== guestId) };
   return { queue: [...active.filter((entry) => entry.guestId !== guestId), {
-    guestId, attemptId, name, rating, ...(totalProgressUnits ? { totalProgressUnits } : {}), ...(unlockAllClasses ? { unlockAllClasses } : {}), equippedEmblem,
+    guestId, attemptId, name, rating, ...(totalProgressUnits ? { totalProgressUnits } : {}), ...(prestigeCount ? { prestigeCount } : {}), ...(unlockAllClasses ? { unlockAllClasses } : {}), equippedEmblem,
     ...(customEmblem ? { customEmblem } : {}), queuedAt: now,
   }] };
 }

@@ -621,22 +621,27 @@ input {
 .emblem-menu-alert .alert-system__title { font-size: 30px; text-align: center; }
 .emblem-menu-alert .alert-system__content { width: 100%; height: 100%; color: #171412; font-size: 18px; text-align: left; }
 .emblem-menu-alert .alert-system__actions:empty { display: none; }
-.emblem-menu { display: grid; height: 100%; min-height: 0; grid-template: auto auto 1fr / 1fr; gap: 10px; }
-.emblem-menu__choices { display: flex; min-height: 132px; flex-wrap: wrap; align-content: start; align-items: stretch; justify-content: center; gap: 10px; }
-.game-button.emblem-menu__custom-button { justify-self: center; width: 128px; margin: -4px 0; }
-.emblem-menu__choice {
-  display: grid; width: 125px; min-width: 0; grid-template-rows: 1fr auto; place-items: center; gap: 3px;
-  border: 3px solid transparent; border-radius: 10px; padding: 7px; color: #171412; background: rgba(255, 255, 255, .25); cursor: pointer;
+.emblem-menu { display: grid; height: 100%; min-height: 0; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: 20px; }
+.emblem-menu__section { display: grid; min-width: 0; min-height: 0; align-content: start; gap: 8px; }
+.emblem-menu__section--collection { grid-template-rows: auto minmax(0, 1fr) auto auto; }
+.emblem-menu__section--missions { grid-template-rows: auto minmax(0, 1fr); }
+.emblem-menu__choices { display: grid; min-height: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; gap: 8px; padding: 4px; overflow-y: auto; }
+.game-button.emblem-menu__custom-button { justify-self: center; width: 128px; margin: -2px 0; }
+.game-button.emblem-menu__choice { width: 100%; min-width: 0; overflow: visible; }
+.game-button.emblem-menu__choice:disabled { cursor: wait; }
+.emblem-menu__choice-art {
+  position: absolute; z-index: 1; inset: 13% 11% 14%; display: grid; overflow: hidden; place-items: center;
+  clip-path: polygon(2% 0,98% 0,100% 5%,100% 95%,98% 100%,2% 100%,0 95%,0 5%);
+  pointer-events: none; transition: transform 33ms linear;
 }
-.emblem-menu__choice[data-selected='true'] { border-color: #ac3235; background: rgba(172, 50, 53, .1); }
-.emblem-menu__choice:hover:not(:disabled) { background: rgba(255, 255, 255, .65); }
-.emblem-menu__choice:focus-visible { outline: 3px solid #1857a6; outline-offset: 2px; }
-.emblem-menu__choice:disabled { opacity: .55; cursor: wait; }
-.emblem-menu__choice-art { position: relative; display: grid; width: 106px; height: 84px; place-items: center; }
-.emblem-menu__choice-art--none { color: rgba(33, 29, 25, .55); font-size: 20px; font-style: italic; }
-.emblem-menu__emblem { position: absolute; inset: 0; }
-.emblem-menu__emblem > .boiling-sprite__canvas { width: 100%; height: 100%; object-fit: contain; }
+.emblem-menu__choice[data-state='between'] .emblem-menu__choice-art { transform: translateY(3%); }
+.emblem-menu__choice[data-state='depressed'] .emblem-menu__choice-art { transform: translateY(7%); }
+.emblem-menu__choice-art--none { color: #171412; font-size: clamp(16px, 11cqi, 24px); font-weight: 900; }
+.emblem-menu__emblem { position: absolute; inset: 0 -7%; }
+.emblem-menu__emblem > .boiling-sprite__canvas { width: 100%; height: 100%; object-fit: fill; }
 .emblem-menu h3 { margin: 2px 0 0; color: #ac3235; font-size: 22px; }
+.emblem-menu__choice-status { margin: 0; color: #ac3235; font-size: 14px; font-weight: 900; text-align: center; }
+.emblem-menu__choice-status[hidden] { display: none; }
 .emblem-menu__status { margin: 18px 0; text-align: center; }
 .emblem-menu__missions { display: grid; min-height: 0; align-content: start; gap: 7px; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
 .emblem-menu__mission { display: grid; grid-template-columns: 35px 1fr; align-items: center; gap: 10px; border-bottom: 2px solid rgba(23, 20, 18, .15); padding: 6px 4px 8px; }
@@ -646,8 +651,8 @@ input {
 .emblem-menu__mission small { margin-top: 2px; font-size: 14px; font-weight: 700; }
 
 @media (orientation: portrait) {
-  .emblem-menu__choices { min-height: 190px; flex-wrap: wrap; align-content: start; gap: 10px; }
-  .emblem-menu__choice { width: 125px; height: 130px; }
+  .emblem-menu { grid-template: minmax(0, 1fr) minmax(0, 1fr) / 1fr; gap: 14px; }
+  .emblem-menu__choices { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 .custom-emblem-editor__drawing-area { position: absolute; z-index: 2; inset: 9.2% 6.1% 9.4% 6%; overflow: hidden; background: #fff; clip-path: polygon(1% 0,99% 0,100% 1.5%,100% 98.5%,99% 100%,1% 100%,0 98.5%,0 1.5%); }
 .custom-emblem-editor__canvas { display: block; width: 100%; height: 100%; cursor: default; touch-action: none; }

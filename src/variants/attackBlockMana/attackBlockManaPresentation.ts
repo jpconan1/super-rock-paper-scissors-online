@@ -1194,5 +1194,5 @@ export function winArtwork(player: 'p1' | 'p2', wins: number) {
 }
 function sheets(root: string) { return { up: `${root}-up-sheet.webp`, between: `${root}-between-sheet.webp`, depressed: `${root}-depressed-sheet.webp` }; }
 function playerDisplay(fallback: string, player?: import('../../protocol/protocol').MatchPlayer) {
-  return { heading: player?.name ?? fallback, rating: '', platform: '', level: player?.level, emblem: player?.emblem, customEmblem: player?.customEmblem };
+  return { heading: player?.name ?? fallback, rating: '', platform: '', level: player?.level, prestigeCount: player?.prestigeCount, emblem: player?.emblem, customEmblem: player?.customEmblem };
 }

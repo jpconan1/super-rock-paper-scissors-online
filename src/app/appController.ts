@@ -390,6 +390,7 @@ export class AppController {
         () => this.openUniversalMenu(),
         (message) => options.session.sendWhiteboard(message),
         account.level,
+        account.prestigeCount,
         account.unlockedClassIds.length,
         account.level === 21 ? 10_000 : account.totalProgressUnits % 10_000,
         account.unlockAllClasses,
@@ -749,6 +750,7 @@ export class AppController {
     this.localMatch = new LocalAbmMatch({
       playerName: this.playerName,
       playerLevel: this.options.session.accountState().level,
+      playerPrestigeCount: this.options.session.accountState().prestigeCount,
       playerEmblem: this.options.session.accountState().equippedEmblem,
       customEmblem: this.options.session.accountState().customEmblem,
       ...(grant ? { matchId: grant.receipt } : {}),
@@ -774,6 +776,7 @@ export class AppController {
     this.localMatch = new LocalAbmMatch({
       playerName: this.playerName,
       playerLevel: this.options.session.accountState().level,
+      playerPrestigeCount: this.options.session.accountState().prestigeCount,
       playerEmblem: this.options.session.accountState().equippedEmblem,
       customEmblem: this.options.session.accountState().customEmblem,
       ...(grant ? { matchId: grant.receipt } : {}),

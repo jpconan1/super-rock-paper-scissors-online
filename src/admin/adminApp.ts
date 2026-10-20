@@ -15,13 +15,14 @@ export async function mountAdminApp(root: HTMLElement, baseUrl: string): Promise
   header.append(element('div', 'admin-brand', 'Super ABM — Admin'), element('span', 'admin-identity', identity.email));
   const nav = element('nav', 'admin-tabs'); const content = element('section', 'admin-content');
   shell.append(header, nav, content); root.replaceChildren(shell);
-  const tabs = ['Overview', 'Lobby', 'Whiteboard', 'Accounts', 'Matches'] as const;
+  const tabs = ['Overview', 'Lobby', 'Whiteboard', 'Accounts', 'Emblems & Missions', 'Matches'] as const;
   let cleanup = () => {};
   const open = (tab: typeof tabs[number]) => {
     cleanup(); cleanup = () => {}; content.replaceChildren(loading());
     [...nav.children].forEach((child) => child.classList.toggle('is-active', child.textContent === tab));
     const mounted = tab === 'Overview' ? overview(content, baseUrl) : tab === 'Lobby' ? lobby(content, baseUrl)
-      : tab === 'Whiteboard' ? whiteboard(content, baseUrl) : tab === 'Accounts' ? accounts(content, baseUrl) : matches(content, baseUrl);
+      : tab === 'Whiteboard' ? whiteboard(content, baseUrl) : tab === 'Accounts' ? accounts(content, baseUrl)
+        : tab === 'Emblems & Missions' ? emblemMonitor(content, baseUrl) : matches(content, baseUrl);
     Promise.resolve(mounted).then((stop) => { if (stop) cleanup = stop; }).catch((error) => showError(content, error));
   };
   for (const tab of tabs) { const button = element('button', 'admin-tab', tab) as HTMLButtonElement; button.type = 'button'; button.onclick = () => open(tab); nav.append(button); }
@@ -115,13 +116,16 @@ async function whiteboard(host: HTMLElement, baseUrl: string): Promise<() => voi
 }
 
 async function accounts(host: HTMLElement, baseUrl: string): Promise<void> {
-  let search = ''; const render = async () => { const data = await api(baseUrl, `/admin/api/accounts?search=${encodeURIComponent(search)}`);
+  let search = ''; const render = async () => { const [data, monitor] = await Promise.all([
+    api(baseUrl, `/admin/api/accounts?search=${encodeURIComponent(search)}`), api(baseUrl, '/admin/api/emblem-monitor')]);
     const input = document.createElement('input'); input.className = 'admin-input'; input.placeholder = 'Search name or email'; input.value = search;
     input.onchange = () => { search = input.value; void render(); };
     const controls = element('div', 'admin-toolbar');
     const player = document.createElement('input'); player.className = 'admin-input'; player.placeholder = 'Player ID';
     const emblem = document.createElement('select'); emblem.className = 'admin-select';
-    for (const id of ['beta-og', 'new-player']) { const option = document.createElement('option'); option.value = id; option.textContent = id; emblem.append(option); }
+    for (const item of monitor.emblems.filter((value: Json) => value.active && value.ownable && !value.systemOnly)) {
+      const option = document.createElement('option'); option.value = item.emblemId; option.textContent = item.name; emblem.append(option);
+    }
     const reason = document.createElement('input'); reason.className = 'admin-input'; reason.placeholder = 'Required reason';
     const history = element('pre', 'admin-operation-detail', 'Enter a player ID to inspect emblem history.');
     const inspect = element('button', 'admin-button', 'Inspect') as HTMLButtonElement;
@@ -141,6 +145,38 @@ async function accounts(host: HTMLElement, baseUrl: string): Promise<void> {
     const ownership = element('div', 'admin-maintenance'); ownership.append(controls, history);
     host.replaceChildren(titleRow('Accounts', `${data.totals?.total ?? 0} total`), input, panel('Emblem ownership', ownership), panel('Players', table(
       ['Name', 'Player ID', 'Email', 'Type', 'Test', 'Rating', 'Matches', 'Emblems', 'Created'], data.rows.map((r: Json) => [r.displayName ?? '—', r.playerId ?? '—', r.email ?? '—', r.accountType, r.isTest ? 'TEST' : '', r.rating ?? '—', r.matches ?? 0, r.emblems ?? '—', date(r.createdAt)])))); };
+  await render();
+}
+
+async function emblemMonitor(host: HTMLElement, baseUrl: string): Promise<void> {
+  let search = '';
+  const render = async () => {
+    const data = await api(baseUrl, `/admin/api/emblem-monitor?search=${encodeURIComponent(search)}`);
+    const controls = element('div', 'admin-toolbar'); controls.append(element('h1', '', 'Emblems & Missions'));
+    const input = document.createElement('input'); input.className = 'admin-input'; input.placeholder = 'Search completions'; input.value = search;
+    input.onchange = () => { search = input.value.trim(); void render(); }; controls.append(input);
+    const contest = element('div', 'admin-maintenance');
+    const remaining = Math.max(0, Number(data.contest?.capacity ?? 0) - data.standings.length);
+    contest.append(element('strong', data.contest?.status === 'active' ? 'is-enabled' : '', `Status: ${data.contest?.status ?? 'missing'}`),
+      element('span', '', `${remaining} places remaining`));
+    if (data.contest?.status === 'inactive') {
+      const start = element('button', 'admin-button', 'Start Contest') as HTMLButtonElement;
+      start.onclick = async () => { if (!confirm('Start the prestige contest? This cannot be undone.')) return;
+        start.disabled = true; await post(baseUrl, '/admin/api/contests/start', {}); await render(); };
+      contest.append(start);
+    }
+    const missions = data.missions.map((row: Json) => [row.title, row.active ? 'Active' : 'Inactive', row.rewardKind,
+      row.rewardReference ?? '—', row.completed, row.eligible, row.eligible ? percent(row.completed / row.eligible) : '—']);
+    host.replaceChildren(controls,
+      panel('Contest', contest),
+      panel('Contest standings', table(['Place', 'Player', 'Player ID', 'Prestige', 'Emblem', 'Completed'], data.standings.map((row: Json) =>
+        [row.placement, row.displayName, row.playerId, row.prestigeCount, row.emblemId, date(row.completedAt)]))),
+      panel('Mission completion', table(['Mission', 'State', 'Reward kind', 'Reward', 'Completed', 'Eligible', 'Rate'], missions)),
+      panel('Emblem ownership', table(['Emblem', 'ID', 'State', 'Ownable', 'System', 'Owned'], data.emblems.map((row: Json) =>
+        [row.name, row.emblemId, row.active ? 'Active' : 'Inactive', row.ownable ? 'Yes' : 'No', row.systemOnly ? 'Yes' : 'No', row.owned]))),
+      panel('Recent completions', table(['Completed', 'Mission', 'Player', 'Player ID', 'Account', 'Reward', 'Place'], data.completions.map((row: Json) =>
+        [date(row.completedAt), row.missionId, row.displayName, row.playerId, row.accountType, row.rewardEmblemId ?? '—', row.placement ?? '—']))));
+  };
   await render();
 }
 

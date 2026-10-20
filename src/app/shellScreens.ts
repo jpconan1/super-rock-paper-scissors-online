@@ -152,6 +152,7 @@ export function mountLobbyScreen(
   onSettings: () => void,
   sendWhiteboard: (message: WhiteboardClientMessage) => void,
   playerLevel = 1,
+  prestigeCount = 0,
   unlockedClassCount = playerLevel,
   progressUnitsInLevel = 0,
   tutorialDisabled = false,
@@ -218,7 +219,7 @@ export function mountLobbyScreen(
   const lobbyElement = (id: string) => layoutDocument.elements.find((item) => item.id === id)!;
 
   const header = sprite(layoutDocument.elements.find((item) => item.id === 'header')!.assets!.src!, 'lobby-screen__header', layoutDocument.copy!.heading);
-  const emblemCard = createPlayerEmblemCard({ name: playerName, level: playerLevel, emblem: equippedEmblem, customEmblem }, clock);
+  const emblemCard = createPlayerEmblemCard({ name: playerName, level: playerLevel, prestigeCount, emblem: equippedEmblem, customEmblem }, clock);
   emblemCard.element.classList.add('lobby-screen__emblem-card');
   sprites.push(emblemCard.emblem);
   let activeEmblem = equippedEmblem;

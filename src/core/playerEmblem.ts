@@ -1,42 +1,43 @@
-export const PLAYER_EMBLEM_IDS = ['beta-og', 'new-player', 'prestige', 'first-place', 'computer'] as const;
-export type PlayerEmblem = typeof PLAYER_EMBLEM_IDS[number];
-export const OWNABLE_PLAYER_EMBLEM_IDS = ['beta-og', 'new-player', 'prestige', 'first-place'] as const;
-export type OwnablePlayerEmblem = typeof OWNABLE_PLAYER_EMBLEM_IDS[number];
+export type PlayerEmblem = string;
+export type OwnablePlayerEmblem = string;
 export type EquippedPlayerEmblem = OwnablePlayerEmblem | 'custom';
-export const FREE_PLAYER_EMBLEM_IDS: readonly OwnablePlayerEmblem[] = ['prestige', 'first-place'];
 
 export interface PlayerEmblemDefinition {
   id: PlayerEmblem;
   name: string;
   sheet: string;
   frameCount?: number;
+  ownable: boolean;
+  systemOnly: boolean;
 }
 
-export const PLAYER_EMBLEMS: readonly PlayerEmblemDefinition[] = [
-  { id: 'beta-og', name: 'Beta OG', sheet: '/emblems/beta-og-sheet.webp' },
-  { id: 'new-player', name: 'New Player', sheet: '/emblems/new-player-sheet.webp' },
-  { id: 'prestige', name: 'Prestige', sheet: '/emblems/prestige-sheet.webp' },
-  { id: 'first-place', name: '1st Place', sheet: '/emblems/first-place-sheet.webp', frameCount: 18 },
-  { id: 'computer', name: 'Computer', sheet: '/emblems/computer-sheet.webp' },
-];
+export const PLAYER_EMBLEM_BY_ID = new Map<string, PlayerEmblemDefinition>();
 
-export const PLAYER_EMBLEM_BY_ID = new Map(PLAYER_EMBLEMS.map((emblem) => [emblem.id, emblem]));
+export function isPlayerEmblemDefinition(value: unknown): value is PlayerEmblemDefinition {
+  if (!value || typeof value !== 'object') return false;
+  const item = value as Partial<PlayerEmblemDefinition>;
+  return typeof item.id === 'string' && item.id.length > 0 && typeof item.name === 'string' && item.name.length > 0
+    && typeof item.sheet === 'string' && item.sheet.startsWith('/')
+    && (item.frameCount === undefined || (Number.isSafeInteger(item.frameCount) && item.frameCount! > 0))
+    && typeof item.ownable === 'boolean' && typeof item.systemOnly === 'boolean';
+}
+
+export function setPlayerEmblemCatalog(emblems: readonly PlayerEmblemDefinition[]): void {
+  PLAYER_EMBLEM_BY_ID.clear();
+  for (const emblem of emblems) PLAYER_EMBLEM_BY_ID.set(emblem.id, emblem);
+}
 
 export function isPlayerEmblem(value: unknown): value is PlayerEmblem {
-  return typeof value === 'string' && PLAYER_EMBLEM_BY_ID.has(value as PlayerEmblem);
+  return typeof value === 'string' && PLAYER_EMBLEM_BY_ID.has(value);
 }
 
 export function isOwnablePlayerEmblem(value: unknown): value is OwnablePlayerEmblem {
-  return typeof value === 'string' && (OWNABLE_PLAYER_EMBLEM_IDS as readonly string[]).includes(value);
+  if (typeof value !== 'string' || value.length === 0 || value === 'custom') return false;
+  return PLAYER_EMBLEM_BY_ID.size === 0 ? true : PLAYER_EMBLEM_BY_ID.get(value)?.ownable === true;
 }
 
 export function isEquippedPlayerEmblem(value: unknown): value is EquippedPlayerEmblem {
   return value === 'custom' || isOwnablePlayerEmblem(value);
-}
-
-export function nextPlayerEmblem(emblem: PlayerEmblem): PlayerEmblem {
-  const index = PLAYER_EMBLEM_IDS.indexOf(emblem);
-  return PLAYER_EMBLEM_IDS[(index + 1) % PLAYER_EMBLEM_IDS.length]!;
 }
 
 export function nextOwnedPlayerEmblem(emblem: OwnablePlayerEmblem | null, owned: readonly OwnablePlayerEmblem[]): OwnablePlayerEmblem | null {

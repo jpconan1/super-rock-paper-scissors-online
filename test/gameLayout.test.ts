@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
+import { setPlayerEmblemCatalog } from '../src/core/playerEmblem';
 
 const mocks = vi.hoisted(() => ({
   buttonDestroys: [] as ReturnType<typeof vi.fn>[],
@@ -143,6 +144,10 @@ describe('shared game layout contract', () => {
   });
 
   test('builds boiling mirrored emblem cards with level fallback', () => {
+    setPlayerEmblemCatalog([
+      { id: 'beta-og', name: 'Beta OG', sheet: '/emblems/beta-og-sheet.webp', ownable: true, systemOnly: false },
+      { id: 'computer', name: 'Computer', sheet: '/emblems/computer-sheet.webp', ownable: false, systemOnly: true },
+    ]);
     useFakeDocument();
     const p1Card = createPlayerInfo({ heading: 'A very long player name', rating: '', platform: '', level: 16 }, 'p1', {} as never);
     const p2Card = createPlayerInfo({ heading: 'Computer', rating: '', platform: '', emblem: 'computer' }, 'p2', {} as never);

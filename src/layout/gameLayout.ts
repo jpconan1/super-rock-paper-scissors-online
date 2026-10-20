@@ -47,6 +47,7 @@ export interface GameLayoutPlayer {
   rating: string;
   platform: string;
   level?: number;
+  prestigeCount?: number;
   emblem?: PlayerEmblem | 'custom' | null;
   customEmblem?: CustomEmblemMeta | null;
 }
@@ -282,10 +283,12 @@ export function createPlayerInfo(player: GameLayoutPlayer, side: 'p1' | 'p2', cl
 } {
   const info = document.createElement('div');
   info.className = `game-layout__player-info game-layout__player-info--${side}`;
-  const card = createPlayerEmblemCard({ name: player.heading, level: player.level, emblem: player.emblem, customEmblem: player.customEmblem }, clock);
+  const card = createPlayerEmblemCard({ name: player.heading, level: player.level, prestigeCount: player.prestigeCount, emblem: player.emblem, customEmblem: player.customEmblem }, clock);
   card.element.classList.add('game-layout__player-card');
   info.replaceChildren(...card.element.children);
   const level = Number.isSafeInteger(player.level) && player.level! > 0 ? player.level! : 1;
-  info.setAttribute('aria-label', `${player.heading}, level ${level}, ${player.emblem === 'custom' ? 'custom emblem' : player.emblem ? `${PLAYER_EMBLEM_BY_ID.get(player.emblem)!.name} emblem` : 'no emblem'}`);
+  const emblemName = player.emblem && player.emblem !== 'custom'
+    ? PLAYER_EMBLEM_BY_ID.get(player.emblem)?.name ?? player.emblem.replace(/(^|-)(\w)/g, (_all, _dash, letter: string) => ` ${letter.toUpperCase()}`).trim() : '';
+  info.setAttribute('aria-label', `${player.heading}, ${player.prestigeCount ? `prestige ${player.prestigeCount}` : `level ${level}`}, ${player.emblem === 'custom' ? 'custom emblem' : player.emblem ? `${emblemName} emblem` : 'no emblem'}`);
   return { element: info, emblem: card.emblem };
 }
