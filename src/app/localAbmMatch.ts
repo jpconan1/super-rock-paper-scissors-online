@@ -9,7 +9,8 @@ import type { PlayerId } from '../core/variant';
 import { randomId } from '../core/randomId';
 import { beats } from '../core/time';
 import { PROTOCOL_VERSION, type MatchPlayer, type ServerSnapshot } from '../protocol/protocol';
-import type { OwnablePlayerEmblem } from '../core/playerEmblem';
+import type { EquippedPlayerEmblem } from '../core/playerEmblem';
+import type { CustomEmblemMeta } from '../core/customEmblem';
 import { ABM_CLASSES } from '../variants/attackBlockMana/attackBlockManaCatalog';
 import type { AbmClassId, AbmCommand, AbmMove, AbmProjection, AbmState } from '../variants/attackBlockMana/attackBlockManaTypes';
 
@@ -19,7 +20,8 @@ type TutorialStage = 'opening' | 'attack-followup' | 'forced-reset' | 'post-rese
 interface LocalAbmMatchOptions {
   playerName: string;
   playerLevel?: number;
-  playerEmblem?: OwnablePlayerEmblem | null;
+  playerEmblem?: EquippedPlayerEmblem | null;
+  customEmblem?: CustomEmblemMeta | null;
   matchId?: string;
   publish(snapshot: ServerSnapshot): void;
   now?: () => number;
@@ -60,7 +62,7 @@ export class LocalAbmMatch {
     this.clearTimer = options.clearTimer ?? ((timer) => globalThis.clearTimeout(timer));
     this.computerPaused = options.computerStartsPaused ?? false;
     const players: Record<PlayerId, MatchPlayer> = {
-      p1: { name: options.playerName, platform: 'Local', rating: 0, level: options.playerLevel ?? 1, emblem: options.playerEmblem ?? null },
+      p1: { name: options.playerName, platform: 'Local', rating: 0, level: options.playerLevel ?? 1, emblem: options.playerEmblem ?? null, customEmblem: options.customEmblem },
       p2: { name: 'Computer', platform: 'CPU', rating: 0, level: 1, emblem: 'computer' },
     };
     const now = this.now();

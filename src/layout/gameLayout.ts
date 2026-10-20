@@ -3,6 +3,7 @@ import { createGameButton, type GameButton } from '../input/gameButton';
 import { createBoilingSprite, type BoilingSprite } from '../renderer/boilingSprite';
 import type { PlayerId } from '../core/variant';
 import { PLAYER_EMBLEM_BY_ID, type PlayerEmblem } from '../core/playerEmblem';
+import type { CustomEmblemMeta } from '../core/customEmblem';
 import { createPlayerEmblemCard, emblemBorderNumber } from '../ui/playerEmblemCard';
 import {
   createScaleBox,
@@ -46,7 +47,8 @@ export interface GameLayoutPlayer {
   rating: string;
   platform: string;
   level?: number;
-  emblem?: PlayerEmblem | null;
+  emblem?: PlayerEmblem | 'custom' | null;
+  customEmblem?: CustomEmblemMeta | null;
 }
 
 export { emblemBorderNumber } from '../ui/playerEmblemCard';
@@ -160,6 +162,7 @@ export function createGameLayout<TLayoutName extends string>(
   const slots = createGameLayoutSlots(composition);
   const sprites: BoilingSprite[] = [];
   const artworkSprites = new Map<'turn' | 'p1Wins' | 'p2Wins' | 'scene', BoilingSprite>();
+  const artworkSources = new Map<'turn' | 'p1Wins' | 'p2Wins' | 'scene', string>();
   const buttons: GameButton[] = [];
   const layoutDocument = options.layoutDocument ?? getLayoutDocument(options.layoutDocumentId ?? 'game-parent');
 
@@ -182,7 +185,10 @@ export function createGameLayout<TLayoutName extends string>(
     const sprite = createBoilingSprite({ ...artwork, clock: options.clock, className });
     sprites.push(sprite);
     const artworkSlot = slot === 'p1-wins' ? 'p1Wins' : slot === 'p2-wins' ? 'p2Wins' : slot === 'turn' || slot === 'scene' ? slot : undefined;
-    if (artworkSlot) artworkSprites.set(artworkSlot, sprite);
+    if (artworkSlot) {
+      artworkSprites.set(artworkSlot, sprite);
+      artworkSources.set(artworkSlot, artwork.src);
+    }
     slots[slot].append(sprite.element);
   };
   addSprite('turn', options.artwork.turn, 'game-layout__turn');
@@ -253,7 +259,10 @@ export function createGameLayout<TLayoutName extends string>(
     setArtwork(slot, artwork) {
       const sprite = artworkSprites.get(slot);
       if (!sprite) return;
-      sprite.setSource(artwork.src);
+      if (artworkSources.get(slot) !== artwork.src) {
+        artworkSources.set(slot, artwork.src);
+        sprite.setSource(artwork.src);
+      }
       sprite.element.setAttribute('aria-label', artwork.alt);
     },
     setRulesVisible(visible) { toolsByAsset.get('rulebook-button')!.hidden = !visible; },
@@ -273,10 +282,10 @@ export function createPlayerInfo(player: GameLayoutPlayer, side: 'p1' | 'p2', cl
 } {
   const info = document.createElement('div');
   info.className = `game-layout__player-info game-layout__player-info--${side}`;
-  const card = createPlayerEmblemCard({ name: player.heading, level: player.level, emblem: player.emblem }, clock);
+  const card = createPlayerEmblemCard({ name: player.heading, level: player.level, emblem: player.emblem, customEmblem: player.customEmblem }, clock);
   card.element.classList.add('game-layout__player-card');
   info.replaceChildren(...card.element.children);
   const level = Number.isSafeInteger(player.level) && player.level! > 0 ? player.level! : 1;
-  info.setAttribute('aria-label', `${player.heading}, level ${level}, ${player.emblem ? `${PLAYER_EMBLEM_BY_ID.get(player.emblem)!.name} emblem` : 'no emblem'}`);
+  info.setAttribute('aria-label', `${player.heading}, level ${level}, ${player.emblem === 'custom' ? 'custom emblem' : player.emblem ? `${PLAYER_EMBLEM_BY_ID.get(player.emblem)!.name} emblem` : 'no emblem'}`);
   return { element: info, emblem: card.emblem };
 }

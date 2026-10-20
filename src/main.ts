@@ -8,6 +8,7 @@ import { resolveServerUrl } from './app/serverUrl';
 import { installStaleChunkRecovery } from './app/staleChunkRecovery';
 import { startAnalytics } from './analytics/tracking';
 import { passMaintenanceGate } from './maintenance/maintenanceScreen';
+import { setCustomEmblemImageBaseUrl } from './core/customEmblem';
 
 const app = document.querySelector<HTMLElement>('#app');
 if (!app) throw new Error('Missing #app mount point.');
@@ -18,6 +19,7 @@ if (location.pathname === '/admin' || location.pathname.startsWith('/admin/')) {
     resolveServerUrl(import.meta.env.VITE_SERVER_URL, location.origin)));
 } else {
   const baseUrl = resolveServerUrl(import.meta.env.VITE_SERVER_URL, location.origin);
+  setCustomEmblemImageBaseUrl(baseUrl);
   void passMaintenanceGate(app, baseUrl).then((allowed) => {
     if (!allowed) return;
     app.className = 'app-viewport'; installStaleChunkRecovery(); startAnalytics(baseUrl);

@@ -33,6 +33,8 @@
       "/player-session",
       "/player-progression",
       "/player-emblem",
+      "/custom-emblem",
+      "/custom-emblems/*",
       "/claim-google-account",
       "/local-match-grant",
       "/local-progress-award",

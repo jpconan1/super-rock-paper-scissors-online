@@ -623,6 +623,7 @@ input {
 .emblem-menu-alert .alert-system__actions:empty { display: none; }
 .emblem-menu { display: grid; height: 100%; min-height: 0; grid-template: auto auto 1fr / 1fr; gap: 10px; }
 .emblem-menu__choices { display: flex; min-height: 132px; flex-wrap: wrap; align-content: start; align-items: stretch; justify-content: center; gap: 10px; }
+.game-button.emblem-menu__custom-button { justify-self: center; width: 128px; margin: -4px 0; }
 .emblem-menu__choice {
   display: grid; width: 125px; min-width: 0; grid-template-rows: 1fr auto; place-items: center; gap: 3px;
   border: 3px solid transparent; border-radius: 10px; padding: 7px; color: #171412; background: rgba(255, 255, 255, .25); cursor: pointer;
@@ -648,6 +649,20 @@ input {
   .emblem-menu__choices { min-height: 190px; flex-wrap: wrap; align-content: start; gap: 10px; }
   .emblem-menu__choice { width: 125px; height: 130px; }
 }
+.custom-emblem-editor__drawing-area { position: absolute; z-index: 2; inset: 9.2% 6.1% 9.4% 6%; overflow: hidden; background: #fff; clip-path: polygon(1% 0,99% 0,100% 1.5%,100% 98.5%,99% 100%,1% 100%,0 98.5%,0 1.5%); }
+.custom-emblem-editor__canvas { display: block; width: 100%; height: 100%; cursor: default; touch-action: none; }
+.custom-emblem-editor__canvas:not([data-tool='scroll']) { cursor: none; }
+.custom-emblem-editor__frame { position: absolute; z-index: 4; box-sizing: border-box; pointer-events: none; touch-action: none; }
+.custom-emblem-editor__frame canvas { display: block; width: 100%; height: 100%; pointer-events: none; }
+.custom-emblem-editor__frame-edge { position: absolute; z-index: 2; pointer-events: auto; cursor: move; }
+.custom-emblem-editor__frame-edge--0 { top: -8px; right: 0; left: 0; height: 18px; }
+.custom-emblem-editor__frame-edge--1 { top: 0; right: -8px; bottom: 0; width: 18px; }
+.custom-emblem-editor__frame-edge--2 { right: 0; bottom: -8px; left: 0; height: 18px; }
+.custom-emblem-editor__frame-edge--3 { top: 0; bottom: 0; left: -8px; width: 18px; }
+.custom-emblem-editor__resize { position: absolute; z-index: 3; right: -8px; bottom: -8px; width: 22px; height: 22px; border: 3px solid #fff; border-radius: 50%; background: #ac3235; box-shadow: 0 0 0 2px #171412; pointer-events: auto; cursor: nwse-resize; }
+.game-button.lobby-screen__emblem-control, .lobby-screen__emblem-status { position: absolute; z-index: 7; }
+.game-button.lobby-screen__emblem-control[hidden], .lobby-screen__emblem-status[hidden] { display: none; }
+.lobby-screen__emblem-status { overflow: hidden; color: #ac3235; font-size: 15px; font-weight: 900; line-height: 1.05; text-align: center; text-overflow: ellipsis; }
 .password-dialog { display: grid; justify-items: center; gap: 10px; }
 .password-dialog p { margin: 0; }
 .password-dialog__entry { width: 340px; height: 50px; }
@@ -831,6 +846,7 @@ input {
 .lobby-whiteboard__held-tool .boiling-sprite__canvas { width: 100%; height: 100%; }
 .lobby-whiteboard__return-zone { position: absolute; z-index: 4; right: 8.5%; bottom: 1.5%; left: 8.5%; height: 6.5%; padding: 0; border: 0; background: transparent; }
 .lobby-screen__chat { display: contents; }
+.lobby-screen__chat[hidden] { display: none; }
 .lobby-screen__chat-input { position: absolute; }
 .game-button.lobby-screen__chat-button { position: absolute; }
 .toggle-button.lobby-screen__roster-toggle { position: absolute; }

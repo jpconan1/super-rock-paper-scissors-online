@@ -2,6 +2,7 @@ export const PLAYER_EMBLEM_IDS = ['beta-og', 'new-player', 'prestige', 'first-pl
 export type PlayerEmblem = typeof PLAYER_EMBLEM_IDS[number];
 export const OWNABLE_PLAYER_EMBLEM_IDS = ['beta-og', 'new-player', 'prestige', 'first-place'] as const;
 export type OwnablePlayerEmblem = typeof OWNABLE_PLAYER_EMBLEM_IDS[number];
+export type EquippedPlayerEmblem = OwnablePlayerEmblem | 'custom';
 export const FREE_PLAYER_EMBLEM_IDS: readonly OwnablePlayerEmblem[] = ['prestige', 'first-place'];
 
 export interface PlayerEmblemDefinition {
@@ -27,6 +28,10 @@ export function isPlayerEmblem(value: unknown): value is PlayerEmblem {
 
 export function isOwnablePlayerEmblem(value: unknown): value is OwnablePlayerEmblem {
   return typeof value === 'string' && (OWNABLE_PLAYER_EMBLEM_IDS as readonly string[]).includes(value);
+}
+
+export function isEquippedPlayerEmblem(value: unknown): value is EquippedPlayerEmblem {
+  return value === 'custom' || isOwnablePlayerEmblem(value);
 }
 
 export function nextPlayerEmblem(emblem: PlayerEmblem): PlayerEmblem {

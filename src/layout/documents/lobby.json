@@ -980,6 +980,116 @@
       }
     },
     {
+      "id": "emblem-save",
+      "type": "button",
+      "label": "Save Emblem",
+      "protected": true,
+      "assets": {
+        "up": "/interactive-elements/save-emblem-button-up-sheet.webp",
+        "between": "/interactive-elements/save-emblem-button-between-sheet.webp",
+        "depressed": "/interactive-elements/save-emblem-button-depressed-sheet.webp"
+      },
+      "properties": {
+        "bakedLabel": true
+      },
+      "layouts": {
+        "landscape": {
+          "x": 305,
+          "y": 405,
+          "width": 90,
+          "height": 45,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 36,
+          "y": 610,
+          "width": 120,
+          "height": 60,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "emblem-frame",
+      "type": "button",
+      "label": "Next Frame",
+      "protected": true,
+      "assets": {
+        "up": "/interactive-elements/frame-button-up-sheet.webp",
+        "between": "/interactive-elements/frame-button-between-sheet.webp",
+        "depressed": "/interactive-elements/frame-button-depressed-sheet.webp"
+      },
+      "properties": {
+        "bakedLabel": true
+      },
+      "layouts": {
+        "landscape": {
+          "x": 430,
+          "y": 405,
+          "width": 90,
+          "height": 45,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 195,
+          "y": 610,
+          "width": 120,
+          "height": 60,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "emblem-cancel",
+      "type": "button",
+      "label": "Cancel",
+      "protected": true,
+      "assets": {
+        "up": "/interactive-elements/cancel-button-up-sheet.webp",
+        "between": "/interactive-elements/cancel-button-between-sheet.webp",
+        "depressed": "/interactive-elements/cancel-button-depressed-sheet.webp"
+      },
+      "properties": {
+        "bakedLabel": true
+      },
+      "layouts": {
+        "landscape": {
+          "x": 555,
+          "y": 405,
+          "width": 90,
+          "height": 45,
+          "aspectLock": true
+        },
+        "portrait": {
+          "x": 354,
+          "y": 610,
+          "width": 120,
+          "height": 60,
+          "aspectLock": true
+        }
+      }
+    },
+    {
+      "id": "emblem-status",
+      "type": "text",
+      "label": "Save status",
+      "protected": true,
+      "layouts": {
+        "landscape": {
+          "x": 250,
+          "y": 382,
+          "width": 460,
+          "height": 20
+        },
+        "portrait": {
+          "x": 36,
+          "y": 588,
+          "width": 468,
+          "height": 20
+        }
+      }
+    },
+    {
       "id": "roster-toggle",
       "type": "toggle",
       "layer": 21,

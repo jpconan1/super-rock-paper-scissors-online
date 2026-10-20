@@ -1,5 +1,6 @@
 import type { BoilClock } from '../animation/boilClock';
-import { PLAYER_EMBLEM_BY_ID, type PlayerEmblem } from '../core/playerEmblem';
+import { PLAYER_EMBLEM_BY_ID, type EquippedPlayerEmblem, type PlayerEmblem } from '../core/playerEmblem';
+import { customEmblemImageUrl, type CustomEmblemMeta } from '../core/customEmblem';
 import { createBoilingSprite, type BoilingSprite } from '../renderer/boilingSprite';
 
 const EMBLEM_BORDER_COUNT = 28;
@@ -18,18 +19,19 @@ export function emblemBorderNumber(displayName: string): number {
 export interface PlayerEmblemCard {
   element: HTMLDivElement;
   emblem: BoilingSprite;
-  setEmblem(emblem: PlayerEmblem | null): void;
+  setEmblem(emblem: EquippedPlayerEmblem | PlayerEmblem | null, customEmblem?: CustomEmblemMeta | null): void;
 }
 
-export function createPlayerEmblemCard(player: { name: string; level?: number; emblem?: PlayerEmblem | null }, clock: BoilClock): PlayerEmblemCard {
+export function createPlayerEmblemCard(player: { name: string; level?: number; emblem?: PlayerEmblem | 'custom' | null; customEmblem?: CustomEmblemMeta | null }, clock: BoilClock): PlayerEmblemCard {
   const element = document.createElement('div');
   element.className = 'player-emblem-card';
   const level = Number.isSafeInteger(player.level) && player.level! > 0 ? player.level! : 1;
   let emblemKind = player.emblem ?? null;
-  const outline = `/emblems/borders/${emblemBorderNumber(player.name)}.webp`;
-  const initialDefinition = PLAYER_EMBLEM_BY_ID.get(emblemKind ?? 'beta-og')!;
+  let custom = player.customEmblem ?? null;
+  const outline = `/emblems/borders/${custom?.borderNumber ?? emblemBorderNumber(player.name)}.webp`;
+  const initialDefinition = PLAYER_EMBLEM_BY_ID.get(emblemKind === 'custom' ? 'beta-og' : emblemKind ?? 'beta-og')!;
   const emblem = createBoilingSprite({
-    src: initialDefinition.sheet,
+    src: emblemKind === 'custom' && custom ? customEmblemImageUrl(custom) : initialDefinition.sheet,
     frameCount: initialDefinition.frameCount,
     clock,
     className: 'player-emblem-card__emblem',
@@ -49,17 +51,22 @@ export function createPlayerEmblemCard(player: { name: string; level?: number; e
   heading.className = 'player-emblem-card__heading';
   heading.append(name, levelLabel);
   element.append(emblem.element, none, heading);
-  const updateLabel = () => element.setAttribute('aria-label', `${player.name}, level ${level}, ${emblemKind ? `${PLAYER_EMBLEM_BY_ID.get(emblemKind)!.name} emblem` : 'no emblem'}`);
+  const updateLabel = () => element.setAttribute('aria-label', `${player.name}, level ${level}, ${emblemKind === 'custom' ? 'custom emblem' : emblemKind ? `${PLAYER_EMBLEM_BY_ID.get(emblemKind)!.name} emblem` : 'no emblem'}`);
   updateLabel();
   return {
     element,
     emblem,
-    setEmblem(next) {
-      if (next === emblemKind) return;
+    setEmblem(next, nextCustom = custom) {
+      if (next === emblemKind && nextCustom?.version === custom?.version) return;
       emblemKind = next;
+      custom = nextCustom ?? null;
       emblem.setArtworkVisible(next !== null); none.hidden = next !== null;
-      if (next) {
+      if (next === 'custom' && custom) {
+        emblem.setOutline({ src: `/emblems/borders/${custom.borderNumber}.webp`, chromaKey: EMBLEM_OUTLINE_CHROMA_KEY });
+        emblem.setSource(customEmblemImageUrl(custom));
+      } else if (next && next !== 'custom') {
         const definition = PLAYER_EMBLEM_BY_ID.get(next)!;
+        emblem.setOutline({ src: `/emblems/borders/${emblemBorderNumber(player.name)}.webp`, chromaKey: EMBLEM_OUTLINE_CHROMA_KEY });
         emblem.setSource(definition.sheet, definition.frameCount);
       }
       updateLabel();

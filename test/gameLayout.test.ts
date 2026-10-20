@@ -3,6 +3,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   buttonDestroys: [] as ReturnType<typeof vi.fn>[],
   spriteDestroys: [] as ReturnType<typeof vi.fn>[],
+  spriteSetSources: [] as ReturnType<typeof vi.fn>[],
   buttonElements: [] as HTMLButtonElement[],
   buttonActivations: [] as (() => void)[],
   stop: vi.fn(),
@@ -22,11 +23,13 @@ vi.mock('../src/input/gameButton', () => ({
 vi.mock('../src/renderer/boilingSprite', () => ({
   createBoilingSprite: (options: { className?: string; src?: string }) => {
     const destroy = vi.fn();
+    const setSource = vi.fn();
     mocks.spriteDestroys.push(destroy);
+    mocks.spriteSetSources.push(setSource);
     const element = document.createElement('div');
     element.className = options.className ?? '';
     element.dataset.src = options.src ?? '';
-    return { element, setSource: vi.fn(), setArtworkVisible: vi.fn(), destroy };
+    return { element, setSource, setArtworkVisible: vi.fn(), destroy };
   },
 }));
 
@@ -117,6 +120,7 @@ afterEach(() => {
   vi.clearAllMocks();
   mocks.buttonDestroys.length = 0;
   mocks.spriteDestroys.length = 0;
+  mocks.spriteSetSources.length = 0;
   mocks.buttonElements.length = 0;
   mocks.buttonActivations.length = 0;
   vi.unstubAllGlobals();
@@ -244,6 +248,28 @@ describe('shared game layout contract', () => {
     expect(mocks.buttonElements[0]!.hidden).toBe(true);
     layout.setRulesVisible(true);
     expect(mocks.buttonElements[0]!.hidden).toBe(false);
+    layout.destroy();
+  });
+
+  test('does not restart boiling artwork when a render repeats the same source', () => {
+    useFakeDocument();
+    const content = Object.fromEntries(['p1-move', 'p2-move', 'p1-resources', 'p2-resources', 'controls'].map((name) => [name, new FakeElement()]));
+    const layout = createGameLayout({
+      container: new FakeElement() as unknown as HTMLElement, clock: {} as never, layouts: FIREBALL_WAR_LAYOUTS,
+      screenClassName: 'test', compositionClassName: 'test', ariaLabel: 'Test',
+      players: { p1: { heading: 'P1', rating: '', platform: '' }, p2: { heading: 'P2', rating: '', platform: '' } },
+      artwork: { turn: { src: 'turn', alt: '' }, p1Wins: { src: 'one', alt: '' }, p2Wins: { src: 'two', alt: '' }, scene: { src: 'scene', alt: 'First label' } },
+      variantContent: content as never,
+    });
+    const sceneSetSource = mocks.spriteSetSources[5]!;
+
+    layout.setArtwork('scene', { src: 'scene', alt: 'Updated label' });
+    expect(sceneSetSource).not.toHaveBeenCalled();
+    layout.setArtwork('scene', { src: 'split-scene', alt: 'Split scene' });
+    expect(sceneSetSource).toHaveBeenCalledOnce();
+    expect(sceneSetSource).toHaveBeenCalledWith('split-scene');
+    layout.setArtwork('scene', { src: 'split-scene', alt: 'Split scene' });
+    expect(sceneSetSource).toHaveBeenCalledOnce();
     layout.destroy();
   });
 

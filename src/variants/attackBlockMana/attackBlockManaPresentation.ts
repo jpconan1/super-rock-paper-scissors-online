@@ -313,7 +313,7 @@ export function blockSegments(player: 'p1' | 'p2', blocks: number): boolean[] {
 
 function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, send: (command: AbmCommand) => void, onMenu: () => void,
   matchProgressComplete: (() => void) | undefined, viewer: 'p1' | 'p2',
-  players: Readonly<Record<'p1' | 'p2', { name: string; platform: string; rating: number; level?: number; emblem?: import('../../protocol/protocol').PlayerEmblem | null }>> | undefined,
+  players: Readonly<Record<'p1' | 'p2', import('../../protocol/protocol').MatchPlayer>> | undefined,
   options: AttackBlockManaPresentationOptions, music?: MusicDirector, unlockedClassIds?: readonly AbmClassId[],
   showOpponentCounterpick = true, setOpeningCountdownActive?: (active: boolean) => void) {
   const layoutDocument = options.layoutDocument ?? getLayoutDocument('variant-abm');
@@ -429,6 +429,9 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   const readyArt = createBoilingSprite({ src: '/visual-elements/ready-waiting/1_sheet.webp', clock, className: 'abm-waiting__ready' });
   const dotsArt = createBoilingSprite({ src: '/visual-elements/ready-waiting/waiting1_sheet.webp', clock, className: 'abm-waiting__dots' });
   const countdownArt = createBoilingSprite({ src: '/visual-elements/ready-waiting/countdown5-sheet.webp', clock, className: 'abm-waiting__countdown' });
+  let readyAsset = '/visual-elements/ready-waiting/1_sheet.webp';
+  let dotsAsset = '/visual-elements/ready-waiting/waiting1_sheet.webp';
+  let countdownAsset = '/visual-elements/ready-waiting/countdown5-sheet.webp';
   sprites.push(readyArt, dotsArt, countdownArt); waiting.append(readyArt.element, dotsArt.element, countdownArt.element);
   const result = createBoilingSprite({ src: ABM_RESULT_SCENES.roundWon, clock, className: 'abm-result-scene', alt: '' });
   result.element.hidden = true; result.element.setAttribute('aria-live', 'polite'); sprites.push(result);
@@ -1002,11 +1005,17 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     applyConfiguredElement(countdownArt.element, config(waitingLayouts.countdown), orientation);
     const visual = getAbmWaitingVisual(serverTime, waitingStartsAt, deadlineAt);
     sceneArtwork.hidden = visual.countdown !== undefined;
-    readyArt.setSource(`/visual-elements/ready-waiting/${visual.readyFrame}_sheet.webp`);
+    const nextReadyAsset = `/visual-elements/ready-waiting/${visual.readyFrame}_sheet.webp`;
+    if (readyAsset !== nextReadyAsset) readyArt.setSource(readyAsset = nextReadyAsset);
     dotsArt.element.hidden = visual.dots === undefined;
     countdownArt.element.hidden = visual.countdown === undefined;
-    if (visual.countdown !== undefined) countdownArt.setSource(`/visual-elements/ready-waiting/countdown${visual.countdown}-sheet.webp`);
-    else if (visual.dots !== undefined) dotsArt.setSource(`/visual-elements/ready-waiting/waiting${visual.dots}_sheet.webp`);
+    if (visual.countdown !== undefined) {
+      const nextCountdownAsset = `/visual-elements/ready-waiting/countdown${visual.countdown}-sheet.webp`;
+      if (countdownAsset !== nextCountdownAsset) countdownArt.setSource(countdownAsset = nextCountdownAsset);
+    } else if (visual.dots !== undefined) {
+      const nextDotsAsset = `/visual-elements/ready-waiting/waiting${visual.dots}_sheet.webp`;
+      if (dotsAsset !== nextDotsAsset) dotsArt.setSource(dotsAsset = nextDotsAsset);
+    }
     if (serverTime < deadlineAt) {
       const paintedAt = now();
       if (scheduleTimers) waitingTimer = setTimeout(() => paint(nextProjection, serverTime + Math.max(58, now() - paintedAt)), 58);
@@ -1184,6 +1193,6 @@ export function winArtwork(player: 'p1' | 'p2', wins: number) {
   return { src: `/visual-elements/win-couters/ft2-win-counter-${state}-sheet.webp`, alt: `${player} wins: ${wins}` };
 }
 function sheets(root: string) { return { up: `${root}-up-sheet.webp`, between: `${root}-between-sheet.webp`, depressed: `${root}-depressed-sheet.webp` }; }
-function playerDisplay(fallback: string, player?: { name: string; platform: string; rating: number; level?: number; emblem?: import('../../protocol/protocol').PlayerEmblem | null }) {
-  return { heading: player?.name ?? fallback, rating: '', platform: '', level: player?.level, emblem: player?.emblem };
+function playerDisplay(fallback: string, player?: import('../../protocol/protocol').MatchPlayer) {
+  return { heading: player?.name ?? fallback, rating: '', platform: '', level: player?.level, emblem: player?.emblem, customEmblem: player?.customEmblem };
 }

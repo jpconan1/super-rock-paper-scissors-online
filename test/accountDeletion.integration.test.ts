@@ -17,10 +17,11 @@ import migration12 from '../worker/migrations/0012_fixed_account_identity.sql?ra
 import migration13 from '../worker/migrations/0013_email_accounts.sql?raw';
 import migration14 from '../worker/migrations/0014_player_emblems.sql?raw';
 import migration15 from '../worker/migrations/0015_emblem_ownership.sql?raw';
+import migration16 from '../worker/migrations/0016_custom_emblems.sql?raw';
 import { activeEmblemCampaign, completeEmblemMission, grantPlayerEmblem, ownedPlayerEmblems, recordUnlockAllClassesFinish, revokePlayerEmblem } from '../worker/playerEmblems';
 import { MAX_PROGRESS_UNITS } from '../src/core/progression';
 
-const migrations = [migration1, migration2, migration3, migration4, migration5, migration6, migration7, migration8, migration9, migration10, migration11, migration12, migration13, migration14, migration15];
+const migrations = [migration1, migration2, migration3, migration4, migration5, migration6, migration7, migration8, migration9, migration10, migration11, migration12, migration13, migration14, migration15, migration16];
 let miniflare: Miniflare;
 let db: Awaited<ReturnType<Miniflare['getD1Database']>>;
 
@@ -66,6 +67,9 @@ async function seedUser(userId: string, playerId: string, email: string): Promis
     db.prepare(`INSERT INTO emblem_mission_completions
       (player_id, mission_id, completed_at, reward_emblem_id) VALUES (?, 'claim-account', ?, 'beta-og')`).bind(playerId, now),
     db.prepare('INSERT INTO unlock_all_class_finishes (player_id, completed_at) VALUES (?, ?)').bind(playerId, now),
+    db.prepare(`INSERT INTO custom_emblems (player_id, drawing_json, crop_x, crop_y, crop_width, crop_height, border_number, artwork_webp, updated_at)
+      VALUES (?, '{"operations":[],"crop":{"x":188,"y":130,"width":384,"height":192},"borderNumber":1}', 188, 130, 384, 192, 1, X'524946460000000057454250', ?)`)
+      .bind(playerId, now),
   ]);
 }
 
@@ -87,7 +91,7 @@ describe('account deletion D1 lifecycle', () => {
     expect(await db.prepare("SELECT season_id FROM seasons WHERE season_id = 'public-abm-test'").first()).toEqual({ season_id: 'public-abm-test' });
     expect(await db.prepare('SELECT singleton_id FROM maintenance_state WHERE singleton_id = 1').first()).toEqual({ singleton_id: 1 });
     for (const table of ['players', 'user', 'session', 'account', 'match_results', 'analytics_events', 'analytics_daily', 'matchmaking_attempts', 'whiteboard_archive',
-      'player_emblems', 'emblem_mission_completions', 'unlock_all_class_finishes']) {
+      'player_emblems', 'emblem_mission_completions', 'unlock_all_class_finishes', 'custom_emblems']) {
       expect(await db.prepare(`SELECT COUNT(*) count FROM ${table}`).first(), table).toEqual({ count: 0 });
     }
     await db.prepare(`INSERT INTO players (player_id, display_name, rating, created_at, updated_at, account_type)
@@ -104,7 +108,7 @@ describe('account deletion D1 lifecycle', () => {
     await purgeAccountData(db, 'user-a', 'a@example.com', 5_000);
 
     for (const table of ['user', 'account', 'session', 'players', 'account_deletion_challenges', 'email_signup_pending', 'email_auth_challenges', 'verification',
-      'local_progress_awards', 'local_match_grants', 'player_emblems', 'emblem_mission_completions', 'unlock_all_class_finishes']) {
+      'local_progress_awards', 'local_match_grants', 'player_emblems', 'emblem_mission_completions', 'unlock_all_class_finishes', 'custom_emblems']) {
       expect((await db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).first<{ count: number }>())?.count, table).toBe(0);
     }
   });
@@ -131,7 +135,7 @@ describe('account deletion D1 lifecycle', () => {
     expect(await db.prepare("SELECT display_name, auth_user_id FROM players WHERE player_id = 'player-b'").first()).toEqual({
       display_name: 'Name user-b', auth_user_id: 'user-b',
     });
-    for (const table of ['player_emblems', 'emblem_mission_completions', 'unlock_all_class_finishes']) {
+    for (const table of ['player_emblems', 'emblem_mission_completions', 'unlock_all_class_finishes', 'custom_emblems']) {
       expect(await db.prepare(`SELECT COUNT(*) count FROM ${table} WHERE player_id = 'player-a'`).first(), table).toEqual({ count: 0 });
     }
   });

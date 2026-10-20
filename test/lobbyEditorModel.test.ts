@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isLobbyEditorElementEditable, isLobbyProgressionEditorElement } from '../src/editor/lobbyEditorModel';
+import { isLobbyEditorElementEditable, isLobbyEditorElementVisible, isLobbyProgressionEditorElement, isLobbyStateElementEditable } from '../src/editor/lobbyEditorModel';
 import { getLayoutDocument } from '../src/layout/layoutDocuments';
 
 describe('lobby editor model', () => {
@@ -24,5 +24,22 @@ describe('lobby editor model', () => {
       expect(isLobbyEditorElementEditable(element(id)), id).toBe(false);
     }
     expect(isLobbyEditorElementEditable(element('xp-bar'))).toBe(true);
+  });
+
+  it('shows chat only on the shared whiteboard', () => {
+    expect(isLobbyEditorElementVisible(element('whiteboard'), 'shared-whiteboard')).toBe(true);
+    expect(isLobbyEditorElementVisible(element('chat-input'), 'shared-whiteboard')).toBe(true);
+    expect(isLobbyEditorElementVisible(element('emblem-save'), 'shared-whiteboard')).toBe(false);
+    expect(isLobbyStateElementEditable(element('chat-input'), 'shared-whiteboard')).toBe(true);
+    expect(isLobbyStateElementEditable(element('black-marker'), 'shared-whiteboard')).toBe(false);
+  });
+
+  it('shows and edits emblem controls only in the custom emblem state', () => {
+    for (const id of ['whiteboard', 'black-marker', 'eraser', 'emblem-save', 'emblem-frame', 'emblem-cancel', 'emblem-status']) {
+      expect(isLobbyEditorElementVisible(element(id), 'custom-emblem'), id).toBe(true);
+    }
+    expect(isLobbyEditorElementVisible(element('chat-input'), 'custom-emblem')).toBe(false);
+    expect(isLobbyStateElementEditable(element('emblem-save'), 'custom-emblem')).toBe(true);
+    expect(isLobbyStateElementEditable(element('emblem-status'), 'custom-emblem')).toBe(false);
   });
 });

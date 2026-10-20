@@ -13,6 +13,7 @@ import { createToggleButton } from '../input/toggleButton';
 import type { ConnectionState } from './appController';
 import { createTextbox } from '../ui/textbox';
 import { mountWhiteboard } from '../whiteboard/whiteboard';
+import { mountWhiteboardTools } from '../whiteboard/toolController';
 import type { WhiteboardClientMessage, WhiteboardServerMessage } from '../whiteboard/protocol';
 import type { LobbyPlayer } from '../lobby/protocol';
 import { ABM_CLASS_IDS, type AbmClassId } from '../variants/attackBlockMana/attackBlockManaTypes';
@@ -24,8 +25,10 @@ import {
 } from '../whiteboard/flipAnimation';
 import { mountClassCardDrag, type ClassCardDragController } from '../lobby/classCardDrag';
 import { randomId } from '../core/randomId';
-import type { OwnablePlayerEmblem } from '../core/playerEmblem';
+import type { EquippedPlayerEmblem, OwnablePlayerEmblem } from '../core/playerEmblem';
+import { DEFAULT_CUSTOM_EMBLEM_DOCUMENT, type CustomEmblemDocument, type CustomEmblemMeta, type CustomEmblemState } from '../core/customEmblem';
 import { createPlayerEmblemCard } from '../ui/playerEmblemCard';
+import { mountCustomEmblemEditor, renderCustomEmblemSheet, type CustomEmblemEditorController } from './customEmblemEditor';
 
 export type ScreenCleanup = () => void;
 export type LobbyScreenMount = ScreenCleanup & {
@@ -35,6 +38,7 @@ export type LobbyScreenMount = ScreenCleanup & {
   updateRoster(players: LobbyPlayer[], selfId: string): void;
   setUnlockedClassCount(count: number): void;
   setTutorialDisabled(disabled: boolean): void;
+  openCustomEmblemEditor(): void;
 };
 
 export interface LobbyClassCardDefinition {
@@ -151,10 +155,17 @@ export function mountLobbyScreen(
   unlockedClassCount = playerLevel,
   progressUnitsInLevel = 0,
   tutorialDisabled = false,
-  equippedEmblem: OwnablePlayerEmblem | null = null,
+  equippedEmblem: EquippedPlayerEmblem | null = null,
   ownedEmblems: readonly OwnablePlayerEmblem[] = [],
-  onOpenEmblems: (options: { equipped: OwnablePlayerEmblem | null; owned: readonly OwnablePlayerEmblem[]; onChosen(emblem: OwnablePlayerEmblem | null): void }) => void = () => {},
-  faceOptions: { initialFace?: LobbyFace } = {},
+  customEmblem: CustomEmblemMeta | null = null,
+  onOpenEmblems: (options: { equipped: EquippedPlayerEmblem | null; owned: readonly OwnablePlayerEmblem[]; customEmblem: CustomEmblemMeta | null; onChosen(emblem: EquippedPlayerEmblem | null, custom?: CustomEmblemMeta | null): void }) => void = () => {},
+  faceOptions: {
+    initialFace?: LobbyFace;
+    customEmblemEditor?: {
+      load(): Promise<CustomEmblemState | null>;
+      save(document: CustomEmblemDocument, artwork: Blob): Promise<CustomEmblemMeta>;
+    };
+  } = {},
 ): LobbyScreenMount {
   const initialFace = faceOptions.initialFace ?? 'whiteboard';
   const layoutDocument = getLayoutDocument('lobby');
@@ -207,18 +218,20 @@ export function mountLobbyScreen(
   const lobbyElement = (id: string) => layoutDocument.elements.find((item) => item.id === id)!;
 
   const header = sprite(layoutDocument.elements.find((item) => item.id === 'header')!.assets!.src!, 'lobby-screen__header', layoutDocument.copy!.heading);
-  const emblemCard = createPlayerEmblemCard({ name: playerName, level: playerLevel, emblem: equippedEmblem }, clock);
+  const emblemCard = createPlayerEmblemCard({ name: playerName, level: playerLevel, emblem: equippedEmblem, customEmblem }, clock);
   emblemCard.element.classList.add('lobby-screen__emblem-card');
   sprites.push(emblemCard.emblem);
   let activeEmblem = equippedEmblem;
+  let activeCustomEmblem = customEmblem;
   const emblemButton = createGameButton({
     label: 'Change your Emblem', clock,
     upSheet: '/interactive-elements/emblem-button-up-sheet.webp',
     betweenSheet: '/interactive-elements/emblem-button-between-sheet.webp',
     depressedSheet: '/interactive-elements/emblem-button-depressed-sheet.webp',
-    onActivate: () => onOpenEmblems({ equipped: activeEmblem, owned: ownedEmblems, onChosen: (next) => {
+    onActivate: () => onOpenEmblems({ equipped: activeEmblem, owned: ownedEmblems, customEmblem: activeCustomEmblem, onChosen: (next, nextCustom) => {
       activeEmblem = next;
-      emblemCard.setEmblem(next);
+      activeCustomEmblem = nextCustom ?? activeCustomEmblem;
+      emblemCard.setEmblem(next, nextCustom);
     } }),
   });
   emblemButton.element.classList.add('lobby-screen__emblem-button', 'game-button--baked-label');
@@ -297,6 +310,19 @@ export function mountLobbyScreen(
   chatEntry.element.classList.add('lobby-screen__chat-input');
   const chatButton = menuButton('Chat', 'chat-button', 'lobby-screen__chat-button');
   chat.append(chatEntry.element, chatButton);
+  const emblemSave = createGameButton({ label: 'Save Emblem', clock,
+    upSheet: '/interactive-elements/save-emblem-button-up-sheet.webp', betweenSheet: '/interactive-elements/save-emblem-button-between-sheet.webp',
+    depressedSheet: '/interactive-elements/save-emblem-button-depressed-sheet.webp', onActivate: () => saveCustomEmblem() });
+  const emblemFrame = createGameButton({ label: 'Next Frame', clock,
+    upSheet: '/interactive-elements/frame-button-up-sheet.webp', betweenSheet: '/interactive-elements/frame-button-between-sheet.webp',
+    depressedSheet: '/interactive-elements/frame-button-depressed-sheet.webp', onActivate: () => emblemEditor?.cycleFrame() });
+  const emblemCancel = createGameButton({ label: 'Cancel', clock,
+    upSheet: '/interactive-elements/cancel-button-up-sheet.webp', betweenSheet: '/interactive-elements/cancel-button-between-sheet.webp',
+    depressedSheet: '/interactive-elements/cancel-button-depressed-sheet.webp', onActivate: () => cancelEmblemEditing() });
+  for (const button of [emblemSave, emblemFrame, emblemCancel]) {
+    button.element.classList.add('lobby-screen__emblem-control', 'game-button--baked-label'); button.element.hidden = true; gameButtons.push(button);
+  }
+  const emblemStatus = document.createElement('span'); emblemStatus.className = 'lobby-screen__emblem-status'; emblemStatus.setAttribute('role', 'status');
   const faceButtons = new Map<LobbyFace, GameButton>();
   const faceButton = (face: LobbyFace, label: string, sheets: { up: string; between: string; depressed: string }, className: string) => {
     const button = createGameButton({
@@ -369,7 +395,7 @@ export function mountLobbyScreen(
   const tutorialButton = gameButtonByElement.get(actions[1]!.element)!;
   tutorialButton.setDisabled(tutorialDisabled);
   progressionFace.append(...progressElements);
-  whiteboardFace.append(whiteboard, ...tools.map((item) => item.element), chat);
+  whiteboardFace.append(whiteboard, ...tools.map((item) => item.element), chat, emblemSave.element, emblemFrame.element, emblemCancel.element, emblemStatus);
   composition.append(header, ...faceLayers.values(), flip, whiteboardFaceButton.element,
     progressionFaceButton.element, moreVariantsFaceButton.element, comingSoon,
     ...actions.map((item) => item.element), roster, curtainLeft, curtainRight, missions);
@@ -381,6 +407,8 @@ export function mountLobbyScreen(
     { id: 'progression', element: progressionFaceButton.element }, { id: 'more-variants', element: moreVariantsFaceButton.element },
     { id: 'more-variants', element: comingSoon }, ...tools,
     { id: 'chat-input', element: chatEntry.element }, { id: 'chat-button', element: chatButton },
+    { id: 'emblem-save', element: emblemSave.element }, { id: 'emblem-frame', element: emblemFrame.element },
+    { id: 'emblem-cancel', element: emblemCancel.element }, { id: 'emblem-status', element: emblemStatus },
     { id: 'roster-toggle', element: rosterToggle.element }, ...actions, { id: 'roster', element: roster },
     { id: 'curtain-left', element: curtainLeft }, { id: 'curtain-right', element: curtainRight },
   );
@@ -391,10 +419,8 @@ export function mountLobbyScreen(
     setHeld: (held: boolean) => { item.heldImage.hidden = !held; },
   })), progressionFace, () => layoutDocument.canvases[layoutName]);
   container.replaceChildren(screen);
-  const whiteboardController = mountWhiteboard({
-    board: whiteboard, composition: whiteboardFace, toolButtons, clock,
-    isPortrait: () => layoutName === 'portrait', send: sendWhiteboard,
-  });
+  const toolController = mountWhiteboardTools({ board: whiteboard, composition: whiteboardFace, buttons: toolButtons, clock, isPortrait: () => layoutName === 'portrait' });
+  const whiteboardController = mountWhiteboard({ board: whiteboard, tools: toolController, clock, send: sendWhiteboard });
   const rotationLease = assetLoader.retainUrls([...WHITEBOARD_ROTATION_FRAMES, ...PAPER_ROTATION_FRAMES]);
   const progressEmpty = new Image(); progressEmpty.src = '/visual-elements/progress-bar-empty-sheet.webp';
   const progressFull = new Image(); progressFull.src = '/visual-elements/progress-bar-full-sheet.webp';
@@ -434,6 +460,10 @@ export function mountLobbyScreen(
   let animatingFace = false;
   let connected = true;
   let destroyed = false;
+  let emblemEditing = false;
+  let emblemSaving = false;
+  let emblemEditor: CustomEmblemEditorController | undefined;
+  let emblemEditorRevision = 0;
 
   function applyFaceState(): void {
     const showLiveBoard = activeFace === 'whiteboard' && !animatingFace;
@@ -441,10 +471,19 @@ export function mountLobbyScreen(
     for (const [face, layer] of faceLayers) layer.hidden = animatingFace || face !== activeFace;
     classCardDrag?.setEnabled(showProgression);
     flip.hidden = !animatingFace;
-    whiteboardController.setEnabled(connected && showLiveBoard);
-    chatEntry.input.disabled = !connected || !showLiveBoard;
-    gameButtonByElement.get(chatButton)?.setDisabled(!connected || !showLiveBoard);
-    for (const [face, button] of faceButtons) button.setDisabled(face === 'more-variants' || !connected || animatingFace || face === activeFace);
+    whiteboardController.setEnabled(connected && showLiveBoard && !emblemEditing);
+    toolController.setEnabled(connected && showLiveBoard);
+    chat.hidden = emblemEditing;
+    emblemSave.element.hidden = !emblemEditing;
+    emblemFrame.element.hidden = !emblemEditing;
+    emblemCancel.element.hidden = !emblemEditing;
+    emblemStatus.hidden = !emblemEditing;
+    emblemSave.setDisabled(!connected || emblemSaving || !emblemEditor);
+    emblemFrame.setDisabled(!connected || emblemSaving || !emblemEditor);
+    emblemCancel.setDisabled(emblemSaving);
+    chatEntry.input.disabled = !connected || !showLiveBoard || emblemEditing;
+    gameButtonByElement.get(chatButton)?.setDisabled(!connected || !showLiveBoard || emblemEditing);
+    for (const [face, button] of faceButtons) button.setDisabled(face === 'more-variants' || !connected || animatingFace || emblemEditing || face === activeFace);
   }
 
   async function setLobbyFace(face: LobbyFace): Promise<void> {
@@ -464,6 +503,52 @@ export function mountLobbyScreen(
     animatingFace = false;
     applyFaceState();
   }
+  async function finishEmblemEditing(): Promise<void> {
+    emblemEditorRevision++;
+    emblemEditor?.destroy(); emblemEditor = undefined;
+    toolController.release();
+    emblemEditing = false; emblemSaving = false; emblemStatus.textContent = '';
+    applyFaceState();
+    if (activeFace !== 'progression') await setLobbyFace('progression');
+  }
+  async function openCustomEmblemEditor(): Promise<void> {
+    const config = faceOptions.customEmblemEditor;
+    if (!config || emblemEditing || animatingFace || destroyed) return;
+    matchmakingToggle.setPressed(false); onMatchmakingChange(false);
+    emblemEditing = true; emblemSaving = false; emblemStatus.textContent = 'Loading…';
+    const revision = ++emblemEditorRevision;
+    applyFaceState();
+    const load = config.load();
+    await setLobbyFace('whiteboard');
+    try {
+      const state = await load;
+      if (destroyed || revision !== emblemEditorRevision) return;
+      emblemEditor = mountCustomEmblemEditor({
+        board: whiteboard, tools: toolController, clock,
+        initial: state ?? structuredClone(DEFAULT_CUSTOM_EMBLEM_DOCUMENT),
+        changed: () => { emblemStatus.textContent = ''; },
+      });
+      emblemStatus.textContent = '';
+    } catch {
+      if (revision === emblemEditorRevision) emblemStatus.textContent = 'Could not load emblem.';
+    }
+    applyFaceState();
+  }
+  const cancelEmblemEditing = () => { if (!emblemSaving) void finishEmblemEditing(); };
+  const saveCustomEmblem = () => {
+    const config = faceOptions.customEmblemEditor;
+    if (!config || !emblemEditor || emblemSaving) return;
+    emblemSaving = true; emblemStatus.textContent = 'Saving…'; applyFaceState();
+    const emblemDocument = emblemEditor.document();
+    void renderCustomEmblemSheet(emblemDocument).then((artwork) => config.save(emblemDocument, artwork)).then((meta) => {
+      activeEmblem = 'custom'; activeCustomEmblem = meta; emblemCard.setEmblem('custom', meta);
+      return finishEmblemEditing();
+    }).catch((reason) => {
+      emblemSaving = false;
+      emblemStatus.textContent = reason instanceof Error ? reason.message : 'Could not save emblem.';
+      applyFaceState();
+    });
+  };
   applyFaceState();
   const submitChat = (event: Event) => {
     event.preventDefault();
@@ -489,7 +574,9 @@ export function mountLobbyScreen(
     matchmakingToggle.destroy();
     chat.removeEventListener('submit', submitChat);
     chatButton.removeEventListener('click', submitChat);
+    emblemEditor?.destroy();
     whiteboardController.destroy();
+    toolController.destroy();
     missions.remove();
     screen.remove();
   }) as LobbyScreenMount;
@@ -502,8 +589,9 @@ export function mountLobbyScreen(
     gameButtonByElement.get(chatButton)?.setDisabled(unavailable || !whiteboardActive);
     rosterToggle.setDisabled(unavailable);
     matchmakingToggle.setDisabled(unavailable);
-    whiteboardController.setEnabled(!unavailable && whiteboardActive);
-    for (const [face, button] of faceButtons) button.setDisabled(face === 'more-variants' || unavailable || animatingFace || face === activeFace);
+    whiteboardController.setEnabled(!unavailable && whiteboardActive && !emblemEditing);
+    for (const [face, button] of faceButtons) button.setDisabled(face === 'more-variants' || unavailable || animatingFace || emblemEditing || face === activeFace);
+    applyFaceState();
   };
   cleanup.setMatchmaking = (active) => matchmakingToggle.setPressed(active);
   cleanup.receiveWhiteboard = (message) => whiteboardController.receive(message);
@@ -521,6 +609,7 @@ export function mountLobbyScreen(
     attachNewestClassSpike();
   };
   cleanup.setTutorialDisabled = (disabled) => tutorialButton.setDisabled(disabled);
+  cleanup.openCustomEmblemEditor = () => { void openCustomEmblemEditor(); };
   return cleanup;
 }
 

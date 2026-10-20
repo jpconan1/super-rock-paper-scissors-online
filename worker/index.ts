@@ -29,7 +29,8 @@ import {
   PLAYER_NAME_MAX_LENGTH, normalizePlayerDisplayName, playerProfile,
 } from '../src/protocol/playerProfile';
 import { claimReadablePlayerId, type PlayerAccountType } from '../src/protocol/playerId';
-import { FREE_PLAYER_EMBLEM_IDS, isOwnablePlayerEmblem, type OwnablePlayerEmblem } from '../src/core/playerEmblem';
+import { FREE_PLAYER_EMBLEM_IDS, isEquippedPlayerEmblem, isOwnablePlayerEmblem, type EquippedPlayerEmblem, type OwnablePlayerEmblem } from '../src/core/playerEmblem';
+import { CUSTOM_EMBLEM_HEIGHT, CUSTOM_EMBLEM_FRAME_COUNT, CUSTOM_EMBLEM_MAX_DOCUMENT_BYTES, CUSTOM_EMBLEM_MAX_IMAGE_BYTES, CUSTOM_EMBLEM_WIDTH, isCustomEmblemDocument, type CustomEmblemMeta } from '../src/core/customEmblem';
 import { EMBLEM_MISSION_IDS, type EmblemMissionStatus } from '../src/core/emblemMission';
 import { createAuth, PRIVACY_VERSION, TERMS_VERSION, type AuthEnv } from './auth';
 import { createResendMailer, type AuthMailer } from './resendMailer';
@@ -327,7 +328,7 @@ export class MatchmakerObject extends DurableObject<Env> {
       await this.ctx.storage.delete(ticketKey);
     }
     const queue = (await this.ctx.storage.get<MatchmakingQueueEntry[]>('queue')) ?? [];
-    const refreshed = refreshMatchmakingQueue(queue, guestId, attemptId, name, player.rating, now, MATCHMAKING_QUEUE_TTL_MS, player.totalProgressUnits, player.unlockAllClasses, player.equippedEmblem);
+    const refreshed = refreshMatchmakingQueue(queue, guestId, attemptId, name, player.rating, now, MATCHMAKING_QUEUE_TTL_MS, player.totalProgressUnits, player.unlockAllClasses, player.equippedEmblem, player.customEmblem);
     if (refreshed.ownedElsewhere) return { status: 'owned-elsewhere' };
     await this.env.DB.prepare(`INSERT OR IGNORE INTO matchmaking_attempts (attempt_id, player_id, started_at) VALUES (?, ?, ?)`)
       .bind(attemptId, guestId, now).run();
@@ -342,8 +343,8 @@ export class MatchmakerObject extends DurableObject<Env> {
     const id = this.env.MATCHES.newUniqueId();
     const matchId = id.toString();
     const initialized = await this.env.MATCHES.get(id).initialize(matchId, {
-      p1: { name: opponent.name, platform: 'Web', rating: opponent.rating, level: progressionForTotal(opponent.totalProgressUnits ?? 0).level, emblem: opponent.equippedEmblem },
-      p2: { name, platform: 'Web', rating: player.rating, level: progressionForTotal(player.totalProgressUnits).level, emblem: player.equippedEmblem },
+      p1: { name: opponent.name, platform: 'Web', rating: opponent.rating, level: progressionForTotal(opponent.totalProgressUnits ?? 0).level, emblem: opponent.equippedEmblem, customEmblem: opponent.customEmblem },
+      p2: { name, platform: 'Web', rating: player.rating, level: progressionForTotal(player.totalProgressUnits).level, emblem: player.equippedEmblem, customEmblem: player.customEmblem },
     }, { p1: opponent.guestId, p2: guestId }, 'abm-only', {
       p1: opponent.totalProgressUnits ?? 0, p2: player.totalProgressUnits,
     }, {
@@ -756,13 +757,15 @@ export async function applyLocalProgressAward(db: D1Database, playerId: string, 
 class GuestAuthError extends Error {}
 class LocalProgressAwardConflictError extends Error {}
 
-interface AuthenticatedPlayer { playerId: string; displayName: string; rating: number; totalProgressUnits: number; unlockAllClasses: boolean; equippedEmblem: OwnablePlayerEmblem | null; accountType: PlayerAccountType; isTest: boolean }
+interface AuthenticatedPlayer { playerId: string; displayName: string; rating: number; totalProgressUnits: number; unlockAllClasses: boolean; equippedEmblem: EquippedPlayerEmblem | null; customEmblem: CustomEmblemMeta | null; accountType: PlayerAccountType; isTest: boolean }
 
-async function getPlayer(db: D1Database, playerId: string): Promise<{ displayName: string; rating: number; totalProgressUnits: number; unlockAllClasses: boolean; equippedEmblem: OwnablePlayerEmblem | null }> {
+async function getPlayer(db: D1Database, playerId: string): Promise<{ displayName: string; rating: number; totalProgressUnits: number; unlockAllClasses: boolean; equippedEmblem: EquippedPlayerEmblem | null; customEmblem: CustomEmblemMeta | null }> {
   const player = await db.prepare('SELECT display_name, rating, total_progress_units, unlock_all_classes, equipped_emblem FROM players WHERE player_id = ?').bind(playerId)
-    .first<{ display_name: string; rating: number; total_progress_units: number; unlock_all_classes: number; equipped_emblem: OwnablePlayerEmblem | null }>();
+    .first<{ display_name: string; rating: number; total_progress_units: number; unlock_all_classes: number; equipped_emblem: EquippedPlayerEmblem | null }>();
   if (!player) throw new GuestAuthError('Player not found.');
-  return { displayName: player.display_name, rating: player.rating, totalProgressUnits: player.total_progress_units, unlockAllClasses: player.unlock_all_classes === 1, equippedEmblem: player.equipped_emblem };
+  const customEmblem = await customEmblemMeta(db, playerId);
+  return { displayName: player.display_name, rating: player.rating, totalProgressUnits: player.total_progress_units, unlockAllClasses: player.unlock_all_classes === 1,
+    equippedEmblem: player.equipped_emblem === 'custom' && !customEmblem ? null : player.equipped_emblem, customEmblem };
 }
 
 async function authenticateRequestPlayer(request: Request, env: Env): Promise<AuthenticatedPlayer> {
@@ -770,22 +773,32 @@ async function authenticateRequestPlayer(request: Request, env: Env): Promise<Au
   if (!session) throw new GuestAuthError('Authentication required.');
   const player = await env.DB.prepare(`SELECT p.player_id, p.display_name, p.rating, p.total_progress_units, p.unlock_all_classes, p.equipped_emblem, p.account_type,
     CASE WHEN t.player_id IS NULL THEN 0 ELSE 1 END is_test FROM players p LEFT JOIN test_players t ON t.player_id = p.player_id WHERE p.auth_user_id = ?`)
-    .bind(session.user.id).first<{ player_id: string; display_name: string; rating: number; total_progress_units: number; unlock_all_classes: number; equipped_emblem: OwnablePlayerEmblem | null; account_type: PlayerAccountType; is_test: number }>();
+    .bind(session.user.id).first<{ player_id: string; display_name: string; rating: number; total_progress_units: number; unlock_all_classes: number; equipped_emblem: EquippedPlayerEmblem | null; account_type: PlayerAccountType; is_test: number }>();
   if (!player) throw new GuestAuthError('Player not found.');
+  const customEmblem = await customEmblemMeta(env.DB, player.player_id);
   return { playerId: player.player_id, displayName: player.display_name, rating: player.rating, totalProgressUnits: player.total_progress_units,
-    unlockAllClasses: player.unlock_all_classes === 1, equippedEmblem: player.equipped_emblem, accountType: player.account_type, isTest: player.is_test === 1 };
+    unlockAllClasses: player.unlock_all_classes === 1, equippedEmblem: player.equipped_emblem === 'custom' && !customEmblem ? null : player.equipped_emblem,
+    customEmblem, accountType: player.account_type, isTest: player.is_test === 1 };
 }
 
 interface PlayerProfileRow {
   player_id: string; display_name: string; rating: number; total_progress_units: number; unlock_all_classes: number;
-  equipped_emblem: OwnablePlayerEmblem | null; account_type: PlayerAccountType;
+  equipped_emblem: EquippedPlayerEmblem | null; account_type: PlayerAccountType;
 }
 
 async function profileForRow(db: D1Database, player: PlayerProfileRow) {
   const owned = await ownedPlayerEmblems(db, player.player_id);
-  const equipped = player.equipped_emblem && owned.includes(player.equipped_emblem) ? player.equipped_emblem : null;
+  const custom = await customEmblemMeta(db, player.player_id);
+  const equipped = player.equipped_emblem === 'custom' ? (custom ? 'custom' : null)
+    : player.equipped_emblem && owned.includes(player.equipped_emblem) ? player.equipped_emblem : null;
   return playerProfile(player.player_id, player.account_type, player.display_name, player.rating, player.total_progress_units,
-    player.unlock_all_classes === 1, equipped, owned);
+    player.unlock_all_classes === 1, equipped, owned, custom);
+}
+
+async function customEmblemMeta(db: D1Database, playerId: string): Promise<CustomEmblemMeta | null> {
+  const row = await db.prepare('SELECT border_number, updated_at FROM custom_emblems WHERE player_id = ?').bind(playerId)
+    .first<{ border_number: number; updated_at: number }>();
+  return row ? { playerId, borderNumber: row.border_number, version: row.updated_at } : null;
 }
 
 async function currentPlayerProfile(db: D1Database, playerId: string) {
@@ -1234,6 +1247,15 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
     }
     if (url.pathname.startsWith('/api/auth/')) return createAuth(env).handler(request);
     if (url.pathname === '/health') return json({ ok: true });
+    if (url.pathname.startsWith('/custom-emblems/') && request.method === 'GET') {
+      const playerId = decodeURIComponent(url.pathname.slice('/custom-emblems/'.length).replace(/\.webp$/, ''));
+      if (!playerId || playerId.length > 128) return json({ error: 'Invalid player.' }, 400);
+      const row = await env.DB.prepare('SELECT artwork_webp FROM custom_emblems WHERE player_id = ?').bind(playerId)
+        .first<{ artwork_webp: ArrayBuffer | number[] }>();
+      if (!row) return json({ error: 'Custom emblem not found.' }, 404);
+      const artwork = row.artwork_webp instanceof ArrayBuffer ? new Uint8Array(row.artwork_webp) : Uint8Array.from(row.artwork_webp);
+      return new Response(artwork, { headers: { 'content-type': 'image/webp', 'content-length': String(artwork.byteLength), 'cache-control': 'public, max-age=31536000, immutable', 'x-content-type-options': 'nosniff' } });
+    }
     if (url.pathname === '/auth-capabilities') return json({
       emailSignup: emailSignupEnabled(env), emailCodeLogin: emailSignupEnabled(env), password: emailSignupEnabled(env),
     });
@@ -1337,11 +1359,16 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
         const authSession = await createAuth(env).api.getSession({ headers: request.headers });
         if (!authSession) return json({ error: 'Authentication required.' }, 401);
         const body = await readJsonBody<{ emblem?: unknown }>(request, 1_000);
-        if (body.emblem !== null && !isOwnablePlayerEmblem(body.emblem)) return json({ error: 'Unknown emblem.' }, 400);
-        if (body.emblem !== null && !FREE_PLAYER_EMBLEM_IDS.includes(body.emblem)) {
+        if (body.emblem !== null && !isEquippedPlayerEmblem(body.emblem)) return json({ error: 'Unknown emblem.' }, 400);
+        if (body.emblem !== null && body.emblem !== 'custom' && !FREE_PLAYER_EMBLEM_IDS.includes(body.emblem)) {
           const owned = await env.DB.prepare(`SELECT 1 present FROM player_emblems pe JOIN players p ON p.player_id = pe.player_id
             WHERE p.auth_user_id = ? AND pe.emblem_id = ? AND pe.revoked_at IS NULL`).bind(authSession.user.id, body.emblem).first();
           if (!owned) return json({ error: 'Emblem is not owned.' }, 403);
+        }
+        if (body.emblem === 'custom') {
+          const owned = await env.DB.prepare(`SELECT 1 present FROM custom_emblems ce JOIN players p ON p.player_id = ce.player_id
+            WHERE p.auth_user_id = ?`).bind(authSession.user.id).first();
+          if (!owned) return json({ error: 'Custom emblem does not exist.' }, 403);
         }
         await env.DB.prepare('UPDATE players SET equipped_emblem = ?, updated_at = ? WHERE auth_user_id = ?')
           .bind(body.emblem, Date.now(), authSession.user.id).run();
@@ -1352,6 +1379,53 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
       } catch (error) {
         if (error instanceof RequestBodyError) return json({ error: error.message }, error.status);
         return json({ error: 'Emblem update failed.' }, 500);
+      }
+    }
+    if (url.pathname === '/custom-emblem' && request.method === 'GET') {
+      const player = await authenticateRequestPlayer(request, env).catch(() => null);
+      if (!player) return json({ error: 'Authentication required.' }, 401);
+      const row = await env.DB.prepare('SELECT drawing_json, updated_at FROM custom_emblems WHERE player_id = ?').bind(player.playerId)
+        .first<{ drawing_json: string; updated_at: number }>();
+      if (!row) return json(null);
+      try { return json({ ...JSON.parse(row.drawing_json) as object, version: row.updated_at }); }
+      catch { return json({ error: 'Stored custom emblem is invalid.' }, 500); }
+    }
+    if (url.pathname === '/custom-emblem' && request.method === 'PUT') {
+      try {
+        const player = await authenticateRequestPlayer(request, env);
+        const contentLength = Number(request.headers.get('content-length') ?? 0);
+        if (contentLength > CUSTOM_EMBLEM_MAX_DOCUMENT_BYTES + CUSTOM_EMBLEM_MAX_IMAGE_BYTES + 50_000) return json({ error: 'Custom emblem is too large.' }, 413);
+        const form = await request.formData();
+        const documentJson = form.get('document');
+        const artwork = form.get('artwork');
+        if (typeof documentJson !== 'string' || new TextEncoder().encode(documentJson).byteLength > CUSTOM_EMBLEM_MAX_DOCUMENT_BYTES
+          || !(artwork instanceof File) || artwork.type !== 'image/webp' || artwork.size < 1 || artwork.size > CUSTOM_EMBLEM_MAX_IMAGE_BYTES) {
+          return json({ error: 'Invalid custom emblem payload.' }, 400);
+        }
+        const document = JSON.parse(documentJson) as unknown;
+        if (!isCustomEmblemDocument(document)) return json({ error: 'Invalid custom emblem document.' }, 400);
+        const bytes = await artwork.arrayBuffer();
+        const dimensions = webpDimensions(bytes);
+        if (!dimensions || dimensions.width !== CUSTOM_EMBLEM_WIDTH || dimensions.height !== CUSTOM_EMBLEM_HEIGHT * CUSTOM_EMBLEM_FRAME_COUNT) {
+          return json({ error: 'Artwork must be a 256 by 384 WebP sheet.' }, 400);
+        }
+        const previous = await env.DB.prepare('SELECT updated_at FROM custom_emblems WHERE player_id = ?').bind(player.playerId).first<{ updated_at: number }>();
+        const version = Math.max(Date.now(), (previous?.updated_at ?? 0) + 1);
+        await env.DB.batch([
+          env.DB.prepare(`INSERT INTO custom_emblems
+            (player_id, drawing_json, crop_x, crop_y, crop_width, crop_height, border_number, artwork_webp, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(player_id) DO UPDATE SET drawing_json = excluded.drawing_json, crop_x = excluded.crop_x,
+              crop_y = excluded.crop_y, crop_width = excluded.crop_width, crop_height = excluded.crop_height, border_number = excluded.border_number,
+              artwork_webp = excluded.artwork_webp, updated_at = excluded.updated_at`)
+            .bind(player.playerId, documentJson, document.crop.x, document.crop.y, document.crop.width, document.crop.height, document.borderNumber, bytes, version),
+          env.DB.prepare("UPDATE players SET equipped_emblem = 'custom', updated_at = ? WHERE player_id = ?").bind(version, player.playerId),
+        ]);
+        return json(await currentPlayerProfile(env.DB, player.playerId));
+      } catch (error) {
+        if (error instanceof SyntaxError) return json({ error: 'Invalid custom emblem document.' }, 400);
+        if (error instanceof GuestAuthError) return json({ error: error.message }, 401);
+        return json({ error: 'Custom emblem save failed.' }, 500);
       }
     }
     if (url.pathname === '/emblem-missions' && request.method === 'GET') {
@@ -1498,6 +1572,26 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
       return url.pathname === '/lobby' ? env.LOBBY.getByName('global').fetch(request) : env.WHITEBOARD.getByName('global').fetch(request);
     }
     return json({ error: 'Not found.' }, 404);
+}
+
+function webpDimensions(buffer: ArrayBuffer): { width: number; height: number } | null {
+  const bytes = new Uint8Array(buffer); if (bytes.length < 30) return null;
+  const ascii = (start: number, length: number) => String.fromCharCode(...bytes.slice(start, start + length));
+  if (ascii(0, 4) !== 'RIFF' || ascii(8, 4) !== 'WEBP') return null;
+  const kind = ascii(12, 4); const offset = 20;
+  if (kind === 'VP8X' && bytes.length >= offset + 10) return {
+    width: 1 + bytes[offset + 4]! + bytes[offset + 5]! * 256 + bytes[offset + 6]! * 65_536,
+    height: 1 + bytes[offset + 7]! + bytes[offset + 8]! * 256 + bytes[offset + 9]! * 65_536,
+  };
+  if (kind === 'VP8 ' && bytes.length >= offset + 10 && bytes[offset + 3] === 0x9d && bytes[offset + 4] === 0x01 && bytes[offset + 5] === 0x2a) return {
+    width: (bytes[offset + 6]! | bytes[offset + 7]! << 8) & 0x3fff,
+    height: (bytes[offset + 8]! | bytes[offset + 9]! << 8) & 0x3fff,
+  };
+  if (kind === 'VP8L' && bytes.length >= offset + 5 && bytes[offset] === 0x2f) {
+    const bits = bytes[offset + 1]! | bytes[offset + 2]! << 8 | bytes[offset + 3]! << 16 | bytes[offset + 4]! << 24;
+    return { width: (bits & 0x3fff) + 1, height: ((bits >>> 14) & 0x3fff) + 1 };
+  }
+  return null;
 }
 
 async function beginAdminGoogleLogin(request: Request, env: Env, url: URL): Promise<Response> {

@@ -22,4 +22,11 @@ describe('player profiles', () => {
     expect(isPlayerProfile({ ...profile, equippedEmblem: 'computer' })).toBe(false);
     expect(isPlayerProfile({ ...profile, equippedEmblem: 'unknown' })).toBe(false);
   });
+
+  test('requires metadata for an equipped custom emblem', () => {
+    const profile = { playerId: 'anchor-chill-pizza-turtle-00', accountType: 'guest', displayName: 'Player', rating: 1500, equippedEmblem: 'custom', ownedEmblems: [],
+      customEmblem: { playerId: 'anchor-chill-pizza-turtle-00', version: 123, borderNumber: 28 } };
+    expect(isPlayerProfile(profile)).toBe(true);
+    expect(isPlayerProfile({ ...profile, customEmblem: null })).toBe(false);
+  });
 });

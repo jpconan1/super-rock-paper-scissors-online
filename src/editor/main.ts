@@ -12,7 +12,7 @@ import { curtainOpenAsset } from '../renderer/curtainWipe';
 import { applyAlertGeometry } from '../ui/fixedAlertCanvas';
 import { createPlayerEmblemCard } from '../ui/playerEmblemCard';
 import { abmEditorGeometry, getEditorMirrorUpdate, isAbmBattleEditorElement, isAbmCounterpickThoughtBubbleEditorContext, isAbmCounterpickThoughtBubbleEditorElement, isAbmPostMatchEditorElement, isAbmTutorialBlockTagEditorContext, isAbmTutorialBlockTagEditorElement, isAbmWaitingEditorElement, isEditorElementVisible, resizeEditorGeometry, setAbmEditorGeometry } from './abmEditorModel';
-import { isLobbyEditorElementEditable, isLobbyProgressionEditorElement } from './lobbyEditorModel';
+import { isLobbyEditorElementVisible, isLobbyStateElementEditable, type LobbyEditorState } from './lobbyEditorModel';
 
 const hostElement = document.querySelector<HTMLElement>('#editor');
 if (!hostElement) throw new Error('Missing editor mount.');
@@ -22,6 +22,7 @@ type EditorScreen = 'lobby' | 'account' | 'variant-abm' | 'class-reward' | 'tuto
 type RewardState = 'unlocked' | 'next';
 type AbmState = 'battle' | 'waiting' | 'counterpick-thought-bubble' | 'tutorial-block-tags' | 'post-match';
 type AccountState = 'google' | 'email' | 'guest';
+const LOBBY_WHITEBOARD_TOOL_IDS = new Set(['black-marker', 'red-marker', 'blue-marker', 'purple-marker', 'green-marker', 'eraser']);
 const drafts = new Map<EditorScreen, LayoutDocument>();
 const savedDocuments = new Map<EditorScreen, LayoutDocument>();
 for (const id of ['lobby', 'account', 'variant-abm', 'class-reward', 'tutorial-slide-one'] as const) {
@@ -32,6 +33,7 @@ let screen: EditorScreen = 'lobby';
 let accountState: AccountState = 'email';
 let rewardState: RewardState = 'unlocked';
 let abmState: AbmState = 'battle';
+let lobbyState: LobbyEditorState = 'progression';
 let working = drafts.get(screen)!;
 let saved = savedDocuments.get(screen)!;
 let orientation: LayoutOrientation = 'landscape';
@@ -70,11 +72,11 @@ const visibleElements = () => working.elements.filter((element) => screen === 'v
       : abmState === 'counterpick-thought-bubble' ? isAbmCounterpickThoughtBubbleEditorContext(element)
         : abmState === 'tutorial-block-tags' ? isAbmTutorialBlockTagEditorContext(element)
         : isAbmBattleEditorElement(element))
-  : screen === 'lobby' ? isLobbyProgressionEditorElement(element)
+  : screen === 'lobby' ? isLobbyEditorElementVisible(element, lobbyState)
     : screen === 'class-reward' ? isEditorElementVisible(element, rewardState)
     : screen === 'account' ? accountElementVisible(element) : true);
 const editableElements = () => visibleElements().filter((element) => {
-  if (screen === 'lobby') return isLobbyEditorElementEditable(element);
+  if (screen === 'lobby') return isLobbyStateElementEditable(element, lobbyState);
   if (element.id.startsWith('curtain-')) return false;
   return screen !== 'variant-abm'
     || (abmState !== 'counterpick-thought-bubble' && abmState !== 'tutorial-block-tags')
@@ -96,8 +98,10 @@ function render(): void {
     else node.classList.add('is-reference');
     node.classList.toggle('is-selected', config.id === selectedId);
     if (configs.some(({ parent }) => parent === config.id)) { node.classList.add('is-structural'); node.textContent = ''; }
-    applyEditorNodeGeometry(node, config, screen === 'variant-abm' ? editorGeometry(config) : config.layouts[orientation]); node.style.zIndex = String(config.layer ?? 0); nodes.set(config.id, node);
+    applyEditorNodeGeometry(node, config, screen === 'variant-abm' ? editorGeometry(config) : config.layouts[orientation]);
+    node.style.zIndex = String(screen === 'lobby' && LOBBY_WHITEBOARD_TOOL_IDS.has(config.id) ? 5 : config.layer ?? 0); nodes.set(config.id, node);
   }
+  if (screen === 'lobby' && lobbyState === 'custom-emblem') addCustomEmblemPreview(nodes.get('whiteboard'));
   for (const config of configs) {
     const node = nodes.get(config.id)!;
     const parent = config.parent ? nodes.get(config.parent) : undefined;
@@ -115,7 +119,7 @@ function render(): void {
   renderList(); renderInspector(); updateToolbar(); applyZoom();
   $('[data-title]').textContent = screen === 'variant-abm'
     ? `Attack Block Mana · ${abmState === 'battle' ? 'Game screen' : abmState === 'waiting' ? 'Waiting' : abmState === 'counterpick-thought-bubble' ? 'Counterpick thought bubble' : abmState === 'tutorial-block-tags' ? 'Tutorial Block tags' : 'Post-match XP'}`
-    : screen === 'lobby' ? 'Lobby · Progression'
+    : screen === 'lobby' ? `Lobby · ${lobbyState === 'progression' ? 'Progression' : lobbyState === 'shared-whiteboard' ? 'Shared Whiteboard' : 'Custom Emblem'}`
       : screen === 'class-reward' ? `Class Reward · ${rewardState === 'unlocked' ? 'Class Unlocked' : 'Next Class'}`
       : screen === 'account' ? `Profile · ${accountState === 'google' ? 'Google account' : accountState === 'email' ? 'Email account' : 'Guest account'}` : 'Tutorial · Slide 1';
 }
@@ -137,6 +141,11 @@ function renderTutorialBackdrop(canvas: HTMLElement): void {
 
 function makeNode(config: LayoutElement): HTMLElement {
   const className = `abm-editor__node abm-editor__node--${config.type}${config.className ? ` ${config.className}` : ''}`;
+  if (screen === 'lobby' && config.id === 'whiteboard' && config.assets?.src) {
+    const wrapper = document.createElement('div'); wrapper.className = `${className} abm-editor__whiteboard-preview`;
+    const image = document.createElement('img'); image.src = config.assets.src; image.alt = ''; image.draggable = false; wrapper.append(image);
+    cleanups.push(() => wrapper.remove()); return wrapper;
+  }
   if (screen === 'lobby' && config.id === 'player-name') {
     const card = createPlayerEmblemCard({ name: '-Monkey D. Vega-', level: 7, emblem: 'new-player' }, clock);
     const wrapper = document.createElement('div'); wrapper.className = className;
@@ -190,6 +199,14 @@ function makeNode(config: LayoutElement): HTMLElement {
     const text = document.createElement('span'); text.textContent = previewText(config); node.append(text);
   } else node.textContent = previewText(config);
   cleanups.push(() => node.remove()); return node;
+}
+
+function addCustomEmblemPreview(board: HTMLElement | undefined): void {
+  if (!board) return;
+  const drawing = document.createElement('div'); drawing.className = 'abm-editor__emblem-drawing';
+  const frame = document.createElement('div'); frame.className = 'abm-editor__emblem-frame-reference';
+  const handle = document.createElement('span'); handle.className = 'abm-editor__emblem-frame-handle';
+  frame.append(handle); drawing.append(frame); board.prepend(drawing);
 }
 
 function previewText(config: LayoutElement): string {
@@ -310,21 +327,24 @@ $<HTMLSelectElement>('[data-screen]').onchange = (event) => {
   selectedId = undefined; history = []; future = []; syncStateOptions(); render(); fit(); status('');
 };
 $<HTMLSelectElement>('[data-state]').onchange = (event) => {
-  if (screen === 'account') accountState = (event.target as HTMLSelectElement).value as AccountState;
+  if (screen === 'lobby') lobbyState = (event.target as HTMLSelectElement).value as LobbyEditorState;
+  else if (screen === 'account') accountState = (event.target as HTMLSelectElement).value as AccountState;
   else if (screen === 'class-reward') rewardState = (event.target as HTMLSelectElement).value as RewardState;
   else abmState = (event.target as HTMLSelectElement).value as AbmState;
   selectedId = undefined; render();
 };
 function syncStateOptions(): void {
   const select = $<HTMLSelectElement>('[data-state]');
-  $<HTMLElement>('[data-state-label]').hidden = screen === 'tutorial-slide-one' || screen === 'lobby';
-  if (screen === 'tutorial-slide-one' || screen === 'lobby') { select.replaceChildren(); return; }
-  select.innerHTML = screen === 'account'
+  $<HTMLElement>('[data-state-label]').hidden = screen === 'tutorial-slide-one';
+  if (screen === 'tutorial-slide-one') { select.replaceChildren(); return; }
+  select.innerHTML = screen === 'lobby'
+    ? '<option value="progression">Progression</option><option value="shared-whiteboard">Shared Whiteboard</option><option value="custom-emblem">Custom Emblem</option>'
+    : screen === 'account'
     ? '<option value="google">Logged in with Google</option><option value="email">Logged in with email</option><option value="guest">Guest</option>'
     : screen === 'class-reward'
     ? '<option value="unlocked">Class Unlocked</option><option value="next">Next Class</option>'
     : '<option value="battle">Battle</option><option value="waiting">Waiting</option><option value="counterpick-thought-bubble">Counterpick thought bubble</option><option value="tutorial-block-tags">Tutorial Block tags</option><option value="post-match">Post-match XP fill</option>';
-  select.value = screen === 'account' ? accountState : screen === 'class-reward' ? rewardState : abmState;
+  select.value = screen === 'lobby' ? lobbyState : screen === 'account' ? accountState : screen === 'class-reward' ? rewardState : abmState;
 }
 $<HTMLSelectElement>('[data-orientation]').onchange = (event) => { orientation = (event.target as HTMLSelectElement).value as LayoutOrientation; selectedId = undefined; render(); fit(); };
 $<HTMLButtonElement>('[data-undo]').onclick = undo; $<HTMLButtonElement>('[data-redo]').onclick = redo; $<HTMLButtonElement>('[data-reset]').onclick = reset;

@@ -4,6 +4,7 @@ import type { SlotId } from '../core/slots';
 import type { PlayerId, VariantGameResult } from '../core/variant';
 import type { ProgressAward } from '../core/progression';
 import type { PlayerEmblem } from '../core/playerEmblem';
+import type { CustomEmblemMeta } from '../core/customEmblem';
 
 export interface ClientCommand<TPayload = unknown> {
   protocolVersion: typeof PROTOCOL_VERSION;
@@ -40,7 +41,7 @@ export interface ServerSnapshot<TProjection = unknown> {
 
 export type MatchPhase = 'match-found' | 'selecting' | 'scoreboard' | 'playing' | 'banning' | 'final-scoreboard' | 'complete';
 export type { PlayerEmblem } from '../core/playerEmblem';
-export interface MatchPlayer { name: string; platform: string; rating: number; level?: number; emblem?: PlayerEmblem | null }
+export interface MatchPlayer { name: string; platform: string; rating: number; level?: number; emblem?: PlayerEmblem | 'custom' | null; customEmblem?: CustomEmblemMeta | null }
 export interface CompletedGame extends VariantGameResult { slotId: SlotId }
 export interface MatchProjection {
   phase: MatchPhase;

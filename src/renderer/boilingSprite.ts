@@ -37,6 +37,7 @@ export interface BoilingSpriteOptions {
 export interface BoilingSprite {
   element: HTMLDivElement;
   setSource(src: string, frameCount?: number): void;
+  setOutline(outline?: { src: string; chromaKey: readonly [number, number, number] }): void;
   whenReady(): Promise<void>;
   setFrame(frame: number): void;
   setArtworkVisible(visible: boolean): void;
@@ -82,7 +83,7 @@ export function createBoilingSprite(options: BoilingSpriteOptions): BoilingSprit
   const context = canvas.getContext('2d') ?? failCanvasContext();
 
   const image = new Image();
-  const outlineImage = options.outline ? new Image() : null;
+  const outlineImage = new Image();
   const defaultFrameCount = options.frameCount ?? BOIL_FRAME_COUNT;
 
   let frame = 0;
@@ -94,16 +95,22 @@ export function createBoilingSprite(options: BoilingSpriteOptions): BoilingSprit
   let outlineMask: HTMLCanvasElement | null = null;
   let visibleOutline: HTMLCanvasElement | null = null;
 
-  const outlineReady = new Promise<void>((resolve, reject) => {
-    if (!outlineImage || !options.outline) { resolve(); return; }
+  let outlineRevision = 0;
+  let outlineReady: Promise<void> = Promise.resolve();
+  function setOutline(outline?: { src: string; chromaKey: readonly [number, number, number] }): void {
+    const revision = ++outlineRevision; outlineMask = null; visibleOutline = null;
+    outlineImage.onload = null; outlineImage.onerror = null;
+    if (!outline) { drawFrame(); outlineReady = Promise.resolve(); return; }
+    outlineReady = new Promise<void>((resolve, reject) => {
     outlineImage.onload = () => {
+      if (revision !== outlineRevision) return;
       try {
         const work = document.createElement('canvas');
         work.width = outlineImage.naturalWidth; work.height = outlineImage.naturalHeight;
         const workContext = work.getContext('2d') ?? failCanvasContext();
         workContext.drawImage(outlineImage, 0, 0);
         const source = workContext.getImageData(0, 0, work.width, work.height);
-        const split = splitChromaOutlinePixels(source.data, options.outline!.chromaKey);
+        const split = splitChromaOutlinePixels(source.data, outline.chromaKey);
         outlineMask = document.createElement('canvas');
         visibleOutline = document.createElement('canvas');
         for (const target of [outlineMask, visibleOutline]) { target.width = work.width; target.height = work.height; }
@@ -117,9 +124,11 @@ export function createBoilingSprite(options: BoilingSpriteOptions): BoilingSprit
         drawFrame(); resolve();
       } catch (error) { reject(error); }
     };
-    outlineImage.onerror = () => reject(new Error(`Could not load outline: ${options.outline!.src}`));
-    outlineImage.src = options.outline.src;
+    outlineImage.onerror = () => reject(new Error(`Could not load outline: ${outline.src}`));
+    outlineImage.src = outline.src;
   });
+  }
+  setOutline(options.outline);
 
   function drawFrame(): void {
     if (!image.complete || !image.naturalWidth || !image.naturalHeight || !canvas.width || !canvas.height) return;
@@ -195,6 +204,7 @@ export function createBoilingSprite(options: BoilingSpriteOptions): BoilingSprit
   return {
     element,
     setSource,
+    setOutline,
     whenReady: () => ready,
     setFrame,
     setArtworkVisible(visible) { artworkVisible = visible; drawFrame(); },
@@ -202,7 +212,7 @@ export function createBoilingSprite(options: BoilingSpriteOptions): BoilingSprit
       sourceRevision++;
       image.onload = null;
       image.onerror = null;
-      if (outlineImage) { outlineImage.onload = null; outlineImage.onerror = null; }
+      outlineRevision++; outlineImage.onload = null; outlineImage.onerror = null;
       unsubscribe();
       element.remove();
     },

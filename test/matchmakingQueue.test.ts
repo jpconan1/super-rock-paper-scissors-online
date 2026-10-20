@@ -32,4 +32,10 @@ describe('matchmaking queue heartbeat', () => {
     const result = refreshMatchmakingQueue([], 'self', 'attempt', 'Self', 1500, 4_000, 5_000, 12_000, true);
     expect(result.queue[0]).toMatchObject({ totalProgressUnits: 12_000, unlockAllClasses: true });
   });
+
+  test('carries custom emblem metadata into matchmaking', () => {
+    const customEmblem = { playerId: 'self', version: 42, borderNumber: 12 };
+    const result = refreshMatchmakingQueue([], 'self', 'attempt', 'Player', 1500, 1, 10_000, 0, false, 'custom', customEmblem);
+    expect(result.queue[0]).toMatchObject({ equippedEmblem: 'custom', customEmblem });
+  });
 });

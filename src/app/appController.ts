@@ -395,13 +395,23 @@ export class AppController {
         account.unlockAllClasses,
         account.equippedEmblem,
         account.ownedEmblems,
-        ({ equipped, owned, onChosen }) => showEmblemMenuAlert(
-          this.alertSystem!, options.clock, equipped, owned,
+        account.customEmblem,
+        ({ equipped, owned, customEmblem, onChosen }) => showEmblemMenuAlert(
+          this.alertSystem!, options.clock, equipped, owned, customEmblem,
           () => options.session.getEmblemMissions(),
           (emblem) => options.session.setEquippedEmblem(emblem),
-          onChosen,
+          (emblem) => onChosen(emblem, options.session.accountState().customEmblem),
+          () => lobby.openCustomEmblemEditor(),
         ),
-        {},
+        { customEmblemEditor: {
+          load: () => options.session.getCustomEmblem(),
+          save: async (document, artwork) => {
+            await options.session.saveCustomEmblem(document, artwork);
+            const meta = options.session.accountState().customEmblem;
+            if (!meta) throw new Error('Saved custom emblem is unavailable.');
+            return meta;
+          },
+        } },
       );
       lobby.receiveWhiteboard({ type: 'snapshot', board: this.whiteboard });
       lobby.updateRoster(this.lobbyPlayers, this.lobbySelfId);
@@ -740,6 +750,7 @@ export class AppController {
       playerName: this.playerName,
       playerLevel: this.options.session.accountState().level,
       playerEmblem: this.options.session.accountState().equippedEmblem,
+      customEmblem: this.options.session.accountState().customEmblem,
       ...(grant ? { matchId: grant.receipt } : {}),
       unlockedClassIds: this.options.session.accountState().unlockedClassIds,
       publish: (snapshot) => this.receiveSnapshot(snapshot, true),
@@ -764,6 +775,7 @@ export class AppController {
       playerName: this.playerName,
       playerLevel: this.options.session.accountState().level,
       playerEmblem: this.options.session.accountState().equippedEmblem,
+      customEmblem: this.options.session.accountState().customEmblem,
       ...(grant ? { matchId: grant.receipt } : {}),
       startingClasses: { p1: 'lucky', p2: 'lucky' },
       unlockedClassIds: this.options.session.accountState().unlockedClassIds,
