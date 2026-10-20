@@ -18,6 +18,11 @@ export function getVerticalSheetFrameSize(sheet: SheetDimensions, frameCount = B
   return { width: sheet.width, height: sheet.height / frameCount };
 }
 
+export function nextLoopFrame(frame: number, frameCount: number): number {
+  if (!Number.isInteger(frameCount) || frameCount <= 0) throw new Error('Frame count must be a positive integer.');
+  return (Math.max(0, Math.floor(frame)) + 1) % frameCount;
+}
+
 export interface BoilingSpriteOptions {
   src: string;
   clock: BoilClock;
@@ -31,7 +36,7 @@ export interface BoilingSpriteOptions {
 
 export interface BoilingSprite {
   element: HTMLDivElement;
-  setSource(src: string): void;
+  setSource(src: string, frameCount?: number): void;
   whenReady(): Promise<void>;
   setFrame(frame: number): void;
   setArtworkVisible(visible: boolean): void;
@@ -78,9 +83,11 @@ export function createBoilingSprite(options: BoilingSpriteOptions): BoilingSprit
 
   const image = new Image();
   const outlineImage = options.outline ? new Image() : null;
-  const frameCount = options.frameCount ?? BOIL_FRAME_COUNT;
+  const defaultFrameCount = options.frameCount ?? BOIL_FRAME_COUNT;
 
   let frame = 0;
+  let frameCount = defaultFrameCount;
+  let clockInitialized = false;
   let artworkVisible = true;
   let sourceRevision = 0;
   let ready: Promise<void> = Promise.resolve();
@@ -143,8 +150,10 @@ export function createBoilingSprite(options: BoilingSpriteOptions): BoilingSprit
     drawFrame();
   }
 
-  function setSource(src: string): void {
+  function setSource(src: string, nextFrameCount = BOIL_FRAME_COUNT): void {
     const revision = ++sourceRevision;
+    frameCount = nextFrameCount;
+    frame = 0;
     const sourceReady = new Promise<void>((resolve, reject) => {
       image.onload = () => {
         if (revision !== sourceRevision) return;
@@ -171,8 +180,17 @@ export function createBoilingSprite(options: BoilingSpriteOptions): BoilingSprit
     ready = Promise.all([sourceReady, outlineReady]).then(() => { drawFrame(); });
   }
 
-  setSource(options.src);
-  const unsubscribe = options.autoAnimate === false ? () => {} : options.clock.subscribe(setFrame);
+  setSource(options.src, defaultFrameCount);
+  const unsubscribe = options.autoAnimate === false ? () => {} : options.clock.subscribe((clockFrame) => {
+    if (frameCount === BOIL_FRAME_COUNT) {
+      setFrame(clockFrame);
+      clockInitialized = true;
+      return;
+    }
+    if (!clockInitialized || !options.clock.isEnabled()) setFrame(0);
+    else setFrame(nextLoopFrame(frame, frameCount));
+    clockInitialized = true;
+  });
 
   return {
     element,

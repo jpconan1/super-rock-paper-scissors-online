@@ -622,9 +622,9 @@ input {
 .emblem-menu-alert .alert-system__content { width: 100%; height: 100%; color: #171412; font-size: 18px; text-align: left; }
 .emblem-menu-alert .alert-system__actions:empty { display: none; }
 .emblem-menu { display: grid; height: 100%; min-height: 0; grid-template: auto auto 1fr / 1fr; gap: 10px; }
-.emblem-menu__choices { display: flex; min-height: 132px; align-items: stretch; justify-content: center; gap: 18px; }
+.emblem-menu__choices { display: flex; min-height: 132px; flex-wrap: wrap; align-content: start; align-items: stretch; justify-content: center; gap: 10px; }
 .emblem-menu__choice {
-  display: grid; width: 145px; min-width: 0; grid-template-rows: 1fr auto; place-items: center; gap: 3px;
+  display: grid; width: 125px; min-width: 0; grid-template-rows: 1fr auto; place-items: center; gap: 3px;
   border: 3px solid transparent; border-radius: 10px; padding: 7px; color: #171412; background: rgba(255, 255, 255, .25); cursor: pointer;
 }
 .emblem-menu__choice[data-selected='true'] { border-color: #ac3235; background: rgba(172, 50, 53, .1); }

@@ -27,8 +27,10 @@ export function createPlayerEmblemCard(player: { name: string; level?: number; e
   const level = Number.isSafeInteger(player.level) && player.level! > 0 ? player.level! : 1;
   let emblemKind = player.emblem ?? null;
   const outline = `/emblems/borders/${emblemBorderNumber(player.name)}.webp`;
+  const initialDefinition = PLAYER_EMBLEM_BY_ID.get(emblemKind ?? 'beta-og')!;
   const emblem = createBoilingSprite({
-    src: PLAYER_EMBLEM_BY_ID.get(emblemKind ?? 'beta-og')!.sheet,
+    src: initialDefinition.sheet,
+    frameCount: initialDefinition.frameCount,
     clock,
     className: 'player-emblem-card__emblem',
     alt: '',
@@ -56,7 +58,10 @@ export function createPlayerEmblemCard(player: { name: string; level?: number; e
       if (next === emblemKind) return;
       emblemKind = next;
       emblem.setArtworkVisible(next !== null); none.hidden = next !== null;
-      if (next) emblem.setSource(PLAYER_EMBLEM_BY_ID.get(next)!.sheet);
+      if (next) {
+        const definition = PLAYER_EMBLEM_BY_ID.get(next)!;
+        emblem.setSource(definition.sheet, definition.frameCount);
+      }
       updateLabel();
     },
   };

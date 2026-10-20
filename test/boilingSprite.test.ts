@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { getVerticalSheetFrameSize, splitChromaOutlinePixels } from '../src/renderer/boilingSprite';
+import { getVerticalSheetFrameSize, nextLoopFrame, splitChromaOutlinePixels } from '../src/renderer/boilingSprite';
 
 describe('vertical boiling sheet dimensions', () => {
   test.each([
@@ -19,6 +19,14 @@ describe('vertical boiling sheet dimensions', () => {
 
   test('supports authored frame counts', () => {
     expect(getVerticalSheetFrameSize({ width: 512, height: 3_072 }, 12)).toEqual({ width: 512, height: 256 });
+    expect(getVerticalSheetFrameSize({ width: 256, height: 2_304 }, 18)).toEqual({ width: 256, height: 128 });
+  });
+
+  test('loops authored frame counts', () => {
+    expect(nextLoopFrame(0, 18)).toBe(1);
+    expect(nextLoopFrame(16, 18)).toBe(17);
+    expect(nextLoopFrame(17, 18)).toBe(0);
+    expect(nextLoopFrame(2, 3)).toBe(0);
   });
 });
 

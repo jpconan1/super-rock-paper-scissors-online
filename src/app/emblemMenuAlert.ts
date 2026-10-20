@@ -41,7 +41,9 @@ export function showEmblemMenuAlert(
     art.className = 'emblem-menu__choice-art';
     if (emblem) {
       const definition = PLAYER_EMBLEM_BY_ID.get(emblem)!;
-      const sprite = createBoilingSprite({ src: definition.sheet, clock, className: 'emblem-menu__emblem', alt: '' });
+      const sprite = createBoilingSprite({
+        src: definition.sheet, frameCount: definition.frameCount, clock, className: 'emblem-menu__emblem', alt: '',
+      });
       sprites.push(sprite);
       art.append(sprite.element);
     } else {

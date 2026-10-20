@@ -1,19 +1,21 @@
-export const PLAYER_EMBLEM_IDS = ['beta-og', 'new-player', 'prestige', 'computer'] as const;
+export const PLAYER_EMBLEM_IDS = ['beta-og', 'new-player', 'prestige', 'first-place', 'computer'] as const;
 export type PlayerEmblem = typeof PLAYER_EMBLEM_IDS[number];
-export const OWNABLE_PLAYER_EMBLEM_IDS = ['beta-og', 'new-player', 'prestige'] as const;
+export const OWNABLE_PLAYER_EMBLEM_IDS = ['beta-og', 'new-player', 'prestige', 'first-place'] as const;
 export type OwnablePlayerEmblem = typeof OWNABLE_PLAYER_EMBLEM_IDS[number];
-export const FREE_PLAYER_EMBLEM_IDS: readonly OwnablePlayerEmblem[] = ['prestige'];
+export const FREE_PLAYER_EMBLEM_IDS: readonly OwnablePlayerEmblem[] = ['prestige', 'first-place'];
 
 export interface PlayerEmblemDefinition {
   id: PlayerEmblem;
   name: string;
   sheet: string;
+  frameCount?: number;
 }
 
 export const PLAYER_EMBLEMS: readonly PlayerEmblemDefinition[] = [
   { id: 'beta-og', name: 'Beta OG', sheet: '/emblems/beta-og-sheet.webp' },
   { id: 'new-player', name: 'New Player', sheet: '/emblems/new-player-sheet.webp' },
   { id: 'prestige', name: 'Prestige', sheet: '/emblems/prestige-sheet.webp' },
+  { id: 'first-place', name: '1st Place', sheet: '/emblems/first-place-sheet.webp', frameCount: 18 },
   { id: 'computer', name: 'Computer', sheet: '/emblems/computer-sheet.webp' },
 ];
 
