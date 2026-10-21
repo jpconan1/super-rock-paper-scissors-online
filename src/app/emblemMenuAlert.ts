@@ -2,6 +2,7 @@ import type { BoilClock } from '../animation/boilClock';
 import type { EmblemMissionStatus } from '../core/emblemMission';
 import { PLAYER_EMBLEM_BY_ID, type EquippedPlayerEmblem, type OwnablePlayerEmblem } from '../core/playerEmblem';
 import { customEmblemImageUrl, type CustomEmblemMeta } from '../core/customEmblem';
+import { createButtonFaceArtwork } from '../renderer/buttonFaceArtwork';
 import { createBoilingSprite } from '../renderer/boilingSprite';
 import type { AlertSystem, ResponsiveAlertGeometry } from '../ui/alertSystem';
 import { createGameButton, type GameButton } from '../input/gameButton';
@@ -14,6 +15,11 @@ const BLANK_BUTTON = {
   upSheet: '/interactive-elements/generic-buttons/generic2-up-sheet.webp',
   betweenSheet: '/interactive-elements/generic-buttons/generic2-between-sheet.webp',
   depressedSheet: '/interactive-elements/generic-buttons/generic2-sheet.webp',
+} as const;
+const BLANK_BUTTON_FACE_SHEETS = {
+  up: BLANK_BUTTON.upSheet,
+  between: BLANK_BUTTON.betweenSheet,
+  depressed: BLANK_BUTTON.depressedSheet,
 } as const;
 
 interface EmblemChoice {
@@ -38,6 +44,7 @@ export function showEmblemMenuAlert(
   const choices = document.createElement('div'); choices.className = 'emblem-menu__choices'; choices.setAttribute('role', 'radiogroup'); choices.setAttribute('aria-label', 'Emblem collection');
   const choiceStatus = document.createElement('p'); choiceStatus.className = 'emblem-menu__choice-status'; choiceStatus.hidden = true;
   const sprites: ReturnType<typeof createBoilingSprite>[] = [];
+  const faceArtworks: ReturnType<typeof createButtonFaceArtwork>[] = [];
   const controls: GameButton[] = [];
   const choiceRecords: EmblemChoice[] = [];
   let handle: ReturnType<AlertSystem['show']>;
@@ -86,18 +93,22 @@ export function showEmblemMenuAlert(
     button.element.setAttribute('aria-checked', String(emblem === selected));
     button.element.title = name;
     const art = document.createElement('span'); art.className = 'emblem-menu__choice-art';
+    let sprite: ReturnType<typeof createBoilingSprite> | null = null;
     if (emblem === 'custom' && customEmblem) {
-      const sprite = createBoilingSprite({ src: customEmblemImageUrl(customEmblem), clock, className: 'emblem-menu__emblem', alt: '',
+      sprite = createBoilingSprite({ src: customEmblemImageUrl(customEmblem), clock, className: 'emblem-menu__emblem', alt: '',
         outline: { src: `/emblems/borders/${customEmblem.borderNumber}.webp`, chromaKey: [255, 64, 255] } });
-      sprites.push(sprite); art.append(sprite.element);
     } else if (emblem) {
       const definition = PLAYER_EMBLEM_BY_ID.get(emblem);
       if (definition) {
-        const sprite = createBoilingSprite({ src: definition.sheet, frameCount: definition.frameCount, clock, className: 'emblem-menu__emblem', alt: '' });
-        sprites.push(sprite); art.append(sprite.element);
+        sprite = createBoilingSprite({ src: definition.sheet, frameCount: definition.frameCount, clock, className: 'emblem-menu__emblem', alt: '' });
       }
     } else {
       art.classList.add('emblem-menu__choice-art--none'); art.textContent = 'None';
+    }
+    if (sprite) {
+      sprites.push(sprite);
+      const faceArtwork = createButtonFaceArtwork({ button, sprite, clock, sheets: BLANK_BUTTON_FACE_SHEETS, className: 'emblem-menu__choice-canvas' });
+      faceArtworks.push(faceArtwork); art.append(faceArtwork.element);
     }
     button.element.append(art);
     choices.append(button.element);
@@ -134,5 +145,8 @@ export function showEmblemMenuAlert(
       copy.append(title, detail); item.append(mark, copy); missions.append(item);
     }
   }).catch(() => { missionStatus.textContent = 'Could not load missions.'; });
-  void handle.result.finally(() => { controls.forEach((control) => control.destroy()); sprites.forEach((sprite) => sprite.destroy()); });
+  void handle.result.finally(() => {
+    faceArtworks.forEach((artwork) => artwork.destroy());
+    controls.forEach((control) => control.destroy()); sprites.forEach((sprite) => sprite.destroy());
+  });
 }

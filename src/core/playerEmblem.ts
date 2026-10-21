@@ -13,6 +13,10 @@ export interface PlayerEmblemDefinition {
 
 export const PLAYER_EMBLEM_BY_ID = new Map<string, PlayerEmblemDefinition>();
 
+const CLIENT_FRAME_COUNTS: Readonly<Record<string, number>> = {
+  'beta-og': 10,
+};
+
 export function isPlayerEmblemDefinition(value: unknown): value is PlayerEmblemDefinition {
   if (!value || typeof value !== 'object') return false;
   const item = value as Partial<PlayerEmblemDefinition>;
@@ -24,7 +28,10 @@ export function isPlayerEmblemDefinition(value: unknown): value is PlayerEmblemD
 
 export function setPlayerEmblemCatalog(emblems: readonly PlayerEmblemDefinition[]): void {
   PLAYER_EMBLEM_BY_ID.clear();
-  for (const emblem of emblems) PLAYER_EMBLEM_BY_ID.set(emblem.id, emblem);
+  for (const emblem of emblems) {
+    const frameCount = CLIENT_FRAME_COUNTS[emblem.id] ?? emblem.frameCount;
+    PLAYER_EMBLEM_BY_ID.set(emblem.id, frameCount === undefined ? emblem : { ...emblem, frameCount });
+  }
 }
 
 export function isPlayerEmblem(value: unknown): value is PlayerEmblem {

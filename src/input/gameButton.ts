@@ -25,6 +25,7 @@ export interface GameButtonOptions {
 export interface GameButton {
   element: HTMLButtonElement;
   readonly ready: Promise<void>;
+  subscribeVisual(subscriber: (visual: GameButtonVisual) => void): () => void;
   setLabel(label: string): void;
   setDisabled(disabled: boolean): void;
   setLockedDepressed(locked: boolean): void;
@@ -87,6 +88,7 @@ export function createGameButton(options: GameButtonOptions): GameButton {
   element.append(juice.element, art.element, label);
   const artLease = assetLoader.retainUrls(Object.values(sheets));
   let currentVisual: GameButtonVisual = 'up';
+  const visualSubscribers = new Set<(visual: GameButtonVisual) => void>();
 
   function applyDetectedAnchor(visual: GameButtonVisual): void {
     void detectSheetTextAnchor(sheets[visual]).then((anchor) => {
@@ -112,6 +114,7 @@ export function createGameButton(options: GameButtonOptions): GameButton {
       juice.element.style.opacity = String(view.juiceOpacity);
       element.dataset.state = view.visual;
       applyDetectedAnchor(view.visual);
+      for (const subscriber of visualSubscribers) subscriber(view.visual);
     },
   });
 
@@ -196,6 +199,11 @@ export function createGameButton(options: GameButtonOptions): GameButton {
   return {
     element,
     ready,
+    subscribeVisual(subscriber) {
+      visualSubscribers.add(subscriber);
+      subscriber(currentVisual);
+      return () => visualSubscribers.delete(subscriber);
+    },
     setLabel(nextLabel) {
       label.textContent = nextLabel;
       element.setAttribute('aria-label', nextLabel);
@@ -216,6 +224,7 @@ export function createGameButton(options: GameButtonOptions): GameButton {
     },
     destroy() {
       destroyed = true;
+      visualSubscribers.clear();
       artLease.release();
       state.destroy();
       depressedSound.destroy();

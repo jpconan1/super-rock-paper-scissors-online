@@ -25,6 +25,9 @@ vi.mock('../src/renderer/boilingSprite', () => ({
   createBoilingSprite: (options: Record<string, any>) => { const record = { options, destroyed: false }; sprites.push(record);
     return { element: new FakeElement(), destroy: () => { record.destroyed = true; } }; },
 }));
+vi.mock('../src/renderer/buttonFaceArtwork', () => ({
+  createButtonFaceArtwork: () => ({ element: new FakeElement(), destroy: vi.fn() }),
+}));
 
 import { setPlayerEmblemCatalog } from '../src/core/playerEmblem';
 import { showEmblemMenuAlert } from '../src/app/emblemMenuAlert';

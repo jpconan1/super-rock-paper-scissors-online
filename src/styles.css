@@ -630,15 +630,10 @@ input {
 .game-button.emblem-menu__choice { width: 100%; min-width: 0; overflow: visible; }
 .game-button.emblem-menu__choice:disabled { cursor: wait; }
 .emblem-menu__choice-art {
-  position: absolute; z-index: 1; inset: 13% 11% 14%; display: grid; overflow: hidden; place-items: center;
-  clip-path: polygon(2% 0,98% 0,100% 5%,100% 95%,98% 100%,2% 100%,0 95%,0 5%);
-  pointer-events: none; transition: transform 33ms linear;
+  position: absolute; z-index: 1; inset: 0; display: grid; place-items: center; pointer-events: none;
 }
-.emblem-menu__choice[data-state='between'] .emblem-menu__choice-art { transform: translateY(3%); }
-.emblem-menu__choice[data-state='depressed'] .emblem-menu__choice-art { transform: translateY(7%); }
 .emblem-menu__choice-art--none { color: #171412; font-size: clamp(16px, 11cqi, 24px); font-weight: 900; }
-.emblem-menu__emblem { position: absolute; inset: 0 -7%; }
-.emblem-menu__emblem > .boiling-sprite__canvas { width: 100%; height: 100%; object-fit: fill; }
+.emblem-menu__choice-canvas { width: 100%; height: 100%; }
 .emblem-menu h3 { margin: 2px 0 0; color: #ac3235; font-size: 22px; }
 .emblem-menu__choice-status { margin: 0; color: #ac3235; font-size: 14px; font-weight: 900; text-align: center; }
 .emblem-menu__choice-status[hidden] { display: none; }
