@@ -2,6 +2,8 @@ import { createAuth, type AuthEnv } from './auth';
 import { isAllowedAdminEmail } from '../src/core/adminAccess';
 import { createMaintenancePass, maintenanceSetCookie, readMaintenanceState, rotateMaintenanceVersion, setMaintenanceState } from './maintenance';
 import { grantPlayerEmblem, isActiveOwnableEmblem, revokePlayerEmblem } from './playerEmblems';
+import { PLAYER_EMBLEM_CATALOG } from '../src/core/playerEmblem';
+import { EMBLEM_MISSIONS, EMBLEM_MISSION_BY_ID } from '../src/core/emblemMission';
 
 interface AdminEnv extends AuthEnv {
   DB: D1Database;
@@ -95,7 +97,7 @@ async function accounts(db: D1Database, url: URL): Promise<Response> {
     CASE WHEN p.account_type = 'email' THEN u.email ELSE NULL END email, p.account_type accountType,
     p.player_id playerId, p.display_name displayName, p.rating, p.updated_at lastActivity, CASE WHEN t.player_id IS NULL THEN 0 ELSE 1 END isTest,
     (SELECT COUNT(*) FROM match_results m WHERE m.p1_id = p.player_id OR m.p2_id = p.player_id) matches,
-    (SELECT GROUP_CONCAT(pe.emblem_id) FROM player_emblems pe WHERE pe.player_id = p.player_id AND pe.revoked_at IS NULL) emblems
+    (SELECT GROUP_CONCAT(pe.emblem_id) FROM player_emblems pe WHERE pe.player_id = p.player_id) emblems
     FROM user u LEFT JOIN players p ON p.auth_user_id = u.id LEFT JOIN test_players t ON t.player_id = p.player_id
     WHERE (? = '' OR u.email LIKE ? OR p.display_name LIKE ? OR p.player_id LIKE ?) ORDER BY u.createdAt DESC LIMIT 50 OFFSET ?`)
     .bind(search, like, like, like, page * 50).all();
@@ -108,42 +110,51 @@ async function accounts(db: D1Database, url: URL): Promise<Response> {
 async function updateEmblem(request: Request, db: D1Database, adminEmail: string): Promise<Response> {
   const body = await request.json().catch(() => null) as { action?: unknown; playerId?: unknown; emblemId?: unknown; reason?: unknown } | null;
   if (!body || (body.action !== 'grant' && body.action !== 'revoke') || typeof body.playerId !== 'string'
-    || typeof body.emblemId !== 'string' || !await isActiveOwnableEmblem(db, body.emblemId)
+    || typeof body.emblemId !== 'string' || !isActiveOwnableEmblem(body.emblemId)
     || typeof body.reason !== 'string' || !body.reason.trim() || body.reason.length > 500) {
     return result({ error: 'Action, player, emblem, and reason are required.' }, 400);
   }
   const player = await db.prepare('SELECT 1 present FROM players WHERE player_id = ? AND auth_user_id IS NOT NULL').bind(body.playerId).first();
   if (!player) return result({ error: 'Player not found.' }, 404);
   const changed = body.action === 'grant'
-    ? (await grantPlayerEmblem(db, body.playerId, body.emblemId, 'admin', body.reason.trim(), Date.now(), adminEmail, body.reason.trim()), true)
-    : await revokePlayerEmblem(db, body.playerId, body.emblemId, adminEmail, body.reason.trim());
+    ? (await grantPlayerEmblem(db, body.playerId, body.emblemId, 'admin', body.reason.trim()), true)
+    : await revokePlayerEmblem(db, body.playerId, body.emblemId);
+  await db.prepare(`INSERT INTO analytics_events
+    (event_id, event_type, occurred_at, player_id, metadata_json, is_test) VALUES (?, ?, ?, ?, ?, 0)`)
+    .bind(crypto.randomUUID(), `admin-emblem-${body.action}`, Date.now(), body.playerId,
+      JSON.stringify({ emblemId: body.emblemId, adminEmail, reason: body.reason.trim(), changed })).run();
   return result({ changed });
 }
 
 async function emblemMonitor(db: D1Database, url: URL): Promise<Response> {
-  const search = (url.searchParams.get('search') ?? '').trim().slice(0, 100); const like = `%${search}%`; const now = Date.now();
-  const emblems = await db.prepare(`SELECT ec.emblem_id emblemId, ec.display_name name, ec.active, ec.ownable, ec.system_only systemOnly,
-    COUNT(pe.player_id) owned FROM emblem_catalog ec LEFT JOIN player_emblems pe ON pe.emblem_id = ec.emblem_id AND pe.revoked_at IS NULL
-    LEFT JOIN test_players tp ON tp.player_id = pe.player_id WHERE tp.player_id IS NULL GROUP BY ec.emblem_id ORDER BY ec.sort_order`).all();
-  const missions = await db.prepare(`SELECT em.mission_id missionId, em.title, em.detail, em.active, em.available_from availableFrom,
-    em.available_until availableUntil, em.reward_kind rewardKind, em.reward_reference rewardReference,
-    (SELECT COUNT(*) FROM players p LEFT JOIN test_players t ON t.player_id = p.player_id WHERE t.player_id IS NULL
-      AND p.created_at < COALESCE(em.available_until, ?) AND (em.mission_id <> 'claim-account' OR p.account_type = 'guest'
-        OR EXISTS (SELECT 1 FROM emblem_mission_completions cc WHERE cc.player_id = p.player_id AND cc.mission_id = 'claim-account'))) eligible,
-    (SELECT COUNT(*) FROM emblem_mission_completions c LEFT JOIN test_players t ON t.player_id = c.player_id
-      WHERE c.mission_id = em.mission_id AND t.player_id IS NULL) completed
-    FROM emblem_missions em ORDER BY em.sort_order`).bind(now).all();
-  const completions = await db.prepare(`SELECT c.mission_id missionId, c.completed_at completedAt, c.reward_emblem_id rewardEmblemId,
-    c.placement, p.player_id playerId, p.display_name displayName, p.account_type accountType
+  const search = (url.searchParams.get('search') ?? '').trim().slice(0, 100); const like = `%${search}%`;
+  const ownership = await db.prepare(`SELECT pe.emblem_id emblemId, COUNT(*) owned FROM player_emblems pe
+    LEFT JOIN test_players tp ON tp.player_id = pe.player_id WHERE tp.player_id IS NULL GROUP BY pe.emblem_id`).all<{ emblemId: string; owned: number }>();
+  const owned = new Map(ownership.results.map((row) => [row.emblemId, row.owned]));
+  const emblems = PLAYER_EMBLEM_CATALOG.map((emblem) => ({ emblemId: emblem.id, name: emblem.name, active: true,
+    ownable: emblem.ownable, systemOnly: emblem.systemOnly, owned: owned.get(emblem.id) ?? 0 }));
+  const completionCounts = await db.prepare(`SELECT c.mission_id missionId, COUNT(*) completed FROM emblem_mission_completions c
+    LEFT JOIN test_players t ON t.player_id = c.player_id WHERE t.player_id IS NULL GROUP BY c.mission_id`).all<{ missionId: string; completed: number }>();
+  const counts = new Map(completionCounts.results.map((row) => [row.missionId, row.completed]));
+  const eligible = await db.prepare('SELECT COUNT(*) count FROM players p LEFT JOIN test_players t ON t.player_id = p.player_id WHERE t.player_id IS NULL').first<{ count: number }>();
+  const contest = await db.prepare(`SELECT contest_id contestId, status, activated_at activatedAt,
+    closed_at closedAt, capacity FROM emblem_contests WHERE contest_id = 'first-prestige'`).first<{ status: string }>();
+  const missions = EMBLEM_MISSIONS.map((mission) => ({ missionId: mission.id, title: mission.title, detail: mission.detail,
+    active: !mission.requiresPrestigeContest || contest?.status !== 'inactive', rewardKind: mission.rewardKind,
+    rewardReference: mission.rewardReference, eligible: eligible?.count ?? 0, completed: counts.get(mission.id) ?? 0 }));
+  const completionsResult = await db.prepare(`SELECT c.mission_id missionId, c.completed_at completedAt,
+    p.player_id playerId, p.display_name displayName, p.account_type accountType,
+    cp.placement, cp.emblem_id contestRewardEmblemId
     FROM emblem_mission_completions c JOIN players p ON p.player_id = c.player_id LEFT JOIN test_players t ON t.player_id = p.player_id
+    LEFT JOIN emblem_contest_placements cp ON cp.player_id = c.player_id AND cp.contest_id = 'first-prestige' AND c.mission_id = 'prestige-contest'
     WHERE t.player_id IS NULL AND (? = '' OR p.player_id LIKE ? OR p.display_name LIKE ? OR c.mission_id LIKE ?)
     ORDER BY c.completed_at DESC LIMIT 500`).bind(search, like, like, like).all();
-  const contest = await db.prepare(`SELECT contest_id contestId, mission_id missionId, status, activated_at activatedAt,
-    closed_at closedAt, capacity FROM emblem_contests WHERE contest_id = 'first-prestige'`).first();
+  const completions = completionsResult.results.map((row: Record<string, unknown>) => { const mission = EMBLEM_MISSION_BY_ID.get(String(row.missionId));
+    return { ...row, rewardEmblemId: row.contestRewardEmblemId ?? (mission?.rewardKind === 'emblem' ? mission.rewardReference : null) }; });
   const standings = await db.prepare(`SELECT cp.placement, cp.completed_at completedAt, cp.prestige_count prestigeCount,
     cp.emblem_id emblemId, p.player_id playerId, p.display_name displayName FROM emblem_contest_placements cp
     JOIN players p ON p.player_id = cp.player_id WHERE cp.contest_id = 'first-prestige' ORDER BY cp.placement`).all();
-  return result({ emblems: emblems.results, missions: missions.results, completions: completions.results, contest, standings: standings.results });
+  return result({ emblems, missions, completions, contest, standings: standings.results });
 }
 
 async function startPrestigeContest(db: D1Database): Promise<Response> {
@@ -151,16 +162,13 @@ async function startPrestigeContest(db: D1Database): Promise<Response> {
   const changed = await db.prepare(`UPDATE emblem_contests SET status = 'active', activated_at = ?
     WHERE contest_id = 'first-prestige' AND status = 'inactive'`).bind(now).run();
   if (changed.meta.changes !== 1) return result({ error: 'Contest has already started.' }, 409);
-  await db.prepare("UPDATE emblem_missions SET active = 1, available_from = ? WHERE mission_id IN ('prestige', 'prestige-contest')").bind(now).run();
   return result({ started: true, activatedAt: now });
 }
 
 async function emblemHistory(db: D1Database, url: URL): Promise<Response> {
   const playerId = url.searchParams.get('playerId')?.trim();
   if (!playerId) return result({ error: 'Player ID is required.' }, 400);
-  const rows = await db.prepare(`SELECT emblem_id emblemId, award_source awardSource, source_reference sourceReference,
-    awarded_at awardedAt, awarded_by awardedBy, award_reason awardReason, revoked_at revokedAt,
-    revoked_by revokedBy, revocation_reason revocationReason
+  const rows = await db.prepare(`SELECT emblem_id emblemId, source_kind sourceKind, source_id sourceId, awarded_at awardedAt
     FROM player_emblems WHERE player_id = ? ORDER BY awarded_at, emblem_id`).bind(playerId).all();
   return result({ rows: rows.results });
 }

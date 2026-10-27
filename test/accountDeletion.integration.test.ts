@@ -15,15 +15,12 @@ import migration10 from '../worker/migrations/0010_admin_dashboard.sql?raw';
 import migration11 from '../worker/migrations/0011_maintenance_mode.sql?raw';
 import migration12 from '../worker/migrations/0012_fixed_account_identity.sql?raw';
 import migration13 from '../worker/migrations/0013_email_accounts.sql?raw';
-import migration14 from '../worker/migrations/0014_player_emblems.sql?raw';
-import migration15 from '../worker/migrations/0015_emblem_ownership.sql?raw';
-import migration16 from '../worker/migrations/0016_custom_emblems.sql?raw';
-import migration17 from '../worker/migrations/0017_emblem_catalog.sql?raw';
-import migration18 from '../worker/migrations/0018_placement_emblem_frames.sql?raw';
+import migration14 from '../worker/migrations/0014_emblems.sql?raw';
 import { completeEmblemMission, grantPlayerEmblem, hasCustomEmblemAccess, ownedPlayerEmblems, prestigePlayer, revokePlayerEmblem } from '../worker/playerEmblems';
 import { MAX_PROGRESS_UNITS } from '../src/core/progression';
+import { finalizeMatch } from '../worker/matchPersistence';
 
-const migrations = [migration1, migration2, migration3, migration4, migration5, migration6, migration7, migration8, migration9, migration10, migration11, migration12, migration13, migration14, migration15, migration16, migration17, migration18];
+const migrations = [migration1, migration2, migration3, migration4, migration5, migration6, migration7, migration8, migration9, migration10, migration11, migration12, migration13, migration14];
 let miniflare: Miniflare;
 let db: Awaited<ReturnType<Miniflare['getD1Database']>>;
 
@@ -64,10 +61,10 @@ async function seedUser(userId: string, playerId: string, email: string): Promis
     db.prepare(`INSERT INTO local_match_grants (player_id, grant_id, kind, issued_at, expires_at, claimed_at)
       VALUES (?, ?, 'tutorial', ?, 999999, NULL)`).bind(playerId, `grant-${userId}`, now),
     db.prepare(`INSERT INTO player_emblems
-      (player_id, emblem_id, award_source, source_reference, awarded_at) VALUES (?, 'beta-og', 'mission', 'claim-account', ?)`)
+      (player_id, emblem_id, awarded_at, source_kind, source_id) VALUES (?, 'beta-og', ?, 'mission', 'claim-account')`)
       .bind(playerId, now),
     db.prepare(`INSERT INTO emblem_mission_completions
-      (player_id, mission_id, completed_at, reward_emblem_id) VALUES (?, 'claim-account', ?, 'beta-og')`).bind(playerId, now),
+      (player_id, mission_id, completed_at) VALUES (?, 'claim-account', ?)`).bind(playerId, now),
     db.prepare('INSERT INTO unlock_all_class_finishes (player_id, completed_at) VALUES (?, ?)').bind(playerId, now),
     db.prepare(`INSERT INTO custom_emblems (player_id, drawing_json, crop_x, crop_y, crop_width, crop_height, border_number, artwork_webp, updated_at)
       VALUES (?, '{"operations":[],"crop":{"x":188,"y":130,"width":384,"height":192},"borderNumber":1}', 188, 130, 384, 192, 1, X'524946460000000057454250', ?)`)
@@ -89,10 +86,29 @@ beforeEach(async () => {
 afterEach(async () => { await miniflare.dispose(); });
 
 describe('account deletion D1 lifecycle', () => {
+  test('applies online prestige exactly once across match-finalization retries', async () => {
+    await db.batch([
+      db.prepare(`INSERT INTO players (player_id, display_name, rating, created_at, updated_at, account_type, total_progress_units)
+        VALUES ('player-a', 'A', 1500, 1, 1, 'guest', ?)` ).bind(MAX_PROGRESS_UNITS),
+      db.prepare(`INSERT INTO players (player_id, display_name, rating, created_at, updated_at, account_type, total_progress_units)
+        VALUES ('player-b', 'B', 1500, 1, 1, 'guest', 0)`),
+    ]);
+    const result = { resultId: 'prestige-match', matchId: 'prestige-match', seasonId: 'public-abm-test',
+      p1Id: 'player-a', p2Id: 'player-b', winnerId: 'player-a', p1Delta: 10, p2Delta: -10,
+      p1ProgressAward: 0, p2ProgressAward: 5_000, p1Prestige: true, p2Prestige: false, summary: '{}' };
+
+    expect(await finalizeMatch(db, result)).toBe('applied');
+    expect(await finalizeMatch(db, result)).toBe('duplicate');
+
+    expect(await db.prepare("SELECT total_progress_units, prestige_count FROM players WHERE player_id = 'player-a'").first())
+      .toEqual({ total_progress_units: 0, prestige_count: 1 });
+    expect(await db.prepare("SELECT mission_id FROM emblem_mission_completions WHERE player_id = 'player-a' AND mission_id = 'prestige'").first())
+      .toEqual({ mission_id: 'prestige' });
+  });
+
   test('installs the reset identity schema while preserving game configuration', async () => {
     expect(await db.prepare("SELECT season_id FROM seasons WHERE season_id = 'public-abm-test'").first()).toEqual({ season_id: 'public-abm-test' });
     expect(await db.prepare('SELECT singleton_id FROM maintenance_state WHERE singleton_id = 1').first()).toEqual({ singleton_id: 1 });
-    expect(await db.prepare("SELECT COUNT(*) count FROM emblem_catalog WHERE emblem_id LIKE '%-place' AND frame_count = 18").first()).toEqual({ count: 10 });
     for (const table of ['players', 'user', 'session', 'account', 'match_results', 'analytics_events', 'analytics_daily', 'matchmaking_attempts', 'whiteboard_archive',
       'player_emblems', 'emblem_mission_completions', 'unlock_all_class_finishes', 'custom_emblems']) {
       expect(await db.prepare(`SELECT COUNT(*) count FROM ${table}`).first(), table).toEqual({ count: 0 });
@@ -222,24 +238,23 @@ describe('emblem ownership D1 lifecycle', () => {
     expect(await db.prepare("SELECT COUNT(*) count FROM emblem_mission_completions WHERE player_id = 'player-a'").first()).toEqual({ count: 2 });
   });
 
-  test('inactive missions no longer award but existing ownership survives', async () => {
+  test('unknown missions do not award but existing ownership survives', async () => {
     await seedPlayer('player-a');
     await grantPlayerEmblem(db, 'player-a', 'beta-og', 'mission', 'claim-account', 10);
-    await db.prepare("UPDATE emblem_missions SET active = 0 WHERE mission_id = 'claim-account'").run();
-    expect(await completeEmblemMission(db, 'player-a', 'claim-account')).toBeNull();
+    expect(await completeEmblemMission(db, 'player-a', 'not-a-mission')).toBeNull();
     expect(await ownedPlayerEmblems(db, 'player-a')).toEqual(['beta-og']);
   });
 
-  test('audits revocation and permits an admin re-grant', async () => {
+  test('deletes revoked ownership and permits an admin re-grant', async () => {
     await seedPlayer('player-a');
-    await grantPlayerEmblem(db, 'player-a', 'beta-og', 'admin', 'launch gift', 10, 'jp@example.com', 'launch gift');
-    expect(await revokePlayerEmblem(db, 'player-a', 'beta-og', 'jp@example.com', 'mistake', 20)).toBe(true);
+    await grantPlayerEmblem(db, 'player-a', 'beta-og', 'admin', 'launch gift', 10);
+    expect(await revokePlayerEmblem(db, 'player-a', 'beta-og', 20)).toBe(true);
     expect(await ownedPlayerEmblems(db, 'player-a')).toEqual([]);
     expect(await db.prepare("SELECT equipped_emblem FROM players WHERE player_id = 'player-a'").first()).toEqual({ equipped_emblem: null });
-    await grantPlayerEmblem(db, 'player-a', 'beta-og', 'admin', 'restored', 30, 'jp@example.com', 'restored');
+    await grantPlayerEmblem(db, 'player-a', 'beta-og', 'admin', 'restored', 30);
     expect(await ownedPlayerEmblems(db, 'player-a')).toEqual(['beta-og']);
-    expect(await db.prepare("SELECT awarded_by, award_reason, revoked_at FROM player_emblems WHERE player_id = 'player-a'").first())
-      .toEqual({ awarded_by: 'jp@example.com', award_reason: 'restored', revoked_at: null });
+    expect(await db.prepare("SELECT source_kind, source_id FROM player_emblems WHERE player_id = 'player-a'").first())
+      .toEqual({ source_kind: 'admin', source_id: 'restored' });
   });
 
   test('unlocks custom emblems from an online-win completion or existing artwork', async () => {
@@ -253,10 +268,19 @@ describe('emblem ownership D1 lifecycle', () => {
     expect(await hasCustomEmblemAccess(db, 'player-b')).toBe(true);
   });
 
+  test('awards the prestige emblem when the prestige contest is inactive', async () => {
+    await seedPlayer('player-a', MAX_PROGRESS_UNITS);
+
+    expect(await prestigePlayer(db, 'player-a', Date.now())).toBe(1);
+    expect(await ownedPlayerEmblems(db, 'player-a')).toEqual(['prestige']);
+    expect(await db.prepare("SELECT mission_id FROM emblem_mission_completions WHERE player_id = 'player-a'").first())
+      .toEqual({ mission_id: 'prestige' });
+    expect(await db.prepare("SELECT placement FROM emblem_contest_placements WHERE player_id = 'player-a'").first()).toBeNull();
+  });
+
   test('repeats prestige and awards ordered contest places once per player', async () => {
     await seedPlayer('player-a', MAX_PROGRESS_UNITS); await seedPlayer('player-b', MAX_PROGRESS_UNITS);
     const now = Date.now();
-    await db.prepare("UPDATE emblem_missions SET active = 1 WHERE mission_id IN ('prestige', 'prestige-contest')").run();
     await db.prepare("UPDATE emblem_contests SET status = 'active', activated_at = 1 WHERE contest_id = 'first-prestige'").run();
     expect(await prestigePlayer(db, 'player-a', now)).toBe(1);
     expect(await db.prepare("SELECT total_progress_units, prestige_count FROM players WHERE player_id = 'player-a'").first())

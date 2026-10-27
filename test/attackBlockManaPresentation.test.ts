@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { ABM_CLASSES, startingResourcesForClass } from '../src/variants/attackBlockMana/attackBlockManaCatalog';
-import { ABM_BONUS_XP_ART, ABM_COUNTERPICK_ENTRANCE_TICKS_PER_STAGE, ABM_LAYOUTS, ABM_OPENING_NUMBER_FRAME_COUNT, ABM_OPENING_READY_ART, ABM_RESULT_SCENES, ABM_SELECT_ART, ABM_TAG_CATEGORIES, ABM_TAG_ORDERS, abmTagSlotId, blockSegments, displayedAbmMove, getAbmAttackCostDisplay, getAbmClassBadgeGeometry, getAbmClassReadyFrame, getAbmClassResourceControlGeometry, getAbmClassResourceGeometry, getAbmClassSelectChrome, getAbmCounterpickCloudPlayer, getAbmCounterpickEntranceVisibility, getAbmLimitedResource, getAbmObservedCounterpickClass, getAbmOpeningStateAfterCountdown, getAbmPickerEntries, getAbmPickerStatus, getAbmPlayerResourceGeometry, getAbmResultScene, getAbmWaitingLayoutIds, getAbmWaitingVisual, initialManaForClass, isInitialClassSelectionTransition, latestClassPreview, reconcileAbmArmedAbility, sceneForMoves, shouldShowAbmBonusXp, shouldShowAbmClassPicker, shouldShowAbmContinuingRoundProcTags, shouldShowAbmRules, shouldShowAbmYouTag, shouldShowClassBadge, shouldShowClassReadyOpponentTag, tutorialBlockTagSource, winArtwork } from '../src/variants/attackBlockMana/attackBlockManaPresentation';
+import { ABM_BONUS_XP_ART, ABM_COUNTERPICK_ENTRANCE_TICKS_PER_STAGE, ABM_LAYOUTS, ABM_OPENING_NUMBER_FRAME_COUNT, ABM_OPENING_READY_ART, ABM_RESULT_SCENES, ABM_SELECT_ART, ABM_TAG_CATEGORIES, ABM_TAG_ORDERS, abmTagSlotId, blockSegments, displayedAbmMove, getAbmAttackCostDisplay, getAbmClassBadgeGeometry, getAbmClassReadyFrame, getAbmClassResourceControlGeometry, getAbmClassResourceGeometry, getAbmClassSelectChrome, getAbmCounterpickCloudPlayer, getAbmCounterpickEntranceVisibility, getAbmLimitedResource, getAbmObservedCounterpickClass, getAbmOpeningStateAfterCountdown, getAbmPickerEntries, getAbmPickerStatus, getAbmPlayerResourceGeometry, getAbmResultScene, getAbmWaitingLayoutIds, getAbmWaitingVisual, initialManaForClass, isInitialClassSelectionTransition, latestClassPreview, progressResultHoldBeats, reconcileAbmArmedAbility, sceneForMoves, shouldShowAbmBonusXp, shouldShowAbmClassPicker, shouldShowAbmContinuingRoundProcTags, shouldShowAbmRules, shouldShowAbmYouTag, shouldShowClassBadge, shouldShowClassReadyOpponentTag, tutorialBlockTagSource, winArtwork } from '../src/variants/attackBlockMana/attackBlockManaPresentation';
 import type { AbmProjection } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 import { ABM_CLASS_IDS } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 import { ABM_SCENE_URLS, resolveAbmProcBackgrounds, resolveAbmScene, resolveAbmSplitScene, resolveAbmTags, resolveConjureScene, resolveJoeScene, resolveNullScene } from '../src/variants/attackBlockMana/attackBlockManaScenes';
@@ -24,12 +24,19 @@ describe('Attack Block Mana presentation data', () => {
   });
   test('shows bonus XP art only behind the newest selectable class', () => {
     expect(ABM_BONUS_XP_ART).toBe('/variants/abm/bonus-xp-sheet.webp');
-    const unlocked = ['lucky', 'advantaged', 'thief'] as const;
-    expect(shouldShowAbmBonusXp('thief', unlocked)).toBe(true);
-    expect(shouldShowAbmBonusXp('advantaged', unlocked)).toBe(false);
-    expect(shouldShowAbmBonusXp(undefined, unlocked)).toBe(false);
-    expect(shouldShowAbmBonusXp('thief', unlocked, true)).toBe(false);
-    expect(shouldShowAbmBonusXp('joe', ABM_CLASS_IDS)).toBe(true);
+    expect(shouldShowAbmBonusXp('thief', 'thief')).toBe(true);
+    expect(shouldShowAbmBonusXp('advantaged', 'thief')).toBe(false);
+    expect(shouldShowAbmBonusXp(undefined, 'thief')).toBe(false);
+    expect(shouldShowAbmBonusXp('thief', 'thief', true)).toBe(false);
+    expect(shouldShowAbmBonusXp('lucky', 'lucky')).toBe(true);
+  });
+
+  test('holds pending prestige for three beats without delaying completed prestige', () => {
+    const progress = { level: 21, totalProgressUnits: 200_000, progressUnitsInLevel: 10_000, unlockedClassIds: ABM_CLASS_IDS };
+    const award = { outcome: 'win' as const, gainedProgressUnits: 0, before: progress, after: progress, unlockedClassIds: [] };
+    expect(progressResultHoldBeats({ ...award, prestige: { state: 'pending' } })).toBe(3);
+    expect(progressResultHoldBeats({ ...award, prestige: { state: 'completed', prestigeCount: 1 } })).toBe(0);
+    expect(progressResultHoldBeats(award)).toBe(2);
   });
 
   test('shows rules only after both classes are selected and outside tutorial round one', () => {

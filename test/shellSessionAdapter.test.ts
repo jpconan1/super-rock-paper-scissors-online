@@ -392,6 +392,19 @@ describe('matchmaking session adapters', () => {
     expect(adapter.accountState().unlockedClassIds).toHaveLength(21);
   });
 
+  test('sets the exact Joe prestige step through the temporary cheat', async () => {
+    const player = { playerId: 'wheel-fresh-toast-owl-14', accountType: 'guest', displayName: 'Player', rating: 1500, totalProgressUnits: 200_000, unlockAllClasses: false, equippedEmblem: null,
+      level: 21, progressUnitsInLevel: 10_000, unlockedClassIds: [] };
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(player), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const adapter = new WebSocketShellSessionAdapter('https://example.test');
+
+    await adapter.setPrestigeStepForTesting();
+
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ testPrestigeStep: true });
+    expect(adapter.accountState()).toMatchObject({ totalProgressUnits: 200_000, level: 21 });
+  });
+
   test('persists a server-authoritative equipped emblem', async () => {
     const player = { playerId: 'wheel-fresh-toast-owl-14', accountType: 'guest', displayName: 'Player', rating: 1500,
       totalProgressUnits: 0, unlockAllClasses: false, equippedEmblem: 'beta-og', ownedEmblems: ['beta-og'], level: 1, progressUnitsInLevel: 0,
@@ -452,6 +465,24 @@ describe('matchmaking session adapters', () => {
     expect(adapter.accountState().unlockedClassIds).toHaveLength(21);
     await adapter.setUnlockAllClasses(false);
     expect(adapter.accountState()).toMatchObject({ unlockAllClasses: false, unlockedClassIds: ['lucky'] });
+  });
+
+  test('local prestige cheat sets the Joe prestige step', async () => {
+    const adapter = new LocalShellSessionAdapter();
+    await adapter.setPrestigeStepForTesting();
+    expect(adapter.accountState()).toMatchObject({ totalProgressUnits: 200_000, level: 21 });
+  });
+
+  test('applies completed prestige progression and count locally before profile refresh', () => {
+    const adapter = new WebSocketShellSessionAdapter('https://example.test');
+    adapter.applyProgressAward({
+      outcome: 'win', gainedProgressUnits: 0,
+      before: { level: 21, totalProgressUnits: 200_000, progressUnitsInLevel: 10_000, unlockedClassIds: [] },
+      after: { level: 1, totalProgressUnits: 0, progressUnitsInLevel: 0, nextUnlock: 'advantaged', unlockedClassIds: ['lucky'] },
+      unlockedClassIds: [], prestige: { state: 'completed', prestigeCount: 2 },
+    });
+    expect(adapter.accountState()).toMatchObject({ level: 1, totalProgressUnits: 0, prestigeCount: 2, bonusClassId: 'lucky' });
+    expect(adapter.accountState().unlockedClassIds).toHaveLength(21);
   });
 
   test('lobby and whiteboard authenticate without putting secrets in URLs', async () => {

@@ -775,14 +775,14 @@
       "protected": true,
       "layouts": {
         "landscape": {
-          "x": 210,
-          "y": 385,
+          "x": 215,
+          "y": 346,
           "width": 220,
-          "height": 26
+          "height": 44
         },
         "portrait": {
-          "x": 20,
-          "y": 630,
+          "x": 22.5,
+          "y": 595,
           "width": 165,
           "height": 45
         }
@@ -795,6 +795,7 @@
       "assets": {
         "src": "/lobby/black-marker-sheet.webp"
       },
+      "properties": { "hitbox-top": 10, "hitbox-right": 5, "hitbox-bottom": 10, "hitbox-left": 5 },
       "layouts": {
         "landscape": {
           "x": 362.5,
@@ -819,6 +820,7 @@
       "assets": {
         "src": "/lobby/red-marker-sheet.webp"
       },
+      "properties": { "hitbox-top": 10, "hitbox-right": 5, "hitbox-bottom": 10, "hitbox-left": 5 },
       "layouts": {
         "landscape": {
           "x": 400,
@@ -843,6 +845,7 @@
       "assets": {
         "src": "/lobby/blue-marker-sheet.webp"
       },
+      "properties": { "hitbox-top": 10, "hitbox-right": 5, "hitbox-bottom": 10, "hitbox-left": 5 },
       "layouts": {
         "landscape": {
           "x": 437.5,
@@ -867,6 +870,7 @@
       "assets": {
         "src": "/lobby/green-marker-sheet.webp"
       },
+      "properties": { "hitbox-top": 10, "hitbox-right": 5, "hitbox-bottom": 10, "hitbox-left": 5 },
       "layouts": {
         "landscape": {
           "x": 512.5,
@@ -891,6 +895,7 @@
       "assets": {
         "src": "/lobby/purple-marker-sheet.webp"
       },
+      "properties": { "hitbox-top": 10, "hitbox-right": 5, "hitbox-bottom": 10, "hitbox-left": 5 },
       "layouts": {
         "landscape": {
           "x": 475,
@@ -915,6 +920,7 @@
       "assets": {
         "src": "/lobby/eraser-sheet.webp"
       },
+      "properties": { "hitbox-top": 8, "hitbox-right": 5, "hitbox-bottom": 8, "hitbox-left": 5 },
       "layouts": {
         "landscape": {
           "x": 555,

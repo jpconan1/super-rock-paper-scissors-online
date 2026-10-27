@@ -16,7 +16,7 @@ export function mountProgressScreen(container: HTMLElement, clock: BoilClock, aw
   const panel = document.createElement('div'); panel.className = 'textbox progress-screen__panel';
   const heading = document.createElement('h1'); heading.textContent = `Level ${award.before.level}`;
   const breakdown = document.createElement('div'); breakdown.className = 'progress-screen__breakdown';
-  if (award.baseProgressUnits !== undefined) {
+  if (!award.prestige && award.baseProgressUnits !== undefined) {
     const base = document.createElement('p'); base.textContent = `Base XP: +${award.baseProgressUnits.toLocaleString()}`;
     breakdown.append(base);
     if ((award.bonusProgressUnits ?? 0) > 0) {
@@ -25,7 +25,7 @@ export function mountProgressScreen(container: HTMLElement, clock: BoilClock, aw
       breakdown.append(bonus);
     }
   }
-  const gain = document.createElement('p'); gain.className = 'progress-screen__gain'; gain.textContent = `+${award.gainedProgressUnits.toLocaleString()} XP`;
+  const gain = document.createElement('p'); gain.className = 'progress-screen__gain'; gain.textContent = `+${award.gainedProgressUnits.toLocaleString()} XP`; gain.hidden = Boolean(award.prestige);
   const progress = createXpProgressBar(clock, award); progress.element.classList.add('progress-screen__bar');
   const unlocks = document.createElement('p'); unlocks.className = 'progress-screen__unlocks';
   unlocks.textContent = award.unlockedClassIds.length ? `Unlocked: ${award.unlockedClassIds.map((id) => ABM_CLASS_BY_ID.get(id)?.name ?? id).join(', ')}` : '';

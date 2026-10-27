@@ -29,7 +29,6 @@ vi.mock('../src/renderer/buttonFaceArtwork', () => ({
   createButtonFaceArtwork: () => ({ element: new FakeElement(), destroy: vi.fn() }),
 }));
 
-import { setPlayerEmblemCatalog } from '../src/core/playerEmblem';
 import { showEmblemMenuAlert } from '../src/app/emblemMenuAlert';
 
 const mission = { id: 'finish-tutorial', title: 'Finish The Tutorial', detail: 'Complete one tutorial match.', rewardKind: 'emblem' as const,
@@ -38,13 +37,11 @@ const mission = { id: 'finish-tutorial', title: 'Finish The Tutorial', detail: '
 describe('emblem menu alert', () => {
   beforeEach(() => {
     buttons.length = 0; sprites.length = 0;
-    setPlayerEmblemCatalog([
-      { id: 'beta-og', name: 'Beta OG', sheet: '/emblems/beta-og-sheet.webp', ownable: true, systemOnly: false },
-      { id: 'new-player', name: 'New Player', sheet: '/emblems/new-player-sheet.webp', ownable: true, systemOnly: false },
-    ]);
   });
 
-  function setup(onChoose = vi.fn(async () => {}), loadMissions = vi.fn(async () => [mission])) {
+  function setup(onChoose = vi.fn(async () => {}), loadMissions = vi.fn(async () => ({
+    contest: { active: true, claimed: 3, capacity: 10 }, missions: [mission],
+  }))) {
     let content!: FakeElement; let closed = false;
     const alerts = { show: (options: { content: FakeElement }) => { content = options.content; return { close: () => { closed = true; }, result: new Promise(() => {}) }; } };
     const onChosen = vi.fn();
@@ -56,10 +53,24 @@ describe('emblem menu alert', () => {
     const view = setup(); await Promise.resolve();
     expect(view.content.children).toHaveLength(2);
     expect(view.content.children[0]!.children[0]!.textContent).toBe('Emblems');
-    expect(view.content.children[1]!.children[0]!.textContent).toBe('Missions');
+    const missionScroll = view.content.children[1]!.children[0]!;
+    expect(missionScroll.children[0]!.children[0]!.textContent).toBe('Contest');
+    expect(missionScroll.children[0]!.children[2]!.textContent).toBe('3 Emblems claimed');
+    expect(missionScroll.children[1]!.textContent).toBe('Missions');
     expect(buttons.slice(0, 3).map((item) => item.options.label)).toEqual(['No Emblem', 'Beta OG', 'New Player']);
+    expect(buttons[0]!.options).toMatchObject({
+      upSheet: '/interactive-elements/none-button-up-sheet.webp',
+      betweenSheet: '/interactive-elements/none-button-between-sheet.webp',
+      depressedSheet: '/interactive-elements/none-button-depressed-sheet.webp',
+    });
     expect(buttons.slice(0, 3).filter((item) => item.locked).map((item) => item.options.label)).toEqual(['Beta OG']);
-    expect(sprites.map((item) => item.options.src)).toEqual(['/emblems/beta-og-sheet.webp', '/emblems/new-player-sheet.webp']);
+    expect(sprites.map((item) => item.options.src)).toEqual(['/emblems/beta-og-sheet.webp', '/emblems/new-player-sheet.webp', '/emblems/first-place-sheet.webp']);
+  });
+
+  test('hides contest section while contest is inactive', async () => {
+    const view = setup(vi.fn(async () => {}), vi.fn(async () => ({ contest: { active: false, claimed: 0, capacity: 10 }, missions: [mission] })));
+    await Promise.resolve();
+    expect(view.content.children[1]!.children[0]!.children[0]!.hidden).toBe(true);
   });
 
   test('equips optimistically, keeps alert open, and commits one locked choice', async () => {

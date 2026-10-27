@@ -47,8 +47,10 @@ export interface VariantPresentationContext<TCommand> {
   matchProgressComplete?(): void;
   self?: PlayerId;
   players?: Readonly<Record<PlayerId, MatchPlayer>>;
+  hideOpponentCustomEmblems?: boolean;
   music?: MusicDirector;
   unlockedClassIds?: readonly AbmClassId[];
+  bonusClassId?: AbmClassId;
   showOpponentCounterpick?: boolean;
   setOpeningCountdownActive?(active: boolean): void;
 }

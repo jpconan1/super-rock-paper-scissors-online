@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { createLobbyMissionCard, orderLobbyPlayers, setLobbyRosterOpen } from '../src/app/shellScreens';
+import { createLobbyMissionCard, openLobbyMissions, orderLobbyPlayers, setLobbyRosterOpen } from '../src/app/shellScreens';
+import type { EmblemMissionStatus } from '../src/core/emblemMission';
 import type { LobbyPlayer } from '../src/lobby/protocol';
 
 class FakeElement {
@@ -10,10 +11,19 @@ class FakeElement {
   id = '';
   textContent = '';
   type = '';
+  listeners = new Map<string, () => void>();
   attributes = new Map<string, string>();
   append(...children: FakeElement[]): void { this.children.push(...children); }
+  replaceChildren(...children: FakeElement[]): void { this.children = children; }
+  addEventListener(name: string, listener: () => void): void { this.listeners.set(name, listener); }
+  click(): void { this.listeners.get('click')?.(); }
   setAttribute(name: string, value: string): void { this.attributes.set(name, value); }
 }
+
+const mission = (id: string, completed = false): EmblemMissionStatus => ({
+  id, completed, completedAt: completed ? 1 : null, placement: null, rewardEmblemId: null,
+  title: id, detail: `${id} detail`, rewardKind: 'none', rewardReference: null,
+});
 
 const originalDocument = globalThis.document;
 
@@ -40,14 +50,36 @@ describe('lobby roster', () => {
     ]);
   });
 
-  test('renders the two display-only missions unchecked and in order', () => {
-    const card = createLobbyMissionCard() as unknown as FakeElement;
+  test('renders the next two incomplete live missions in feed order', async () => {
+    const card = createLobbyMissionCard(async () => ({
+      contest: { active: false, claimed: 0, capacity: 10 },
+      missions: [mission('done', true), mission('next-one'), mission('next-two'), mission('later')],
+    })) as unknown as FakeElement;
+    await Promise.resolve();
     const list = card.children[1]!;
-    expect(card.hidden).toBe(false);
     expect(list.children.map((item) => item.children[1]!.textContent)).toEqual([
-      'Claim Your Account', 'Finish The Tutorial',
+      'next-one', 'next-two',
     ]);
-    expect(list.children.every((item) => item.children[0]!.type === 'checkbox' && item.children[0]!.disabled)).toBe(true);
+    expect(card.type).toBe('button');
+  });
+
+  test('renders loading, complete, and failure mission states', async () => {
+    let resolve!: (value: { contest: { active: false; claimed: 0; capacity: 10 }; missions: EmblemMissionStatus[] }) => void;
+    const loading = createLobbyMissionCard(() => new Promise((next) => { resolve = next; })) as unknown as FakeElement;
+    expect(loading.children[1]!.children[0]!.textContent).toBe('Loading missions…');
+    resolve({ contest: { active: false, claimed: 0, capacity: 10 }, missions: [mission('done', true)] });
+    await Promise.resolve();
+    expect(loading.children[1]!.children[0]!.textContent).toBe('All missions complete');
+
+    const failed = createLobbyMissionCard(async () => { throw new Error('nope'); }) as unknown as FakeElement;
+    await Promise.resolve(); await Promise.resolve();
+    expect(failed.children[1]!.children[0]!.textContent).toBe('Could not load missions.');
+  });
+
+  test('switches to progression before opening missions', async () => {
+    const events: string[] = [];
+    await openLobbyMissions(async (face) => { events.push(`face:${face}`); }, () => events.push('open'));
+    expect(events).toEqual(['face:progression', 'open']);
   });
 
   test('hides missions only while the roster is open', () => {

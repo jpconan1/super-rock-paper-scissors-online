@@ -5,16 +5,22 @@ import { createBoilingSprite } from '../renderer/boilingSprite';
 export type ControllerButton = 'up' | 'down' | 'left' | 'right' | 'select' | 'b' | 'a';
 
 export const UNLOCK_CODE: readonly ControllerButton[] = ['up', 'up', 'down', 'down', 'left', 'right', 'left', 'right', 'b', 'a', 'select'];
+// Temporary prestige-testing cheat. The controller art's center/start button uses the existing `select` asset name.
+export const PRESTIGE_TEST_CODE: readonly ControllerButton[] = ['a', 'a', 'a', 'a', 'select'];
 
-export function advanceUnlockCode(progress: number, button: ControllerButton): { progress: number; complete: boolean } {
-  const attempted = [...UNLOCK_CODE.slice(0, progress), button];
-  if (attempted.length === UNLOCK_CODE.length && attempted.every((value, index) => value === UNLOCK_CODE[index])) {
+export function advanceControllerCode(code: readonly ControllerButton[], progress: number, button: ControllerButton): { progress: number; complete: boolean } {
+  const attempted = [...code.slice(0, progress), button];
+  if (attempted.length === code.length && attempted.every((value, index) => value === code[index])) {
     return { progress: 0, complete: true };
   }
-  for (let length = Math.min(attempted.length, UNLOCK_CODE.length - 1); length > 0; length--) {
-    if (attempted.slice(-length).every((value, index) => value === UNLOCK_CODE[index])) return { progress: length, complete: false };
+  for (let length = Math.min(attempted.length, code.length - 1); length > 0; length--) {
+    if (attempted.slice(-length).every((value, index) => value === code[index])) return { progress: length, complete: false };
   }
   return { progress: 0, complete: false };
+}
+
+export function advanceUnlockCode(progress: number, button: ControllerButton): { progress: number; complete: boolean } {
+  return advanceControllerCode(UNLOCK_CODE, progress, button);
 }
 
 const ROOT = '/interactive-elements/unlock-controller';
@@ -36,7 +42,7 @@ const source = (button: ControllerButton, state: 'between' | 'depressed') =>
 
 export interface UnlockController { element: HTMLElement; destroy(): void }
 
-export function createUnlockController(clock: BoilClock, onUnlockCode: () => void = () => {}): UnlockController {
+export function createUnlockController(clock: BoilClock, onUnlockCode: () => void = () => {}, onPrestigeTestCode: () => void = () => {}): UnlockController {
   const element = document.createElement('section'); element.className = 'unlock-controller'; element.setAttribute('aria-label', 'Unlock code controller');
   const upSource = `${ROOT}/controller-up-sheet.webp`;
   const art = createBoilingSprite({ src: upSource, clock, className: 'unlock-controller__art', alt: '' });
@@ -48,12 +54,15 @@ export function createUnlockController(clock: BoilClock, onUnlockCode: () => voi
   let releaseTimer: ReturnType<typeof setTimeout> | undefined;
   let active: ControllerButton | undefined;
   let codeProgress = 0;
+  let prestigeTestCodeProgress = 0;
   const show = (button: ControllerButton, state: 'between' | 'depressed') => { clearTimeout(releaseTimer); art.setSource(source(button, state)); };
   const release = (button: ControllerButton) => {
     if (active !== button) return;
     active = undefined; show(button, 'between'); releaseTimer = setTimeout(() => art.setSource(upSource), 1000 / 30);
     const next = advanceUnlockCode(codeProgress, button); codeProgress = next.progress;
     if (next.complete) onUnlockCode();
+    const prestigeNext = advanceControllerCode(PRESTIGE_TEST_CODE, prestigeTestCodeProgress, button); prestigeTestCodeProgress = prestigeNext.progress;
+    if (prestigeNext.complete) onPrestigeTestCode();
   };
 
   for (const { name, label } of BUTTONS) {

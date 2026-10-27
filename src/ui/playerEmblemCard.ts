@@ -1,6 +1,6 @@
 import type { BoilClock } from '../animation/boilClock';
-import { PLAYER_EMBLEM_BY_ID, type EquippedPlayerEmblem, type PlayerEmblem } from '../core/playerEmblem';
-import { customEmblemImageUrl, type CustomEmblemMeta } from '../core/customEmblem';
+import { emblemArtworkFrameCount, emblemArtworkSource, PLAYER_EMBLEM_BY_ID, type EquippedPlayerEmblem, type PlayerEmblem } from '../core/playerEmblem';
+import { CUSTOM_EMBLEM_FRAME_COUNT, customEmblemImageUrl, type CustomEmblemMeta } from '../core/customEmblem';
 import { createBoilingSprite, type BoilingSprite } from '../renderer/boilingSprite';
 
 const EMBLEM_BORDER_COUNT = 28;
@@ -22,7 +22,7 @@ export interface PlayerEmblemCard {
   setEmblem(emblem: EquippedPlayerEmblem | PlayerEmblem | null, customEmblem?: CustomEmblemMeta | null): void;
 }
 
-export function createPlayerEmblemCard(player: { name: string; level?: number; prestigeCount?: number; emblem?: PlayerEmblem | 'custom' | null; customEmblem?: CustomEmblemMeta | null }, clock: BoilClock): PlayerEmblemCard {
+export function createPlayerEmblemCard(player: { name: string; level?: number; prestigeCount?: number; emblem?: PlayerEmblem | 'custom' | null; customEmblem?: CustomEmblemMeta | null; hideCustomArtwork?: boolean }, clock: BoilClock): PlayerEmblemCard {
   const element = document.createElement('div');
   element.className = 'player-emblem-card';
   const level = Number.isSafeInteger(player.level) && player.level! > 0 ? player.level! : 1;
@@ -30,16 +30,17 @@ export function createPlayerEmblemCard(player: { name: string; level?: number; p
   let custom = player.customEmblem ?? null;
   const outline = `/emblems/borders/${custom?.borderNumber ?? emblemBorderNumber(player.name)}.webp`;
   const initialDefinition = PLAYER_EMBLEM_BY_ID.get(emblemKind === 'custom' ? 'beta-og' : emblemKind ?? 'beta-og')
-    ?? { id: '', name: '', sheet: 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=', ownable: false, systemOnly: false };
+    ?? { id: '', name: '', artwork: { kind: 'image', src: 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=' }, ownable: false, systemOnly: false, sortOrder: 0 };
+  const customArtworkHidden = player.hideCustomArtwork === true;
   const emblem = createBoilingSprite({
-    src: emblemKind === 'custom' && custom ? customEmblemImageUrl(custom) : initialDefinition.sheet,
-    frameCount: initialDefinition.frameCount,
+    src: emblemKind === 'custom' && custom && !customArtworkHidden ? customEmblemImageUrl(custom) : emblemArtworkSource(initialDefinition),
+    frameCount: emblemKind === 'custom' && custom && !customArtworkHidden ? CUSTOM_EMBLEM_FRAME_COUNT : emblemArtworkFrameCount(initialDefinition),
     clock,
     className: 'player-emblem-card__emblem',
     alt: '',
     outline: { src: outline, chromaKey: EMBLEM_OUTLINE_CHROMA_KEY },
   });
-  emblem.setArtworkVisible(emblemKind !== null);
+  emblem.setArtworkVisible(emblemKind !== null && !(emblemKind === 'custom' && customArtworkHidden));
   const none = document.createElement('span'); none.className = 'player-emblem-card__none'; none.textContent = '(None)'; none.hidden = emblemKind !== null;
   const name = document.createElement('strong');
   name.className = 'player-emblem-card__name';
@@ -47,12 +48,16 @@ export function createPlayerEmblemCard(player: { name: string; level?: number; p
   name.title = player.name;
   const levelLabel = document.createElement('span');
   levelLabel.className = 'player-emblem-card__level';
-  levelLabel.textContent = player.prestigeCount ? `P. ${player.prestigeCount}` : `Lv ${level}`;
+  levelLabel.textContent = `Lv ${level}`;
+  const prestigeLabel = document.createElement('span');
+  prestigeLabel.className = 'player-emblem-card__prestige';
+  prestigeLabel.textContent = `P. ${player.prestigeCount ?? 0}`;
+  prestigeLabel.hidden = !player.prestigeCount;
   const heading = document.createElement('div');
   heading.className = 'player-emblem-card__heading';
   heading.append(name, levelLabel);
-  element.append(emblem.element, none, heading);
-  const updateLabel = () => element.setAttribute('aria-label', `${player.name}, ${player.prestigeCount ? `prestige ${player.prestigeCount}` : `level ${level}`}, ${emblemKind === 'custom' ? 'custom emblem' : emblemKind ? `${PLAYER_EMBLEM_BY_ID.get(emblemKind)?.name ?? emblemKind.replace(/(^|-)(\w)/g, (_all, _dash, letter: string) => ` ${letter.toUpperCase()}`).trim()} emblem` : 'no emblem'}`);
+  element.append(emblem.element, none, heading, prestigeLabel);
+  const updateLabel = () => element.setAttribute('aria-label', `${player.name}, level ${level}${player.prestigeCount ? `, prestige ${player.prestigeCount}` : ''}, ${emblemKind === 'custom' ? (customArtworkHidden ? 'custom emblem hidden' : 'custom emblem') : emblemKind ? `${PLAYER_EMBLEM_BY_ID.get(emblemKind)?.name ?? emblemKind.replace(/(^|-)(\w)/g, (_all, _dash, letter: string) => ` ${letter.toUpperCase()}`).trim()} emblem` : 'no emblem'}`);
   updateLabel();
   return {
     element,
@@ -61,15 +66,15 @@ export function createPlayerEmblemCard(player: { name: string; level?: number; p
       if (next === emblemKind && nextCustom?.version === custom?.version) return;
       emblemKind = next;
       custom = nextCustom ?? null;
-      emblem.setArtworkVisible(next !== null); none.hidden = next !== null;
-      if (next === 'custom' && custom) {
+      emblem.setArtworkVisible(next !== null && !(next === 'custom' && customArtworkHidden)); none.hidden = next !== null;
+      if (next === 'custom' && custom && !customArtworkHidden) {
         emblem.setOutline({ src: `/emblems/borders/${custom.borderNumber}.webp`, chromaKey: EMBLEM_OUTLINE_CHROMA_KEY });
-        emblem.setSource(customEmblemImageUrl(custom));
+        emblem.setSource(customEmblemImageUrl(custom), CUSTOM_EMBLEM_FRAME_COUNT);
       } else if (next && next !== 'custom') {
         const definition = PLAYER_EMBLEM_BY_ID.get(next);
         if (!definition) return;
         emblem.setOutline({ src: `/emblems/borders/${emblemBorderNumber(player.name)}.webp`, chromaKey: EMBLEM_OUTLINE_CHROMA_KEY });
-        emblem.setSource(definition.sheet, definition.frameCount);
+        emblem.setSource(emblemArtworkSource(definition), emblemArtworkFrameCount(definition));
       }
       updateLabel();
     },

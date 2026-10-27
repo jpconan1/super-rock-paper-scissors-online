@@ -39,6 +39,8 @@ import type { AbmProjection } from '../variants/attackBlockMana/attackBlockManaT
 import { generateRandomName } from '../title/randomName';
 import { showPasswordAlert } from '../auth/passwordAlert';
 import { showEmblemMenuAlert } from './emblemMenuAlert';
+import { isStreamerModeEnabled } from '../input/streamerMode';
+import { showTitleSettingsAlert } from '../title/settingsAlert';
 
 export type ConnectionState = 'connected' | 'reconnecting' | 'offline';
 export type ShellDestination = 'title' | 'lobby' | 'account' | 'match-found' | 'slot-picker' | 'scoreboard' | 'gameplay' | 'progress' | 'reward';
@@ -203,19 +205,21 @@ export class AppController {
       }
       else if (this.connectionState === 'connected') this.options.session.send(command);
     });
+    const account = isControllerOptions(this.optionsOrRegistry) ? this.optionsOrRegistry.session.accountState() : undefined;
     presentation.mount({
       container: this.screenLayer, signal: this.lifecycle.signal, send: emit,
       openMenu: () => this.openUniversalMenu(), backToLobby: () => this.returnToLobbyFromMatch(),
       matchProgressComplete: () => void this.completeMatchProgressFlow(),
       self: this.matchProjection?.self ?? 'p1', players: this.matchProjection?.players,
+      hideOpponentCustomEmblems: isStreamerModeEnabled(),
       showOpponentCounterpick: this.localMatchAwardMode !== 'computer',
       setOpeningCountdownActive: (active) => {
         if (this.localMatchAwardMode !== 'computer') return;
         if (active) this.localMatch?.pauseComputer();
         else this.localMatch?.resumeComputer();
       },
-      music: this.music, ...(isControllerOptions(this.optionsOrRegistry)
-        ? { unlockedClassIds: this.optionsOrRegistry.session.accountState().unlockedClassIds } : {}),
+      music: this.music,
+      ...(account ? { unlockedClassIds: account.unlockedClassIds, bonusClassId: account.bonusClassId } : {}),
     });
     this.timeline = new AnimationTimeline(({ event, serverTime }) => {
       if (this.latestSnapshot) {
@@ -371,6 +375,8 @@ export class AppController {
             await this.navigate('lobby');
           }).catch((error) => { this.music.enterTitle(); this.showError(error, 'title'); });
         });
+      }, () => {
+        if (this.alertSystem) showTitleSettingsAlert(this.alertSystem, options.clock);
       });
       this.screenCleanup = title;
       this.screenReady = title.ready;
@@ -404,7 +410,7 @@ export class AppController {
           (emblem) => onChosen(emblem, options.session.accountState().customEmblem),
           () => lobby.openCustomEmblemEditor(),
         ),
-        { customEmblemEditor: {
+        { whiteboardDisabled: isStreamerModeEnabled(), loadMissions: () => options.session.getEmblemMissions(), customEmblemEditor: {
           load: () => options.session.getCustomEmblem(),
           save: async (document, artwork) => {
             await options.session.saveCustomEmblem(document, artwork);
@@ -413,6 +419,7 @@ export class AppController {
             return meta;
           },
         } },
+        account.bonusClassId,
       );
       lobby.receiveWhiteboard({ type: 'snapshot', board: this.whiteboard });
       lobby.updateRoster(this.lobbyPlayers, this.lobbySelfId);
@@ -588,7 +595,11 @@ export class AppController {
         const account = this.options.session.accountState();
         this.lobbyScreen?.setUnlockedClassCount(account.unlockedClassIds.length);
         this.lobbyScreen?.setTutorialDisabled(account.unlockAllClasses);
-      },
+      }, onSetPrestigeStepForTesting: async () => {
+        await this.options.session.setPrestigeStepForTesting();
+        this.closeUniversalMenu();
+        await this.navigate('lobby');
+      }, onStreamerModeChange: (enabled) => this.lobbyScreen?.setStreamerMode(enabled),
     };
     this.universalMenu = mountUniversalMenu(scaleContent ?? this.screenLayer, background, this.options.clock, menuOptions);
   }
@@ -916,7 +927,15 @@ export class AppController {
     const award = this.pendingProgressAward;
     if (!award) return;
     this.rewardTransitionStarted = true;
-    if (!award.unlockedClassIds.length) { this.finishReturnToLobby(); return; }
+    if (award.prestige?.state === 'completed') {
+      this.releaseCompletedMatch();
+      try { await this.options.session.refreshOnlineIdentity(); }
+      catch (error) { this.showError(error); return; }
+      this.pendingProgressAward = undefined; this.progressAwardMatchId = undefined; this.rewardTransitionStarted = false;
+      void this.navigate('lobby');
+      return;
+    }
+    if (!shouldShowClassRewards(award, this.options.session.accountState().prestigeCount)) { this.finishReturnToLobby(); return; }
     await this.openClassRewards(true);
   }
 
@@ -970,7 +989,7 @@ export class AppController {
         }
       } catch (error) { this.showError(error); return; }
     }
-    if (award && award.gainedProgressUnits > 0) {
+    if (award && (award.gainedProgressUnits > 0 || award.prestige)) {
       this.options.session.applyProgressAward(award);
       this.pendingProgressAward = award;
       void this.navigate('progress');
@@ -985,6 +1004,10 @@ export class AppController {
     this.progressAwardMatchId = undefined; this.rewardTransitionStarted = false;
     void this.navigate('lobby');
   }
+}
+
+export function shouldShowClassRewards(award: ProgressAward, prestigeCount: number): boolean {
+  return prestigeCount === 0 && award.unlockedClassIds.length > 0;
 }
 
 function isControllerOptions(value: AppControllerOptions | PresentationRegistry): value is AppControllerOptions {

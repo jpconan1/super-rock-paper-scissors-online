@@ -37,4 +37,10 @@ describe('lobby class cards', () => {
   it('shows every card face up when given the unlock-all class count', () => {
     expect(lobbyClassCardDefinitions(ABM_CLASS_IDS.length).every(({ faceUp }) => faceUp)).toBe(true);
   });
+
+  it('keeps every prestiged card face up while moving the bonus spike to Lucky', () => {
+    const cards = lobbyClassCardDefinitions(ABM_CLASS_IDS.length, 'lucky');
+    expect(cards.every(({ faceUp }) => faceUp)).toBe(true);
+    expect(cards.filter(({ newest }) => newest).map(({ classId }) => classId)).toEqual(['lucky']);
+  });
 });

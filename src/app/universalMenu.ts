@@ -3,6 +3,7 @@ import { getMusicVolume, getSfxVolume, setMusicVolume, setSfxVolume, subscribeAu
 import { createBoilToggle } from '../input/boilToggle';
 import { createGameButton } from '../input/gameButton';
 import { createSoundToggle } from '../input/soundToggle';
+import { createStreamerModeToggle } from '../input/streamerMode';
 import { createVolumeSlider } from '../title/volumeSlider';
 import { createTextbox } from '../ui/textbox';
 import { STANDARD_CONFIRMATION_GEOMETRY, type AlertButtonSheets, type AlertSystem } from '../ui/alertSystem';
@@ -16,6 +17,8 @@ export interface LobbyUniversalMenuOptions extends UniversalMenuCommonOptions {
   mode: 'lobby';
   onAccount: () => void;
   onSetUnlockAll: (enabled: boolean) => Promise<void>;
+  onSetPrestigeStepForTesting: () => Promise<void>;
+  onStreamerModeChange: (enabled: boolean) => void;
   account: UniversalMenuAccount;
 }
 export interface GameUniversalMenuOptions extends UniversalMenuCommonOptions { mode: 'game' }
@@ -103,14 +106,18 @@ export function mountUniversalMenu(container: HTMLElement, background: HTMLEleme
   continueButton.element.classList.add('universal-menu__continue', 'game-button--baked-label');
   const controls = document.createElement('div');
   controls.className = `universal-menu__controls universal-menu__controls--${options.mode}`;
-  music.element.classList.add('universal-menu__slider');
-  sfx.element.classList.add('universal-menu__slider');
-  sound.element.classList.add('universal-menu__toggle');
-  boil.element.classList.add('universal-menu__toggle');
+  music.element.classList.add('universal-menu__slider', 'universal-menu__slider--music');
+  sfx.element.classList.add('universal-menu__slider', 'universal-menu__slider--sfx');
+  sound.element.classList.add('universal-menu__toggle', 'universal-menu__toggle--sound');
+  boil.element.classList.add('universal-menu__toggle', 'universal-menu__toggle--boil');
   controls.append(music.element, sfx.element, sound.element, boil.element);
   const lobbyResources: Array<{ destroy(): void }> = [];
   const lobbyDecorations: Node[] = [];
   if (options.mode === 'lobby') {
+    const streamer = createStreamerModeToggle(clock, options.onStreamerModeChange);
+    streamer.element.classList.add('universal-menu__toggle', 'universal-menu__toggle--streamer');
+    controls.append(streamer.element);
+    lobbyResources.push(streamer);
     let unlockAllClasses = options.account.unlockAllClasses;
     let resumeProgression: ReturnType<typeof createGameButton>;
     const renderUnlockControl = () => {
@@ -132,7 +139,7 @@ export function mountUniversalMenu(container: HTMLElement, background: HTMLEleme
         confirm: { label: 'Continue', sheets: ALERT_BUTTON_SHEETS.continue, onActivate: () => updateUnlockAll(true) },
       }).then((confirmed) => { if (confirmed) resumeProgression.element.focus(); });
     };
-    const unlockController = createUnlockController(clock, showUnlockConfirmation);
+    const unlockController = createUnlockController(clock, showUnlockConfirmation, () => void options.onSetPrestigeStepForTesting());
     resumeProgression = createGameButton({ label: 'Resume progression', onActivate: () => void updateUnlockAll(false), clock,
       upSheet: '/interactive-elements/resume-progression/lock-button-up-sheet.webp', betweenSheet: '/interactive-elements/resume-progression/lock-button-between-sheet.webp', depressedSheet: '/interactive-elements/resume-progression/lock-button-depressed-sheet.webp' });
     resumeProgression.element.classList.add('universal-menu__resume-progression', 'game-button--baked-label');

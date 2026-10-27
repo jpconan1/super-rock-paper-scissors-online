@@ -13,6 +13,7 @@ import { applyAlertGeometry } from '../ui/fixedAlertCanvas';
 import { createPlayerEmblemCard } from '../ui/playerEmblemCard';
 import { abmEditorGeometry, getEditorMirrorUpdate, isAbmBattleEditorElement, isAbmCounterpickThoughtBubbleEditorContext, isAbmCounterpickThoughtBubbleEditorElement, isAbmPostMatchEditorElement, isAbmTutorialBlockTagEditorContext, isAbmTutorialBlockTagEditorElement, isAbmWaitingEditorElement, isEditorElementVisible, resizeEditorGeometry, setAbmEditorGeometry } from './abmEditorModel';
 import { isLobbyEditorElementVisible, isLobbyStateElementEditable, type LobbyEditorState } from './lobbyEditorModel';
+import { applyAuthoredHitbox } from '../layout/layoutRuntime';
 
 const hostElement = document.querySelector<HTMLElement>('#editor');
 if (!hostElement) throw new Error('Missing editor mount.');
@@ -33,7 +34,7 @@ let screen: EditorScreen = 'lobby';
 let accountState: AccountState = 'email';
 let rewardState: RewardState = 'unlocked';
 let abmState: AbmState = 'battle';
-let lobbyState: LobbyEditorState = 'progression';
+let lobbyState: LobbyEditorState = 'custom-emblem';
 let working = drafts.get(screen)!;
 let saved = savedDocuments.get(screen)!;
 let orientation: LayoutOrientation = 'landscape';
@@ -44,7 +45,7 @@ let future: LayoutDocument[] = [];
 let cleanups: (() => void)[] = [];
 
 host.innerHTML = `<main class="abm-editor">
-  <header class="abm-editor__toolbar"><strong data-title>Lobby · Progression</strong>
+  <header class="abm-editor__toolbar"><strong data-title>Lobby · Custom Emblem</strong>
     <label>Screen <select data-screen><option value="lobby">Lobby</option><option value="account">Account</option><option value="variant-abm">ABM game</option><option value="class-reward">Class reward</option><option value="tutorial-slide-one">Tutorial slide 1</option></select></label>
     <label data-state-label>State <select data-state></select></label>
     <label>View <select data-orientation><option value="landscape">Landscape</option><option value="portrait">Portrait</option></select></label>
@@ -99,6 +100,7 @@ function render(): void {
     node.classList.toggle('is-selected', config.id === selectedId);
     if (configs.some(({ parent }) => parent === config.id)) { node.classList.add('is-structural'); node.textContent = ''; }
     applyEditorNodeGeometry(node, config, screen === 'variant-abm' ? editorGeometry(config) : config.layouts[orientation]);
+    applyAuthoredHitbox(node, config);
     node.style.zIndex = String(screen === 'lobby' && LOBBY_WHITEBOARD_TOOL_IDS.has(config.id) ? 5 : config.layer ?? 0); nodes.set(config.id, node);
   }
   if (screen === 'lobby' && lobbyState === 'custom-emblem') addCustomEmblemPreview(nodes.get('whiteboard'));
@@ -234,8 +236,11 @@ function renderInspector(): void {
   const geometry = item ? (screen === 'variant-abm' ? editorGeometry(item) : item.layouts[orientation]) : undefined;
   if (!item || !geometry) { panel.innerHTML = '<h2>Element</h2><p>Select an element to edit its geometry.</p>'; return; }
   const fields = (['x', 'y', 'width', 'height'] as const).map((key) => `<label>${key}<input type="number" step="5" data-geometry="${key}" value="${round(geometry[key])}"></label>`).join('');
+  const supportsHitbox = LOBBY_WHITEBOARD_TOOL_IDS.has(item.id) || item.id === 'emblem-frame'
+    || ['top', 'right', 'bottom', 'left'].some((side) => item.properties?.[`hitbox-${side}`] !== undefined);
+  const hitboxFields = supportsHitbox ? ['top', 'right', 'bottom', 'left'].map((side) => `<label>hit ${side}<input type="number" step="1" min="0" data-hitbox="${side}" value="${Number(item.properties?.[`hitbox-${side}`] ?? 0)}"></label>`).join('') : '';
   const mirror = screen === 'variant-abm' ? getEditorMirrorUpdate(working, item.id, orientation) : undefined;
-  panel.innerHTML = `<h2>${item.label ?? name(item.id)}</h2><p class="abm-editor__id">${item.id}</p><div class="abm-editor__fields">${fields}</div><button data-mirror${mirror ? '' : ' disabled'}>Mirror to P2</button>`;
+  panel.innerHTML = `<h2>${item.label ?? name(item.id)}</h2><p class="abm-editor__id">${item.id}</p><div class="abm-editor__fields">${fields}${hitboxFields}</div><button data-mirror${mirror ? '' : ' disabled'}>Mirror to P2</button>`;
   panel.querySelectorAll<HTMLInputElement>('[data-geometry]').forEach((input) => { input.onchange = () => change(() => {
     const key = input.dataset.geometry as 'x' | 'y' | 'width' | 'height'; const value = Number(input.value);
     if (!Number.isFinite(value)) return;
@@ -243,6 +248,11 @@ function renderInspector(): void {
       ? resizeEditorGeometry(item, orientation, key, Math.max(5, value), undefined, geometry)
       : { ...geometry, [key]: value };
     if (screen === 'variant-abm') setAbmEditorGeometry(item, orientation, next); else item.layouts[orientation] = next;
+  }); });
+  panel.querySelectorAll<HTMLInputElement>('[data-hitbox]').forEach((input) => { input.onchange = () => change(() => {
+    const side = input.dataset.hitbox!; const value = Math.max(0, Number(input.value));
+    if (!Number.isFinite(value)) return;
+    item.properties = { ...item.properties, [`hitbox-${side}`]: value };
   }); });
   panel.querySelector<HTMLButtonElement>('[data-mirror]')!.onclick = () => change(() => {
     const update = getEditorMirrorUpdate(working, item.id, orientation); if (!update) return;

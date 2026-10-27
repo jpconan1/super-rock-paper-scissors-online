@@ -1,6 +1,6 @@
 import type { BoilClock } from '../animation/boilClock';
-import type { EmblemMissionStatus } from '../core/emblemMission';
-import { PLAYER_EMBLEM_BY_ID, type EquippedPlayerEmblem, type OwnablePlayerEmblem } from '../core/playerEmblem';
+import type { EmblemMissionFeed } from '../core/emblemMission';
+import { emblemArtworkFrameCount, emblemArtworkSource, PLAYER_EMBLEM_BY_ID, type EquippedPlayerEmblem, type OwnablePlayerEmblem } from '../core/playerEmblem';
 import { customEmblemImageUrl, type CustomEmblemMeta } from '../core/customEmblem';
 import { createButtonFaceArtwork } from '../renderer/buttonFaceArtwork';
 import { createBoilingSprite } from '../renderer/boilingSprite';
@@ -21,6 +21,11 @@ const BLANK_BUTTON_FACE_SHEETS = {
   between: BLANK_BUTTON.betweenSheet,
   depressed: BLANK_BUTTON.depressedSheet,
 } as const;
+const NONE_BUTTON = {
+  upSheet: '/interactive-elements/none-button-up-sheet.webp',
+  betweenSheet: '/interactive-elements/none-button-between-sheet.webp',
+  depressedSheet: '/interactive-elements/none-button-depressed-sheet.webp',
+} as const;
 
 interface EmblemChoice {
   emblem: EquippedPlayerEmblem | null;
@@ -33,7 +38,7 @@ export function showEmblemMenuAlert(
   equipped: EquippedPlayerEmblem | null,
   owned: readonly OwnablePlayerEmblem[],
   customEmblem: CustomEmblemMeta | null,
-  loadMissions: () => Promise<EmblemMissionStatus[]>,
+  loadMissions: () => Promise<EmblemMissionFeed>,
   onChoose: (emblem: EquippedPlayerEmblem | null) => Promise<void>,
   onChosen: (emblem: EquippedPlayerEmblem | null) => void,
   onEditCustom: () => void,
@@ -86,7 +91,7 @@ export function showEmblemMenuAlert(
 
   for (const emblem of available) {
     const name = emblem === 'custom' ? 'Custom' : emblem ? PLAYER_EMBLEM_BY_ID.get(emblem)?.name ?? emblem : 'No Emblem';
-    const button = createGameButton({ label: name, clock, ...BLANK_BUTTON, lockedDepressed: emblem === selected,
+    const button = createGameButton({ label: name, clock, ...(emblem === null ? NONE_BUTTON : BLANK_BUTTON), lockedDepressed: emblem === selected,
       activateAtReleaseStart: true, onActivate: () => choose(emblem) });
     button.element.classList.add('emblem-menu__choice', 'game-button--baked-label');
     button.element.setAttribute('role', 'radio');
@@ -100,10 +105,8 @@ export function showEmblemMenuAlert(
     } else if (emblem) {
       const definition = PLAYER_EMBLEM_BY_ID.get(emblem);
       if (definition) {
-        sprite = createBoilingSprite({ src: definition.sheet, frameCount: definition.frameCount, clock, className: 'emblem-menu__emblem', alt: '' });
+        sprite = createBoilingSprite({ src: emblemArtworkSource(definition), frameCount: emblemArtworkFrameCount(definition), clock, className: 'emblem-menu__emblem', alt: '' });
       }
-    } else {
-      art.classList.add('emblem-menu__choice-art--none'); art.textContent = 'None';
     }
     if (sprite) {
       sprites.push(sprite);
@@ -124,15 +127,35 @@ export function showEmblemMenuAlert(
   collectionSection.append(collectionHeading, choices, customButton.element, choiceStatus);
 
   const missionSection = document.createElement('section'); missionSection.className = 'emblem-menu__section emblem-menu__section--missions';
+  const missionScroll = document.createElement('div'); missionScroll.className = 'emblem-menu__mission-scroll';
+  const contest = document.createElement('section'); contest.className = 'emblem-menu__contest'; contest.hidden = true;
+  const contestHeading = document.createElement('h3'); contestHeading.textContent = 'Contest';
+  const contestCopy = document.createElement('p'); contestCopy.className = 'emblem-menu__contest-copy';
+  contestCopy.textContent = 'The first ten players to Prestige get a one-of-a-kind Emblem!';
+  const contestClaimed = document.createElement('small'); contestClaimed.className = 'emblem-menu__contest-claimed';
+  const contestArt = document.createElement('span'); contestArt.className = 'emblem-menu__contest-art';
+  contest.append(contestHeading, contestCopy, contestClaimed, contestArt);
   const missionHeading = document.createElement('h3'); missionHeading.textContent = 'Missions';
+  const missionCopy = document.createElement('p'); missionCopy.className = 'emblem-menu__contest-copy emblem-menu__mission-copy';
+  missionCopy.textContent = 'Complete Missions to get new Emblems!';
   const missionStatus = document.createElement('p'); missionStatus.className = 'emblem-menu__status'; missionStatus.textContent = 'Loading missions…';
   const missions = document.createElement('ul'); missions.className = 'emblem-menu__missions';
-  missionSection.append(missionHeading, missionStatus, missions);
+  missionScroll.append(contest, missionHeading, missionCopy, missionStatus, missions); missionSection.append(missionScroll);
   content.append(collectionSection, missionSection);
   handle = alerts.show({ ariaLabel: 'Choose Your Emblem', title: 'Choose Your Emblem', geometry: GEOMETRY, content,
     className: 'emblem-menu-alert', actions: [], dismissible: true });
 
-  void loadMissions().then((items) => {
+  void loadMissions().then(({ contest: contestStatus, missions: items }) => {
+    if (contestStatus.active) {
+      contest.hidden = false;
+      contestClaimed.textContent = `${contestStatus.claimed} Emblems claimed`;
+      const definition = PLAYER_EMBLEM_BY_ID.get('first-place');
+      if (definition) {
+        const sprite = createBoilingSprite({ src: emblemArtworkSource(definition), frameCount: emblemArtworkFrameCount(definition),
+          clock, className: 'emblem-menu__contest-emblem', alt: 'First place emblem' });
+        sprites.push(sprite); contestArt.append(sprite.element);
+      }
+    }
     customButton.element.hidden = customEmblem === null && !items.some((mission) => mission.id === 'win-online-match' && mission.completed);
     if (!items.length) { missionStatus.textContent = 'No current missions.'; return; }
     missionStatus.remove();

@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { setPlayerEmblemCatalog } from '../src/core/playerEmblem';
 
 const mocks = vi.hoisted(() => ({
   buttonDestroys: [] as ReturnType<typeof vi.fn>[],
   spriteDestroys: [] as ReturnType<typeof vi.fn>[],
   spriteSetSources: [] as ReturnType<typeof vi.fn>[],
+  spriteArtworkVisibility: [] as ReturnType<typeof vi.fn>[],
+  spriteOptions: [] as { src?: string; frameCount?: number }[],
   buttonElements: [] as HTMLButtonElement[],
   buttonActivations: [] as (() => void)[],
   stop: vi.fn(),
@@ -22,15 +23,18 @@ vi.mock('../src/input/gameButton', () => ({
 }));
 
 vi.mock('../src/renderer/boilingSprite', () => ({
-  createBoilingSprite: (options: { className?: string; src?: string }) => {
+  createBoilingSprite: (options: { className?: string; src?: string; frameCount?: number }) => {
     const destroy = vi.fn();
     const setSource = vi.fn();
     mocks.spriteDestroys.push(destroy);
     mocks.spriteSetSources.push(setSource);
+    mocks.spriteOptions.push(options);
     const element = document.createElement('div');
     element.className = options.className ?? '';
     element.dataset.src = options.src ?? '';
-    return { element, setSource, setArtworkVisible: vi.fn(), destroy };
+    const setArtworkVisible = vi.fn();
+    mocks.spriteArtworkVisibility.push(setArtworkVisible);
+    return { element, setSource, setArtworkVisible, destroy };
   },
 }));
 
@@ -122,6 +126,8 @@ afterEach(() => {
   mocks.buttonDestroys.length = 0;
   mocks.spriteDestroys.length = 0;
   mocks.spriteSetSources.length = 0;
+  mocks.spriteArtworkVisibility.length = 0;
+  mocks.spriteOptions.length = 0;
   mocks.buttonElements.length = 0;
   mocks.buttonActivations.length = 0;
   vi.unstubAllGlobals();
@@ -144,10 +150,6 @@ describe('shared game layout contract', () => {
   });
 
   test('builds boiling mirrored emblem cards with level fallback', () => {
-    setPlayerEmblemCatalog([
-      { id: 'beta-og', name: 'Beta OG', sheet: '/emblems/beta-og-sheet.webp', ownable: true, systemOnly: false },
-      { id: 'computer', name: 'Computer', sheet: '/emblems/computer-sheet.webp', ownable: false, systemOnly: true },
-    ]);
     useFakeDocument();
     const p1Card = createPlayerInfo({ heading: 'A very long player name', rating: '', platform: '', level: 16 }, 'p1', {} as never);
     const p2Card = createPlayerInfo({ heading: 'Computer', rating: '', platform: '', emblem: 'computer' }, 'p2', {} as never);
@@ -159,14 +161,41 @@ describe('shared game layout contract', () => {
     expect(p1.attributes.get('aria-label')).toBe('A very long player name, level 16, no emblem');
     expect(p2.attributes.get('aria-label')).toBe('Computer, level 1, Computer emblem');
     expect(p1.children.map((child) => child.className)).toEqual([
-      'player-emblem-card__emblem', 'player-emblem-card__none', 'player-emblem-card__heading',
+      'player-emblem-card__emblem', 'player-emblem-card__none', 'player-emblem-card__heading', 'player-emblem-card__prestige',
     ]);
     expect(p1.children[2]!.children[0]!.textContent).toBe('A very long player name');
     expect(p1.children[2]!.children[1]!.textContent).toBe('Lv 16');
     expect(p2.children[2]!.children[1]!.textContent).toBe('Lv 1');
+    expect(p1.children[3]!.hidden).toBe(true);
     expect(p1.children[0]!.dataset.src).toBe('/emblems/beta-og-sheet.webp');
     expect(p2.children[0]!.dataset.src).toBe('/emblems/computer-sheet.webp');
     expect(mocks.spriteDestroys).toHaveLength(2);
+  });
+
+  test('shows level and prestige in separate player-card boxes', () => {
+    useFakeDocument();
+    const card = createPlayerInfo({ heading: 'Veteran', rating: '', platform: '', level: 4, prestigeCount: 3 }, 'p1', {} as never);
+    const element = card.element as unknown as FakeElement;
+    expect(element.attributes.get('aria-label')).toBe('Veteran, level 4, prestige 3, no emblem');
+    expect(element.children[2]!.children[1]!.textContent).toBe('Lv 4');
+    expect(element.children[3]).toMatchObject({ textContent: 'P. 3', hidden: false });
+  });
+
+  test('slices equipped custom emblem sheets into their three authored frames', () => {
+    useFakeDocument();
+    createPlayerInfo({ heading: 'Artist', rating: '', platform: '', emblem: 'custom',
+      customEmblem: { playerId: 'player-a', version: 42, borderNumber: 5 } }, 'p1', {} as never);
+    expect(mocks.spriteOptions[0]).toMatchObject({ src: '/custom-emblems/player-a.webp?v=42&format=2', frameCount: 3 });
+  });
+
+  test('leaves a hidden custom emblem framed without requesting its artwork', () => {
+    useFakeDocument();
+    const card = createPlayerInfo({ heading: 'Opponent', rating: '', platform: '', emblem: 'custom', hideCustomArtwork: true,
+      customEmblem: { playerId: 'player-a', version: 42, borderNumber: 5 } }, 'p2', {} as never);
+    expect(mocks.spriteOptions[0]!.src).not.toContain('/custom-emblems/');
+    expect(mocks.spriteArtworkVisibility[0]).toHaveBeenCalledWith(false);
+    expect((card.element as unknown as FakeElement).children[1]!.hidden).toBe(true);
+    expect((card.element as unknown as FakeElement).attributes.get('aria-label')).toContain('custom emblem hidden');
   });
 
   test('creates every required slot exactly once', () => {

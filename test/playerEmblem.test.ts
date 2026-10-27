@@ -1,12 +1,8 @@
 import { describe, expect, test } from 'vitest';
-import { isOwnablePlayerEmblem, isPlayerEmblem, nextOwnedPlayerEmblem, PLAYER_EMBLEM_BY_ID, setPlayerEmblemCatalog } from '../src/core/playerEmblem';
+import { emblemArtworkFrameCount, emblemArtworkSource, isOwnablePlayerEmblem, isPlayerEmblem, nextOwnedPlayerEmblem, PLAYER_EMBLEM_BY_ID } from '../src/core/playerEmblem';
 
 describe('player emblem runtime catalog', () => {
-  test('validates IDs from the server-owned catalog', () => {
-    setPlayerEmblemCatalog([
-      { id: 'new-player', name: 'New Player', sheet: '/emblems/new-player-sheet.webp', ownable: true, systemOnly: false },
-      { id: 'computer', name: 'Computer', sheet: '/emblems/computer-sheet.webp', ownable: false, systemOnly: true },
-    ]);
+  test('validates IDs from the code-owned catalog', () => {
     expect(isPlayerEmblem('new-player')).toBe(true);
     expect(isOwnablePlayerEmblem('new-player')).toBe(true);
     expect(isOwnablePlayerEmblem('computer')).toBe(false);
@@ -17,10 +13,11 @@ describe('player emblem runtime catalog', () => {
     expect(nextOwnedPlayerEmblem(null, ['new-player'])).toBe('new-player');
     expect(nextOwnedPlayerEmblem('new-player', ['new-player'])).toBeNull();
   });
-  test('uses the authored Beta OG frame count without a server migration', () => {
-    setPlayerEmblemCatalog([
-      { id: 'beta-og', name: 'Beta OG', sheet: '/emblems/beta-og-sheet.webp', ownable: true, systemOnly: false },
-    ]);
-    expect(PLAYER_EMBLEM_BY_ID.get('beta-og')?.frameCount).toBe(10);
+  test('supports static images and arbitrary authored sprite counts', () => {
+    expect(emblemArtworkFrameCount(PLAYER_EMBLEM_BY_ID.get('beta-og')!)).toBe(10);
+    expect(emblemArtworkFrameCount(PLAYER_EMBLEM_BY_ID.get('new-player')!)).toBe(15);
+    const still = { id: 'still', name: 'Still', artwork: { kind: 'image' as const, src: '/still.webp' }, ownable: true, systemOnly: false, sortOrder: 1 };
+    expect(emblemArtworkFrameCount(still)).toBe(1);
+    expect(emblemArtworkSource(still)).toBe('/still.webp');
   });
 });

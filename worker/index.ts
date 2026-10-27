@@ -15,7 +15,7 @@ import {
 } from '../src/whiteboard/protocol';
 import { isLobbyPresence, type LobbyPlayer, type LobbyPresence, type LobbyServerMessage } from '../src/lobby/protocol';
 import { eloDeltas } from '../src/core/elo';
-import { countNewestClassRoundWins, createProgressAward, createTokenProgressAward, createTutorialProgressAward, isClassUnlocked, progressionForTotal, type ProgressAward } from '../src/core/progression';
+import { countNewestClassRoundWins, createOnlineProgressAward, createProgressAward, createTokenProgressAward, createTutorialProgressAward, isClassUnlocked, progressionForTotal, type ProgressAward } from '../src/core/progression';
 import { ABM_CLASS_IDS, type AbmCommand, type AbmClassId, type AbmState } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 import { WhiteboardRateLimiter, type WhiteboardRateCategory } from '../src/whiteboard/rateLimiter';
 import { LOBBY_SOCKET_PROTOCOL, MATCH_SOCKET_PROTOCOL, socketCredential, WHITEBOARD_SOCKET_PROTOCOL } from '../src/protocol/webSocketAuth';
@@ -31,12 +31,13 @@ import {
 import { claimReadablePlayerId, type PlayerAccountType } from '../src/protocol/playerId';
 import type { EquippedPlayerEmblem, OwnablePlayerEmblem } from '../src/core/playerEmblem';
 import { CUSTOM_EMBLEM_HEIGHT, CUSTOM_EMBLEM_FRAME_COUNT, CUSTOM_EMBLEM_MAX_DOCUMENT_BYTES, CUSTOM_EMBLEM_MAX_IMAGE_BYTES, CUSTOM_EMBLEM_WIDTH, isCustomEmblemDocument, type CustomEmblemMeta } from '../src/core/customEmblem';
-import type { EmblemMissionStatus } from '../src/core/emblemMission';
+import { EMBLEM_MISSIONS, type EmblemMissionStatus } from '../src/core/emblemMission';
 import { createAuth, PRIVACY_VERSION, TERMS_VERSION, type AuthEnv } from './auth';
 import { createResendMailer, type AuthMailer } from './resendMailer';
 import { accountDeletionCodeHash, consumeAccountDeletionChallenge, purgeAccountData } from './accountDeletion';
 import { adminRoute } from './admin';
-import { completeEmblemMission, hasCustomEmblemAccess, isActiveOwnableEmblem, ownedPlayerEmblems, playerEmblemCatalog, prestigePlayer, recordUnlockAllClassesFinish } from './playerEmblems';
+import { completeEmblemMission, hasCustomEmblemAccess, isActiveOwnableEmblem, ownedPlayerEmblems, recordUnlockAllClassesFinish } from './playerEmblems';
+import { finalizeMatch } from './matchPersistence';
 import { maintenanceCookie, maintenancePassExpiry, readMaintenanceState, verifyMaintenancePass } from './maintenance';
 import { hashPassword } from 'better-auth/crypto';
 import {
@@ -266,6 +267,8 @@ export class MatchObject extends DurableObject<Env> {
         p1Delta: deltas.p1, p2Delta: deltas.p2,
         p1ProgressAward: progressAwards.p1?.gainedProgressUnits ?? 0,
         p2ProgressAward: progressAwards.p2?.gainedProgressUnits ?? 0,
+        p1Prestige: progressAwards.p1?.prestige?.state === 'completed',
+        p2Prestige: progressAwards.p2?.prestige?.state === 'completed',
         summary: JSON.stringify({ format: record.format, games: record.games, winner: record.winner,
           completionReason: record.completionReason, disconnectedPlayer: record.disconnectedPlayer,
           ratings: { p1: record.players.p1.rating, p2: record.players.p2.rating }, deltas }),
@@ -285,10 +288,14 @@ export class MatchObject extends DurableObject<Env> {
     const abm = record.gameState as AbmState | undefined;
     for (const seat of ['p1', 'p2'] as const) {
       if (record.completionReason === 'disconnect' && record.disconnectedPlayer === seat) continue;
-      const newestClassRoundWins = countNewestClassRoundWins(record.playerProgress[seat], abm?.roundWinningClassIds?.[seat] ?? []);
-      awards[seat] = createProgressAward(record.playerProgress[seat], seat === record.winner ? 'win' : 'loss', {
-        opponent: 'human', newestClassRoundWins, paused: record.playerUnlockAll?.[seat],
-      });
+      const roundWinningClassIds = abm?.roundWinningClassIds?.[seat] ?? [];
+      awards[seat] = record.completionReason === 'played'
+        ? createOnlineProgressAward(record.playerProgress[seat], seat === record.winner ? 'win' : 'loss', roundWinningClassIds,
+          record.playerUnlockAll?.[seat], record.players[seat].prestigeCount ?? 0)
+        : createProgressAward(record.playerProgress[seat], seat === record.winner ? 'win' : 'loss', {
+          opponent: 'human', newestClassRoundWins: countNewestClassRoundWins(record.playerProgress[seat], roundWinningClassIds),
+          paused: record.playerUnlockAll?.[seat],
+        });
     }
     return awards;
   }
@@ -712,26 +719,6 @@ function sanitizePoints(value: unknown, minimumY: number, maximumY: number): Whi
     if (typeof candidate.x !== 'number' || typeof candidate.y !== 'number' || !Number.isFinite(candidate.x) || !Number.isFinite(candidate.y)) return [];
     return [{ x: Math.max(0, Math.min(760, candidate.x)), y: Math.max(minimumY, Math.min(maximumY, candidate.y)) }];
   });
-}
-
-export async function finalizeMatch(db: D1Database, result: {
-  resultId: string; matchId: string; seasonId: string; p1Id: string; p2Id: string;
-  winnerId: string | null; p1Delta: number; p2Delta: number; p1ProgressAward: number; p2ProgressAward: number; summary: string;
-}): Promise<'applied' | 'duplicate'> {
-  const statements = [
-    db.prepare('INSERT OR IGNORE INTO match_results (result_id, match_id, season_id, p1_id, p2_id, winner_id, summary_json, progress_applied, p1_progress_award, p2_progress_award) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)')
-      .bind(result.resultId, result.matchId, result.seasonId, result.p1Id, result.p2Id, result.winnerId, result.summary, result.p1ProgressAward, result.p2ProgressAward),
-    db.prepare('UPDATE players SET rating = rating + ? WHERE player_id = ? AND EXISTS (SELECT 1 FROM match_results WHERE result_id = ? AND ratings_applied = 0)').bind(result.p1Delta, result.p1Id, result.resultId),
-    db.prepare('UPDATE players SET rating = rating + ? WHERE player_id = ? AND EXISTS (SELECT 1 FROM match_results WHERE result_id = ? AND ratings_applied = 0)').bind(result.p2Delta, result.p2Id, result.resultId),
-    db.prepare('UPDATE match_results SET ratings_applied = 1 WHERE result_id = ? AND ratings_applied = 0').bind(result.resultId),
-    db.prepare('UPDATE players SET total_progress_units = MIN(200000, total_progress_units + ?) WHERE player_id = ? AND EXISTS (SELECT 1 FROM match_results WHERE result_id = ? AND progress_applied = 0)').bind(result.p1ProgressAward, result.p1Id, result.resultId),
-    db.prepare('UPDATE players SET total_progress_units = MIN(200000, total_progress_units + ?) WHERE player_id = ? AND EXISTS (SELECT 1 FROM match_results WHERE result_id = ? AND progress_applied = 0)').bind(result.p2ProgressAward, result.p2Id, result.resultId),
-    db.prepare('UPDATE match_results SET progress_applied = 1 WHERE result_id = ? AND progress_applied = 0').bind(result.resultId),
-  ];
-  const responses = await db.batch(statements);
-  if (result.winnerId) await completeEmblemMission(db, result.winnerId, 'win-online-match');
-  await Promise.all([recordUnlockAllClassesFinish(db, result.p1Id), recordUnlockAllClassesFinish(db, result.p2Id)]);
-  return responses[3]?.meta.changes === 1 || responses[6]?.meta.changes === 1 ? 'applied' : 'duplicate';
 }
 
 export async function applyLocalProgressAward(db: D1Database, playerId: string, resultId: string, kind: LocalMatchKind, award: ProgressAward, fullReward: boolean, createdAt = Date.now()): Promise<ProgressAward> {
@@ -1254,10 +1241,6 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
     }
     if (url.pathname.startsWith('/api/auth/')) return createAuth(env).handler(request);
     if (url.pathname === '/health') return json({ ok: true });
-    if (url.pathname === '/emblem-catalog' && request.method === 'GET') {
-      try { return json(await playerEmblemCatalog(env.DB, true)); }
-      catch { return json({ error: 'Emblem catalog failed.' }, 500); }
-    }
     if (url.pathname.startsWith('/custom-emblems/') && request.method === 'GET') {
       const playerId = decodeURIComponent(url.pathname.slice('/custom-emblems/'.length).replace(/\.webp$/, ''));
       if (!playerId || playerId.length > 128) return json({ error: 'Invalid player.' }, 400);
@@ -1272,7 +1255,8 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
     });
     if (url.pathname === '/claim-google-account' && request.method === 'POST') {
       try {
-        const authSession = await createAuth(env).api.getSession({ headers: request.headers });
+        const auth = createAuth(env);
+        const authSession = await auth.api.getSession({ headers: request.headers });
         if (!authSession) return json({ error: 'Authentication required.' }, 401);
         const player = await env.DB.prepare(`SELECT player_id, display_name, rating, total_progress_units, unlock_all_classes,
           equipped_emblem, account_type, prestige_count FROM players WHERE auth_user_id = ?`).bind(authSession.user.id).first<PlayerProfileRow>();
@@ -1281,13 +1265,18 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
         if (!alreadyClaimed && (!(authSession.user as { isAnonymous?: boolean }).isAnonymous || player.account_type !== 'guest')) {
           return json({ error: 'Only a guest player can be claimed.' }, 409);
         }
+        const google = await env.DB.prepare(`SELECT accountId FROM account
+          WHERE userId = ? AND providerId = 'google'`).bind(authSession.user.id).first<{ accountId: string }>();
+        if (!google) return json({ error: 'Link Google before claiming this player.' }, 409);
+        const googleIdentity = await auth.api.accountInfo({ headers: request.headers,
+          query: { providerId: 'google', accountId: google.accountId } });
+        const googleEmail = googleIdentity?.user.email?.trim().toLowerCase();
+        if (!googleEmail || googleIdentity?.user.emailVerified !== true) return json({ error: 'Google did not provide a verified email.' }, 409);
         const now = Date.now();
         if (!alreadyClaimed) {
-          const google = await env.DB.prepare(`SELECT 1 present FROM account
-            WHERE userId = ? AND providerId = 'google'`).bind(authSession.user.id).first();
-          if (!google) return json({ error: 'Link Google before claiming this player.' }, 409);
           await env.DB.batch([
-            env.DB.prepare('UPDATE user SET isAnonymous = 0, updatedAt = ? WHERE id = ? AND isAnonymous = 1').bind(now, authSession.user.id),
+            env.DB.prepare('UPDATE user SET email = ?, emailVerified = 1, isAnonymous = 0, updatedAt = ? WHERE id = ?')
+              .bind(googleEmail, now, authSession.user.id),
             env.DB.prepare(`UPDATE players SET account_type = 'google', terms_version = ?, privacy_version = ?,
               legal_accepted_at = COALESCE(legal_accepted_at, ?), updated_at = ? WHERE player_id = ? AND account_type = 'guest'`)
               .bind(TERMS_VERSION, PRIVACY_VERSION, now, now, player.player_id),
@@ -1296,6 +1285,9 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
               SELECT ?, 'protected-account', ?, ?, '{}', CASE WHEN EXISTS (SELECT 1 FROM test_players WHERE player_id = ?) THEN 1 ELSE 0 END`)
               .bind(`protected-account:${authSession.user.id}`, now, player.player_id, player.player_id),
           ]);
+        } else if (authSession.user.email.trim().toLowerCase() !== googleEmail) {
+          await env.DB.prepare('UPDATE user SET email = ?, emailVerified = 1, updatedAt = ? WHERE id = ?')
+            .bind(googleEmail, now, authSession.user.id).run();
         }
         await completeEmblemMission(env.DB, player.player_id, 'claim-account', now);
         return json(await currentPlayerProfile(env.DB, player.player_id));
@@ -1352,10 +1344,16 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
       try {
         const authSession = await createAuth(env).api.getSession({ headers: request.headers });
         if (!authSession) return json({ error: 'Authentication required.' }, 401);
-        const body = await readJsonBody<{ unlockAllClasses?: unknown }>(request, 1_000);
-        if (typeof body.unlockAllClasses !== 'boolean') return json({ error: 'unlockAllClasses must be a boolean.' }, 400);
-        await env.DB.prepare('UPDATE players SET unlock_all_classes = ?, updated_at = ? WHERE auth_user_id = ?')
-          .bind(body.unlockAllClasses ? 1 : 0, Date.now(), authSession.user.id).run();
+        const body = await readJsonBody<{ unlockAllClasses?: unknown; testPrestigeStep?: unknown }>(request, 1_000);
+        if (body.testPrestigeStep === true) {
+          // Temporary controller cheat used to exercise the prestige flow.
+          await env.DB.prepare('UPDATE players SET total_progress_units = ?, updated_at = ? WHERE auth_user_id = ?')
+            .bind(200_000, Date.now(), authSession.user.id).run();
+        } else {
+          if (typeof body.unlockAllClasses !== 'boolean') return json({ error: 'unlockAllClasses must be a boolean.' }, 400);
+          await env.DB.prepare('UPDATE players SET unlock_all_classes = ?, updated_at = ? WHERE auth_user_id = ?')
+            .bind(body.unlockAllClasses ? 1 : 0, Date.now(), authSession.user.id).run();
+        }
         const player = await env.DB.prepare('SELECT player_id, display_name, rating, total_progress_units, unlock_all_classes, equipped_emblem, account_type, prestige_count FROM players WHERE auth_user_id = ?')
           .bind(authSession.user.id).first<PlayerProfileRow>();
         if (!player) return json({ error: 'Player not found.' }, 404);
@@ -1365,17 +1363,6 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
         return json({ error: 'Progression update failed.' }, 500);
       }
     }
-    if (url.pathname === '/player-prestige' && request.method === 'POST') {
-      try {
-        const player = await authenticateRequestPlayer(request, env);
-        const prestigeCount = await prestigePlayer(env.DB, player.playerId);
-        if (prestigeCount === null) return json({ error: 'Maximum progression is required.' }, 409);
-        return json(await currentPlayerProfile(env.DB, player.playerId));
-      } catch (error) {
-        if (error instanceof GuestAuthError) return json({ error: error.message }, 401);
-        return json({ error: 'Prestige failed.' }, 500);
-      }
-    }
     if (url.pathname === '/player-emblem' && request.method === 'PUT') {
       try {
         const authSession = await createAuth(env).api.getSession({ headers: request.headers });
@@ -1383,9 +1370,9 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
         const body = await readJsonBody<{ emblem?: unknown }>(request, 1_000);
         if (body.emblem !== null && typeof body.emblem !== 'string') return json({ error: 'Unknown emblem.' }, 400);
         if (body.emblem !== null && body.emblem !== 'custom') {
-          if (!await isActiveOwnableEmblem(env.DB, body.emblem)) return json({ error: 'Unknown emblem.' }, 400);
+          if (!isActiveOwnableEmblem(body.emblem)) return json({ error: 'Unknown emblem.' }, 400);
           const owned = await env.DB.prepare(`SELECT 1 present FROM player_emblems pe JOIN players p ON p.player_id = pe.player_id
-            WHERE p.auth_user_id = ? AND pe.emblem_id = ? AND pe.revoked_at IS NULL`).bind(authSession.user.id, body.emblem).first();
+            WHERE p.auth_user_id = ? AND pe.emblem_id = ?`).bind(authSession.user.id, body.emblem).first();
           if (!owned) return json({ error: 'Emblem is not owned.' }, 403);
         }
         if (body.emblem === 'custom') {
@@ -1457,26 +1444,25 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
       try {
         const authSession = await createAuth(env).api.getSession({ headers: request.headers });
         if (!authSession) return json({ error: 'Authentication required.' }, 401);
-        const player = await env.DB.prepare('SELECT player_id FROM players WHERE auth_user_id = ?')
-          .bind(authSession.user.id).first<{ player_id: string }>();
+        const player = await env.DB.prepare('SELECT player_id, account_type FROM players WHERE auth_user_id = ?')
+          .bind(authSession.user.id).first<{ player_id: string; account_type: PlayerAccountType }>();
         if (!player) return json({ error: 'Player not found.' }, 404);
-        const now = Date.now();
-        const missions = await env.DB.prepare(`SELECT mission_id, title, detail, reward_kind, reward_reference
-          FROM emblem_missions WHERE active = 1 AND available_from <= ? AND (available_until IS NULL OR available_until > ?)
-          AND (mission_id <> 'claim-account' OR (SELECT account_type FROM players WHERE player_id = ?) = 'guest'
-            OR EXISTS (SELECT 1 FROM emblem_mission_completions c WHERE c.player_id = ? AND c.mission_id = 'claim-account'))
-          ORDER BY sort_order, mission_id`)
-          .bind(now, now, player.player_id, player.player_id)
-          .all<{ mission_id: string; title: string; detail: string; reward_kind: EmblemMissionStatus['rewardKind']; reward_reference: string | null }>();
-        const rows = await env.DB.prepare(`SELECT mission_id, completed_at, reward_emblem_id, placement FROM emblem_mission_completions WHERE player_id = ?`)
-          .bind(player.player_id).all<{ mission_id: string; completed_at: number; reward_emblem_id: string | null; placement: number | null }>();
+        const contest = await env.DB.prepare("SELECT status, capacity FROM emblem_contests WHERE contest_id = 'first-prestige'").first<{ status: string; capacity: number }>();
+        const contestClaims = await env.DB.prepare("SELECT COUNT(*) count FROM emblem_contest_placements WHERE contest_id = 'first-prestige'").first<{ count: number }>();
+        const rows = await env.DB.prepare('SELECT mission_id, completed_at FROM emblem_mission_completions WHERE player_id = ?')
+          .bind(player.player_id).all<{ mission_id: string; completed_at: number }>();
+        const placement = await env.DB.prepare("SELECT placement, emblem_id FROM emblem_contest_placements WHERE contest_id = 'first-prestige' AND player_id = ?")
+          .bind(player.player_id).first<{ placement: number; emblem_id: string }>();
         const byId = new Map(rows.results.map((row) => [row.mission_id, row]));
-        return json(missions.results.map((mission): EmblemMissionStatus => {
-          const row = byId.get(mission.mission_id);
-          return { id: mission.mission_id, title: mission.title, detail: mission.detail, rewardKind: mission.reward_kind,
-            rewardReference: mission.reward_reference, completed: Boolean(row), completedAt: row?.completed_at ?? null,
-            placement: row?.placement ?? null, rewardEmblemId: row?.reward_emblem_id ?? (mission.reward_kind === 'emblem' ? mission.reward_reference : null) };
-        }));
+        const missions = EMBLEM_MISSIONS.filter((mission) => mission.id !== 'prestige-contest'
+          && (!mission.requiresPrestigeContest || contest?.status !== 'inactive')
+          && (mission.id !== 'claim-account' || player.account_type === 'guest' || byId.has(mission.id)))
+          .map((mission): EmblemMissionStatus => { const row = byId.get(mission.id); const contestReward = mission.id === 'prestige-contest' ? placement?.emblem_id ?? null : null;
+            return { id: mission.id, title: mission.title, detail: mission.detail, rewardKind: mission.rewardKind,
+              rewardReference: mission.rewardReference, completed: Boolean(row), completedAt: row?.completed_at ?? null,
+              placement: mission.id === 'prestige-contest' ? placement?.placement ?? null : null,
+              rewardEmblemId: contestReward ?? (mission.rewardKind === 'emblem' ? mission.rewardReference : null) }; });
+        return json({ contest: { active: contest?.status === 'active', claimed: contestClaims?.count ?? 0, capacity: contest?.capacity ?? 10 }, missions });
       } catch {
         return json({ error: 'Emblem missions failed.' }, 500);
       }

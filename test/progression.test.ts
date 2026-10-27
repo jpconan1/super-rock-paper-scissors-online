@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'vitest';
 import {
-  computerProgressRateForLevel, countNewestClassRoundWins, createNextLevelProgressAward, createProgressAward, createTokenProgressAward, createTutorialProgressAward, HUMAN_WIN_PROGRESS_BY_LEVEL, isClassUnlocked, MAX_PROGRESS_UNITS, progressGainForLevel, progressionForTotal,
+  bonusClassIdForTotal, computerProgressRateForLevel, countNewestClassRoundWins, createNextLevelProgressAward, createOnlineProgressAward, createProgressAward, createTokenProgressAward, createTutorialProgressAward, HUMAN_WIN_PROGRESS_BY_LEVEL, isClassUnlocked, MAX_PROGRESS_UNITS, progressGainForLevel, progressionForTotal,
 } from '../src/core/progression';
 import { ABM_CLASS_IDS } from '../src/variants/attackBlockMana/attackBlockManaTypes';
-import { XP_BAR_CLIMB_MS, XP_BAR_DING_HOLD_MS, xpAnimationSegment, xpAnimationStops } from '../src/app/xpProgressBar';
+import { PRESTIGE_CHALLENGE_COPY, XP_BAR_CLIMB_MS, XP_BAR_DING_HOLD_MS, xpAnimationSegment, xpAnimationStops } from '../src/app/xpProgressBar';
 
 describe('progression', () => {
   test('starts at level one with Lucky and ends at level 21 with Joe', () => {
@@ -11,10 +11,18 @@ describe('progression', () => {
     expect(progressionForTotal(MAX_PROGRESS_UNITS)).toMatchObject({ level: 21, progressUnitsInLevel: 10_000, unlockedClassIds: ABM_CLASS_IDS });
   });
 
-  test('uses the explicit linear reward table and derives losses and computer awards', () => {
+  test('maps every level to its catalog-order bonus class', () => {
+    expect(ABM_CLASS_IDS.map((_, index) => bonusClassIdForTotal(index * 10_000))).toEqual(ABM_CLASS_IDS);
+  });
+
+  test('uses the concise prestige challenge instruction', () => {
+    expect(PRESTIGE_CHALLENGE_COPY).toBe('Win with Joe to Prestige!');
+  });
+
+  test('uses the explicit floored reward table and derives losses and computer awards', () => {
     expect(HUMAN_WIN_PROGRESS_BY_LEVEL).toEqual([
       10_000, 9_500, 9_000, 8_500, 8_000, 7_500, 7_000, 6_500, 6_000, 5_500,
-      5_000, 4_500, 4_000, 3_500, 3_000, 2_500, 2_000, 1_500, 1_000, 500,
+      5_000, 4_500, 4_000, 3_500, 3_000, 2_500, 2_000, 1_500, 1_500, 1_500,
     ]);
     for (const [index, humanWin] of HUMAN_WIN_PROGRESS_BY_LEVEL.entries()) {
       const level = index + 1;
@@ -29,7 +37,7 @@ describe('progression', () => {
     expect(progressGainForLevel(21, 'win')).toBe(0);
     expect(HUMAN_WIN_PROGRESS_BY_LEVEL.map((_, index) => progressGainForLevel(index + 1, 'win', 'computer'))).toEqual([
       10_000, 8_550, 7_200, 5_950, 4_800, 3_750, 2_800, 1_950, 1_200, 550,
-      500, 450, 400, 350, 300, 250, 200, 150, 100, 50,
+      500, 450, 400, 350, 300, 250, 200, 150, 150, 150,
     ]);
     expect(computerProgressRateForLevel(10)).toBeCloseTo(0.1);
     expect(computerProgressRateForLevel(20)).toBeCloseTo(0.1);
@@ -59,8 +67,8 @@ describe('progression', () => {
     expect(createProgressAward(0, 'loss', { opponent: 'human' }).baseProgressUnits).toBe(5_000);
     expect(createProgressAward(0, 'win', { opponent: 'human' }).baseProgressUnits).toBe(10_000);
     expect(createProgressAward(90_000, 'win', { opponent: 'human' }).baseProgressUnits).toBe(5_500);
-    expect(createProgressAward(190_000, 'loss', { opponent: 'computer' }).baseProgressUnits).toBe(25);
-    expect(createProgressAward(190_000, 'win', { opponent: 'human' }).baseProgressUnits).toBe(500);
+    expect(createProgressAward(190_000, 'loss', { opponent: 'computer' }).baseProgressUnits).toBe(75);
+    expect(createProgressAward(190_000, 'win', { opponent: 'human' }).baseProgressUnits).toBe(1_500);
   });
 
   test('gives losses exactly half the equal-level win base before class bonuses', () => {
@@ -93,6 +101,24 @@ describe('progression', () => {
     expect(countNewestClassRoundWins(20_000, ['lucky', 'thief'])).toBe(1);
     expect(countNewestClassRoundWins(20_000, ['thief', 'thief', 'thief'])).toBe(2);
     expect(countNewestClassRoundWins(20_000, ['lucky', 'advantaged'])).toBe(0);
+  });
+
+  test('completes prestige only for an online win with two Joe round wins at maximum progression', () => {
+    expect(createOnlineProgressAward(MAX_PROGRESS_UNITS, 'win', ['joe', 'joe'], false, 2)).toMatchObject({
+      gainedProgressUnits: 0, after: { level: 1, totalProgressUnits: 0 }, unlockedClassIds: [],
+      prestige: { state: 'completed', prestigeCount: 3 },
+    });
+    expect(createOnlineProgressAward(199_000, 'win', ['joe', 'joe'], false, 0)).toMatchObject({
+      gainedProgressUnits: 1_000, after: { level: 21, totalProgressUnits: MAX_PROGRESS_UNITS }, unlockedClassIds: ['joe'],
+    });
+    expect(createOnlineProgressAward(199_000, 'win', ['joe', 'joe'], false, 0).prestige).toBeUndefined();
+    expect(createOnlineProgressAward(MAX_PROGRESS_UNITS, 'win', ['joe', 'lucky'])).toMatchObject({ prestige: { state: 'pending' } });
+    expect(createOnlineProgressAward(MAX_PROGRESS_UNITS, 'loss', ['joe', 'joe'])).toMatchObject({ prestige: { state: 'pending' } });
+    expect(createOnlineProgressAward(MAX_PROGRESS_UNITS, 'win', ['joe', 'joe'], true).prestige).toBeUndefined();
+  });
+
+  test('allows a 2-1 victory when both winning rounds used Joe', () => {
+    expect(createOnlineProgressAward(MAX_PROGRESS_UNITS, 'win', ['joe', 'joe']).prestige?.state).toBe('completed');
   });
 
   test('class availability follows catalog order', () => {

@@ -28,7 +28,9 @@ import { randomId } from '../core/randomId';
 import type { EquippedPlayerEmblem, OwnablePlayerEmblem } from '../core/playerEmblem';
 import { DEFAULT_CUSTOM_EMBLEM_DOCUMENT, type CustomEmblemDocument, type CustomEmblemMeta, type CustomEmblemState } from '../core/customEmblem';
 import { createPlayerEmblemCard } from '../ui/playerEmblemCard';
+import { renderPrestigeChallengeCopy } from './xpProgressBar';
 import { mountCustomEmblemEditor, renderCustomEmblemSheet, type CustomEmblemEditorController } from './customEmblemEditor';
+import type { EmblemMissionFeed } from '../core/emblemMission';
 
 export type ScreenCleanup = () => void;
 export type LobbyScreenMount = ScreenCleanup & {
@@ -38,6 +40,7 @@ export type LobbyScreenMount = ScreenCleanup & {
   updateRoster(players: LobbyPlayer[], selfId: string): void;
   setUnlockedClassCount(count: number): void;
   setTutorialDisabled(disabled: boolean): void;
+  setStreamerMode(enabled: boolean): void;
   openCustomEmblemEditor(): void;
 };
 
@@ -50,7 +53,15 @@ export interface LobbyClassCardDefinition {
   newest: boolean;
 }
 
-export function lobbyClassCardDefinitions(playerLevel: number): LobbyClassCardDefinition[] {
+export function initialLobbyFace(whiteboardDisabled: boolean, requested?: LobbyFace): LobbyFace {
+  return whiteboardDisabled ? 'progression' : requested ?? 'whiteboard';
+}
+
+export function isLobbyFaceDisabled(face: LobbyFace, whiteboardDisabled: boolean): boolean {
+  return face === 'more-variants' || (face === 'whiteboard' && whiteboardDisabled);
+}
+
+export function lobbyClassCardDefinitions(playerLevel: number, bonusClassId: AbmClassId = ABM_CLASS_IDS[Math.max(0, Math.min(ABM_CLASS_IDS.length - 1, Math.floor(playerLevel) - 1))]!): LobbyClassCardDefinition[] {
   const unlockedCount = Math.max(1, Math.min(ABM_CLASS_IDS.length, Math.floor(playerLevel)));
   return ABM_CLASS_IDS.map((classId, index) => ({
     id: `class-card-${classId}`,
@@ -58,7 +69,7 @@ export function lobbyClassCardDefinitions(playerLevel: number): LobbyClassCardDe
     asset: `/lobby/class-cards/${classId}-${index <= unlockedCount ? 'card' : 'back'}-sheet.webp`,
     faceUp: index <= unlockedCount,
     next: index === unlockedCount,
-    newest: index === unlockedCount - 1,
+    newest: classId === bonusClassId,
   }));
 }
 
@@ -83,8 +94,12 @@ function renderLobbyRoster(roster: HTMLElement, players: readonly LobbyPlayer[],
   }
 }
 
-export function createLobbyMissionCard(): HTMLElement {
-  const card = document.createElement('aside');
+export function createLobbyMissionCard(
+  loadMissions: () => Promise<EmblemMissionFeed> = async () => ({ contest: { active: false, claimed: 0, capacity: 10 }, missions: [] }),
+  onActivate: () => void | Promise<void> = () => {},
+): HTMLButtonElement {
+  const card = document.createElement('button');
+  card.type = 'button';
   card.className = 'lobby-screen__missions';
   card.setAttribute('aria-labelledby', 'lobby-missions-title');
   const titleBar = document.createElement('header');
@@ -96,20 +111,36 @@ export function createLobbyMissionCard(): HTMLElement {
   titleBar.append(title);
   const list = document.createElement('ul');
   list.className = 'lobby-screen__mission-list';
-  for (const copy of ['Claim Your Account', 'Finish The Tutorial']) {
-    const item = document.createElement('li');
-    item.className = 'lobby-screen__mission';
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.disabled = true;
-    checkbox.setAttribute('aria-label', copy);
-    const label = document.createElement('span');
-    label.textContent = copy;
-    item.append(checkbox, label);
-    list.append(item);
-  }
+  const showStatus = (copy: string) => {
+    const item = document.createElement('li'); item.className = 'lobby-screen__mission-status'; item.textContent = copy;
+    list.replaceChildren(item);
+  };
+  const renderMissions = (feed: EmblemMissionFeed) => {
+    const items = feed.missions.filter((mission) => !mission.completed).slice(0, 2);
+    if (!items.length) { showStatus('All missions complete'); return; }
+    list.replaceChildren();
+    for (const mission of items) {
+      const item = document.createElement('li');
+      item.className = 'lobby-screen__mission';
+      const mark = document.createElement('span');
+      mark.className = 'lobby-screen__mission-mark';
+      mark.setAttribute('aria-hidden', 'true');
+      const label = document.createElement('span');
+      label.textContent = mission.title;
+      item.append(mark, label);
+      list.append(item);
+    }
+  };
+  showStatus('Loading missions…');
+  card.addEventListener('click', () => { void onActivate(); });
   card.append(titleBar, list);
+  void loadMissions().then(renderMissions).catch(() => showStatus('Could not load missions.'));
   return card;
+}
+
+export async function openLobbyMissions(setFace: (face: LobbyFace) => Promise<void>, open: () => void): Promise<void> {
+  await setFace('progression');
+  open();
 }
 
 export function setLobbyRosterOpen(roster: HTMLElement, missions: HTMLElement, open: boolean): void {
@@ -162,19 +193,24 @@ export function mountLobbyScreen(
   onOpenEmblems: (options: { equipped: EquippedPlayerEmblem | null; owned: readonly OwnablePlayerEmblem[]; customEmblem: CustomEmblemMeta | null; onChosen(emblem: EquippedPlayerEmblem | null, custom?: CustomEmblemMeta | null): void }) => void = () => {},
   faceOptions: {
     initialFace?: LobbyFace;
+    whiteboardDisabled?: boolean;
+    loadMissions?: () => Promise<EmblemMissionFeed>;
     customEmblemEditor?: {
       load(): Promise<CustomEmblemState | null>;
       save(document: CustomEmblemDocument, artwork: Blob): Promise<CustomEmblemMeta>;
     };
   } = {},
+  bonusClassId: AbmClassId = ABM_CLASS_IDS[Math.max(0, Math.min(ABM_CLASS_IDS.length - 1, playerLevel - 1))]!,
 ): LobbyScreenMount {
-  const initialFace = faceOptions.initialFace ?? 'whiteboard';
+  let whiteboardDisabled = faceOptions.whiteboardDisabled ?? false;
+  const initialFace = initialLobbyFace(whiteboardDisabled, faceOptions.initialFace);
   const layoutDocument = getLayoutDocument('lobby');
   let layoutName: 'landscape' | 'portrait' = 'landscape';
   let classCardDrag: ClassCardDragController | undefined;
   const layoutBindings: { id: string; element: HTMLElement }[] = [];
   const screen = document.createElement('section');
   screen.className = 'menu-canvas-screen lobby-screen';
+  screen.dataset.face = initialFace;
   screen.setAttribute('aria-label', 'Lobby');
   const canvas = createMenuCanvas(screen, 'lobby-screen', (name) => {
     layoutName = name;
@@ -238,9 +274,13 @@ export function mountLobbyScreen(
   emblemButton.element.classList.add('lobby-screen__emblem-button', 'game-button--baked-label');
   gameButtons.push(emblemButton);
   const progressBar = document.createElement('canvas'); progressBar.className = 'lobby-screen__progress-bar'; progressBar.width = 512; progressBar.height = 256;
-  progressBar.setAttribute('role', 'progressbar'); progressBar.setAttribute('aria-valuemin', '0'); progressBar.setAttribute('aria-valuemax', '10000'); progressBar.setAttribute('aria-valuenow', String(progressUnitsInLevel));
-  const progressCopy = document.createElement('span'); progressCopy.className = 'lobby-screen__progress-copy'; progressCopy.textContent = `${progressUnitsInLevel.toLocaleString()} / 10,000 XP`;
-  let classCardDefinitions = lobbyClassCardDefinitions(unlockedClassCount);
+  const prestigeChallenge = playerLevel === 21;
+  const displayedProgress = prestigeChallenge ? 0 : progressUnitsInLevel;
+  progressBar.setAttribute('role', 'progressbar'); progressBar.setAttribute('aria-valuemin', '0'); progressBar.setAttribute('aria-valuemax', '10000'); progressBar.setAttribute('aria-valuenow', String(displayedProgress));
+  const progressCopy = document.createElement('span'); progressCopy.className = 'lobby-screen__progress-copy';
+  if (prestigeChallenge) renderPrestigeChallengeCopy(progressCopy);
+  else progressCopy.textContent = `${progressUnitsInLevel.toLocaleString()} / 10,000 XP`;
+  let classCardDefinitions = lobbyClassCardDefinitions(unlockedClassCount, bonusClassId);
   const classCards = classCardDefinitions.map((definition) => {
     const item = lobbyElement(definition.id);
     const cardSprite = createBoilingSprite({ src: definition.asset, className: 'lobby-screen__class-card', alt: item.label ?? '', clock });
@@ -356,7 +396,13 @@ export function mountLobbyScreen(
   roster.className = 'textbox lobby-screen__roster';
   roster.hidden = true;
   renderLobbyRoster(roster, [], '');
-  const missions = createLobbyMissionCard();
+  const missions = createLobbyMissionCard(faceOptions.loadMissions, () => openLobbyMissions(setLobbyFace, () => {
+    onOpenEmblems({ equipped: activeEmblem, owned: ownedEmblems, customEmblem: activeCustomEmblem, onChosen: (next, nextCustom) => {
+      activeEmblem = next;
+      activeCustomEmblem = nextCustom ?? activeCustomEmblem;
+      emblemCard.setEmblem(next, nextCustom);
+    } });
+  }));
   const rosterToggle = createToggleButton({
     label: layoutDocument.copy!.showPlayers!,
     pressed: false,
@@ -429,7 +475,7 @@ export function mountLobbyScreen(
     if (!progressEmpty.complete || !progressEmpty.naturalWidth || !progressFull.complete || !progressFull.naturalWidth) return;
     const context = progressBar.getContext('2d'); if (!context) return;
     const activeFrame = clock.isEnabled() ? frame : 0;
-    const width = Math.round(512 * Math.max(0, Math.min(1, progressUnitsInLevel / 10_000)));
+    const width = Math.round(512 * Math.max(0, Math.min(1, displayedProgress / 10_000)));
     context.clearRect(0, 0, 512, 256);
     context.drawImage(progressEmpty, 0, activeFrame * 256, 512, 256, 0, 0, 512, 256);
     if (width) context.drawImage(progressFull, 0, activeFrame * 256, width, 256, 0, 0, width, 256);
@@ -469,6 +515,7 @@ export function mountLobbyScreen(
   function applyFaceState(): void {
     const showLiveBoard = activeFace === 'whiteboard' && !animatingFace;
     const showProgression = activeFace === 'progression' && !animatingFace;
+    screen.classList.toggle('is-emblem-editing', emblemEditing);
     for (const [face, layer] of faceLayers) layer.hidden = animatingFace || face !== activeFace;
     classCardDrag?.setEnabled(showProgression);
     flip.hidden = !animatingFace;
@@ -484,14 +531,16 @@ export function mountLobbyScreen(
     emblemCancel.setDisabled(emblemSaving);
     chatEntry.input.disabled = !connected || !showLiveBoard || emblemEditing;
     gameButtonByElement.get(chatButton)?.setDisabled(!connected || !showLiveBoard || emblemEditing);
-    for (const [face, button] of faceButtons) button.setDisabled(face === 'more-variants' || !connected || animatingFace || emblemEditing || face === activeFace);
+    for (const [face, button] of faceButtons) button.setDisabled(isLobbyFaceDisabled(face, whiteboardDisabled)
+      || !connected || animatingFace || emblemEditing || face === activeFace);
   }
 
   async function setLobbyFace(face: LobbyFace): Promise<void> {
-    if (destroyed || animatingFace || face === activeFace || !connected) return;
+    if (destroyed || animatingFace || face === activeFace || !connected || (face === 'whiteboard' && whiteboardDisabled && !emblemEditing)) return;
     const transition = lobbyFaceTransition(activeFace, face, reducedMotion);
     if (!transition) return;
     for (const [name, button] of faceButtons) button.setLockedDepressed(name === face);
+    screen.dataset.face = face;
     animatingFace = true;
     applyFaceState();
     if (transition.frames.length) {
@@ -585,20 +634,22 @@ export function mountLobbyScreen(
     const unavailable = state !== 'connected';
     connected = !unavailable;
     screen.dataset.connection = state;
+    missions.disabled = unavailable;
     const whiteboardActive = activeFace === 'whiteboard' && !animatingFace;
     chatEntry.input.disabled = unavailable || !whiteboardActive;
     gameButtonByElement.get(chatButton)?.setDisabled(unavailable || !whiteboardActive);
     rosterToggle.setDisabled(unavailable);
     matchmakingToggle.setDisabled(unavailable);
     whiteboardController.setEnabled(!unavailable && whiteboardActive && !emblemEditing);
-    for (const [face, button] of faceButtons) button.setDisabled(face === 'more-variants' || unavailable || animatingFace || emblemEditing || face === activeFace);
+    for (const [face, button] of faceButtons) button.setDisabled(isLobbyFaceDisabled(face, whiteboardDisabled)
+      || unavailable || animatingFace || emblemEditing || face === activeFace);
     applyFaceState();
   };
   cleanup.setMatchmaking = (active) => matchmakingToggle.setPressed(active);
   cleanup.receiveWhiteboard = (message) => whiteboardController.receive(message);
   cleanup.updateRoster = (players, selfId) => renderLobbyRoster(roster, players, selfId);
   cleanup.setUnlockedClassCount = (count) => {
-    const definitions = lobbyClassCardDefinitions(count); classCardDefinitions = definitions;
+    const definitions = lobbyClassCardDefinitions(count, bonusClassId); classCardDefinitions = definitions;
     for (let index = 0; index < classCards.length; index++) {
       const card = classCards[index]!; const definition = definitions[index]!;
       card.heldImage.src = definition.faceUp
@@ -610,6 +661,11 @@ export function mountLobbyScreen(
     attachNewestClassSpike();
   };
   cleanup.setTutorialDisabled = (disabled) => tutorialButton.setDisabled(disabled);
+  cleanup.setStreamerMode = (enabled) => {
+    whiteboardDisabled = enabled;
+    applyFaceState();
+    if (enabled && activeFace === 'whiteboard' && !emblemEditing) void setLobbyFace('progression');
+  };
   cleanup.openCustomEmblemEditor = () => { void openCustomEmblemEditor(); };
   return cleanup;
 }

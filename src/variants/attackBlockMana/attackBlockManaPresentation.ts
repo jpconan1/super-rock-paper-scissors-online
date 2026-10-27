@@ -85,8 +85,14 @@ export function getAbmPickerEntries(unlockedClassIds: readonly AbmClassId[], obs
 }
 
 export function shouldShowAbmBonusXp(selectedClassId: AbmClassId | undefined,
-  unlockedClassIds: readonly AbmClassId[], observingOpponent = false): boolean {
-  return !observingOpponent && selectedClassId !== undefined && selectedClassId === unlockedClassIds.at(-1);
+  bonusClassId: AbmClassId | undefined, observingOpponent = false): boolean {
+  return !observingOpponent && selectedClassId !== undefined && selectedClassId === bonusClassId;
+}
+
+export function progressResultHoldBeats(progressAward: ProgressAward): number {
+  if (progressAward.prestige?.state === 'pending') return 3;
+  if (progressAward.prestige?.state === 'completed') return 0;
+  return 2;
 }
 
 export function getAbmClassSelectChrome(projection: Pick<AbmProjection, 'phase' | 'counterPicker' | 'self'>): {
@@ -294,8 +300,9 @@ export function createAttackBlockManaPresentation(
         ...Object.values(COUNTERPICK_CLOUD_ART), ...ABM_SCENE_URLS];
       const lease = assetLoader.retainUrls(urls); await lease.ready; return lease;
     },
-    mount({ container, send, openMenu, matchProgressComplete, self, players, music, unlockedClassIds, showOpponentCounterpick, setOpeningCountdownActive }) {
-      screen = mountAttackBlockManaScreen(container, clock, send, openMenu, matchProgressComplete, self ?? 'p1', players, options, music, unlockedClassIds, showOpponentCounterpick, setOpeningCountdownActive);
+    mount({ container, send, openMenu, matchProgressComplete, self, players, music, unlockedClassIds, bonusClassId, showOpponentCounterpick, setOpeningCountdownActive, hideOpponentCustomEmblems }) {
+      screen = mountAttackBlockManaScreen(container, clock, send, openMenu, matchProgressComplete, self ?? 'p1', players, options, music, unlockedClassIds,
+        bonusClassId, showOpponentCounterpick, setOpeningCountdownActive, hideOpponentCustomEmblems);
     },
     render(projection, events, serverTime, progressAward) { if (projection) screen?.render(projection, events, serverTime, false, progressAward); },
     unmount() { screen?.destroy(); screen = undefined; },
@@ -314,8 +321,8 @@ export function blockSegments(player: 'p1' | 'p2', blocks: number): boolean[] {
 function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, send: (command: AbmCommand) => void, onMenu: () => void,
   matchProgressComplete: (() => void) | undefined, viewer: 'p1' | 'p2',
   players: Readonly<Record<'p1' | 'p2', import('../../protocol/protocol').MatchPlayer>> | undefined,
-  options: AttackBlockManaPresentationOptions, music?: MusicDirector, unlockedClassIds?: readonly AbmClassId[],
-  showOpponentCounterpick = true, setOpeningCountdownActive?: (active: boolean) => void) {
+  options: AttackBlockManaPresentationOptions, music?: MusicDirector, unlockedClassIds?: readonly AbmClassId[], bonusClassId?: AbmClassId,
+  showOpponentCounterpick = true, setOpeningCountdownActive?: (active: boolean) => void, hideOpponentCustomEmblems = false) {
   const layoutDocument = options.layoutDocument ?? getLayoutDocument('variant-abm');
   const now = options.now ?? Date.now;
   const scheduleTimers = options.scheduleTimers !== false;
@@ -325,6 +332,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   let selected = 0;
   const ownPickerEntries = getAbmPickerEntries(unlockedClassIds ?? ABM_CLASSES.map(({ id }) => id));
   const ownUnlockedClassIds = ownPickerEntries.flatMap((entry) => entry.kind === 'class' ? [entry.definition.id] : []);
+  const ownBonusClassId = bonusClassId ?? ownUnlockedClassIds.at(-1);
   const opponentPickerEntries = getAbmPickerEntries([], true);
   const pickerEntries = () => projection?.phase === 'counter-picking' && projection.counterPicker !== projection.self
     ? opponentPickerEntries : ownPickerEntries;
@@ -496,8 +504,8 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     layoutDocument, fixedLayoutName: options.fixedOrientation,
     viewer, youTagVisible: false,
     players: {
-      p1: playerDisplay('P1', players?.p1),
-      p2: playerDisplay('P2', players?.p2),
+      p1: playerDisplay('P1', players?.p1, hideOpponentCustomEmblems && viewer !== 'p1'),
+      p2: playerDisplay('P2', players?.p2, hideOpponentCustomEmblems && viewer !== 'p2'),
     },
     artwork: { turn: turnArtwork(0), p1Wins: winArtwork('p1', 0), p2Wins: winArtwork('p2', 0), scene: { src: sceneForMoves(), alt: 'Players face each other.' } },
     variantContent: { 'p1-move': p1Status.output, 'p2-move': p2Status.output, 'p1-resources': p1Resources.element, 'p2-resources': p2Resources.element, controls },
@@ -686,7 +694,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     const entry = entries[selected]!;
     const definition = entry.kind === 'class' ? entry.definition : undefined;
     const observingOpponent = projection?.phase === 'counter-picking' && projection.counterPicker !== projection.self;
-    const showBonusXp = shouldShowAbmBonusXp(definition?.id, ownUnlockedClassIds, observingOpponent);
+    const showBonusXp = shouldShowAbmBonusXp(definition?.id, ownBonusClassId, observingOpponent);
     bonusXp.element.hidden = !showBonusXp; bonusXpHeading.hidden = !showBonusXp;
     portrait.setSource(pickerAsset(entry)); portrait.element.setAttribute('aria-label', definition?.name ?? 'Locked classes');
     className.textContent = definition?.name ?? 'Locked'; description.textContent = definition?.description ?? `${entry.kind === 'locked' ? entry.count : 0} classes still locked!`;
@@ -843,7 +851,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     if (complete && showingResult && progressAward && !xpSequenceStarted) {
       xpSequenceStarted = true; xpBar = createXpProgressBar(clock, progressAward); matchProgress.replaceChildren(xpBar.element);
       applyVariantLayout();
-      void xpBar.finished.then(() => new Promise<void>((resolve) => setTimeout(resolve, beats(2))))
+      void xpBar.finished.then(() => new Promise<void>((resolve) => setTimeout(resolve, beats(progressResultHoldBeats(progressAward)))))
         .then(() => { if (!transitionAbort.signal.aborted) matchProgressComplete?.(); });
     }
     result.element.hidden = !showingResult;
@@ -1193,6 +1201,7 @@ export function winArtwork(player: 'p1' | 'p2', wins: number) {
   return { src: `/visual-elements/win-couters/ft2-win-counter-${state}-sheet.webp`, alt: `${player} wins: ${wins}` };
 }
 function sheets(root: string) { return { up: `${root}-up-sheet.webp`, between: `${root}-between-sheet.webp`, depressed: `${root}-depressed-sheet.webp` }; }
-function playerDisplay(fallback: string, player?: import('../../protocol/protocol').MatchPlayer) {
-  return { heading: player?.name ?? fallback, rating: '', platform: '', level: player?.level, prestigeCount: player?.prestigeCount, emblem: player?.emblem, customEmblem: player?.customEmblem };
+function playerDisplay(fallback: string, player?: import('../../protocol/protocol').MatchPlayer, hideCustomArtwork = false) {
+  return { heading: player?.name ?? fallback, rating: '', platform: '', level: player?.level, prestigeCount: player?.prestigeCount,
+    emblem: player?.emblem, customEmblem: player?.customEmblem, hideCustomArtwork: hideCustomArtwork && player?.emblem === 'custom' };
 }

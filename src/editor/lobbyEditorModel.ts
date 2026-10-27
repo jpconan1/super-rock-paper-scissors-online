@@ -6,6 +6,7 @@ const WHITEBOARD_IDS = new Set([
   'whiteboard',
   'black-marker', 'red-marker', 'blue-marker', 'green-marker', 'purple-marker', 'eraser',
 ]);
+const WHITEBOARD_TOOL_IDS = new Set(['black-marker', 'red-marker', 'blue-marker', 'green-marker', 'purple-marker', 'eraser']);
 const SHARED_WHITEBOARD_IDS = new Set([
   ...WHITEBOARD_IDS,
   'chat-input', 'chat-button',
@@ -38,6 +39,6 @@ export function isLobbyEditorElementVisible(element: LayoutElement, state: Lobby
 export function isLobbyStateElementEditable(element: LayoutElement, state: LobbyEditorState): boolean {
   if (!isLobbyEditorElementVisible(element, state)) return false;
   if (state === 'progression') return !element.id.startsWith('curtain-');
-  if (state === 'custom-emblem') return ['emblem-save', 'emblem-frame', 'emblem-cancel'].includes(element.id);
+  if (state === 'custom-emblem') return WHITEBOARD_TOOL_IDS.has(element.id) || ['emblem-save', 'emblem-frame', 'emblem-cancel'].includes(element.id);
   return ['chat-input', 'chat-button'].includes(element.id);
 }

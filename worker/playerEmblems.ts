@@ -1,58 +1,47 @@
 import { MAX_PROGRESS_UNITS } from '../src/core/progression';
-import type { PlayerEmblemDefinition } from '../src/core/playerEmblem';
-import type { EmblemMissionId } from '../src/core/emblemMission';
+import { isKnownOwnablePlayerEmblem, OWNABLE_PLAYER_EMBLEM_ORDER } from '../src/core/emblemIds';
+import { EMBLEM_MISSION_BY_ID, type EmblemMissionId } from '../src/core/emblemMission';
 export type { EmblemMissionId } from '../src/core/emblemMission';
 
 interface EmblemStatement { bind(...values: unknown[]): EmblemStatement; run(): Promise<{ meta: { changes?: number } }>; first<T = Record<string, unknown>>(): Promise<T | null>; all<T = Record<string, unknown>>(): Promise<{ results: T[] }> }
 export interface EmblemDatabase { prepare(query: string): EmblemStatement; batch(statements: EmblemStatement[]): Promise<unknown[]> }
-interface MissionRow { reward_kind: 'emblem' | 'feature' | 'placement-emblem' | 'none'; reward_reference: string | null }
-
-export async function playerEmblemCatalog(db: EmblemDatabase, includeSystem = false): Promise<PlayerEmblemDefinition[]> {
-  const rows = await db.prepare(`SELECT emblem_id, display_name, asset_path, frame_count, ownable, system_only FROM emblem_catalog
-    WHERE active = 1 AND (? = 1 OR player_visible = 1) ORDER BY sort_order, emblem_id`).bind(includeSystem ? 1 : 0)
-    .all<{ emblem_id: string; display_name: string; asset_path: string; frame_count: number | null; ownable: number; system_only: number }>();
-  return rows.results.map((row) => ({ id: row.emblem_id, name: row.display_name, sheet: row.asset_path,
-    ...(row.frame_count ? { frameCount: row.frame_count } : {}), ownable: row.ownable === 1, systemOnly: row.system_only === 1 }));
-}
-
-export async function isActiveOwnableEmblem(db: EmblemDatabase, emblemId: string): Promise<boolean> {
-  return Boolean(await db.prepare('SELECT 1 present FROM emblem_catalog WHERE emblem_id = ? AND active = 1 AND ownable = 1 AND system_only = 0').bind(emblemId).first());
-}
+type EmblemAwardSource = 'mission' | 'contest' | 'admin';
+export function isActiveOwnableEmblem(emblemId: string): boolean { return isKnownOwnablePlayerEmblem(emblemId); }
 
 export async function ownedPlayerEmblems(db: EmblemDatabase, playerId: string): Promise<string[]> {
-  const rows = await db.prepare(`SELECT pe.emblem_id FROM player_emblems pe JOIN emblem_catalog ec ON ec.emblem_id = pe.emblem_id
-    WHERE pe.player_id = ? AND pe.revoked_at IS NULL AND ec.active = 1 AND ec.ownable = 1 AND ec.system_only = 0
-    ORDER BY ec.sort_order, pe.awarded_at`).bind(playerId).all<{ emblem_id: string }>();
-  return rows.results.map(({ emblem_id }) => emblem_id);
+  const rows = await db.prepare('SELECT emblem_id FROM player_emblems WHERE player_id = ?')
+    .bind(playerId).all<{ emblem_id: string }>();
+  const owned = new Set(rows.results.map(({ emblem_id }) => emblem_id).filter(isKnownOwnablePlayerEmblem));
+  return OWNABLE_PLAYER_EMBLEM_ORDER.filter((emblemId) => owned.has(emblemId));
 }
 
-export async function grantPlayerEmblem(db: EmblemDatabase, playerId: string, emblemId: string, source: string,
-  sourceReference: string, now = Date.now(), awardedBy: string | null = null, awardReason: string | null = null): Promise<void> {
-  if (!await isActiveOwnableEmblem(db, emblemId)) throw new Error('Unknown emblem.');
+export async function grantPlayerEmblem(db: EmblemDatabase, playerId: string, emblemId: string, source: EmblemAwardSource,
+  sourceReference: string | null, now = Date.now()): Promise<void> {
+  if (!isActiveOwnableEmblem(emblemId)) throw new Error('Unknown emblem.');
   await db.batch([
     db.prepare(`INSERT INTO player_emblems
-      (player_id, emblem_id, award_source, source_reference, awarded_at, awarded_by, award_reason, revoked_at, revoked_by, revocation_reason)
-      VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL)
-      ON CONFLICT(player_id, emblem_id) DO UPDATE SET award_source = excluded.award_source, source_reference = excluded.source_reference,
-        awarded_at = excluded.awarded_at, awarded_by = excluded.awarded_by, award_reason = excluded.award_reason,
-        revoked_at = NULL, revoked_by = NULL, revocation_reason = NULL WHERE player_emblems.revoked_at IS NOT NULL`)
-      .bind(playerId, emblemId, source, sourceReference, now, awardedBy, awardReason),
+      (player_id, emblem_id, awarded_at, source_kind, source_id) VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(player_id, emblem_id) DO NOTHING`).bind(playerId, emblemId, now, source, sourceReference),
     db.prepare(`UPDATE players SET equipped_emblem = ?, updated_at = ? WHERE player_id = ? AND equipped_emblem IS NULL
-      AND EXISTS (SELECT 1 FROM player_emblems WHERE player_id = ? AND emblem_id = ? AND revoked_at IS NULL)`)
+      AND EXISTS (SELECT 1 FROM player_emblems WHERE player_id = ? AND emblem_id = ?)`)
       .bind(emblemId, now, playerId, playerId, emblemId),
   ]);
 }
 
 export async function completeEmblemMission(db: EmblemDatabase, playerId: string, missionId: EmblemMissionId, now = Date.now()): Promise<string | null> {
-  const mission = await db.prepare(`SELECT reward_kind, reward_reference FROM emblem_missions WHERE mission_id = ? AND active = 1
-    AND available_from <= ? AND (available_until IS NULL OR available_until > ?)`).bind(missionId, now, now).first<MissionRow>();
-  if (!mission || mission.reward_kind === 'placement-emblem') return null;
-  const reward = mission.reward_kind === 'emblem' ? mission.reward_reference : null;
+  const mission = EMBLEM_MISSION_BY_ID.get(missionId);
+  if (!mission || mission.rewardKind === 'placement-emblem') return null;
+  if (mission.requiresPrestigeContest && !await isPrestigeContestStarted(db)) return null;
+  const reward = mission.rewardKind === 'emblem' ? mission.rewardReference : null;
   const inserted = await db.prepare(`INSERT OR IGNORE INTO emblem_mission_completions
-    (player_id, mission_id, completed_at, reward_emblem_id, placement) VALUES (?, ?, ?, ?, NULL)`).bind(playerId, missionId, now, reward).run();
+    (player_id, mission_id, completed_at) VALUES (?, ?, ?)`).bind(playerId, missionId, now).run();
   if (inserted.meta.changes !== 1) return null;
   if (reward) await grantPlayerEmblem(db, playerId, reward, 'mission', missionId, now);
   return reward;
+}
+
+async function isPrestigeContestStarted(db: EmblemDatabase): Promise<boolean> {
+  return Boolean(await db.prepare("SELECT 1 present FROM emblem_contests WHERE contest_id = 'first-prestige' AND status <> 'inactive'").first());
 }
 
 export async function hasCustomEmblemAccess(db: EmblemDatabase, playerId: string): Promise<boolean> {
@@ -66,9 +55,13 @@ export async function prestigePlayer(db: EmblemDatabase, playerId: string, now =
   if (changed.meta.changes !== 1) return null;
   const player = await db.prepare('SELECT prestige_count FROM players WHERE player_id = ?').bind(playerId).first<{ prestige_count: number }>();
   if (!player) return null;
-  await completeEmblemMission(db, playerId, 'prestige', now);
-  await placePrestigeContest(db, playerId, player.prestige_count, now);
+  await awardPrestigeCompletion(db, playerId, player.prestige_count, now);
   return player.prestige_count;
+}
+
+export async function awardPrestigeCompletion(db: EmblemDatabase, playerId: string, prestigeCount: number, now = Date.now()): Promise<void> {
+  await completeEmblemMission(db, playerId, 'prestige', now);
+  await placePrestigeContest(db, playerId, prestigeCount, now);
 }
 
 async function placePrestigeContest(db: EmblemDatabase, playerId: string, prestigeCount: number, now: number): Promise<void> {
@@ -81,18 +74,17 @@ async function placePrestigeContest(db: EmblemDatabase, playerId: string, presti
     const count = await db.prepare('SELECT COUNT(*) count FROM emblem_contest_placements WHERE contest_id = ?').bind(contest.contest_id).first<{ count: number }>();
     const placement = (count?.count ?? 0) + 1;
     if (placement > contest.capacity) return;
-    const reward = await db.prepare('SELECT emblem_id FROM emblem_contest_rewards WHERE contest_id = ? AND placement = ?').bind(contest.contest_id, placement).first<{ emblem_id: string }>();
-    if (!reward) return;
+    const emblemId = PLACEMENT_EMBLEM_IDS[placement - 1];
+    if (!emblemId) return;
     const inserted = await db.prepare(`INSERT OR IGNORE INTO emblem_contest_placements
       (contest_id, player_id, placement, prestige_count, completed_at, emblem_id) VALUES (?, ?, ?, ?, ?, ?)`)
-      .bind(contest.contest_id, playerId, placement, prestigeCount, now, reward.emblem_id).run();
-    if (inserted.meta.changes === 1) awarded = { placement, emblemId: reward.emblem_id };
+      .bind(contest.contest_id, playerId, placement, prestigeCount, now, emblemId).run();
+    if (inserted.meta.changes === 1) awarded = { placement, emblemId };
     else if (await db.prepare('SELECT 1 present FROM emblem_contest_placements WHERE contest_id = ? AND player_id = ?').bind(contest.contest_id, playerId).first()) return;
   }
   if (!awarded) return;
-  await db.prepare(`INSERT OR IGNORE INTO emblem_mission_completions
-    (player_id, mission_id, completed_at, reward_emblem_id, placement) VALUES (?, 'prestige-contest', ?, ?, ?)`)
-    .bind(playerId, now, awarded.emblemId, awarded.placement).run();
+  await db.prepare("INSERT OR IGNORE INTO emblem_mission_completions (player_id, mission_id, completed_at) VALUES (?, 'prestige-contest', ?)")
+    .bind(playerId, now).run();
   await grantPlayerEmblem(db, playerId, awarded.emblemId, 'contest', contest.contest_id, now);
   if (awarded.placement === contest.capacity) await db.prepare("UPDATE emblem_contests SET status = 'closed', closed_at = ? WHERE contest_id = ? AND status = 'active'").bind(now, contest.contest_id).run();
 }
@@ -100,9 +92,11 @@ async function placePrestigeContest(db: EmblemDatabase, playerId: string, presti
 export async function recordUnlockAllClassesFinish(_db: EmblemDatabase, _playerId: string, _now = Date.now()): Promise<number | null> { return null; }
 
 export async function revokePlayerEmblem(db: EmblemDatabase, playerId: string, emblemId: string,
-  adminEmail: string, reason: string, now = Date.now()): Promise<boolean> {
-  const result = await db.prepare(`UPDATE player_emblems SET revoked_at = ?, revoked_by = ?, revocation_reason = ?
-    WHERE player_id = ? AND emblem_id = ? AND revoked_at IS NULL`).bind(now, adminEmail, reason, playerId, emblemId).run();
+  now = Date.now()): Promise<boolean> {
+  const result = await db.prepare('DELETE FROM player_emblems WHERE player_id = ? AND emblem_id = ?').bind(playerId, emblemId).run();
   if (result.meta.changes === 1) await db.prepare('UPDATE players SET equipped_emblem = NULL, updated_at = ? WHERE player_id = ? AND equipped_emblem = ?').bind(now, playerId, emblemId).run();
   return result.meta.changes === 1;
 }
+
+const PLACEMENT_EMBLEM_IDS = ['first-place', 'second-place', 'third-place', 'fourth-place', 'fifth-place',
+  'sixth-place', 'seventh-place', 'eighth-place', 'ninth-place', 'tenth-place'] as const;

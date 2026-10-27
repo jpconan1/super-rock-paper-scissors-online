@@ -2529,15 +2529,15 @@
       "layouts": {
         "landscape": {
           "x": 0,
-          "y": -26,
+          "y": -50,
           "width": 256,
-          "height": 24
+          "height": 48
         },
         "portrait": {
           "x": 0,
-          "y": -26,
+          "y": -50,
           "width": 256,
-          "height": 24
+          "height": 48
         }
       }
     },

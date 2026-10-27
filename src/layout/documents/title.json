@@ -381,22 +381,27 @@
       }
     },
     {
-      "id": "boil-toggle",
-      "type": "toggle",
+      "id": "settings",
+      "type": "button",
       "protected": true,
-      "behavior": "toggle-animation",
+      "behavior": "open-settings",
+      "assets": {
+        "up": "/interactive-elements/menu-buttons/settings-button-up-sheet.webp",
+        "between": "/interactive-elements/menu-buttons/settings-button-between-sheet.webp",
+        "depressed": "/interactive-elements/menu-buttons/settings-button-depressed-sheet.webp"
+      },
       "layouts": {
         "landscape": {
-          "x": 640,
-          "y": 440,
-          "width": 158,
-          "height": 79
+          "x": 659,
+          "y": 449.5,
+          "width": 120,
+          "height": 60
         },
         "portrait": {
-          "x": 270,
-          "y": 320,
-          "width": 170,
-          "height": 85
+          "x": 297.5,
+          "y": 332.5,
+          "width": 115,
+          "height": 60
         }
       }
     }
