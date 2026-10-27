@@ -39,6 +39,7 @@ import type { AbmProjection } from '../variants/attackBlockMana/attackBlockManaT
 import { generateRandomName } from '../title/randomName';
 import { showPasswordAlert } from '../auth/passwordAlert';
 import { showEmblemMenuAlert } from './emblemMenuAlert';
+import { showPrestigeAnimationAlert } from './prestigeAnimationAlert';
 import { isStreamerModeEnabled } from '../input/streamerMode';
 import { showTitleSettingsAlert } from '../title/settingsAlert';
 
@@ -420,6 +421,7 @@ export class AppController {
           },
         } },
         account.bonusClassId,
+        () => { if (this.alertSystem) showPrestigeAnimationAlert(this.alertSystem); },
       );
       lobby.receiveWhiteboard({ type: 'snapshot', board: this.whiteboard });
       lobby.updateRoster(this.lobbyPlayers, this.lobbySelfId);

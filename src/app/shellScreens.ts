@@ -201,6 +201,7 @@ export function mountLobbyScreen(
     };
   } = {},
   bonusClassId: AbmClassId = ABM_CLASS_IDS[Math.max(0, Math.min(ABM_CLASS_IDS.length - 1, playerLevel - 1))]!,
+  onTestPrestige: () => void = () => {},
 ): LobbyScreenMount {
   let whiteboardDisabled = faceOptions.whiteboardDisabled ?? false;
   const initialFace = initialLobbyFace(whiteboardDisabled, faceOptions.initialFace);
@@ -218,6 +219,11 @@ export function mountLobbyScreen(
     classCardDrag?.reset();
   });
   const composition = canvas.composition;
+  const prestigeTestLink = document.createElement('button');
+  prestigeTestLink.type = 'button';
+  prestigeTestLink.className = 'lobby-screen__prestige-test-link';
+  prestigeTestLink.textContent = 'Test prestige animation';
+  prestigeTestLink.addEventListener('click', onTestPrestige);
   const faceLayers = new Map<LobbyFace, HTMLDivElement>(
     (['whiteboard', 'progression', 'more-variants'] as const).map((face) => {
       const layer = document.createElement('div');
@@ -445,7 +451,7 @@ export function mountLobbyScreen(
   whiteboardFace.append(whiteboard, ...tools.map((item) => item.element), chat, emblemSave.element, emblemFrame.element, emblemCancel.element, emblemStatus);
   composition.append(header, ...faceLayers.values(), flip, whiteboardFaceButton.element,
     progressionFaceButton.element, moreVariantsFaceButton.element, comingSoon,
-    ...actions.map((item) => item.element), roster, curtainLeft, curtainRight, missions);
+    ...actions.map((item) => item.element), roster, curtainLeft, curtainRight, missions, prestigeTestLink);
   composition.append(rosterToggle.element);
   layoutBindings.push(
     { id: 'header', element: header }, { id: 'player-name', element: emblemCard.element }, { id: 'player-level', element: emblemButton.element },
