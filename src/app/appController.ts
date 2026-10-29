@@ -39,12 +39,12 @@ import type { AbmProjection } from '../variants/attackBlockMana/attackBlockManaT
 import { generateRandomName } from '../title/randomName';
 import { showPasswordAlert } from '../auth/passwordAlert';
 import { showEmblemMenuAlert } from './emblemMenuAlert';
-import { showPrestigeAnimationAlert } from './prestigeAnimationAlert';
+import { mountPrestigeRewardScreen } from './prestigeRewardScreen';
 import { isStreamerModeEnabled } from '../input/streamerMode';
 import { showTitleSettingsAlert } from '../title/settingsAlert';
 
 export type ConnectionState = 'connected' | 'reconnecting' | 'offline';
-export type ShellDestination = 'title' | 'lobby' | 'account' | 'match-found' | 'slot-picker' | 'scoreboard' | 'gameplay' | 'progress' | 'reward';
+export type ShellDestination = 'title' | 'lobby' | 'account' | 'match-found' | 'slot-picker' | 'scoreboard' | 'gameplay' | 'progress' | 'reward' | 'prestige';
 
 export interface AppControllerOptions {
   readonly clock: BoilClock;
@@ -421,7 +421,6 @@ export class AppController {
           },
         } },
         account.bonusClassId,
-        () => { if (this.alertSystem) showPrestigeAnimationAlert(this.alertSystem); },
       );
       lobby.receiveWhiteboard({ type: 'snapshot', board: this.whiteboard });
       lobby.updateRoster(this.lobbyPlayers, this.lobbySelfId);
@@ -497,6 +496,14 @@ export class AppController {
       const flow = createClassRewardFlow(award);
       const reward = mountClassRewardScreen(this.screenLayer, this.screenLayer, options.clock, award, flow.unlockedClassIds, flow.nextClassId, () => {
         this.pendingProgressAward = undefined; this.progressAwardMatchId = undefined; this.rewardTransitionStarted = false; void this.navigate('lobby');
+      });
+      this.screenCleanup = () => reward.destroy();
+    } else if (destination === 'prestige') {
+      const prestige = this.pendingProgressAward?.prestige;
+      if (prestige?.state !== 'completed') throw new Error('Prestige reward is unavailable.');
+      const reward = mountPrestigeRewardScreen({
+        container: this.screenLayer, clock: options.clock, prestigeCount: prestige.prestigeCount,
+        onContinue: () => { void this.finishPrestigeReward(); },
       });
       this.screenCleanup = () => reward.destroy();
     } else if (destination === 'gameplay') {
@@ -929,19 +936,20 @@ export class AppController {
     const award = this.pendingProgressAward;
     if (!award) return;
     this.rewardTransitionStarted = true;
-    if (award.prestige?.state === 'completed') {
-      this.releaseCompletedMatch();
-      try { await this.options.session.refreshOnlineIdentity(); }
-      catch (error) { this.showError(error); return; }
-      this.pendingProgressAward = undefined; this.progressAwardMatchId = undefined; this.rewardTransitionStarted = false;
-      void this.navigate('lobby');
+    const reward = progressRewardDestination(award, this.options.session.accountState().prestigeCount);
+    if (reward === 'prestige') {
+      await this.openRewardScreen('prestige', true);
       return;
     }
-    if (!shouldShowClassRewards(award, this.options.session.accountState().prestigeCount)) { this.finishReturnToLobby(); return; }
+    if (reward === 'lobby') { this.finishReturnToLobby(); return; }
     await this.openClassRewards(true);
   }
 
   private async openClassRewards(releaseMatch: boolean): Promise<void> {
+    await this.openRewardScreen('reward', releaseMatch);
+  }
+
+  private async openRewardScreen(destination: 'reward' | 'prestige', releaseMatch: boolean): Promise<void> {
     const curtain = this.getCurtain(); const signal = this.lifecycle?.signal;
     try {
       await curtain.close(signal);
@@ -950,14 +958,23 @@ export class AppController {
       if (signal?.aborted) return;
       if (releaseMatch) this.releaseCompletedMatch();
       this.clearScreen();
-      this.destination = 'reward';
+      this.destination = destination;
       this.lifecycle = new AbortController();
       curtain.setOpenDecoration(true);
       curtain.setDecorationForeground(true);
-      this.mountDestination('reward');
+      this.mountDestination(destination);
       await curtain.open(this.lifecycle.signal);
-      if (!this.lifecycle.signal.aborted) playCatalogSound('unlock-jingle');
+      if (destination === 'reward' && !this.lifecycle.signal.aborted) playCatalogSound('unlock-jingle');
     } catch (error) { if (!signal?.aborted) this.showError(error); }
+  }
+
+  private async finishPrestigeReward(): Promise<void> {
+    try { await this.options.session.refreshOnlineIdentity(); }
+    catch (error) { this.showError(error); return; }
+    this.pendingProgressAward = undefined;
+    this.progressAwardMatchId = undefined;
+    this.rewardTransitionStarted = false;
+    void this.navigate('lobby');
   }
 
   private releaseCompletedMatch(): void {
@@ -1010,6 +1027,11 @@ export class AppController {
 
 export function shouldShowClassRewards(award: ProgressAward, prestigeCount: number): boolean {
   return prestigeCount === 0 && award.unlockedClassIds.length > 0;
+}
+
+export function progressRewardDestination(award: ProgressAward, prestigeCount: number): 'prestige' | 'reward' | 'lobby' {
+  if (award.prestige?.state === 'completed') return 'prestige';
+  return shouldShowClassRewards(award, prestigeCount) ? 'reward' : 'lobby';
 }
 
 function isControllerOptions(value: AppControllerOptions | PresentationRegistry): value is AppControllerOptions {

@@ -6,6 +6,7 @@ import { createSoundToggle } from '../input/soundToggle';
 import { createStreamerModeToggle } from '../input/streamerMode';
 import { createVolumeSlider } from '../title/volumeSlider';
 import { createTextbox } from '../ui/textbox';
+import { showNoCommunicationAlert } from '../ui/noCommunicationAlert';
 import { STANDARD_CONFIRMATION_GEOMETRY, type AlertButtonSheets, type AlertSystem } from '../ui/alertSystem';
 import { createUnlockController } from './unlockController';
 
@@ -114,7 +115,10 @@ export function mountUniversalMenu(container: HTMLElement, background: HTMLEleme
   const lobbyResources: Array<{ destroy(): void }> = [];
   const lobbyDecorations: Node[] = [];
   if (options.mode === 'lobby') {
-    const streamer = createStreamerModeToggle(clock, options.onStreamerModeChange);
+    const streamer = createStreamerModeToggle(clock, (enabled) => {
+      options.onStreamerModeChange(enabled);
+      if (enabled) showNoCommunicationAlert(options.alerts);
+    });
     streamer.element.classList.add('universal-menu__toggle', 'universal-menu__toggle--streamer');
     controls.append(streamer.element);
     lobbyResources.push(streamer);

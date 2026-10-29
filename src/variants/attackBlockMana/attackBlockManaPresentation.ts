@@ -696,6 +696,9 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     const observingOpponent = projection?.phase === 'counter-picking' && projection.counterPicker !== projection.self;
     const showBonusXp = shouldShowAbmBonusXp(definition?.id, ownBonusClassId, observingOpponent);
     bonusXp.element.hidden = !showBonusXp; bonusXpHeading.hidden = !showBonusXp;
+    bonusXpHeading.textContent = definition?.id === 'joe'
+      ? 'Complete the game by winning with Joe!'
+      : 'Bonus XP for winning with this class!';
     portrait.setSource(pickerAsset(entry)); portrait.element.setAttribute('aria-label', definition?.name ?? 'Locked classes');
     className.textContent = definition?.name ?? 'Locked'; description.textContent = definition?.description ?? `${entry.kind === 'locked' ? entry.count : 0} classes still locked!`;
     if (projection && (projection.phase === 'selecting-classes' || projection.phase === 'waiting-for-class' || projection.phase === 'counter-picking')) {

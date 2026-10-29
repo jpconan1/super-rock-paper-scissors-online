@@ -18,7 +18,6 @@ export interface ButtonFaceArtwork {
 
 const BUTTON_FRAME_COUNT = 3;
 const FACE_BRIGHTNESS = 238;
-const FACE_PADDING = 0.9;
 
 interface PixelBounds { left: number; right: number; top: number; bottom: number }
 
@@ -62,8 +61,6 @@ export function createButtonFaceArtwork(options: ButtonFaceArtworkOptions): Butt
   const maskContext = maskCanvas.getContext('2d', { willReadFrequently: true });
   let visual: GameButtonVisual = 'up';
   let boilFrame: BoilFrame = 0;
-  const stableFaceBounds = new Map<GameButtonVisual, PixelBounds>();
-  let stableArtworkBounds: PixelBounds | null = null;
 
   function draw(): void {
     const mask = masks[visual]!;
@@ -92,27 +89,12 @@ export function createButtonFaceArtwork(options: ButtonFaceArtworkOptions): Butt
     }
     if (right < left || bottom < top) return;
     maskContext.putImageData(maskPixels, 0, 0);
-    let faceBounds = stableFaceBounds.get(visual);
-    if (!faceBounds) {
-      faceBounds = { left, right, top, bottom };
-      stableFaceBounds.set(visual, faceBounds);
-    }
-
-    const artworkContext = artworkCanvas.getContext('2d', { willReadFrequently: true });
-    if (!artworkContext) return;
-    const artworkBounds = readArtworkBounds(artworkContext, artworkCanvas.width, artworkCanvas.height);
-    if (!artworkBounds) return;
-    stableArtworkBounds ??= artworkBounds;
-    const stableArt = stableArtworkBounds;
-    const faceWidth = faceBounds.right - faceBounds.left + 1; const faceHeight = faceBounds.bottom - faceBounds.top + 1;
-    const artWidth = stableArt.right - stableArt.left + 1; const artHeight = stableArt.bottom - stableArt.top + 1;
-    const scale = Math.min(faceWidth * FACE_PADDING / artWidth, faceHeight * FACE_PADDING / artHeight);
-    const faceCenterX = (faceBounds.left + faceBounds.right + 1) / 2;
-    const faceCenterY = (faceBounds.top + faceBounds.bottom + 1) / 2;
-    const artCenterX = (stableArt.left + stableArt.right + 1) / 2;
-    const artCenterY = (stableArt.top + stableArt.bottom + 1) / 2;
+    const faceWidth = right - left + 1; const faceHeight = bottom - top + 1;
+    const scale = Math.max(faceWidth / artworkCanvas.width, faceHeight / artworkCanvas.height);
+    const drawnWidth = artworkCanvas.width * scale; const drawnHeight = artworkCanvas.height * scale;
+    const faceCenterX = (left + right + 1) / 2; const faceCenterY = (top + bottom + 1) / 2;
     outputContext.clearRect(0, 0, frameWidth, frameHeight);
-    outputContext.drawImage(artworkCanvas, faceCenterX - artCenterX * scale, faceCenterY - artCenterY * scale, artworkCanvas.width * scale, artworkCanvas.height * scale);
+    outputContext.drawImage(artworkCanvas, faceCenterX - drawnWidth / 2, faceCenterY - drawnHeight / 2, drawnWidth, drawnHeight);
     outputContext.globalCompositeOperation = 'destination-in';
     outputContext.drawImage(maskCanvas, 0, 0);
     outputContext.globalCompositeOperation = 'source-over';

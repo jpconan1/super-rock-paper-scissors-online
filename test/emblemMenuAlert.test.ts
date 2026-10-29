@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
+import type { EmblemMissionFeed } from '../src/core/emblemMission';
 
 class FakeElement {
   children: FakeElement[] = [];
@@ -39,7 +40,7 @@ describe('emblem menu alert', () => {
     buttons.length = 0; sprites.length = 0;
   });
 
-  function setup(onChoose = vi.fn(async () => {}), loadMissions = vi.fn(async () => ({
+  function setup(onChoose = vi.fn(async () => {}), loadMissions: () => Promise<EmblemMissionFeed> = vi.fn(async () => ({
     contest: { active: true, claimed: 3, capacity: 10 }, missions: [mission],
   }))) {
     let content!: FakeElement; let closed = false;
@@ -64,7 +65,18 @@ describe('emblem menu alert', () => {
       depressedSheet: '/interactive-elements/none-button-depressed-sheet.webp',
     });
     expect(buttons.slice(0, 3).filter((item) => item.locked).map((item) => item.options.label)).toEqual(['Beta OG']);
-    expect(sprites.map((item) => item.options.src)).toEqual(['/emblems/beta-og-sheet.webp', '/emblems/new-player-sheet.webp', '/emblems/first-place-sheet.webp']);
+    expect(sprites.map((item) => item.options.src)).toEqual(['/emblems/beta-og-sheet.webp', '/emblems/new-player-sheet.webp', '/emblems/first-place-sheet.webp', '/emblems/new-player-sheet.webp']);
+    const row = missionScroll.children[4]!.children[0]!;
+    expect(row.children[1]!.children[2]!.textContent).toBe('Reward:');
+    expect(row.children[1]!.children[3]!.children).toHaveLength(1);
+  });
+
+  test('previews the depressed custom emblem button for its unlock mission', async () => {
+    setup(vi.fn(async () => {}), vi.fn(async () => ({ contest: { active: false, claimed: 0, capacity: 10 }, missions: [{
+      ...mission, id: 'win-online-match', rewardKind: 'feature' as const, rewardReference: 'custom-emblem', completed: false,
+    }] })));
+    await Promise.resolve();
+    expect(sprites.at(-1)!.options).toMatchObject({ src: '/interactive-elements/custom-emblem-button-depressed-sheet.webp', frameCount: 3 });
   });
 
   test('hides contest section while contest is inactive', async () => {

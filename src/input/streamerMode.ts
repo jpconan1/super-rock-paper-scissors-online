@@ -29,12 +29,12 @@ export function setStreamerModeEnabled(
 
 export function createStreamerModeToggle(clock: BoilClock, onChange: (enabled: boolean) => void = () => {}): StreamerModeToggle {
   const toggle = createToggleButton({
-    label: 'Streamer Mode',
+    label: 'No Communication Mode',
     pressed: isStreamerModeEnabled(),
     onChange: (enabled) => { setStreamerModeEnabled(enabled); onChange(enabled); },
-    offSheet: '/interactive-elements/streamer-mode-toggle-off-sheet.webp',
-    betweenSheet: '/interactive-elements/streamer-mode-toggle-between-sheet.webp',
-    onSheet: '/interactive-elements/streamer-mode-toggle-on-sheet.webp',
+    offSheet: '/interactive-elements/no-communication-toggle-off-sheet.webp',
+    betweenSheet: '/interactive-elements/no-communication-toggle-between-sheet.webp',
+    onSheet: '/interactive-elements/no-communication-toggle-on-sheet.webp',
     juiceSheet: '/interactive-elements/generic-buttons/button-juice-sheet.webp',
     clock,
   });

@@ -165,7 +165,20 @@ export function showEmblemMenuAlert(
       const copy = document.createElement('span');
       const title = document.createElement('strong'); title.textContent = mission.title;
       const detail = document.createElement('small'); detail.textContent = mission.detail;
-      copy.append(title, detail); item.append(mark, copy); missions.append(item);
+      copy.append(title, detail);
+      const rewardId = mission.rewardKind === 'emblem' ? mission.rewardReference : null;
+      const rewardDefinition = rewardId ? PLAYER_EMBLEM_BY_ID.get(rewardId) : undefined;
+      const rewardSource = rewardDefinition ? emblemArtworkSource(rewardDefinition)
+        : mission.rewardKind === 'feature' && mission.rewardReference === 'custom-emblem'
+          ? '/interactive-elements/custom-emblem-button-depressed-sheet.webp' : null;
+      if (rewardSource) {
+        const rewardLabel = document.createElement('small'); rewardLabel.className = 'emblem-menu__reward-label'; rewardLabel.textContent = 'Reward:';
+        const rewardArt = document.createElement('span'); rewardArt.className = 'emblem-menu__reward-art';
+        const reward = createBoilingSprite({ src: rewardSource, frameCount: rewardDefinition ? emblemArtworkFrameCount(rewardDefinition) : 3,
+          clock, className: 'emblem-menu__reward-emblem', alt: rewardDefinition?.name ?? 'Custom Emblem' });
+        sprites.push(reward); rewardArt.append(reward.element); copy.append(rewardLabel, rewardArt);
+      }
+      item.append(mark, copy); missions.append(item);
     }
   }).catch(() => { missionStatus.textContent = 'Could not load missions.'; });
   void handle.result.finally(() => {
