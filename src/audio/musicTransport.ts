@@ -232,6 +232,11 @@ export class MusicTransport {
   private scheduleTrack(definition: MusicTrackDefinition, when: number, offsetSeconds: number, duration: number): void {
     const loaded = this.loaded.get(definition.src);
     if (!loaded || duration <= 0) return;
+    const lateBy = Math.max(0, this.context.currentTime - when);
+    if (lateBy >= duration) return;
+    when += lateBy;
+    offsetSeconds += lateBy;
+    duration -= lateBy;
     const source = this.createSource(loaded, this.programGain);
     source.onended = () => { this.scheduled.delete(source); source.disconnect(); };
     this.scheduled.set(source, { startsAt: when });

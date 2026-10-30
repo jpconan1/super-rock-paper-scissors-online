@@ -36,12 +36,12 @@ import { createAuth, PRIVACY_VERSION, TERMS_VERSION, type AuthEnv } from './auth
 import { createResendMailer, type AuthMailer } from './resendMailer';
 import { accountDeletionCodeHash, consumeAccountDeletionChallenge, purgeAccountData } from './accountDeletion';
 import { adminRoute } from './admin';
-import { completeEmblemMission, hasCustomEmblemAccess, isActiveOwnableEmblem, ownedPlayerEmblems, recordUnlockAllClassesFinish } from './playerEmblems';
+import { claimLegacyGoogleEmblem, completeEmblemMission, hasCustomEmblemAccess, isActiveOwnableEmblem, ownedPlayerEmblems, recordUnlockAllClassesFinish } from './playerEmblems';
 import { finalizeMatch } from './matchPersistence';
 import { maintenanceCookie, maintenancePassExpiry, readMaintenanceState, verifyMaintenancePass } from './maintenance';
 import { hashPassword } from 'better-auth/crypto';
 import {
-  consumeEmailChallenge, emailChallengeHash, generateEmailCode, normalizeAuthEmail, validEmailPassword,
+  consumeEmailChallenge, emailChallengeHash, generateEmailCode, normalizeAuthEmail, validEmailPassword, verifySignupChallengeForLink,
   type EmailChallengePurpose,
 } from './emailAccounts';
 import {
@@ -959,7 +959,7 @@ async function verifyEmailSignup(request: Request, env: Env, url: URL, clientKey
       allowed(env.SIGNUP_VERIFY_RATE, ipKey), useSignupRateLimit(env.DB, ipKey, 20, now),
     ]);
     if (!bindingAllowed || !ipAllowed) return rateLimited(15 * 60);
-    const pending = await verifyStoredEmailChallenge(env, `signup:${session.user.id}`, 'signup', session.user.id, email, code);
+    const pending = await verifySignupChallengeForLink(env.DB, env.BETTER_AUTH_SECRET, `signup:${session.user.id}`, session.user.id, email, code);
     const context = pending ? JSON.parse(pending.context_json) as { available?: boolean; displayName?: string } : null;
     if (!pending || pending.email !== email || context?.available !== true || !context.displayName) return json({ error: 'Code invalid or expired.' }, 400);
     const headers = new Headers(request.headers);
@@ -1290,6 +1290,7 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
             .bind(googleEmail, now, authSession.user.id).run();
         }
         await completeEmblemMission(env.DB, player.player_id, 'claim-account', now);
+        await claimLegacyGoogleEmblem(env.DB, authSession.user.id, player.player_id, now);
         return json(await currentPlayerProfile(env.DB, player.player_id));
       } catch {
         return json({ error: 'Account claim failed.' }, 500);
@@ -1332,7 +1333,8 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
           FROM players p WHERE p.auth_user_id = ?`)
           .bind(authSession.user.id).first<PlayerProfileRow & { has_password: number }>();
         if (!player) return json({ error: 'Player not found.' }, 404);
-        return json({ ...await profileForRow(env.DB, player),
+        await claimLegacyGoogleEmblem(env.DB, authSession.user.id, player.player_id);
+        return json({ ...await currentPlayerProfile(env.DB, player.player_id),
           email: player.account_type === 'email' ? authSession.user.email : undefined,
           hasPassword: player.account_type === 'email' && player.has_password === 1 });
       } catch (error) {
@@ -1344,16 +1346,10 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
       try {
         const authSession = await createAuth(env).api.getSession({ headers: request.headers });
         if (!authSession) return json({ error: 'Authentication required.' }, 401);
-        const body = await readJsonBody<{ unlockAllClasses?: unknown; testPrestigeStep?: unknown }>(request, 1_000);
-        if (body.testPrestigeStep === true) {
-          // Temporary controller cheat used to exercise the prestige flow.
-          await env.DB.prepare('UPDATE players SET total_progress_units = ?, updated_at = ? WHERE auth_user_id = ?')
-            .bind(200_000, Date.now(), authSession.user.id).run();
-        } else {
-          if (typeof body.unlockAllClasses !== 'boolean') return json({ error: 'unlockAllClasses must be a boolean.' }, 400);
-          await env.DB.prepare('UPDATE players SET unlock_all_classes = ?, updated_at = ? WHERE auth_user_id = ?')
-            .bind(body.unlockAllClasses ? 1 : 0, Date.now(), authSession.user.id).run();
-        }
+        const body = await readJsonBody<{ unlockAllClasses?: unknown }>(request, 1_000);
+        if (typeof body.unlockAllClasses !== 'boolean') return json({ error: 'unlockAllClasses must be a boolean.' }, 400);
+        await env.DB.prepare('UPDATE players SET unlock_all_classes = ?, updated_at = ? WHERE auth_user_id = ?')
+          .bind(body.unlockAllClasses ? 1 : 0, Date.now(), authSession.user.id).run();
         const player = await env.DB.prepare('SELECT player_id, display_name, rating, total_progress_units, unlock_all_classes, equipped_emblem, account_type, prestige_count FROM players WHERE auth_user_id = ?')
           .bind(authSession.user.id).first<PlayerProfileRow>();
         if (!player) return json({ error: 'Player not found.' }, 404);
@@ -1454,8 +1450,7 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
         const placement = await env.DB.prepare("SELECT placement, emblem_id FROM emblem_contest_placements WHERE contest_id = 'first-prestige' AND player_id = ?")
           .bind(player.player_id).first<{ placement: number; emblem_id: string }>();
         const byId = new Map(rows.results.map((row) => [row.mission_id, row]));
-        const missions = EMBLEM_MISSIONS.filter((mission) => mission.id !== 'prestige-contest'
-          && (!mission.requiresPrestigeContest || contest?.status !== 'inactive')
+        const missions = EMBLEM_MISSIONS.filter((mission) => (!mission.requiresPrestigeContest || contest?.status !== 'inactive' || byId.has(mission.id))
           && (mission.id !== 'claim-account' || player.account_type === 'guest' || byId.has(mission.id)))
           .map((mission): EmblemMissionStatus => { const row = byId.get(mission.id); const contestReward = mission.id === 'prestige-contest' ? placement?.emblem_id ?? null : null;
             return { id: mission.id, title: mission.title, detail: mission.detail, rewardKind: mission.rewardKind,
@@ -1618,8 +1613,12 @@ async function beginAdminGoogleLogin(request: Request, env: Env, url: URL): Prom
   let callbackUrl: URL;
   try { callbackUrl = new URL(callback); } catch { return json({ error: 'Invalid callback.' }, 400); }
   const allowedCallbacks = new Set(['http://localhost:5173', 'http://127.0.0.1:5173', 'https://abm.jpconan.ca']);
-  if (!allowedCallbacks.has(callbackUrl.origin) || callbackUrl.pathname !== '/admin') return json({ error: 'Invalid callback.' }, 400);
-  const headers = new Headers(request.headers); headers.set('content-type', 'application/json');
+  if (!allowedCallbacks.has(callbackUrl.origin) || (callbackUrl.pathname !== '/admin' && callbackUrl.pathname !== '/admin/')) return json({ error: 'Invalid callback.' }, 400);
+  const headers = new Headers(request.headers);
+  // This starts a fresh admin login. Forwarding the tester pass or old guest
+  // session makes Better Auth reject the synthetic OAuth start request.
+  headers.delete('cookie');
+  headers.set('content-type', 'application/json');
   const authRequest = new Request(`${url.origin}/api/auth/sign-in/social`, { method: 'POST', headers,
     body: JSON.stringify({ provider: 'google', callbackURL: callbackUrl.toString(), errorCallbackURL: callbackUrl.toString(), disableRedirect: true }) });
   const response = await createAuth(env).handler(authRequest);

@@ -1,11 +1,24 @@
 import { describe, expect, test, vi } from 'vitest';
-import { AppController, GOOGLE_AUTH_POPUP_MESSAGE, googlePopupCallbackUrl, isExistingGoogleAccountError, isGoogleAuthPopupMessage, isTutorialMoveCommand } from '../src/app/appController';
+import { AppController, GOOGLE_AUTH_POPUP_MESSAGE, completedEmblemMissionIds, googlePopupCallbackUrl, isExistingGoogleAccountError, isGoogleAuthPopupMessage, isTutorialMoveCommand, newEmblemMissionAlerts } from '../src/app/appController';
+import type { EmblemMissionStatus } from '../src/core/emblemMission';
 import type { VariantPresentation } from '../src/core/variant';
 import { PROTOCOL_VERSION } from '../src/protocol/protocol';
 
 const lease = () => ({ ready: Promise.resolve(), release: vi.fn() });
 
 describe('AppController', () => {
+  test('queues newly completed emblem and feature missions once', () => {
+    const mission = (id: string, rewardKind: EmblemMissionStatus['rewardKind'], completed: boolean): EmblemMissionStatus => ({
+      id, title: id, detail: id, rewardKind, rewardReference: null, completed,
+      completedAt: completed ? 1 : null, placement: null, rewardEmblemId: null,
+    });
+    const before = [mission('finish-tutorial', 'emblem', true), mission('win-online-match', 'feature', false)];
+    const after = [mission('finish-tutorial', 'emblem', true), mission('win-online-match', 'feature', true),
+      mission('prestige', 'emblem', true), mission('prestige-contest', 'placement-emblem', true)];
+    const known = completedEmblemMissionIds(before);
+    expect(newEmblemMissionAlerts(known, after).map(({ id }) => id)).toEqual(['win-online-match', 'prestige', 'prestige-contest']);
+    expect(newEmblemMissionAlerts(completedEmblemMissionIds(after), after)).toEqual([]);
+  });
   test('recognizes only move choices as tutorial-completing commands', () => {
     expect(isTutorialMoveCommand({ type: 'choose-move', move: 'attack' })).toBe(true);
     expect(isTutorialMoveCommand({ type: 'activate-ability', ability: 'steal' })).toBe(false);

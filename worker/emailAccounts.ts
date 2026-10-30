@@ -54,11 +54,23 @@ export function emailChallengeStatus(record: EmailChallengeRecord | null | undef
 export async function consumeEmailChallenge(db: AtomicDatabase, secret: string, challengeKey: string,
   purpose: EmailChallengePurpose, binding: string, email: string, code: string, now = Date.now(), maxAttempts = 3,
 ): Promise<StoredEmailChallenge | null> {
+  return checkEmailChallenge(db, secret, challengeKey, purpose, binding, email, code, now, maxAttempts, true);
+}
+
+export async function verifySignupChallengeForLink(db: AtomicDatabase, secret: string, challengeKey: string,
+  binding: string, email: string, code: string, now = Date.now(), maxAttempts = 3,
+): Promise<StoredEmailChallenge | null> {
+  return checkEmailChallenge(db, secret, challengeKey, 'signup', binding, email, code, now, maxAttempts, false);
+}
+
+async function checkEmailChallenge(db: AtomicDatabase, secret: string, challengeKey: string,
+  purpose: EmailChallengePurpose, binding: string, email: string, code: string, now: number, maxAttempts: number, consume: boolean,
+): Promise<StoredEmailChallenge | null> {
   const candidateHash = await emailChallengeHash(secret, purpose, binding, code);
-  const [consumed] = await db.batch<StoredEmailChallenge>([
-    db.prepare(`DELETE FROM email_auth_challenges
+  const [matched] = await db.batch<StoredEmailChallenge>([
+    db.prepare(`${consume ? 'DELETE FROM' : 'SELECT challenge_key, purpose, user_id, email, code_hash, context_json, expires_at, failed_attempts FROM'} email_auth_challenges
       WHERE challenge_key = ? AND purpose = ? AND email = ? AND code_hash = ? AND expires_at > ? AND failed_attempts < ?
-      RETURNING challenge_key, purpose, user_id, email, code_hash, context_json, expires_at, failed_attempts`)
+      ${consume ? 'RETURNING challenge_key, purpose, user_id, email, code_hash, context_json, expires_at, failed_attempts' : ''}`)
       .bind(challengeKey, purpose, email, candidateHash, now, maxAttempts),
     db.prepare(`UPDATE email_auth_challenges SET failed_attempts = failed_attempts + 1
       WHERE challenge_key = ? AND purpose = ? AND email = ? AND code_hash <> ? AND expires_at > ? AND failed_attempts < ?`)
@@ -67,7 +79,7 @@ export async function consumeEmailChallenge(db: AtomicDatabase, secret: string, 
       WHERE challenge_key = ? AND purpose = ? AND (expires_at <= ? OR failed_attempts >= ?)`)
       .bind(challengeKey, purpose, now, maxAttempts),
   ]);
-  return consumed?.results[0] ?? null;
+  return matched?.results[0] ?? null;
 }
 
 function constantTimeEqual(left: string, right: string): boolean {

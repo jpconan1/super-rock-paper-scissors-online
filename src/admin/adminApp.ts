@@ -37,7 +37,7 @@ function mountLogin(root: HTMLElement, baseUrl: string, status: number): void {
     button.disabled = true;
     const signedOut = await createGameAuthClient(baseUrl).signOut();
     if (signedOut.error) { button.disabled = false; card.append(element('p', 'admin-error', signedOut.error.message ?? 'Could not clear the current session.')); return; }
-    const login = new URL('/admin/auth/google', baseUrl); login.searchParams.set('callback', location.href); location.assign(login);
+    const login = new URL('/admin/auth/google', baseUrl); login.searchParams.set('callback', new URL('/admin', baseUrl).toString()); location.assign(login);
   };
   card.append(button); root.replaceChildren(card);
 }

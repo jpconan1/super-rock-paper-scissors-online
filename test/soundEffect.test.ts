@@ -78,6 +78,15 @@ describe('createSoundEffect', () => {
     expect(AudioMock.instances[1]?.volume).toBe(0.8);
   });
 
+  it('plays a fallback effect at half the selected sound-effect volume', async () => {
+    vi.stubGlobal('Audio', AudioMock);
+    vi.stubGlobal('AudioContext', undefined);
+    const audio = await import('../src/audio/soundEffect');
+    audio.setSfxVolume(0.8);
+    audio.createSoundEffect('/emblem.mp3', { volumeMultiplier: 0.5 }).play();
+    expect(AudioMock.instances[0]?.volume).toBe(0.4);
+  });
+
   it('plays and stops a bounded fallback segment', async () => {
     vi.useFakeTimers();
     vi.stubGlobal('Audio', AudioMock);

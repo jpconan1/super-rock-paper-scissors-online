@@ -39,6 +39,8 @@ import type { AbmProjection } from '../variants/attackBlockMana/attackBlockManaT
 import { generateRandomName } from '../title/randomName';
 import { showPasswordAlert } from '../auth/passwordAlert';
 import { showEmblemMenuAlert } from './emblemMenuAlert';
+import { showEmblemUnlockAlert } from './emblemUnlockAlert';
+import type { EmblemMissionStatus } from '../core/emblemMission';
 import { mountPrestigeRewardScreen } from './prestigeRewardScreen';
 import { isStreamerModeEnabled } from '../input/streamerMode';
 import { showTitleSettingsAlert } from '../title/settingsAlert';
@@ -71,6 +73,13 @@ export class AppController {
   private connectionState: ConnectionState = 'offline';
   private destination: ShellDestination = 'title';
   private playerName = '';
+  private emblemPlayerId = '';
+  private knownMissionIds: Set<string> | null = null;
+  private emblemAlerts: EmblemMissionStatus[] = [];
+  private emblemAlertOpen = false;
+  private emblemSyncing = false;
+  private emblemResyncRequested = false;
+  private emblemAlertReady = false;
   private latestSnapshot?: ServerSnapshot;
   private activeSlot?: SlotId;
   private screenReady: Promise<void> = Promise.resolve();
@@ -146,9 +155,24 @@ export class AppController {
     globalThis.addEventListener?.('keydown', this.onGlobalKeyDown as EventListener);
     const removeLoadingScreen = await runLoadingScreen(this.screenLayer, options.clock, assetLoader.retainBundle('shared'), true);
     const googleReturn = options.session.isGoogleSignInReturn();
+    const claimEmblemBaseline = googleReturn ? sessionStorage.getItem('super-rps-claim-emblem-baseline') : null;
+    sessionStorage.removeItem('super-rps-claim-emblem-baseline');
     const googlePlayer = googleReturn ? await options.session.completeGoogleSignIn() : null;
     if (!googlePlayer) await options.session.prepareTitle();
     const restoredAccount = options.session.accountState();
+    this.emblemPlayerId = restoredAccount.playerId;
+    if (restoredAccount.playerId) {
+      try {
+        const feed = await options.session.getEmblemMissions();
+        this.knownMissionIds = completedEmblemMissionIds(feed.missions);
+      } catch { this.knownMissionIds = null; }
+    }
+    if (claimEmblemBaseline && googlePlayer) {
+      try {
+        const baseline = JSON.parse(claimEmblemBaseline) as { playerId: string; missionIds: string[] };
+        if (baseline.playerId === restoredAccount.playerId && Array.isArray(baseline.missionIds)) this.knownMissionIds = new Set(baseline.missionIds);
+      } catch { /* Ignore stale claim state. */ }
+    }
     this.playerName = googlePlayer?.displayName ?? restoredAccount.displayName;
     this.transitionLayer.replaceChildren(...this.screenLayer.childNodes);
     await this.navigate(googlePlayer ? 'lobby' : 'title', false);
@@ -158,6 +182,7 @@ export class AppController {
   }
 
   async navigate(destination: ShellDestination, animated = true): Promise<void> {
+    this.emblemAlertReady = false;
     this.alertSystem?.closeAll();
     if (this.destination === 'lobby' && destination !== 'lobby') {
       this.setMatchmaking(false);
@@ -176,14 +201,52 @@ export class AppController {
       try { this.mountDestination(destination); }
       catch (error) { this.showError(error); }
     };
-    if (!animated) { commit(); return; }
+    if (!animated) { commit(); this.emblemAlertReady = true; void this.syncEmblemAlerts(); return; }
     try {
       const curtain = this.getCurtain();
       curtain.setDecorationForeground(destination === 'reward');
       curtain.setOpenDecoration(destination === 'lobby' || destination === 'account' || destination === 'slot-picker' || destination === 'scoreboard');
       await curtain.transition(commit, signal);
+      if (!signal.aborted && revision === this.loadRevision) { this.emblemAlertReady = true; void this.syncEmblemAlerts(); }
     }
     catch (error) { if (!signal.aborted) this.showError(error); }
+  }
+
+  private async syncEmblemAlerts(): Promise<void> {
+    if (this.connectionState !== 'connected' || (this.destination !== 'lobby' && this.destination !== 'account')) return;
+    const account = this.options.session.accountState();
+    const changedPlayer = account.playerId !== this.emblemPlayerId;
+    if (account.playerId !== this.emblemPlayerId) {
+      this.emblemPlayerId = account.playerId;
+      this.knownMissionIds = null;
+      this.emblemAlerts = [];
+    }
+    if (!account.playerId) return;
+    if (this.emblemSyncing) { this.emblemResyncRequested = true; return; }
+    this.emblemSyncing = true;
+    try {
+      const feed = await this.options.session.getEmblemMissions();
+      if (account.playerId !== this.options.session.accountState().playerId) return;
+      if (!changedPlayer && this.knownMissionIds) this.emblemAlerts.push(...newEmblemMissionAlerts(this.knownMissionIds, feed.missions));
+      this.knownMissionIds = completedEmblemMissionIds(feed.missions);
+      this.showNextEmblemAlert();
+    } catch (error) {
+      console.error('Could not load emblem unlocks.', error);
+    } finally {
+      this.emblemSyncing = false;
+      if (this.emblemResyncRequested) { this.emblemResyncRequested = false; void this.syncEmblemAlerts(); }
+    }
+  }
+
+  private showNextEmblemAlert(): void {
+    if (this.emblemAlertOpen || !this.emblemAlertReady || !this.alertSystem || (this.destination !== 'lobby' && this.destination !== 'account')) return;
+    const mission = this.emblemAlerts.shift();
+    if (!mission) return;
+    this.emblemAlertOpen = true;
+    void showEmblemUnlockAlert(this.alertSystem, this.options.clock, mission).finally(() => {
+      this.emblemAlertOpen = false;
+      this.showNextEmblemAlert();
+    });
   }
 
   async loadSlot(slotId: SlotId, send?: (command: unknown) => void): Promise<void> {
@@ -249,6 +312,7 @@ export class AppController {
   render(snapshot: ServerSnapshot): void { this.receiveSnapshot(snapshot); }
 
   setConnectionState(state: ConnectionState): void {
+    const recovered = this.connectionState !== 'connected' && state === 'connected';
     this.connectionState = state;
     if (state !== 'connected') this.closeUniversalMenu();
     if (state !== 'connected') this.alertSystem?.closeAll();
@@ -257,6 +321,7 @@ export class AppController {
     this.terminalCleanup?.();
     this.terminalCleanup = undefined;
     this.lobbyScreen?.setConnectionState(state);
+    if (recovered && this.emblemAlertReady) void this.syncEmblemAlerts();
     if (state !== 'connected' && this.destination !== 'lobby' && !this.localMatch) {
       this.timeline?.cancel(true);
       this.modalCleanup = showConnectionModal(this.modalLayer, state);
@@ -604,10 +669,6 @@ export class AppController {
         const account = this.options.session.accountState();
         this.lobbyScreen?.setUnlockedClassCount(account.unlockedClassIds.length);
         this.lobbyScreen?.setTutorialDisabled(account.unlockAllClasses);
-      }, onSetPrestigeStepForTesting: async () => {
-        await this.options.session.setPrestigeStepForTesting();
-        this.closeUniversalMenu();
-        await this.navigate('lobby');
       }, onStreamerModeChange: (enabled) => this.lobbyScreen?.setStreamerMode(enabled),
     };
     this.universalMenu = mountUniversalMenu(scaleContent ?? this.screenLayer, background, this.options.clock, menuOptions);
@@ -633,6 +694,10 @@ export class AppController {
   }
 
   private async startGoogleSignIn(flow: 'title' | 'claim', name = '', successDestination?: 'account' | 'lobby'): Promise<void> {
+    if (flow === 'claim' && this.knownMissionIds) {
+      const account = this.options.session.accountState();
+      sessionStorage.setItem('super-rps-claim-emblem-baseline', JSON.stringify({ playerId: account.playerId, missionIds: [...this.knownMissionIds] }));
+    }
     const popup = window.open('', 'super-rps-google-sign-in', 'popup,width=520,height=720');
     const curtain = this.getCurtain();
     if (!popup) {
@@ -1023,6 +1088,15 @@ export class AppController {
     this.progressAwardMatchId = undefined; this.rewardTransitionStarted = false;
     void this.navigate('lobby');
   }
+}
+
+export function completedEmblemMissionIds(missions: readonly EmblemMissionStatus[]): Set<string> {
+  return new Set(missions.filter((mission) => mission.completed).map((mission) => mission.id));
+}
+
+export function newEmblemMissionAlerts(previous: ReadonlySet<string>, missions: readonly EmblemMissionStatus[]): EmblemMissionStatus[] {
+  return missions.filter((mission) => mission.completed && !previous.has(mission.id)
+    && (mission.rewardKind === 'emblem' || mission.rewardKind === 'placement-emblem' || mission.rewardKind === 'feature'));
 }
 
 export function shouldShowClassRewards(award: ProgressAward, prestigeCount: number): boolean {

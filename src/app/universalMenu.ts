@@ -18,7 +18,6 @@ export interface LobbyUniversalMenuOptions extends UniversalMenuCommonOptions {
   mode: 'lobby';
   onAccount: () => void;
   onSetUnlockAll: (enabled: boolean) => Promise<void>;
-  onSetPrestigeStepForTesting: () => Promise<void>;
   onStreamerModeChange: (enabled: boolean) => void;
   account: UniversalMenuAccount;
 }
@@ -143,7 +142,7 @@ export function mountUniversalMenu(container: HTMLElement, background: HTMLEleme
         confirm: { label: 'Continue', sheets: ALERT_BUTTON_SHEETS.continue, onActivate: () => updateUnlockAll(true) },
       }).then((confirmed) => { if (confirmed) resumeProgression.element.focus(); });
     };
-    const unlockController = createUnlockController(clock, showUnlockConfirmation, () => void options.onSetPrestigeStepForTesting());
+    const unlockController = createUnlockController(clock, showUnlockConfirmation);
     resumeProgression = createGameButton({ label: 'Resume progression', onActivate: () => void updateUnlockAll(false), clock,
       upSheet: '/interactive-elements/resume-progression/lock-button-up-sheet.webp', betweenSheet: '/interactive-elements/resume-progression/lock-button-between-sheet.webp', depressedSheet: '/interactive-elements/resume-progression/lock-button-depressed-sheet.webp' });
     resumeProgression.element.classList.add('universal-menu__resume-progression', 'game-button--baked-label');

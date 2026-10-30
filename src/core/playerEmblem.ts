@@ -16,6 +16,7 @@ export interface PlayerEmblemDefinition {
 
 export const PLAYER_EMBLEM_CATALOG: readonly PlayerEmblemDefinition[] = [
   { id: 'beta-og', name: 'Beta OG', artwork: { kind: 'sprite-sheet', src: '/emblems/beta-og-sheet.webp', frameCount: 10 }, ownable: true, systemOnly: false, sortOrder: 10 },
+  { id: 'guma', name: 'GUMA', artwork: { kind: 'sprite-sheet', src: '/emblems/guma-emblem-sheet.webp', frameCount: 24 }, ownable: true, systemOnly: false, sortOrder: 15 },
   { id: 'new-player', name: 'New Player', artwork: { kind: 'sprite-sheet', src: '/emblems/new-player-sheet.webp', frameCount: 15 }, ownable: true, systemOnly: false, sortOrder: 20 },
   { id: 'prestige', name: 'Prestige', artwork: { kind: 'sprite-sheet', src: '/emblems/prestige-sheet.webp', frameCount: 3 }, ownable: true, systemOnly: false, sortOrder: 30 },
   ...(['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth'] as const).map((place, index) => ({

@@ -1,4 +1,5 @@
 import { betterAuth } from 'better-auth';
+import type { D1Database } from '@cloudflare/workers-types';
 import { anonymous, emailOTP } from 'better-auth/plugins';
 import { createResendMailer, type AuthMailer } from './resendMailer';
 import { completeEmblemMission } from './playerEmblems';

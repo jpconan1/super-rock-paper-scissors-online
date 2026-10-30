@@ -85,6 +85,15 @@ describe('emblem menu alert', () => {
     expect(view.content.children[1]!.children[0]!.children[0]!.hidden).toBe(true);
   });
 
+  test('uses the awarded placement emblem in a completed contest mission row', async () => {
+    setup(vi.fn(async () => {}), vi.fn(async () => ({ contest: { active: false, claimed: 10, capacity: 10 }, missions: [{
+      ...mission, id: 'prestige-contest', rewardKind: 'placement-emblem' as const,
+      rewardReference: 'first-prestige', rewardEmblemId: 'first-place', placement: 1,
+    }] })));
+    await Promise.resolve();
+    expect(sprites.at(-1)!.options.src).toBe('/emblems/first-place-sheet.webp');
+  });
+
   test('equips optimistically, keeps alert open, and commits one locked choice', async () => {
     const view = setup(); buttons[2]!.activate();
     expect(buttons[1]!.locked).toBe(false); expect(buttons[2]!.locked).toBe(true);

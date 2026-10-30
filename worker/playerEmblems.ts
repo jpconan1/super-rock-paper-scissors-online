@@ -28,6 +28,32 @@ export async function grantPlayerEmblem(db: EmblemDatabase, playerId: string, em
   ]);
 }
 
+export async function claimLegacyGoogleEmblem(db: EmblemDatabase, authUserId: string, playerId: string, now = Date.now()): Promise<void> {
+  await db.batch([
+    db.prepare(`INSERT OR IGNORE INTO player_emblems (player_id, emblem_id, awarded_at, source_kind, source_id)
+      SELECT ?, e.emblem_id, ?, 'admin', 'legacy-google-entitlement'
+      FROM legacy_emblem_entitlements e JOIN account a ON a.providerId = e.provider_id AND a.accountId = e.provider_account_id
+      JOIN players p ON p.player_id = ? AND p.auth_user_id = a.userId AND p.account_type = 'google'
+      WHERE a.userId = ? AND e.claimed_player_id IS NULL AND e.emblem_id = 'guma'`)
+      .bind(playerId, now, playerId, authUserId),
+    db.prepare(`UPDATE players SET equipped_emblem = 'guma', updated_at = ?
+      WHERE player_id = ? AND auth_user_id = ? AND account_type = 'google'
+      AND EXISTS (SELECT 1 FROM player_emblems WHERE player_id = ? AND emblem_id = 'guma')
+      AND EXISTS (SELECT 1 FROM legacy_emblem_entitlements e JOIN account a
+        ON a.providerId = e.provider_id AND a.accountId = e.provider_account_id
+        WHERE a.userId = ? AND e.emblem_id = 'guma' AND e.claimed_player_id IS NULL)`)
+      .bind(now, playerId, authUserId, playerId, authUserId),
+    db.prepare(`UPDATE legacy_emblem_entitlements SET claimed_player_id = ?, claimed_at = ?
+      WHERE emblem_id = 'guma' AND claimed_player_id IS NULL AND EXISTS
+      (SELECT 1 FROM account a JOIN players p ON p.auth_user_id = a.userId
+        WHERE a.providerId = legacy_emblem_entitlements.provider_id
+        AND a.accountId = legacy_emblem_entitlements.provider_account_id
+        AND a.userId = ? AND p.player_id = ? AND p.account_type = 'google'
+        AND EXISTS (SELECT 1 FROM player_emblems WHERE player_id = ? AND emblem_id = 'guma'))`)
+      .bind(playerId, now, authUserId, playerId, playerId),
+  ]);
+}
+
 export async function completeEmblemMission(db: EmblemDatabase, playerId: string, missionId: EmblemMissionId, now = Date.now()): Promise<string | null> {
   const mission = EMBLEM_MISSION_BY_ID.get(missionId);
   if (!mission || mission.rewardKind === 'placement-emblem') return null;

@@ -9,6 +9,34 @@ function deferred<T>() {
 
 describe('matchmaking session adapters', () => {
   let storageValues: Map<string, string>;
+  test('marks the lobby reconnecting when either socket drops and restores it after both recover', () => {
+    const sockets: Array<{ readyState: number; emit(type: string): void }> = [];
+    class SocketMock {
+      static OPEN = 1;
+      readyState = 0;
+      private listeners = new Map<string, Array<() => void>>();
+      constructor() { sockets.push(this); }
+      addEventListener(type: string, listener: () => void) { this.listeners.set(type, [...this.listeners.get(type) ?? [], listener]); }
+      send() {}
+      close() {}
+      emit(type: string) { this.readyState = type === 'open' ? 1 : 3; for (const listener of this.listeners.get(type) ?? []) listener(); }
+    }
+    vi.stubGlobal('WebSocket', SocketMock);
+    const connection = vi.fn();
+    const adapter = new WebSocketShellSessionAdapter('https://example.test');
+    adapter.subscribe({ connection, matchFound: vi.fn(), snapshot: vi.fn() });
+    const internals = adapter as unknown as { onlineActive: boolean; whiteboardActive: boolean; connectLobbyPresence(): void; connectWhiteboard(): void };
+    internals.onlineActive = true; internals.whiteboardActive = true;
+    internals.connectLobbyPresence(); internals.connectWhiteboard();
+    sockets[0]!.emit('open'); sockets[1]!.emit('open');
+    expect(connection).toHaveBeenLastCalledWith('connected');
+    sockets[1]!.emit('close');
+    expect(connection).toHaveBeenLastCalledWith('reconnecting');
+    vi.runOnlyPendingTimers();
+    sockets[2]!.emit('open');
+    expect(connection).toHaveBeenLastCalledWith('connected');
+    adapter.destroy();
+  });
   test('preserves ABM command envelopes while unwrapping legacy move commands', () => {
     const abm = { type: 'choose-move', move: 'attack' } as const;
     expect(serializeVariantCommand(abm)).toBe(abm);
@@ -392,19 +420,6 @@ describe('matchmaking session adapters', () => {
     expect(adapter.accountState().unlockedClassIds).toHaveLength(21);
   });
 
-  test('sets the exact Joe prestige step through the temporary cheat', async () => {
-    const player = { playerId: 'wheel-fresh-toast-owl-14', accountType: 'guest', displayName: 'Player', rating: 1500, totalProgressUnits: 200_000, unlockAllClasses: false, equippedEmblem: null,
-      level: 21, progressUnitsInLevel: 10_000, unlockedClassIds: [] };
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(player), { status: 200 }));
-    vi.stubGlobal('fetch', fetchMock);
-    const adapter = new WebSocketShellSessionAdapter('https://example.test');
-
-    await adapter.setPrestigeStepForTesting();
-
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ testPrestigeStep: true });
-    expect(adapter.accountState()).toMatchObject({ totalProgressUnits: 200_000, level: 21 });
-  });
-
   test('persists a server-authoritative equipped emblem', async () => {
     const player = { playerId: 'wheel-fresh-toast-owl-14', accountType: 'guest', displayName: 'Player', rating: 1500,
       totalProgressUnits: 0, unlockAllClasses: false, equippedEmblem: 'beta-og', ownedEmblems: ['beta-og'], level: 1, progressUnitsInLevel: 0,
@@ -465,12 +480,6 @@ describe('matchmaking session adapters', () => {
     expect(adapter.accountState().unlockedClassIds).toHaveLength(21);
     await adapter.setUnlockAllClasses(false);
     expect(adapter.accountState()).toMatchObject({ unlockAllClasses: false, unlockedClassIds: ['lucky'] });
-  });
-
-  test('local prestige cheat sets the Joe prestige step', async () => {
-    const adapter = new LocalShellSessionAdapter();
-    await adapter.setPrestigeStepForTesting();
-    expect(adapter.accountState()).toMatchObject({ totalProgressUnits: 200_000, level: 21 });
   });
 
   test('applies completed prestige progression and count locally before profile refresh', () => {

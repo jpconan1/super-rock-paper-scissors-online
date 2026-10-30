@@ -3,7 +3,7 @@ export type OwnablePlayerEmblem = string;
 export type EquippedPlayerEmblem = OwnablePlayerEmblem | 'custom';
 
 export const OWNABLE_PLAYER_EMBLEM_ORDER = [
-  'beta-og', 'new-player', 'prestige',
+  'beta-og', 'guma', 'new-player', 'prestige',
   'first-place', 'second-place', 'third-place', 'fourth-place', 'fifth-place',
   'sixth-place', 'seventh-place', 'eighth-place', 'ninth-place', 'tenth-place',
 ] as const;

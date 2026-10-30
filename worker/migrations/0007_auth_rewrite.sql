@@ -1,4 +1,19 @@
 -- Intentional pre-release auth reset. No legacy guest credentials survive.
+-- Keep one Google identity entitlement before the old auth rows are removed.
+CREATE TABLE legacy_emblem_entitlements (
+  provider_id TEXT NOT NULL,
+  provider_account_id TEXT NOT NULL,
+  emblem_id TEXT NOT NULL,
+  claimed_player_id TEXT,
+  claimed_at INTEGER,
+  PRIMARY KEY (provider_id, provider_account_id, emblem_id)
+);
+
+INSERT INTO legacy_emblem_entitlements (provider_id, provider_account_id, emblem_id)
+SELECT a.providerId, a.accountId, 'guma'
+FROM players p JOIN account a ON a.userId = p.auth_user_id
+WHERE p.player_id = '86136ceb-a00a-4e52-8037-d9cbec09be65' AND a.providerId = 'google';
+
 DELETE FROM verification;
 DELETE FROM session;
 DELETE FROM account;

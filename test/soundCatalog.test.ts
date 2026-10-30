@@ -5,7 +5,7 @@ describe('sound catalog', () => {
   it('maps every typed sound to the current audio root', () => {
     expect(Object.keys(SOUND_CATALOG)).toEqual([
       'button-down', 'button-up', 'ready', 'abm-charge', 'abm-block', 'abm-collision', 'abm-lucky',
-      'win', 'lose', 'match-found', 'starburst', 'curtain-close', 'curtain-open', 'unlock-jingle', 'xp-climb', 'xp-ding',
+      'win', 'lose', 'match-found', 'starburst', 'curtain-close', 'curtain-open', 'unlock-jingle', 'xp-climb', 'xp-ding', 'emblem-unlock',
     ]);
     for (const src of Object.values(SOUND_CATALOG)) expect(src).toMatch(/^\/audio\/.+\.(mp3|m4a)$/);
   });

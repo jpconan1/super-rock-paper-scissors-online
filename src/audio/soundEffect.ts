@@ -18,6 +18,8 @@ export interface SoundPlaybackOptions {
 export interface SoundEffectOptions {
   /** Caps this effect's final gain while preserving the global SFX setting. */
   maximumGain?: () => number;
+  /** Scales this effect relative to the global SFX setting. */
+  volumeMultiplier?: number;
 }
 
 export interface MusicLoop {
@@ -312,7 +314,7 @@ export function createSoundEffect(src: string, options: SoundEffectOptions = {})
     nextFallback = (index + 1) % fallbackPool.length;
 
     try {
-      audio.volume = Math.min(sfxVolume, options.maximumGain?.() ?? 1);
+      audio.volume = Math.min(sfxVolume * clampVolume(options.volumeMultiplier ?? 1), options.maximumGain?.() ?? 1);
       audio.currentTime = Math.max(0, playbackOptions.offsetSeconds ?? 0);
       void audio.play().catch(() => {});
     } catch {}
@@ -355,9 +357,9 @@ export function createSoundEffect(src: string, options: SoundEffectOptions = {})
         try {
           voice = audioContext.createBufferSource();
           voice.buffer = sound.buffer!;
-          if (sfxGain && options.maximumGain) {
+          if (sfxGain && (options.maximumGain || options.volumeMultiplier !== undefined)) {
             const effectGain = audioContext.createGain();
-            const finalGain = Math.min(sfxVolume, clampVolume(options.maximumGain()));
+            const finalGain = Math.min(sfxVolume * clampVolume(options.volumeMultiplier ?? 1), options.maximumGain ? clampVolume(options.maximumGain()) : 1);
             effectGain.gain.value = sfxVolume > 0 ? finalGain / sfxVolume : 0;
             voice.connect(effectGain);
             effectGain.connect(sfxGain);

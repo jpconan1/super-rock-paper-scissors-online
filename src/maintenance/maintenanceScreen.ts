@@ -18,6 +18,6 @@ function mount(root: HTMLElement, failed: boolean): void {
   const heading = document.createElement('h1'); heading.textContent = failed ? 'Connection trouble' : 'Maintenance Mode';
   const copy = document.createElement('p'); copy.textContent = failed
     ? 'Could not check the server.'
-    : "I'm testing new stuff. Super ABM will be back online in a few hours! – JP";
+    : "I'm testing new stuff. Super ABM will be back online in a few days! – JP";
   card.append(heading, copy); root.replaceChildren(card);
 }

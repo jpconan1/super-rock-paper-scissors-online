@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { advanceControllerCode, advanceUnlockCode, PRESTIGE_TEST_CODE, UNLOCK_CODE, type ControllerButton } from '../src/app/unlockController';
+import { advanceUnlockCode, UNLOCK_CODE, type ControllerButton } from '../src/app/unlockController';
 
 function enter(buttons: readonly ControllerButton[]): number {
   let progress = 0; let completions = 0;
@@ -11,12 +11,6 @@ function enter(buttons: readonly ControllerButton[]): number {
 }
 
 describe('unlock controller code', () => {
-  test('completes the temporary prestige-step sequence', () => {
-    let progress = 0; let complete = false;
-    for (const button of PRESTIGE_TEST_CODE) ({ progress, complete } = advanceControllerCode(PRESTIGE_TEST_CODE, progress, button));
-    expect(complete).toBe(true);
-  });
-
   test('completes the Konami sequence without a timing dependency', () => {
     expect(enter(UNLOCK_CODE)).toBe(1);
   });

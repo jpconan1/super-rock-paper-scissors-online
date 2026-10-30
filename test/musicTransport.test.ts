@@ -63,7 +63,36 @@ describe('MusicTransport', () => {
     context.currentTime = 4.1; transport.tick();
     const fullLoop = sources.at(-1)!;
     expect((fullLoop.buffer as AudioBuffer & { id: string }).id).toBe('/lobby');
-    expect(fullLoop.starts[0]![1]).toBe(0); expect(fullLoop.starts[0]![2]).toBe(4); transport.destroy();
+    expect(fullLoop.starts[0]![0]).toBeCloseTo(4.1);
+    expect(fullLoop.starts[0]![1]).toBeCloseTo(0.05);
+    expect(fullLoop.starts[0]![2]).toBeCloseTo(3.95); transport.destroy();
+  });
+
+  it('seeks into a late lobby loop without overlapping the next boundary', async () => {
+    const { context, transport, sources } = setup();
+    await transport.startPreloaded('lobby-loop', 'menu'); await flush();
+    context.currentTime = 4.55;
+    transport.tick();
+    const lateLoop = sources.at(-1)!;
+    expect(lateLoop.starts[0]![0]).toBeCloseTo(4.55);
+    expect(lateLoop.starts[0]![1]).toBeCloseTo(0.5);
+    expect(lateLoop.starts[0]![2]).toBeCloseTo(3.5);
+    context.currentTime = 7.86;
+    transport.tick();
+    expect(sources.at(-1)!.starts[0]).toEqual([8.05, 0, 4]);
+    transport.destroy();
+  });
+
+  it('skips entire missed loops after a long pause', async () => {
+    const { context, transport, sources } = setup();
+    await transport.startPreloaded('lobby-loop', 'menu'); await flush();
+    context.currentTime = 12.55;
+    transport.tick();
+    expect(sources).toHaveLength(2);
+    expect(sources[1]!.starts[0]![0]).toBeCloseTo(12.55);
+    expect(sources[1]!.starts[0]![1]).toBeCloseTo(0.5);
+    expect(sources[1]!.starts[0]![2]).toBeCloseTo(3.5);
+    transport.destroy();
   });
 
   it('returns from lobby to the equivalent title measure phase', async () => {

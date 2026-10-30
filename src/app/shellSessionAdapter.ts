@@ -38,7 +38,6 @@ export interface ShellSessionAdapter {
   suggestedPlayerName(): string;
   accountState(): AccountState;
   setUnlockAllClasses(enabled: boolean): Promise<void>;
-  setPrestigeStepForTesting(): Promise<void>;
   setEquippedEmblem(emblem: EquippedPlayerEmblem | null): Promise<void>;
   getEmblemMissions(): Promise<EmblemMissionFeed>;
   getCustomEmblem(): Promise<CustomEmblemState | null>;
@@ -166,13 +165,6 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
     if (!response.ok) throw new Error(`Progression update failed: ${response.status}`);
     const player = await response.json() as PlayerProfile;
     if (player.unlockAllClasses !== enabled) throw new Error('Progression update returned invalid data.');
-    this.totalProgressUnits = player.totalProgressUnits; this.unlockAllClasses = player.unlockAllClasses;
-  }
-  async setPrestigeStepForTesting(): Promise<void> {
-    const response = await fetch(`${this.baseUrl}/player-progression`, { method: 'PUT', credentials: 'include', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ testPrestigeStep: true }) });
-    if (!response.ok) throw new Error(`Progression update failed: ${response.status}`);
-    const player = await response.json() as PlayerProfile;
-    if (player.level !== 21) throw new Error('Progression update returned invalid prestige test state.');
     this.totalProgressUnits = player.totalProgressUnits; this.unlockAllClasses = player.unlockAllClasses;
   }
   async setEquippedEmblem(emblem: EquippedPlayerEmblem | null): Promise<void> {
@@ -525,13 +517,17 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
     if (!this.onlineActive || this.lobbySocket) return;
     const url = new URL(`${this.baseUrl}/lobby`); url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
     const socket = new WebSocket(url, LOBBY_SOCKET_PROTOCOL); this.lobbySocket = socket;
-    socket.addEventListener('open', () => socket.send(JSON.stringify({ type: 'presence', presence: this.lobbyPresence })));
+    socket.addEventListener('open', () => {
+      socket.send(JSON.stringify({ type: 'presence', presence: this.lobbyPresence }));
+      this.updateLobbyConnectionState();
+    });
     socket.addEventListener('message', (event) => {
       try { const message = JSON.parse(String(event.data)); if (isLobbyServerMessage(message) && message.type === 'roster') this.listener?.roster?.(message.players, message.selfId); } catch { /* ignore malformed server data */ }
     });
     socket.addEventListener('close', () => {
       if (this.lobbySocket !== socket) return;
       this.lobbySocket = undefined;
+      this.updateLobbyConnectionState();
       if (this.onlineActive) this.lobbyReconnect = setTimeout(() => { this.lobbyReconnect = undefined; this.connectLobbyPresence(); }, 1_000);
     });
   }
@@ -541,7 +537,10 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
     const url = new URL(`${this.baseUrl}/whiteboard`); url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
     url.searchParams.set('visit', this.lobbyVisitId);
     const socket = new WebSocket(url, WHITEBOARD_SOCKET_PROTOCOL); this.whiteboardSocket = socket;
-    socket.addEventListener('open', () => { for (const message of this.whiteboardPending.values()) socket.send(JSON.stringify(message)); });
+    socket.addEventListener('open', () => {
+      for (const message of this.whiteboardPending.values()) socket.send(JSON.stringify(message));
+      this.updateLobbyConnectionState();
+    });
     socket.addEventListener('message', (event) => {
       try {
         const message = JSON.parse(String(event.data));
@@ -558,8 +557,15 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
     socket.addEventListener('close', () => {
       if (this.whiteboardSocket !== socket) return;
       this.whiteboardSocket = undefined;
+      this.updateLobbyConnectionState();
       if (this.whiteboardActive) this.whiteboardReconnect = setTimeout(() => { this.whiteboardReconnect = undefined; this.connectWhiteboard(); }, 1_000);
     });
+  }
+
+  private updateLobbyConnectionState(): void {
+    if (!this.onlineActive || !this.whiteboardActive) return;
+    const ready = this.lobbySocket?.readyState === WebSocket.OPEN && this.whiteboardSocket?.readyState === WebSocket.OPEN;
+    this.listener?.connection(ready ? 'connected' : 'reconnecting');
   }
 
   private async pollMatchmaking(generation: number, attemptId: string): Promise<void> {
@@ -676,7 +682,6 @@ export class LocalShellSessionAdapter implements ShellSessionAdapter {
   suggestedPlayerName(): string { return ''; }
   accountState(): AccountState { const progress = progressionForTotal(this.totalProgressUnits); return { signedIn: false, accountType: 'guest', displayName: '', playerId: 'anchor-chill-pizza-turtle-00', rating: 1500, totalProgressUnits: this.totalProgressUnits, level: progress.level, prestigeCount: 0, unlockedClassIds: this.unlockAllClasses ? ABM_CLASS_IDS : progress.unlockedClassIds, bonusClassId: bonusClassIdForTotal(this.totalProgressUnits), unlockAllClasses: this.unlockAllClasses, equippedEmblem: this.equippedEmblem, ownedEmblems: [...this.ownedEmblems], customEmblem: this.customEmblem, email: '', hasPassword: false, emailAuthAvailable: false, emailSignupAvailable: false }; }
   async setUnlockAllClasses(enabled: boolean): Promise<void> { this.unlockAllClasses = enabled; }
-  async setPrestigeStepForTesting(): Promise<void> { this.totalProgressUnits = 200_000; }
   async setEquippedEmblem(emblem: EquippedPlayerEmblem | null): Promise<void> { this.equippedEmblem = emblem; }
   async getEmblemMissions(): Promise<EmblemMissionFeed> { return { contest: { active: false, claimed: 0, capacity: 10 }, missions: [
     { id: 'claim-account', title: 'Claim Your Account', detail: 'Protect your guest account.', rewardKind: 'emblem', rewardReference: 'beta-og', completed: false, completedAt: null, placement: null, rewardEmblemId: 'beta-og' },

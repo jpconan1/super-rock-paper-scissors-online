@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { convertV4MiniflareOptions, Miniflare } from 'miniflare';
 import { accountDeletionChallengeStatus, accountDeletionCodeHash, consumeAccountDeletionChallenge, purgeAccountData } from '../worker/accountDeletion';
-import { consumeEmailChallenge, emailChallengeHash } from '../worker/emailAccounts';
+import { consumeEmailChallenge, emailChallengeHash, verifySignupChallengeForLink } from '../worker/emailAccounts';
+import { createAuth } from '../worker/auth';
 import migration1 from '../worker/migrations/0001_initial.sql?raw';
 import migration2 from '../worker/migrations/0002_public_abm_test.sql?raw';
 import migration3 from '../worker/migrations/0003_better_auth.sql?raw';
@@ -84,6 +85,40 @@ beforeEach(async () => {
 });
 
 afterEach(async () => { await miniflare.dispose(); });
+
+test('verified signup code stays available until Better Auth links the guest', async () => {
+  const auth = createAuth({ DB: db, BETTER_AUTH_SECRET: 'test-secret', BETTER_AUTH_URL: 'http://localhost:8787',
+    GOOGLE_CLIENT_ID: 'unused', GOOGLE_CLIENT_SECRET: 'unused', DEV_AUTH_EMAIL_CODE: '123456' });
+  const guestResponse = await auth.handler(new Request('http://localhost:8787/api/auth/sign-in/anonymous', {
+    method: 'POST', headers: { origin: 'http://localhost:8787' },
+  }));
+  expect(guestResponse.ok).toBe(true);
+  const guest = await guestResponse.json() as { user: { id: string } };
+  const cookie = guestResponse.headers.get('set-cookie')?.split(';')[0] ?? '';
+  expect(cookie).toContain('session_token');
+  const now = Date.now();
+  await db.prepare(`INSERT INTO players (player_id, display_name, created_at, updated_at, auth_user_id, account_type)
+    VALUES ('guest-player', 'Guest', ?, ?, ?, 'guest')`).bind(now, now, guest.user.id).run();
+  const hash = await emailChallengeHash('test-secret', 'signup', guest.user.id, '123456');
+  await db.prepare(`INSERT INTO email_auth_challenges
+    (challenge_key, purpose, user_id, email, code_hash, context_json, expires_at, requested_at, last_sent_at)
+    VALUES (?, 'signup', ?, 'new@example.com', ?, ?, ?, ?, ?)`)
+    .bind(`signup:${guest.user.id}`, guest.user.id, hash,
+      JSON.stringify({ available: true, displayName: 'New Player', termsVersion: 'v1', privacyVersion: 'v1', acceptedAt: now }), now + 600_000, now, now).run();
+  expect(await verifySignupChallengeForLink(db, 'test-secret', `signup:${guest.user.id}`, guest.user.id,
+    'new@example.com', '123456', now)).not.toBeNull();
+  expect(await db.prepare('SELECT challenge_key FROM email_auth_challenges WHERE challenge_key = ?')
+    .bind(`signup:${guest.user.id}`).first()).not.toBeNull();
+  const signupResponse = await auth.handler(new Request('http://localhost:8787/api/auth/sign-up/email', {
+    method: 'POST', headers: { origin: 'http://localhost:8787', cookie, 'content-type': 'application/json' },
+    body: JSON.stringify({ email: 'new@example.com', password: 'long-enough-password', name: 'New Player' }),
+  }));
+  expect(signupResponse.status).toBe(200);
+  expect(await db.prepare("SELECT account_type, display_name FROM players WHERE player_id = 'guest-player'").first())
+    .toEqual({ account_type: 'email', display_name: 'New Player' });
+  expect(await db.prepare('SELECT challenge_key FROM email_auth_challenges WHERE challenge_key = ?')
+    .bind(`signup:${guest.user.id}`).first()).toBeNull();
+});
 
 describe('account deletion D1 lifecycle', () => {
   test('applies online prestige exactly once across match-finalization retries', async () => {
