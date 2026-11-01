@@ -15,27 +15,16 @@ export function mountProgressScreen(container: HTMLElement, clock: BoilClock, aw
   const menu = createMenuCanvas(screen, 'progress-screen');
   const panel = document.createElement('div'); panel.className = 'textbox progress-screen__panel';
   const heading = document.createElement('h1'); heading.textContent = `Level ${award.before.level}`;
-  const breakdown = document.createElement('div'); breakdown.className = 'progress-screen__breakdown';
-  if (!award.prestige && award.baseProgressUnits !== undefined) {
-    const base = document.createElement('p'); base.textContent = `Base XP: +${award.baseProgressUnits.toLocaleString()}`;
-    breakdown.append(base);
-    if ((award.bonusProgressUnits ?? 0) > 0) {
-      const bonus = document.createElement('p'); bonus.className = 'progress-screen__bonus';
-      bonus.textContent = `Newest class bonus +${Math.round((award.classBonusRate ?? 0) * 100)}%: +${award.bonusProgressUnits!.toLocaleString()} XP`;
-      breakdown.append(bonus);
-    }
-  }
-  const gain = document.createElement('p'); gain.className = 'progress-screen__gain'; gain.textContent = `+${award.gainedProgressUnits.toLocaleString()} XP`; gain.hidden = Boolean(award.prestige);
   const progress = createXpProgressBar(clock, award); progress.element.classList.add('progress-screen__bar');
   const unlocks = document.createElement('p'); unlocks.className = 'progress-screen__unlocks';
   unlocks.textContent = award.unlockedClassIds.length ? `Unlocked: ${award.unlockedClassIds.map((id) => ABM_CLASS_BY_ID.get(id)?.name ?? id).join(', ')}` : '';
   const button = createGameButton({ label: 'Continue', clock, onActivate: onContinue,
     upSheet: '/new-buttons/continue-button-w-up-sheet.webp', betweenSheet: '/new-buttons/continue-button-w-between-sheet.webp', depressedSheet: '/new-buttons/continue-button-w-depressed-sheet.webp' });
-  button.element.classList.add('progress-screen__continue', 'game-button--baked-label'); button.setDisabled(true);
-  panel.append(heading, breakdown, gain, progress.element, unlocks, button.element); menu.composition.append(panel); container.replaceChildren(screen);
+  button.element.classList.add('progress-screen__continue', 'game-button--baked-label');
+  panel.append(heading, progress.element, unlocks, button.element); menu.composition.append(panel); container.replaceChildren(screen);
   void progress.finished.then(() => {
     heading.textContent = `Level ${award.after.level}`;
-    button.setDisabled(false); button.element.focus();
+    button.element.focus();
   });
   return { finished: progress.finished, destroy() { progress.destroy(); button.destroy(); menu.destroy(); screen.remove(); } };
 }

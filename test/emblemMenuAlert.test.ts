@@ -32,7 +32,7 @@ vi.mock('../src/renderer/buttonFaceArtwork', () => ({
 
 import { showEmblemMenuAlert } from '../src/app/emblemMenuAlert';
 
-const mission = { id: 'finish-tutorial', title: 'Finish The Tutorial', detail: 'Complete one tutorial match.', rewardKind: 'emblem' as const,
+const mission = { id: 'finish-tutorial', title: 'Finish the Tutorial', detail: "I promise it's short", rewardKind: 'emblem' as const,
   rewardReference: 'new-player', completed: true, completedAt: 1, placement: null, rewardEmblemId: 'new-player' };
 
 describe('emblem menu alert', () => {
@@ -85,13 +85,16 @@ describe('emblem menu alert', () => {
     expect(view.content.children[1]!.children[0]!.children[0]!.hidden).toBe(true);
   });
 
-  test('uses the awarded placement emblem in a completed contest mission row', async () => {
-    setup(vi.fn(async () => {}), vi.fn(async () => ({ contest: { active: false, claimed: 10, capacity: 10 }, missions: [{
+  test('keeps the prestige contest out of the missions list', async () => {
+    const view = setup(vi.fn(async () => {}), vi.fn(async () => ({ contest: { active: true, claimed: 10, capacity: 10 }, missions: [{
       ...mission, id: 'prestige-contest', rewardKind: 'placement-emblem' as const,
       rewardReference: 'first-prestige', rewardEmblemId: 'first-place', placement: 1,
     }] })));
     await Promise.resolve();
-    expect(sprites.at(-1)!.options.src).toBe('/emblems/first-place-sheet.webp');
+    const missionScroll = view.content.children[1]!.children[0]!;
+    expect(missionScroll.children[0]!.hidden).toBe(false);
+    expect(missionScroll.children[4]!.children).toHaveLength(0);
+    expect(missionScroll.children[3]!.textContent).toBe('No current missions.');
   });
 
   test('equips optimistically, keeps alert open, and commits one locked choice', async () => {

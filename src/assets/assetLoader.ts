@@ -15,6 +15,7 @@ interface ImageRecord {
 }
 
 const RETRY_DELAYS_MS = [0, 150, 500] as const;
+const IMAGE_TIMEOUT_MS = 12_000;
 
 export class AssetLoader {
   private readonly records = new Map<string, ImageRecord>();
@@ -102,18 +103,28 @@ export class AssetLoader {
     }
     throw lastError;
   }
+
 }
 
 export async function loadDecodedImage(url: string): Promise<HTMLImageElement> {
   const image = new Image();
   image.decoding = 'async';
   await new Promise<void>((resolve, reject) => {
-    image.addEventListener('load', () => resolve(), { once: true });
-    image.addEventListener('error', () => reject(new Error(`Could not load image: ${url}`)), { once: true });
+    const timer = setTimeout(() => reject(new Error(`Image timed out: ${url}`)), IMAGE_TIMEOUT_MS);
+    image.addEventListener('load', () => { clearTimeout(timer); resolve(); }, { once: true });
+    image.addEventListener('error', () => { clearTimeout(timer); reject(new Error(`Could not load image: ${url}`)); }, { once: true });
     image.src = url;
-    if (image.complete) image.naturalWidth ? resolve() : reject(new Error(`Could not load image: ${url}`));
+    if (image.complete) { clearTimeout(timer); image.naturalWidth ? resolve() : reject(new Error(`Could not load image: ${url}`)); }
   });
-  if (image.decode) await image.decode();
+  if (image.decode) {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        image.decode(),
+        new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`Image decode timed out: ${url}`)), IMAGE_TIMEOUT_MS); }),
+      ]);
+    } finally { clearTimeout(timer); }
+  }
   return image;
 }
 

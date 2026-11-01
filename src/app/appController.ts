@@ -175,15 +175,18 @@ export class AppController {
     }
     this.playerName = googlePlayer?.displayName ?? restoredAccount.displayName;
     this.transitionLayer.replaceChildren(...this.screenLayer.childNodes);
-    await this.navigate(googlePlayer ? 'lobby' : 'title', false);
+    await this.navigate(googlePlayer || options.session.hasPendingGoogleName() ? 'lobby' : 'title', false);
     await this.screenReady;
     await nextFrame();
     removeLoadingScreen();
+    this.showPendingGoogleName();
   }
 
   async navigate(destination: ShellDestination, animated = true): Promise<void> {
     this.emblemAlertReady = false;
     this.alertSystem?.closeAll();
+    this.modalCleanup?.();
+    this.modalCleanup = undefined;
     if (this.destination === 'lobby' && destination !== 'lobby') {
       this.setMatchmaking(false);
       this.options.session.leaveLobby();
@@ -214,6 +217,7 @@ export class AppController {
 
   private async syncEmblemAlerts(): Promise<void> {
     if (this.connectionState !== 'connected' || (this.destination !== 'lobby' && this.destination !== 'account')) return;
+    if (this.options.session.hasPendingGoogleName()) return;
     const account = this.options.session.accountState();
     const changedPlayer = account.playerId !== this.emblemPlayerId;
     if (account.playerId !== this.emblemPlayerId) {
@@ -322,7 +326,7 @@ export class AppController {
     this.terminalCleanup = undefined;
     this.lobbyScreen?.setConnectionState(state);
     if (recovered && this.emblemAlertReady) void this.syncEmblemAlerts();
-    if (state !== 'connected' && this.destination !== 'lobby' && !this.localMatch) {
+    if (state !== 'connected' && this.destination !== 'title' && this.destination !== 'lobby' && !this.localMatch) {
       this.timeline?.cancel(true);
       this.modalCleanup = showConnectionModal(this.modalLayer, state);
     }
@@ -476,7 +480,7 @@ export class AppController {
           (emblem) => onChosen(emblem, options.session.accountState().customEmblem),
           () => lobby.openCustomEmblemEditor(),
         ),
-        { whiteboardDisabled: isStreamerModeEnabled(), loadMissions: () => options.session.getEmblemMissions(), customEmblemEditor: {
+        { whiteboardDisabled: isStreamerModeEnabled(), testMode: account.unlockAllClasses, loadMissions: () => options.session.getEmblemMissions(), customEmblemEditor: {
           load: () => options.session.getCustomEmblem(),
           save: async (document, artwork) => {
             await options.session.saveCustomEmblem(document, artwork);
@@ -492,7 +496,7 @@ export class AppController {
       lobby.setConnectionState(this.connectionState);
       this.lobbyScreen = lobby;
       this.screenCleanup = lobby;
-      if (!hasSeenAbmNewsletter()) this.openAbmLetter();
+      if (!options.session.hasPendingGoogleName() && !hasSeenAbmNewsletter()) this.openAbmLetter();
     } else if (destination === 'account') {
       this.screenReady = Promise.resolve();
       const account = mountAccountScreen(this.screenLayer, options.clock, this.alertSystem!, options.session.accountState(), async (name) => {
@@ -669,6 +673,11 @@ export class AppController {
         const account = this.options.session.accountState();
         this.lobbyScreen?.setUnlockedClassCount(account.unlockedClassIds.length);
         this.lobbyScreen?.setTutorialDisabled(account.unlockAllClasses);
+        this.lobbyScreen?.setTestMode(account.unlockAllClasses);
+      }, onSetPrestigeStepForTesting: async () => {
+        await this.options.session.setPrestigeStepForTesting();
+        this.closeUniversalMenu();
+        await this.navigate('lobby');
       }, onStreamerModeChange: (enabled) => this.lobbyScreen?.setStreamerMode(enabled),
     };
     this.universalMenu = mountUniversalMenu(scaleContent ?? this.screenLayer, background, this.options.clock, menuOptions);
@@ -734,6 +743,7 @@ export class AppController {
       if (!player) throw new Error('Google sign-in completed without a player session.');
       this.playerName = player.displayName;
       await this.navigate(successDestination ?? (flow === 'claim' ? 'account' : 'lobby'));
+      this.showPendingGoogleName();
     } catch (error) {
       if (!controller.signal.aborted) {
         await curtain.open();
@@ -744,6 +754,21 @@ export class AppController {
       if (!popup.closed) popup.close();
       if (this.googleSignIn === controller) this.googleSignIn = undefined;
     }
+  }
+
+  private showPendingGoogleName(): void {
+    if (this.destination !== 'lobby' || !this.alertSystem || !this.options.session.hasPendingGoogleName()) return;
+    void showGuestNameDialog(this.alertSystem, this.options.clock, {
+      mode: 'google',
+      save: async (name) => {
+        const player = await this.options.session.confirmGoogleName(name);
+        this.playerName = player.displayName;
+        this.lobbyScreen?.updateRoster(this.lobbyPlayers, this.lobbySelfId);
+      },
+    }).then((name) => {
+      if (!name || this.destination !== 'lobby') return;
+      void this.navigate('lobby', false);
+    });
   }
 
   private showExistingAccountAlert(): void {
@@ -835,6 +860,7 @@ export class AppController {
     this.localMatch = new LocalAbmMatch({
       playerName: this.playerName,
       playerLevel: this.options.session.accountState().level,
+      playerTestMode: this.options.session.accountState().unlockAllClasses,
       playerPrestigeCount: this.options.session.accountState().prestigeCount,
       playerEmblem: this.options.session.accountState().equippedEmblem,
       customEmblem: this.options.session.accountState().customEmblem,
@@ -861,6 +887,7 @@ export class AppController {
     this.localMatch = new LocalAbmMatch({
       playerName: this.playerName,
       playerLevel: this.options.session.accountState().level,
+      playerTestMode: this.options.session.accountState().unlockAllClasses,
       playerPrestigeCount: this.options.session.accountState().prestigeCount,
       playerEmblem: this.options.session.accountState().equippedEmblem,
       customEmblem: this.options.session.accountState().customEmblem,
@@ -1073,7 +1100,7 @@ export class AppController {
         }
       } catch (error) { this.showError(error); return; }
     }
-    if (award && (award.gainedProgressUnits > 0 || award.prestige)) {
+    if (award) {
       this.options.session.applyProgressAward(award);
       this.pendingProgressAward = award;
       void this.navigate('progress');

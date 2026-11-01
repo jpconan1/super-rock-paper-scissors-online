@@ -76,38 +76,38 @@
       "protected": true,
       "binding": "turn",
       "assets": {
-        "src": "/visual-elements/time-counters/turn0-sheet.webp"
+        "src": "/visual-elements/digit-counters/turn-sheet.webp"
       },
       "layouts": {
         "landscape": {
-          "x": 330,
-          "y": -10,
-          "width": 310,
-          "height": 155,
+          "x": 430,
+          "y": 12,
+          "width": 110,
+          "height": 95,
           "aspectLock": true
         },
         "portrait": {
-          "x": 180,
+          "x": 213,
           "y": 30,
-          "width": 176,
-          "height": 88,
+          "width": 110,
+          "height": 95,
           "aspectLock": true
         }
       },
       "alternateLayouts": {
         "class-resource": {
           "landscape": {
-            "x": 330,
-            "y": -10,
-            "width": 310,
-            "height": 155,
+            "x": 430,
+            "y": 12,
+            "width": 110,
+            "height": 95,
             "aspectLock": true
           },
           "portrait": {
-            "x": 182,
+            "x": 215,
             "y": 127.5,
-            "width": 176,
-            "height": 88,
+            "width": 110,
+            "height": 95,
             "aspectLock": true
           }
         }
@@ -1557,7 +1557,7 @@
       "type": "sprite",
       "parent": "p1-mana-group",
       "assets": {
-        "src": "/visual-elements/resource-counters/times1-sheet.webp"
+        "src": "/visual-elements/digit-counters/1-sheet.webp"
       },
       "layouts": {
         "landscape": {
@@ -1795,7 +1795,7 @@
       "protected": true,
       "parent": "p1-limited-group",
       "assets": {
-        "src": "/visual-elements/resource-counters/times1-sheet.webp"
+        "src": "/visual-elements/digit-counters/1-sheet.webp"
       },
       "layouts": {
         "landscape": {
@@ -1870,7 +1870,7 @@
       "type": "sprite",
       "parent": "p2-mana-group",
       "assets": {
-        "src": "/visual-elements/resource-counters/times1-sheet.webp"
+        "src": "/visual-elements/digit-counters/1-sheet.webp"
       },
       "layouts": {
         "landscape": {
@@ -2106,7 +2106,7 @@
       "protected": true,
       "parent": "p2-limited-group",
       "assets": {
-        "src": "/visual-elements/resource-counters/times1-sheet.webp"
+        "src": "/visual-elements/digit-counters/1-sheet.webp"
       },
       "layouts": {
         "landscape": {
@@ -2529,13 +2529,13 @@
       "layouts": {
         "landscape": {
           "x": 0,
-          "y": -50,
+          "y": 0,
           "width": 256,
           "height": 48
         },
         "portrait": {
           "x": 0,
-          "y": -50,
+          "y": 0,
           "width": 256,
           "height": 48
         }

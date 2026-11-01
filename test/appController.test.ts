@@ -53,6 +53,12 @@ describe('AppController', () => {
     expect(isExistingGoogleAccountError(undefined)).toBe(false);
   });
 
+  test('does not cover the title with a reconnect overlay', () => {
+    const controller = new AppController({} as HTMLElement, new Map());
+    controller.setConnectionState('reconnecting');
+    expect(controller.getConnectionState()).toBe('reconnecting');
+  });
+
   test('loads opaque slots through the presentation contract', async () => {
     const presentation: VariantPresentation<unknown, unknown> = {
       preload: vi.fn(async () => lease()),

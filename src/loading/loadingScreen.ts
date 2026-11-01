@@ -34,7 +34,19 @@ export async function runLoadingScreen(
   container.replaceChildren(screen);
 
   const loadingArt = assetLoader.retainUrls([LOADING_SRC, CLICK_SRC, TAP_SRC]);
-  await Promise.all([loadShared, loadingArt.ready, wait(MINIMUM_LOADING_MS)]);
+  try {
+    await Promise.all([loadShared, loadingArt.ready, wait(MINIMUM_LOADING_MS)]);
+  } catch (error) {
+    console.error('Could not prepare game art.', error);
+    art.destroy();
+    loadingArt.release();
+    start.classList.add('loading-screen__start--failed');
+    start.replaceChildren(document.createTextNode('Could not load game. Tap to retry.'));
+    start.setAttribute('aria-label', 'Retry loading game');
+    start.disabled = false;
+    start.addEventListener('click', () => location.reload());
+    await new Promise<void>(() => {});
+  }
 
   const portrait = matchMedia('(orientation: portrait)');
   const updatePrompt = () => {

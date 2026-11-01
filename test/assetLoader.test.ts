@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from 'vitest';
-import { AssetLoader } from '../src/assets/assetLoader';
+import { AssetLoader, loadDecodedImage } from '../src/assets/assetLoader';
 
 describe('AssetLoader', () => {
   test('deduplicates concurrent image loads and releases decoded references', async () => {
@@ -31,6 +31,22 @@ describe('AssetLoader', () => {
     await lease.ready;
     expect(load).toHaveBeenCalledTimes(2);
     lease.release();
+    vi.useRealTimers();
+  });
+
+  test('rejects a stalled image instead of waiting forever', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('Image', class {
+      decoding = '';
+      complete = false;
+      src = '';
+      addEventListener() {}
+    });
+    const pending = loadDecodedImage('/stalled.webp');
+    const failure = expect(pending).rejects.toThrow('Image timed out: /stalled.webp');
+    await vi.advanceTimersByTimeAsync(12_000);
+    await failure;
+    vi.unstubAllGlobals();
     vi.useRealTimers();
   });
 });

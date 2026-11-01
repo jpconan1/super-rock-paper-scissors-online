@@ -20,6 +20,7 @@ type TutorialStage = 'opening' | 'attack-followup' | 'forced-reset' | 'post-rese
 interface LocalAbmMatchOptions {
   playerName: string;
   playerLevel?: number;
+  playerTestMode?: boolean;
   playerPrestigeCount?: number;
   playerEmblem?: EquippedPlayerEmblem | null;
   customEmblem?: CustomEmblemMeta | null;
@@ -63,7 +64,7 @@ export class LocalAbmMatch {
     this.clearTimer = options.clearTimer ?? ((timer) => globalThis.clearTimeout(timer));
     this.computerPaused = options.computerStartsPaused ?? false;
     const players: Record<PlayerId, MatchPlayer> = {
-      p1: { name: options.playerName, platform: 'Local', rating: 0, level: options.playerLevel ?? 1, prestigeCount: options.playerPrestigeCount, emblem: options.playerEmblem ?? null, customEmblem: options.customEmblem },
+      p1: { name: options.playerName, platform: 'Local', rating: 0, level: options.playerLevel ?? 1, ...(options.playerTestMode ? { testMode: true } : {}), prestigeCount: options.playerPrestigeCount, emblem: options.playerEmblem ?? null, customEmblem: options.customEmblem },
       p2: { name: 'Computer', platform: 'CPU', rating: 0, level: 1, emblem: 'computer' },
     };
     const now = this.now();

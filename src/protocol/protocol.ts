@@ -41,7 +41,7 @@ export interface ServerSnapshot<TProjection = unknown> {
 
 export type MatchPhase = 'match-found' | 'selecting' | 'scoreboard' | 'playing' | 'banning' | 'final-scoreboard' | 'complete';
 export type { PlayerEmblem } from '../core/playerEmblem';
-export interface MatchPlayer { name: string; platform: string; rating: number; level?: number; prestigeCount?: number; emblem?: PlayerEmblem | 'custom' | null; customEmblem?: CustomEmblemMeta | null }
+export interface MatchPlayer { name: string; platform: string; rating: number; level?: number; testMode?: boolean; prestigeCount?: number; emblem?: PlayerEmblem | 'custom' | null; customEmblem?: CustomEmblemMeta | null }
 export interface CompletedGame extends VariantGameResult { slotId: SlotId }
 export interface MatchProjection {
   phase: MatchPhase;

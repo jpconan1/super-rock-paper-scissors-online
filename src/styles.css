@@ -184,6 +184,7 @@ body::before {
 .guest-name-dialog__heading { margin: 0; color: #ac3235; font-size: 36px; line-height: 1; }
 .guest-name-dialog__entry { width: 400px; height: 50px; }
 .guest-name-dialog__controls { display: flex; justify-content: center; gap: 14px; }
+.guest-name-dialog__error { margin: 0; color: #ac3235; font-size: 18px; text-align: center; }
 .game-button.guest-name-dialog__button { width: 140px; flex: none; }
 .fixed-alert-canvas__content[data-layout='portrait'] .guest-name-dialog__entry { width: 370px; }
 .alert-system__box.email-login-alert { gap: 0; padding: 24px; }
@@ -889,10 +890,10 @@ input {
 .lobby-screen__chat[hidden] { display: none; }
 .lobby-screen__chat-input { position: absolute; }
 .game-button.lobby-screen__chat-button { position: absolute; }
-.toggle-button.lobby-screen__roster-toggle { position: absolute; }
+.toggle-button.lobby-screen__roster-toggle { position: absolute; z-index: 51; }
 .game-button.lobby-screen__action { position: absolute; }
 .toggle-button.lobby-screen__action { position: absolute; }
-.lobby-screen__roster { position: absolute; display: grid; align-content: start; gap: 8px; overflow-x: hidden; overflow-y: auto; padding: 12px; border: 3px solid #211d19; background: rgba(247,239,217,.96); text-align: left; }
+.lobby-screen__roster { position: absolute; z-index: 50; display: grid; align-content: start; gap: 8px; overflow-x: hidden; overflow-y: auto; padding: 12px; border: 3px solid #211d19; background: rgba(247,239,217,.96); text-align: left; }
 .lobby-screen__roster[hidden] { display: none; }
 .lobby-screen__roster-heading { position: sticky; top: -12px; z-index: 1; padding: 6px 2px; background: rgba(247,239,217,.98); text-align: center; }
 .lobby-screen__roster-row { display: grid; gap: 1px; padding: 5px 7px; border-bottom: 2px solid rgba(33,29,25,.16); }
@@ -1144,6 +1145,14 @@ input {
 
 .loading-screen__start:disabled { cursor: default; }
 
+.loading-screen__start--failed {
+  padding: 1rem;
+  color: #211d19;
+  background: #fffced;
+  border: 3px solid currentColor;
+  font: 1.5rem 'Architects Daughter', cursive;
+}
+
 .loading-screen__start:focus-visible {
   outline: 0.22rem solid #1857a6;
   outline-offset: 0.35rem;
@@ -1257,6 +1266,11 @@ input {
   min-width: 46px;
   justify-content: center;
 }
+.player-emblem-card--test-mode .player-emblem-card__level { color: #821b92; white-space: nowrap; }
+.game-layout__player-info.player-emblem-card--test-mode .player-emblem-card__level {
+  min-width: 92px;
+}
+.game-layout__player-info.player-emblem-card--test-mode .player-emblem-card__name { max-width: calc(100% - 89px); }
 .lobby-screen__emblem-card { container-type: size; }
 .lobby-screen__emblem-card .player-emblem-card__emblem {
   inset: 0;
@@ -1277,6 +1291,8 @@ input {
 }
 .lobby-screen__emblem-card .player-emblem-card__name { max-width: calc(100% - 17.9167%); }
 .lobby-screen__emblem-card .player-emblem-card__level { min-width: 19.1667%; }
+.lobby-screen__emblem-card.player-emblem-card--test-mode .player-emblem-card__level { min-width: 43%; font-size: 5.2cqw; }
+.lobby-screen__emblem-card.player-emblem-card--test-mode .player-emblem-card__name { max-width: 55%; }
 .lobby-screen__emblem-card .player-emblem-card__prestige { right: -2.5%; bottom: -6.6667%; height: 20%; min-width: 19.1667%; }
 .game-layout__you-tag { z-index: 4; overflow: visible; }
 .game-layout__you-tag[hidden] { display: none; }
@@ -1466,6 +1482,17 @@ input {
 .abm-resource__art { display: block; width: 100%; height: 100%; }
 .abm-resource__art.is-filled { overflow: visible; }
 .abm-resource__art.is-filled > .boiling-sprite__canvas { transform: scale(1.25); }
+.abm-digit-counter { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
+.abm-digit-counter > .boiling-sprite,
+.abm-digit-counter__digits > .boiling-sprite { flex: 1 1 0; min-width: 0; height: 100%; }
+.abm-digit-counter__digits { display: flex; align-items: center; justify-content: center; min-width: 0; height: 100%; flex: 1 1 0; }
+.abm-digit-counter__digits > .boiling-sprite[hidden] { display: none; }
+.abm-digit-counter .boiling-sprite__canvas { object-fit: contain; }
+.abm-digit-counter--turn { flex-direction: column; }
+.abm-digit-counter--turn > .boiling-sprite { flex: none; width: 98px; height: 43px; }
+.abm-digit-counter--turn > .abm-digit-counter__digits { flex: none; width: 100%; height: 48px; }
+.abm-digit-counter--turn .abm-digit-counter__digits > .boiling-sprite { flex: 1 1 0; max-width: 48px; height: 48px; }
+.abm-game .game-layout__slot--turn > .abm-digit-counter { position: absolute; inset: 0; }
 .abm-resource--mana-count.is-infinite::after { display: grid; width: 100%; height: 100%; place-items: center; content: '∞'; font-size: 2.25em; line-height: 1; }
 .abm-waiting { position: absolute; z-index: 2; inset: 0; pointer-events: none; }
 .abm-waiting__ready, .abm-waiting__countdown { position: absolute; top: 28px; width: 120px; }
@@ -1650,11 +1677,15 @@ input {
 
 .abm-controls__match-progress { width: 100%; height: 100%; display: grid; place-items: center; }
 .abm-controls__match-progress[hidden] { display: none; }
+.abm-controls__progress-continue { position: absolute; top: 75%; left: 50%; width: 65%; transform: translateX(-50%); z-index: 4; }
+.abm-controls__progress-continue[hidden] { display: none; }
 .xp-progress-bar { position: relative; width: 512px; height: 256px; overflow: visible; container-type: size; }
 .xp-progress-bar__canvas { display: block; width: 100%; height: 100%; }
 .xp-progress-bar__count { position: absolute; z-index: 2; right: 0; bottom: 100%; left: 0; display: grid; height: 12%; place-items: center; color: #181818; font-weight: 900; line-height: 1; container-type: size; }
 .xp-progress-bar__count[data-layout-element] { right: auto; bottom: auto; }
 .xp-progress-bar__count-value { font-size: 80cqh; white-space: nowrap; text-shadow: 4cqh 4cqh #fff4d6; }
+.xp-progress-bar__count-value { display: block; width: 100%; font-size: 55cqh; line-height: .95; text-align: center; white-space: normal; overflow-wrap: anywhere; }
+.xp-progress-bar[data-copy='test-mode'] .xp-progress-bar__count-value { font-size: 32cqh; line-height: 1; }
 .xp-progress-bar[data-copy='prestige'] .xp-progress-bar__count-value { width: 100%; font-size: 48cqh; line-height: .9; white-space: normal; text-align: center; }
 .xp-progress-bar__juice.boiling-sprite { position: absolute; z-index: 3; top: 50%; left: 100%; width: 75%; height: 75%; overflow: visible; transform: translate(-50%, -50%); pointer-events: none; }
 .xp-progress-bar__juice[hidden] { display: none; }

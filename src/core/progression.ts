@@ -19,6 +19,8 @@ export interface PlayerProgression {
 
 export interface ProgressAward {
   outcome: ProgressOutcome;
+  opponent?: ProgressOpponent;
+  paused?: boolean;
   gainedProgressUnits: number;
   before: PlayerProgression;
   after: PlayerProgression;
@@ -79,7 +81,7 @@ export function createProgressAward(totalProgressUnits: number, outcome: Progres
   const newestClassId = bonusClassIdForTotal(totalProgressUnits);
   const newestClassRoundWins = Math.max(0, Math.min(2, Math.floor(options.newestClassRoundWins ?? 0))) as 0 | 1 | 2;
   const classBonusRate: ClassBonusRate = newestClassRoundWins === 2 ? 0.5 : newestClassRoundWins === 1 ? 0.25 : 0;
-  const details = { baseProgressUnits: 0, bonusProgressUnits: 0, classBonusRate, newestClassId, newestClassRoundWins };
+  const details = { opponent: options.opponent, paused: Boolean(options.paused), baseProgressUnits: 0, bonusProgressUnits: 0, classBonusRate, newestClassId, newestClassRoundWins };
   if (options.paused) return { outcome, gainedProgressUnits: 0, before, after: before, unlockedClassIds: [], ...details };
   const requestedBase = progressGainForLevel(before.level, outcome, options.opponent);
   const requestedTotal = requestedBase + Math.round(requestedBase * classBonusRate);
@@ -94,7 +96,7 @@ export function createProgressAward(totalProgressUnits: number, outcome: Progres
     before,
     after,
     unlockedClassIds: after.unlockedClassIds.slice(before.unlockedClassIds.length),
-    baseProgressUnits, bonusProgressUnits, classBonusRate, newestClassId, newestClassRoundWins,
+    opponent: options.opponent, paused: false, baseProgressUnits, bonusProgressUnits, classBonusRate, newestClassId, newestClassRoundWins,
   };
 }
 
@@ -118,6 +120,7 @@ export function createTutorialProgressAward(totalProgressUnits: number, outcome:
   const after = progressionForTotal(before.totalProgressUnits + gainedProgressUnits);
   return {
     outcome,
+    opponent: 'computer',
     gainedProgressUnits,
     before,
     after,
@@ -129,7 +132,7 @@ export function createTokenProgressAward(totalProgressUnits: number, outcome: Pr
   const before = progressionForTotal(totalProgressUnits);
   const gainedProgressUnits = paused ? 0 : Math.min(1, MAX_PROGRESS_UNITS - before.totalProgressUnits);
   const after = progressionForTotal(before.totalProgressUnits + gainedProgressUnits);
-  return { outcome, gainedProgressUnits, before, after, unlockedClassIds: after.unlockedClassIds.slice(before.unlockedClassIds.length) };
+  return { outcome, opponent: 'computer', paused, gainedProgressUnits, before, after, unlockedClassIds: after.unlockedClassIds.slice(before.unlockedClassIds.length) };
 }
 
 export function createNextLevelProgressAward(totalProgressUnits: number): ProgressAward | undefined {

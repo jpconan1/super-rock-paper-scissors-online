@@ -4,8 +4,8 @@ import { ABM_CLASSES, ABM_CLASS_BY_ID, startingResourcesForClass } from './attac
 import type { AbmAbilityId, AbmClassId, AbmCommand, AbmDisplayMove, AbmGamblerOutcome, AbmLastDitchBonus, AbmMove, AbmPlayerState, AbmProjection, AbmResult, AbmState } from './attackBlockManaTypes';
 
 const OTHER: Record<PlayerId, PlayerId> = { p1: 'p2', p2: 'p1' };
-const MAX_MANA = 9;
-const MAX_STUNNED_ATTACK_COST = 8;
+const MAX_MANA = 99;
+const MAX_STUNNED_ATTACK_COST = 64;
 export const ABM_READY_SPLIT_MS = 3 * 58;
 export const ABM_WAITING_MS = 30_000;
 export const ABM_LETHAL_TO_RESULT_MS = STARBURST_WIPE_MS + beats(1);

@@ -20,11 +20,14 @@ export interface PlayerEmblemCard {
   element: HTMLDivElement;
   emblem: BoilingSprite;
   setEmblem(emblem: EquippedPlayerEmblem | PlayerEmblem | null, customEmblem?: CustomEmblemMeta | null): void;
+  setTestMode(enabled: boolean): void;
 }
 
-export function createPlayerEmblemCard(player: { name: string; level?: number; prestigeCount?: number; emblem?: PlayerEmblem | 'custom' | null; customEmblem?: CustomEmblemMeta | null; hideCustomArtwork?: boolean }, clock: BoilClock): PlayerEmblemCard {
+export function createPlayerEmblemCard(player: { name: string; level?: number; testMode?: boolean; prestigeCount?: number; emblem?: PlayerEmblem | 'custom' | null; customEmblem?: CustomEmblemMeta | null; hideCustomArtwork?: boolean }, clock: BoilClock): PlayerEmblemCard {
   const element = document.createElement('div');
   element.className = 'player-emblem-card';
+  let testMode = player.testMode === true;
+  element.classList.toggle('player-emblem-card--test-mode', testMode);
   const level = Number.isSafeInteger(player.level) && player.level! > 0 ? player.level! : 1;
   let emblemKind = player.emblem ?? null;
   let custom = player.customEmblem ?? null;
@@ -48,7 +51,7 @@ export function createPlayerEmblemCard(player: { name: string; level?: number; p
   name.title = player.name;
   const levelLabel = document.createElement('span');
   levelLabel.className = 'player-emblem-card__level';
-  levelLabel.textContent = `Lv ${level}`;
+  levelLabel.textContent = testMode ? 'Test Mode' : `Lv ${level}`;
   const prestigeLabel = document.createElement('span');
   prestigeLabel.className = 'player-emblem-card__prestige';
   prestigeLabel.textContent = `P. ${player.prestigeCount ?? 0}`;
@@ -57,11 +60,18 @@ export function createPlayerEmblemCard(player: { name: string; level?: number; p
   heading.className = 'player-emblem-card__heading';
   heading.append(name, levelLabel);
   element.append(emblem.element, none, heading, prestigeLabel);
-  const updateLabel = () => element.setAttribute('aria-label', `${player.name}, level ${level}${player.prestigeCount ? `, prestige ${player.prestigeCount}` : ''}, ${emblemKind === 'custom' ? (customArtworkHidden ? 'custom emblem hidden' : 'custom emblem') : emblemKind ? `${PLAYER_EMBLEM_BY_ID.get(emblemKind)?.name ?? emblemKind.replace(/(^|-)(\w)/g, (_all, _dash, letter: string) => ` ${letter.toUpperCase()}`).trim()} emblem` : 'no emblem'}`);
+  const updateLabel = () => element.setAttribute('aria-label', `${player.name}, ${testMode ? 'Test Mode' : `level ${level}`}${player.prestigeCount ? `, prestige ${player.prestigeCount}` : ''}, ${emblemKind === 'custom' ? (customArtworkHidden ? 'custom emblem hidden' : 'custom emblem') : emblemKind ? `${PLAYER_EMBLEM_BY_ID.get(emblemKind)?.name ?? emblemKind.replace(/(^|-)(\w)/g, (_all, _dash, letter: string) => ` ${letter.toUpperCase()}`).trim()} emblem` : 'no emblem'}`);
   updateLabel();
   return {
     element,
     emblem,
+    setTestMode(enabled) {
+      if (testMode === enabled) return;
+      testMode = enabled;
+      element.classList.toggle('player-emblem-card--test-mode', enabled);
+      levelLabel.textContent = enabled ? 'Test Mode' : `Lv ${level}`;
+      updateLabel();
+    },
     setEmblem(next, nextCustom = custom) {
       if (next === emblemKind && nextCustom?.version === custom?.version) return;
       emblemKind = next;

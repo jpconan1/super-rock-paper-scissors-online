@@ -40,6 +40,7 @@ export type LobbyScreenMount = ScreenCleanup & {
   updateRoster(players: LobbyPlayer[], selfId: string): void;
   setUnlockedClassCount(count: number): void;
   setTutorialDisabled(disabled: boolean): void;
+  setTestMode(enabled: boolean): void;
   setStreamerMode(enabled: boolean): void;
   openCustomEmblemEditor(): void;
 };
@@ -116,7 +117,7 @@ export function createLobbyMissionCard(
     list.replaceChildren(item);
   };
   const renderMissions = (feed: EmblemMissionFeed) => {
-    const items = feed.missions.filter((mission) => !mission.completed).slice(0, 2);
+    const items = feed.missions.filter((mission) => mission.id !== 'prestige-contest' && !mission.completed).slice(0, 2);
     if (!items.length) { showStatus('All missions complete'); return; }
     list.replaceChildren();
     for (const mission of items) {
@@ -194,6 +195,7 @@ export function mountLobbyScreen(
   faceOptions: {
     initialFace?: LobbyFace;
     whiteboardDisabled?: boolean;
+    testMode?: boolean;
     loadMissions?: () => Promise<EmblemMissionFeed>;
     customEmblemEditor?: {
       load(): Promise<CustomEmblemState | null>;
@@ -255,7 +257,7 @@ export function mountLobbyScreen(
   const lobbyElement = (id: string) => layoutDocument.elements.find((item) => item.id === id)!;
 
   const header = sprite(layoutDocument.elements.find((item) => item.id === 'header')!.assets!.src!, 'lobby-screen__header', layoutDocument.copy!.heading);
-  const emblemCard = createPlayerEmblemCard({ name: playerName, level: playerLevel, prestigeCount, emblem: equippedEmblem, customEmblem }, clock);
+  const emblemCard = createPlayerEmblemCard({ name: playerName, level: playerLevel, testMode: faceOptions.testMode, prestigeCount, emblem: equippedEmblem, customEmblem }, clock);
   emblemCard.element.classList.add('lobby-screen__emblem-card');
   sprites.push(emblemCard.emblem);
   let activeEmblem = equippedEmblem;
@@ -661,6 +663,7 @@ export function mountLobbyScreen(
     attachNewestClassSpike();
   };
   cleanup.setTutorialDisabled = (disabled) => tutorialButton.setDisabled(disabled);
+  cleanup.setTestMode = (enabled) => emblemCard.setTestMode(enabled);
   cleanup.setStreamerMode = (enabled) => {
     whiteboardDisabled = enabled;
     applyFaceState();

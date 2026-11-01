@@ -51,6 +51,15 @@ describe('LocalAbmMatch', () => {
     match.destroy();
   });
 
+  test('marks only the human card in a Test Mode CPU match', () => {
+    const snapshots: ServerSnapshot[] = [];
+    const match = new LocalAbmMatch({ playerName: 'JP', playerTestMode: true, publish: (snapshot) => snapshots.push(snapshot) });
+    match.start();
+    expect(latest(snapshots).players.p1.testMode).toBe(true);
+    expect(latest(snapshots).players.p2.testMode).toBeUndefined();
+    match.destroy();
+  });
+
   test('can start with fixed classes before publishing the first snapshot', () => {
     const snapshots: ServerSnapshot[] = [];
     const match = new LocalAbmMatch({

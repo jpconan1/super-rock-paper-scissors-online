@@ -157,9 +157,10 @@ export function showEmblemMenuAlert(
       }
     }
     customButton.element.hidden = customEmblem === null && !items.some((mission) => mission.id === 'win-online-match' && mission.completed);
-    if (!items.length) { missionStatus.textContent = 'No current missions.'; return; }
+    const listedMissions = items.filter((mission) => mission.id !== 'prestige-contest');
+    if (!listedMissions.length) { missionStatus.textContent = 'No current missions.'; return; }
     missionStatus.remove();
-    for (const mission of items) {
+    for (const mission of listedMissions) {
       const row = createEmblemMissionRow(mission, clock);
       sprites.push(...row.sprites); missions.append(row.element);
     }

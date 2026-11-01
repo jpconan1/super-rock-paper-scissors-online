@@ -173,7 +173,7 @@ and also saves Skip.
 
 ### Stunner 💥
 
-- Previous Attack doubles opponent's existing attack cost next turn: 2,4,8...
+- Previous Attack doubles opponent's existing attack cost next turn: 2,4,8...64.
 - Previous non-Attack resets it to 1. Forced Mana resets it.
 - Null resets both costs. Attack deduction floors at 0.
 
@@ -364,8 +364,8 @@ is desired; otherwise record repair below.
 
 ## Recreation deviations
 
-Super ABM uses a universal 9-mana cap. Positive gains, including Gambler's
-gain and double outcomes, resolve as `mana = min(9, resultingMana)`. Joe's
+Super ABM uses a universal 99-mana cap. Positive gains, including Gambler's
+gain and double outcomes, resolve as `mana = min(99, resultingMana)`. Joe's
 recreation rule rolls after both moves are submitted at 1-in-1,000. A successful
 roll grants uncapped Infinite Mana and negates a lethal Attack against Joe on
 that reveal. Joe does not roll when his Attack already defeats the opponent.

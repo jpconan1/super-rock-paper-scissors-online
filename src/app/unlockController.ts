@@ -5,6 +5,7 @@ import { createBoilingSprite } from '../renderer/boilingSprite';
 export type ControllerButton = 'up' | 'down' | 'left' | 'right' | 'select' | 'b' | 'a';
 
 export const UNLOCK_CODE: readonly ControllerButton[] = ['up', 'up', 'down', 'down', 'left', 'right', 'left', 'right', 'b', 'a', 'select'];
+export const PRESTIGE_TEST_CODE: readonly ControllerButton[] = ['a', 'a', 'a', 'a', 'select'];
 
 export function advanceControllerCode(code: readonly ControllerButton[], progress: number, button: ControllerButton): { progress: number; complete: boolean } {
   const attempted = [...code.slice(0, progress), button];
@@ -40,7 +41,7 @@ const source = (button: ControllerButton, state: 'between' | 'depressed') =>
 
 export interface UnlockController { element: HTMLElement; destroy(): void }
 
-export function createUnlockController(clock: BoilClock, onUnlockCode: () => void = () => {}): UnlockController {
+export function createUnlockController(clock: BoilClock, onUnlockCode: () => void = () => {}, onPrestigeTestCode: () => void = () => {}): UnlockController {
   const element = document.createElement('section'); element.className = 'unlock-controller'; element.setAttribute('aria-label', 'Unlock code controller');
   const upSource = `${ROOT}/controller-up-sheet.webp`;
   const art = createBoilingSprite({ src: upSource, clock, className: 'unlock-controller__art', alt: '' });
@@ -52,12 +53,15 @@ export function createUnlockController(clock: BoilClock, onUnlockCode: () => voi
   let releaseTimer: ReturnType<typeof setTimeout> | undefined;
   let active: ControllerButton | undefined;
   let codeProgress = 0;
+  let prestigeTestCodeProgress = 0;
   const show = (button: ControllerButton, state: 'between' | 'depressed') => { clearTimeout(releaseTimer); art.setSource(source(button, state)); };
   const release = (button: ControllerButton) => {
     if (active !== button) return;
     active = undefined; show(button, 'between'); releaseTimer = setTimeout(() => art.setSource(upSource), 1000 / 30);
     const next = advanceUnlockCode(codeProgress, button); codeProgress = next.progress;
     if (next.complete) onUnlockCode();
+    const prestigeNext = advanceControllerCode(PRESTIGE_TEST_CODE, prestigeTestCodeProgress, button); prestigeTestCodeProgress = prestigeNext.progress;
+    if (prestigeNext.complete) onPrestigeTestCode();
   };
 
   for (const { name, label } of BUTTONS) {

@@ -24,6 +24,31 @@ import { beats } from '../../core/time';
 import type { ProgressAward } from '../../core/progression';
 
 const ABM_ROOT = '/variants/abm';
+const DIGIT_ROOT = '/visual-elements/digit-counters';
+function digitCounter(clock: BoilClock, sprites: BoilingSprite[], withLabel: 'turn' | 'times') {
+  const element = document.createElement('span');
+  element.className = `abm-digit-counter abm-digit-counter--${withLabel}`;
+  const label = createBoilingSprite({ src: `${DIGIT_ROOT}/${withLabel}-sheet.webp`, clock, alt: '' });
+  const digitRow = document.createElement('span');
+  digitRow.className = 'abm-digit-counter__digits';
+  sprites.push(label); element.append(label.element, digitRow);
+  const digits: BoilingSprite[] = [];
+  let previous = '';
+  return { element, set(value: number) {
+    const text = String(Math.max(0, Math.floor(value)));
+    if (text === previous) return;
+    while (digits.length < text.length) {
+      const sprite = createBoilingSprite({ src: `${DIGIT_ROOT}/0-sheet.webp`, clock, alt: '' });
+      sprites.push(sprite); digits.push(sprite); digitRow.append(sprite.element);
+    }
+    digits.forEach((sprite, index) => {
+      sprite.element.hidden = index >= text.length;
+      if (index < text.length && text[index] !== previous[index]) sprite.setSource(`${DIGIT_ROOT}/${text[index]}-sheet.webp`);
+    });
+    element.setAttribute('aria-label', `${withLabel === 'turn' ? 'Turn ' : 'Times '}${text}`);
+    previous = text;
+  } };
+}
 const STUNNED_BUTTON_TAG = `${ABM_ROOT}/stunned-button-tag-sheet.webp`;
 const COUNTERPICK_TAG = `${ABM_ROOT}/counterpick-tag-sheet.webp`;
 const PICK_CLASS_HEADER = `${ABM_ROOT}/pick-class-sheet.webp`;
@@ -87,12 +112,6 @@ export function getAbmPickerEntries(unlockedClassIds: readonly AbmClassId[], obs
 export function shouldShowAbmBonusXp(selectedClassId: AbmClassId | undefined,
   bonusClassId: AbmClassId | undefined, observingOpponent = false): boolean {
   return !observingOpponent && selectedClassId !== undefined && selectedClassId === bonusClassId;
-}
-
-export function progressResultHoldBeats(progressAward: ProgressAward): number {
-  if (progressAward.prestige?.state === 'pending') return 3;
-  if (progressAward.prestige?.state === 'completed') return 0;
-  return 2;
 }
 
 export function getAbmClassSelectChrome(projection: Pick<AbmProjection, 'phase' | 'counterPicker' | 'self'>): {
@@ -293,7 +312,7 @@ export function createAttackBlockManaPresentation(
         `${ABM_ROOT}/mana-icon-sheet.webp`, `${ABM_ROOT}/block-icon-sheet.webp`, `${ABM_ROOT}/block-icon-empty-sheet.webp`,
         ...Object.values(LIMITED_RESOURCE_ICONS).map(({ icon }) => icon),
         '/visual-elements/arrows/arrow-blue-upright-sheet.webp', '/visual-elements/arrows/arrow-red-downright-sheet.webp', `${ABM_ROOT}/arrow-purp-left-sheet.webp`,
-        ...Array.from({ length: 10 }, (_, index) => `/visual-elements/resource-counters/times${index}-sheet.webp`),
+        ...Array.from({ length: 10 }, (_, index) => `${DIGIT_ROOT}/${index}-sheet.webp`), `${DIGIT_ROOT}/times-sheet.webp`, `${DIGIT_ROOT}/turn-sheet.webp`,
         ...Array.from({ length: 5 }, (_, index) => `/visual-elements/ready-waiting/countdown${index + 1}-sheet.webp`),
         ...Object.values(ABM_RESULT_SCENES), '/visual-elements/progress-bar-empty-sheet.webp', '/visual-elements/progress-bar-full-sheet.webp',
         STUNNED_BUTTON_TAG, COUNTERPICK_TAG, PICK_CLASS_HEADER, LOCKED_CLASS_ART, ABM_OPENING_READY_ART, ABM_OPENING_COUNTDOWN_ART, ABM_OPENING_GO_ART,
@@ -420,6 +439,11 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   stunnedCost.hidden = true; stunnedCost.append(stunnedCostArt.element, stunnedCostValue); attackButton.element.append(stunnedCost); sprites.push(stunnedCostArt);
   const matchProgress = element('div', 'abm-controls__match-progress'); matchProgress.hidden = true; controls.append(matchProgress);
   let xpBar: XpProgressBar | undefined; let xpSequenceStarted = false;
+  const progressContinue = createGameButton({ label: 'Continue', clock, onActivate: () => matchProgressComplete?.(),
+    upSheet: '/new-buttons/continue-button-w-up-sheet.webp', betweenSheet: '/new-buttons/continue-button-w-between-sheet.webp',
+    depressedSheet: '/new-buttons/continue-button-w-depressed-sheet.webp' });
+  progressContinue.element.classList.add('abm-controls__progress-continue', 'game-button--baked-label');
+  matchProgress.append(progressContinue.element); buttons.push(progressContinue);
 
   const picker = element('div', 'abm-picker');
   const bonusXp = createBoilingSprite({ src: ABM_BONUS_XP_ART, clock, className: 'abm-picker__bonus-xp', alt: '' });
@@ -507,12 +531,16 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
       p1: playerDisplay('P1', players?.p1, hideOpponentCustomEmblems && viewer !== 'p1'),
       p2: playerDisplay('P2', players?.p2, hideOpponentCustomEmblems && viewer !== 'p2'),
     },
-    artwork: { turn: turnArtwork(0), p1Wins: winArtwork('p1', 0), p2Wins: winArtwork('p2', 0), scene: { src: sceneForMoves(), alt: 'Players face each other.' } },
+    artwork: { turn: { src: `${DIGIT_ROOT}/turn-sheet.webp`, alt: 'Turn 0' }, p1Wins: winArtwork('p1', 0), p2Wins: winArtwork('p2', 0), scene: { src: sceneForMoves(), alt: 'Players face each other.' } },
     variantContent: { 'p1-move': p1Status.output, 'p2-move': p2Status.output, 'p1-resources': p1Resources.element, 'p2-resources': p2Resources.element, controls },
     onRules: () => setRulesOpen(true),
     onLayoutChange(nextLayout) { orientation = nextLayout.name; applyVariantLayout(); },
     onMenu,
   });
+  const turnCounter = digitCounter(clock, sprites, 'turn');
+  turnCounter.set(0);
+  layout.slots.turn.querySelector('.game-layout__turn')?.remove();
+  layout.slots.turn.append(turnCounter.element);
   layout.composition.append(rulesOverlay);
   layout.slots.scene.append(picker, waiting, result.element);
   layout.slots.scene.prepend(counterpickBigCloud.element);
@@ -852,10 +880,8 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     }
     matchProgress.hidden = !complete || !showingResult || !progressAward;
     if (complete && showingResult && progressAward && !xpSequenceStarted) {
-      xpSequenceStarted = true; xpBar = createXpProgressBar(clock, progressAward); matchProgress.replaceChildren(xpBar.element);
+      xpSequenceStarted = true; xpBar = createXpProgressBar(clock, progressAward); matchProgress.prepend(xpBar.element);
       applyVariantLayout();
-      void xpBar.finished.then(() => new Promise<void>((resolve) => setTimeout(resolve, beats(progressResultHoldBeats(progressAward)))))
-        .then(() => { if (!transitionAbort.signal.aborted) matchProgressComplete?.(); });
     }
     result.element.hidden = !showingResult;
     if (showingResult) {
@@ -874,7 +900,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
       const index = entries.findIndex((entry) => entry.kind === 'class' && entry.definition.id === preview); if (index >= 0) selected = index;
     }
     if (counterpickTag) counterpickTag.element.hidden = !picking || !classSelectChrome.showCounterpickMessage;
-    layout.setArtwork('turn', turnArtwork(nextProjection.turn)); layout.setArtwork('p1Wins', winArtwork('p1', nextProjection.score.p1)); layout.setArtwork('p2Wins', winArtwork('p2', nextProjection.score.p2));
+    turnCounter.set(nextProjection.turn); layout.setArtwork('p1Wins', winArtwork('p1', nextProjection.score.p1)); layout.setArtwork('p2Wins', winArtwork('p2', nextProjection.score.p2));
     const continuingRoundProc = shouldShowAbmContinuingRoundProcTags(nextProjection.phase);
     const advantagedProcPlayers = continuingRoundProc ? nextProjection.advantagedProcPlayers : undefined;
     const juggernautProcPlayers = continuingRoundProc ? nextProjection.juggernautProcPlayers : undefined;
@@ -1115,12 +1141,12 @@ function renderStatus(status: { output: HTMLElement; sprite: BoilingSprite; labe
 }
 interface ResourceDisplay {
   element: HTMLOutputElement;
-  manaMultiplier: BoilingSprite;
+  manaMultiplier: ReturnType<typeof digitCounter>;
   manaCountElement: HTMLElement;
   blocks: BoilingSprite[];
   limitedGroup: HTMLElement;
   limitedIcon: BoilingSprite;
-  limitedMultiplier: BoilingSprite;
+  limitedMultiplier: ReturnType<typeof digitCounter>;
   bindings: [string, HTMLElement][];
 }
 function resourceDisplay(label: string, player: 'p1' | 'p2', clock: BoilClock, sprites: BoilingSprite[]): ResourceDisplay {
@@ -1135,16 +1161,18 @@ function resourceDisplay(label: string, player: 'p1' | 'p2', clock: BoilClock, s
     item.append(sprite.element); parent.append(item); return { item, sprite };
   };
   const mana = make(manaGroup, 'mana', `${ABM_ROOT}/mana-icon-sheet.webp`);
-  const multiplier = make(manaGroup, 'mana-count', '/visual-elements/resource-counters/times1-sheet.webp');
+  const multiplierItem = element('span', 'abm-resource abm-resource--mana-count');
+  const multiplier = digitCounter(clock, sprites, 'times'); multiplierItem.append(multiplier.element); manaGroup.append(multiplierItem);
   const blocks = Array.from({ length: 5 }, (_, index) => make(blockGroup, `block-${index + 1}`, `${ABM_ROOT}/block-icon-sheet.webp`));
   const limitedIcon = make(limitedGroup, 'limited-icon', `${ABM_ROOT}/steal-icon-sheet.webp`);
-  const limitedMultiplier = make(limitedGroup, 'limited-count', '/visual-elements/resource-counters/times1-sheet.webp');
+  const limitedItem = element('span', 'abm-resource abm-resource--limited-count');
+  const limitedMultiplier = digitCounter(clock, sprites, 'times'); limitedItem.append(limitedMultiplier.element); limitedGroup.append(limitedItem);
   limitedGroup.hidden = true;
-  return { element: output, manaMultiplier: multiplier.sprite, manaCountElement: multiplier.item, blocks: blocks.map(({ sprite }) => sprite),
-    limitedGroup, limitedIcon: limitedIcon.sprite, limitedMultiplier: limitedMultiplier.sprite, bindings: [
+  return { element: output, manaMultiplier: multiplier, manaCountElement: multiplierItem, blocks: blocks.map(({ sprite }) => sprite),
+    limitedGroup, limitedIcon: limitedIcon.sprite, limitedMultiplier, bindings: [
     [`${player}-mana-group`, manaGroup], [`${player}-block-group`, blockGroup], [`${player}-limited-group`, limitedGroup],
-    [`${player}-mana-icon`, mana.item], [`${player}-mana-count`, multiplier.item],
-    [`${player}-limited-icon`, limitedIcon.item], [`${player}-limited-count`, limitedMultiplier.item],
+    [`${player}-mana-icon`, mana.item], [`${player}-mana-count`, multiplierItem],
+    [`${player}-limited-icon`, limitedIcon.item], [`${player}-limited-count`, limitedItem],
     ...blocks.map(({ item }, index) => [`${player}-block-${index + 1}`, item] as [string, HTMLElement]),
   ] };
 }
@@ -1156,7 +1184,7 @@ function renderResources(target: ResourceDisplay, projection: AbmProjection, pla
   target.limitedGroup.hidden = !limited;
   if (!limited) return;
   target.limitedIcon.setSource(limited.icon);
-  target.limitedMultiplier.setSource(`/visual-elements/resource-counters/times${Math.max(0, Math.min(9, limited.remaining))}-sheet.webp`);
+  target.limitedMultiplier.set(limited.remaining);
   target.limitedGroup.setAttribute('aria-label', `${classId ? ABM_CLASS_BY_ID.get(classId)?.name ?? classId : 'Class'}: ${limited.remaining} uses remaining`);
 }
 function setResourceDisplay(target: ResourceDisplay, resources: AbmStartingResources, infiniteMana = false) {
@@ -1171,7 +1199,7 @@ function setManaDisplay(target: ResourceDisplay, mana: number, infiniteMana = fa
   target.manaCountElement.hidden = false;
   target.manaCountElement.classList.toggle('is-infinite', infiniteMana);
   target.manaMultiplier.element.hidden = infiniteMana;
-  target.manaMultiplier.setSource(`/visual-elements/resource-counters/times${Math.max(0, Math.min(9, mana))}-sheet.webp`);
+  if (!infiniteMana) target.manaMultiplier.set(mana);
 }
 export function initialManaForClass(classId: AbmClassId): number {
   return startingResourcesForClass(classId).mana;
@@ -1198,13 +1226,12 @@ function element<K extends keyof HTMLElementTagNameMap>(tag: K, className: strin
 function isWipeCue(type: TimedSemanticEvent['type']) {
   return ['class-reveal', 'move-reveal', 'move-timeout', 'forced-mana', 'round-result', 'conjure-reveal', 'conjure-stalemate', 'null-reset'].includes(type);
 }
-function turnArtwork(turn: number) { const value = Math.min(21, Math.max(0, turn)); return { src: `/visual-elements/time-counters/turn${value}-sheet.webp`, alt: `Turn ${turn}` }; }
 export function winArtwork(player: 'p1' | 'p2', wins: number) {
   const state = wins <= 0 ? 'empty' : wins >= 2 ? 'filled' : player === 'p1' ? 'right-filled' : 'left-filled';
   return { src: `/visual-elements/win-couters/ft2-win-counter-${state}-sheet.webp`, alt: `${player} wins: ${wins}` };
 }
 function sheets(root: string) { return { up: `${root}-up-sheet.webp`, between: `${root}-between-sheet.webp`, depressed: `${root}-depressed-sheet.webp` }; }
 function playerDisplay(fallback: string, player?: import('../../protocol/protocol').MatchPlayer, hideCustomArtwork = false) {
-  return { heading: player?.name ?? fallback, rating: '', platform: '', level: player?.level, prestigeCount: player?.prestigeCount,
+  return { heading: player?.name ?? fallback, rating: '', platform: '', level: player?.level, testMode: player?.testMode, prestigeCount: player?.prestigeCount,
     emblem: player?.emblem, customEmblem: player?.customEmblem, hideCustomArtwork: hideCustomArtwork && player?.emblem === 'custom' };
 }

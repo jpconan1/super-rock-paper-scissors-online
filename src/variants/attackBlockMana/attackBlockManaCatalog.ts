@@ -35,7 +35,7 @@ export const ABM_CLASSES: readonly AbmClassDefinition[] = [
   entry('advantaged', 'Advantaged', 'For the first three turns, Mana gives 2 instead of 1.', true),
   entry('thief', 'Thief', 'Steal ability steals 1 Mana from your opponent. Only after turn 4, only once.', true, {}, 'thief', ability('steal', 'Steal', 1, 0, (player, turn) => turn >= 5)),
   entry('juggernaut', 'Juggernaut', 'Two consecutive attacks disable your opponent\'s Block next turn.', true),
-  entry('stunner', 'Stunner', 'Attacks double your opponent\'s next Attack cost, up to 8 Mana.', true),
+  entry('stunner', 'Stunner', 'Attacks double your opponent\'s next Attack cost.', true),
   entry('duplicator', 'Duplicator', 'Picking Mana consecutively doubles the amount gained each time.', true),
   entry('sumo', 'The Sumo', 'When both players Attack, The Sumo doesn\'t pay. Three charges.', true),
   entry('cheater', 'Cheater', 'Has a 1/3 chance to get an extra Mana when Mana-ing.', true),

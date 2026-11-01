@@ -294,6 +294,27 @@ describe('matchmaking session adapters', () => {
     const creation = fetchMock.mock.calls.find(([input, init]) => String(input).endsWith('/player-session') && init?.method === 'POST');
     expect(JSON.parse(String(creation?.[1]?.body))).toEqual({ displayName: 'Google Name' });
     expect(storageValues.has('super-rps-google-title-name')).toBe(false);
+    expect(adapter.hasPendingGoogleName()).toBe(true);
+    expect(storageValues.get('local:super-rps-google-pending-name')).toBe(player.playerId);
+
+    const reloaded = new WebSocketShellSessionAdapter('https://example.test');
+    await reloaded.prepareTitle();
+    expect(reloaded.hasPendingGoogleName()).toBe(true);
+
+    fetchMock.mockImplementation((input: string | URL | Request, init?: RequestInit) => {
+      if (String(input).endsWith('/player-session') && init?.method === 'PUT') return Promise.resolve(new Response(null, { status: 500 }));
+      if (String(input).endsWith('/player-session')) return Promise.resolve(new Response(JSON.stringify(player), { status: 200 }));
+      return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    });
+    await expect(reloaded.confirmGoogleName('Chosen Name')).rejects.toThrow('Name update failed');
+    expect(reloaded.hasPendingGoogleName()).toBe(true);
+
+    fetchMock.mockImplementation((input: string | URL | Request, init?: RequestInit) => {
+      if (String(input).endsWith('/player-session') && init?.method === 'PUT') return Promise.resolve(new Response(JSON.stringify({ ...player, displayName: 'Chosen Name' }), { status: 200 }));
+      return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    });
+    await expect(reloaded.confirmGoogleName('Chosen Name')).resolves.toMatchObject({ displayName: 'Chosen Name' });
+    expect(reloaded.hasPendingGoogleName()).toBe(false);
   });
 
   test('completes an intentional Google return and removes its URL marker', async () => {
@@ -316,6 +337,7 @@ describe('matchmaking session adapters', () => {
     expect(replaceState).toHaveBeenCalledOnce();
     expect(String(replaceState.mock.calls[0]?.[2])).toBe('https://game.test/');
     expect(adapter.accountState()).toMatchObject({ signedIn: true, displayName: 'Google Player' });
+    expect(adapter.hasPendingGoogleName()).toBe(false);
     expect(storageValues.get('local:super-rps-guest-name')).toBe('Google Player');
   });
 
@@ -337,6 +359,7 @@ describe('matchmaking session adapters', () => {
 
     expect([...storageValues.keys()].some((key) => key.includes('secret') || key === 'local:super-rps-guest')).toBe(false);
     expect(adapter.accountState()).toMatchObject({ signedIn: true, accountType: 'google', rating: 1600 });
+    expect(adapter.hasPendingGoogleName()).toBe(false);
     expect(fetchMock.mock.calls.some(([input, init]) => String(input).endsWith('/claim-google-account') && init?.method === 'POST')).toBe(true);
   });
 
@@ -418,6 +441,23 @@ describe('matchmaking session adapters', () => {
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ unlockAllClasses: true });
     expect(adapter.accountState()).toMatchObject({ totalProgressUnits: 20_000, level: 3, unlockAllClasses: true });
     expect(adapter.accountState().unlockedClassIds).toHaveLength(21);
+  });
+
+  test('sets the prestige test step to 200,000 XP', async () => {
+    const player = { playerId: 'wheel-fresh-toast-owl-14', accountType: 'guest', displayName: 'Player', rating: 1500,
+      totalProgressUnits: 200_000, unlockAllClasses: false, equippedEmblem: null, ownedEmblems: [], level: 21, prestigeCount: 0,
+      progressUnitsInLevel: 10_000, unlockedClassIds: [
+        'lucky', 'advantaged', 'thief', 'juggernaut', 'stunner', 'duplicator', 'sumo', 'cheater', 'investor', 'gambler',
+        'taxman', 'copywriter', 'conjurer', 'fireborne', 'retired', 'parrymaster', 'cupid', 'defender', 'last-ditch', 'null', 'joe',
+      ] };
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(player), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const adapter = new WebSocketShellSessionAdapter('https://example.test');
+
+    await adapter.setPrestigeStepForTesting();
+
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ testPrestigeStep: true });
+    expect(adapter.accountState()).toMatchObject({ totalProgressUnits: 200_000, level: 21 });
   });
 
   test('persists a server-authoritative equipped emblem', async () => {

@@ -1,6 +1,6 @@
 import type { BoilClock } from '../animation/boilClock';
 import { beats } from '../core/time';
-import { MAX_PROGRESS_UNITS, PROGRESS_UNITS_PER_LEVEL, type ProgressAward } from '../core/progression';
+import { MAX_PROGRESS_UNITS, PROGRESS_UNITS_PER_LEVEL, progressGainForLevel, type ProgressAward } from '../core/progression';
 import { playCatalogSound } from '../audio/soundCatalog';
 import type { SoundPlayback } from '../audio/soundEffect';
 import { createBoilingSprite } from '../renderer/boilingSprite';
@@ -10,6 +10,21 @@ const HEIGHT = 256;
 export const XP_BAR_CLIMB_MS = 2_090;
 export const XP_BAR_DING_HOLD_MS = beats(1);
 export const PRESTIGE_CHALLENGE_COPY = 'Win with Joe to Prestige!';
+export const XP_COPY_BEATS = 2;
+export interface XpCopyStep { text: string; color: string }
+export function xpCopySteps(award: ProgressAward): readonly XpCopyStep[] {
+  if (award.paused) return [{ text: 'Test Mode: +0 XP. Re-lock classes to earn XP!', color: '#821B92' }];
+  const opponent = award.opponent ?? 'human';
+  const base = award.baseProgressUnits ?? award.gainedProgressUnits;
+  const bonus = award.bonusProgressUnits ?? 0;
+  const versus = award.outcome === 'win' && award.baseProgressUnits !== undefined
+    ? Math.min(base, progressGainForLevel(award.before.level, 'loss', opponent)) : base;
+  const steps: XpCopyStep[] = [{ text: `VS ${opponent === 'computer' ? 'Computer' : 'Player'}: +${versus.toLocaleString()}`, color: '#181818' }];
+  if (bonus > 0) steps.push({ text: `Class Bonus: +${bonus.toLocaleString()}`, color: '#2A5733' });
+  if (award.outcome === 'win' && base > versus) steps.push({ text: `Win Bonus: +${(base - versus).toLocaleString()}`, color: '#AC3235' });
+  steps.push({ text: `Total: +${award.gainedProgressUnits.toLocaleString()}`, color: '#181818' });
+  return steps;
+}
 const PRESTIGE_CHALLENGE_LINES = ['Win with Joe', 'to Prestige!'] as const;
 
 export function renderPrestigeChallengeCopy(element: HTMLElement): void {
@@ -43,7 +58,7 @@ export function xpAnimationSegment(start: number, end: number): { durationMs: nu
 
 export function createXpProgressBar(clock: BoilClock, award: ProgressAward, animate = true): XpProgressBar {
   const element = document.createElement('div'); element.className = 'xp-progress-bar';
-  element.dataset.copy = award.prestige ? 'prestige' : 'xp';
+  element.dataset.copy = award.prestige ? 'prestige' : award.paused ? 'test-mode' : 'xp';
   const canvas = document.createElement('canvas'); canvas.width = WIDTH; canvas.height = HEIGHT; canvas.className = 'xp-progress-bar__canvas';
   canvas.setAttribute('role', 'progressbar'); canvas.setAttribute('aria-valuemin', '0'); canvas.setAttribute('aria-valuemax', String(PROGRESS_UNITS_PER_LEVEL));
   const count = document.createElement('span'); count.className = 'xp-progress-bar__count';
@@ -58,6 +73,24 @@ export function createXpProgressBar(clock: BoilClock, award: ProgressAward, anim
   const abort = new AbortController(); let resolveFinished!: () => void;
   let climbPlayback: SoundPlayback | undefined;
   const finished = new Promise<void>((resolve) => { resolveFinished = resolve; });
+  const copySteps = prestige ? [] : xpCopySteps(award);
+  let barFinished = false; let copyFinished = false;
+  function completeWhenReady() { if (barFinished && copyFinished && !abort.signal.aborted) resolveFinished(); }
+  if (prestige || !animate) { copyFinished = true; if (copySteps[0]) setCopy(copySteps.at(-1)!); }
+  else {
+    setCopy(copySteps[0]!);
+    void (async () => {
+      for (let index = 1; index < copySteps.length; index++) {
+        await wait(beats(XP_COPY_BEATS));
+        if (abort.signal.aborted) return;
+        setCopy(copySteps[index]!);
+      }
+      if (copySteps.length > 1) await wait(beats(XP_COPY_BEATS));
+      if (abort.signal.aborted) return;
+      copyFinished = true; completeWhenReady();
+    })();
+  }
+  function setCopy(step: XpCopyStep) { countValue.textContent = step.text; countValue.style.color = step.color; }
   const unsubscribe = clock.subscribe((next) => { frame = next; draw(); });
   Promise.all([empty.decode(), full.decode(), juice.whenReady()]).then(async () => {
     if (abort.signal.aborted) return;
@@ -122,7 +155,7 @@ export function createXpProgressBar(clock: BoilClock, award: ProgressAward, anim
     if (abort.signal.aborted) return;
     if (prestige) { total = prestige.state === 'completed' ? PROGRESS_UNITS_PER_LEVEL : 0; showFull = prestige.state === 'completed'; }
     else { total = award.after.totalProgressUnits; showFull = total === MAX_PROGRESS_UNITS; }
-    draw(); resolveFinished();
+    draw(); barFinished = true; completeWhenReady();
   }
   function draw() {
     if (!empty.complete || !empty.naturalWidth || !full.complete || !full.naturalWidth) return;
@@ -134,7 +167,6 @@ export function createXpProgressBar(clock: BoilClock, award: ProgressAward, anim
     context.clearRect(0, 0, WIDTH, HEIGHT);
     context.drawImage(empty, 0, activeFrame * HEIGHT, WIDTH, HEIGHT, 0, 0, WIDTH, HEIGHT);
     if (width) context.drawImage(full, 0, activeFrame * HEIGHT, width, HEIGHT, 0, 0, width, HEIGHT);
-    if (!prestige) countValue.textContent = `${value.toLocaleString()} / ${PROGRESS_UNITS_PER_LEVEL.toLocaleString()} XP`;
     canvas.setAttribute('aria-valuenow', String(value));
   }
   return { element, countElement: count, finished, destroy() { abort.abort(); climbPlayback?.stop(); cancelAnimationFrame(animationFrame); unsubscribe(); juice.destroy(); element.remove(); } };

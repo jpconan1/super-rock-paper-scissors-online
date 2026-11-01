@@ -85,6 +85,7 @@ export class CurtainWipe implements WipeTransition {
 
     this.layer = document.createElement('div');
     this.layer.className = 'curtain-wipe';
+    host.append(this.layer);
     this.canvas = createMenuCanvas(this.layer, 'curtain-wipe', (layout) => {
       this.layout = layout;
       this.sprite?.setSource(this.sourceFor(this.currentPosition));
@@ -107,8 +108,6 @@ export class CurtainWipe implements WipeTransition {
     this.foreground = document.createElement('div');
     this.foreground.className = 'curtain-wipe__foreground';
     this.canvas.composition.append(this.sprite.element, decoration, this.foreground);
-    host.append(this.layer);
-
     this.player = new AnimationPlayer<number>({ commit: (position) => this.commitPosition(position) });
     this.syncLayer();
   }

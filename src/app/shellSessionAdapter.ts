@@ -38,6 +38,7 @@ export interface ShellSessionAdapter {
   suggestedPlayerName(): string;
   accountState(): AccountState;
   setUnlockAllClasses(enabled: boolean): Promise<void>;
+  setPrestigeStepForTesting(): Promise<void>;
   setEquippedEmblem(emblem: EquippedPlayerEmblem | null): Promise<void>;
   getEmblemMissions(): Promise<EmblemMissionFeed>;
   getCustomEmblem(): Promise<CustomEmblemState | null>;
@@ -49,6 +50,8 @@ export interface ShellSessionAdapter {
   requestGoogleSignInFromTitle(playerName: string, callbackURL: string, errorCallbackURL: string): Promise<string>;
   requestGuestClaimWithGoogle(callbackURL: string, errorCallbackURL: string): Promise<string>;
   finishGoogleSignIn(): Promise<PlayerProfile | null>;
+  hasPendingGoogleName(): boolean;
+  confirmGoogleName(displayName: string): Promise<PlayerProfile>;
   signInWithGoogleFromTitle(playerName: string): Promise<void>;
   claimGuestWithGoogle(): Promise<void>;
   updateDisplayName(displayName: string): Promise<PlayerProfile>;
@@ -149,10 +152,22 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
       if (!response.ok) throw new Error((await response.json().catch(() => ({})) as { error?: string }).error || 'Account claim failed.');
     }
     let player = await this.loadAuthenticatedPlayer();
-    if (!player && flow === 'title') player = await this.createAuthenticatedPlayer(loadGoogleTitleName());
+    if (!player && flow === 'title') {
+      player = await this.createAuthenticatedPlayer(loadGoogleTitleName());
+      if (player) localStorage.setItem(GOOGLE_PENDING_NAME_KEY, player.playerId);
+    }
     if (!player || this.authIsAnonymous) return null;
     this.googleFlow = undefined; sessionStorage.removeItem(GOOGLE_FLOW_KEY); sessionStorage.removeItem(GOOGLE_TITLE_NAME_KEY);
     await this.connectOnlineServices();
+    return player;
+  }
+  hasPendingGoogleName(): boolean {
+    return this.accountType === 'google' && Boolean(this.playerId) && localStorage.getItem(GOOGLE_PENDING_NAME_KEY) === this.playerId;
+  }
+  async confirmGoogleName(displayName: string): Promise<PlayerProfile> {
+    if (!this.hasPendingGoogleName()) throw new Error('No Google name is pending.');
+    const player = await this.updateDisplayName(displayName);
+    localStorage.removeItem(GOOGLE_PENDING_NAME_KEY);
     return player;
   }
   suggestedPlayerName(): string { return loadSavedGuestName(); }
@@ -166,6 +181,14 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
     const player = await response.json() as PlayerProfile;
     if (player.unlockAllClasses !== enabled) throw new Error('Progression update returned invalid data.');
     this.totalProgressUnits = player.totalProgressUnits; this.unlockAllClasses = player.unlockAllClasses;
+  }
+  async setPrestigeStepForTesting(): Promise<void> {
+    const response = await fetch(`${this.baseUrl}/player-progression`, { method: 'PUT', credentials: 'include', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ testPrestigeStep: true }) });
+    if (!response.ok) throw new Error(`Progression update failed: ${response.status}`);
+    const player = await response.json() as PlayerProfile;
+    if (!isPlayerProfile(player) || player.totalProgressUnits !== 200_000) throw new Error('Progression update returned invalid prestige test state.');
+    this.totalProgressUnits = player.totalProgressUnits;
+    this.unlockAllClasses = player.unlockAllClasses;
   }
   async setEquippedEmblem(emblem: EquippedPlayerEmblem | null): Promise<void> {
     const response = await fetch(`${this.baseUrl}/player-emblem`, { method: 'PUT', credentials: 'include', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ emblem }) });
@@ -648,6 +671,7 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
 const GOOGLE_RETURN_PARAM = 'google-sign-in-return';
 const GOOGLE_FLOW_KEY = 'super-rps-google-flow';
 const GOOGLE_TITLE_NAME_KEY = 'super-rps-google-title-name';
+const GOOGLE_PENDING_NAME_KEY = 'super-rps-google-pending-name';
 const GUEST_NAME_KEY = 'super-rps-guest-name';
 function loadSavedGuestName(): string { return localStorage.getItem(GUEST_NAME_KEY)?.trim() ?? ''; }
 function loadGoogleFlow(): 'title' | 'claim' | undefined { const value = sessionStorage.getItem(GOOGLE_FLOW_KEY); return value === 'title' || value === 'claim' ? value : undefined; }
@@ -682,10 +706,11 @@ export class LocalShellSessionAdapter implements ShellSessionAdapter {
   suggestedPlayerName(): string { return ''; }
   accountState(): AccountState { const progress = progressionForTotal(this.totalProgressUnits); return { signedIn: false, accountType: 'guest', displayName: '', playerId: 'anchor-chill-pizza-turtle-00', rating: 1500, totalProgressUnits: this.totalProgressUnits, level: progress.level, prestigeCount: 0, unlockedClassIds: this.unlockAllClasses ? ABM_CLASS_IDS : progress.unlockedClassIds, bonusClassId: bonusClassIdForTotal(this.totalProgressUnits), unlockAllClasses: this.unlockAllClasses, equippedEmblem: this.equippedEmblem, ownedEmblems: [...this.ownedEmblems], customEmblem: this.customEmblem, email: '', hasPassword: false, emailAuthAvailable: false, emailSignupAvailable: false }; }
   async setUnlockAllClasses(enabled: boolean): Promise<void> { this.unlockAllClasses = enabled; }
+  async setPrestigeStepForTesting(): Promise<void> { this.totalProgressUnits = 200_000; }
   async setEquippedEmblem(emblem: EquippedPlayerEmblem | null): Promise<void> { this.equippedEmblem = emblem; }
   async getEmblemMissions(): Promise<EmblemMissionFeed> { return { contest: { active: false, claimed: 0, capacity: 10 }, missions: [
-    { id: 'claim-account', title: 'Claim Your Account', detail: 'Protect your guest account.', rewardKind: 'emblem', rewardReference: 'beta-og', completed: false, completedAt: null, placement: null, rewardEmblemId: 'beta-og' },
-    { id: 'finish-tutorial', title: 'Finish The Tutorial', detail: 'Complete one tutorial match.', rewardKind: 'emblem', rewardReference: 'new-player', completed: false, completedAt: null, placement: null, rewardEmblemId: 'new-player' },
+    { id: 'claim-account', title: 'Create an Account', detail: "Only available during the Beta. This Emblem's gonna be so rare one day", rewardKind: 'emblem', rewardReference: 'beta-og', completed: false, completedAt: null, placement: null, rewardEmblemId: 'beta-og' },
+    { id: 'finish-tutorial', title: 'Finish the Tutorial', detail: "I promise it's short", rewardKind: 'emblem', rewardReference: 'new-player', completed: false, completedAt: null, placement: null, rewardEmblemId: 'new-player' },
   ] }; }
   async getCustomEmblem(): Promise<CustomEmblemState | null> { return null; }
   async saveCustomEmblem(_document: CustomEmblemDocument, _artwork: Blob): Promise<void> {
@@ -701,6 +726,8 @@ export class LocalShellSessionAdapter implements ShellSessionAdapter {
   async requestGoogleSignInFromTitle(_playerName: string, _callbackURL: string, _errorCallbackURL: string): Promise<string> { return ''; }
   async requestGuestClaimWithGoogle(_callbackURL: string, _errorCallbackURL: string): Promise<string> { return ''; }
   async finishGoogleSignIn(): Promise<PlayerProfile | null> { return null; }
+  hasPendingGoogleName(): boolean { return false; }
+  async confirmGoogleName(displayName: string): Promise<PlayerProfile> { return this.updateDisplayName(displayName); }
   async signInWithGoogleFromTitle(_playerName: string): Promise<void> {}
   async claimGuestWithGoogle(): Promise<void> {}
   async updateDisplayName(displayName: string): Promise<PlayerProfile> { return { playerId: 'anchor-chill-pizza-turtle-00', accountType: 'guest', displayName, rating: 1500, prestigeCount: 0, unlockAllClasses: this.unlockAllClasses, equippedEmblem: this.equippedEmblem, ownedEmblems: [...this.ownedEmblems], ...progressionForTotal(0) }; }

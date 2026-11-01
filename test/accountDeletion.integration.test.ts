@@ -17,11 +17,13 @@ import migration11 from '../worker/migrations/0011_maintenance_mode.sql?raw';
 import migration12 from '../worker/migrations/0012_fixed_account_identity.sql?raw';
 import migration13 from '../worker/migrations/0013_email_accounts.sql?raw';
 import migration14 from '../worker/migrations/0014_emblems.sql?raw';
+import migration15 from '../worker/migrations/0015_legacy_emblem_entitlements.sql?raw';
+import migration16 from '../worker/migrations/0016_beta_og_protected_accounts.sql?raw';
 import { completeEmblemMission, grantPlayerEmblem, hasCustomEmblemAccess, ownedPlayerEmblems, prestigePlayer, revokePlayerEmblem } from '../worker/playerEmblems';
 import { MAX_PROGRESS_UNITS } from '../src/core/progression';
 import { finalizeMatch } from '../worker/matchPersistence';
 
-const migrations = [migration1, migration2, migration3, migration4, migration5, migration6, migration7, migration8, migration9, migration10, migration11, migration12, migration13, migration14];
+const migrations = [migration1, migration2, migration3, migration4, migration5, migration6, migration7, migration8, migration9, migration10, migration11, migration12, migration13, migration14, migration15, migration16];
 let miniflare: Miniflare;
 let db: Awaited<ReturnType<Miniflare['getD1Database']>>;
 
@@ -31,6 +33,12 @@ async function applyMigrations(database: Awaited<ReturnType<Miniflare['getD1Data
     for (const statement of sql.split(';').map((item) => item.trim()).filter(Boolean)) {
       if (!statement.startsWith('PRAGMA ')) await database.prepare(statement).run();
     }
+  }
+}
+
+async function applyBetaOgMigration(): Promise<void> {
+  for (const statement of migration16.split(';').map((item) => item.trim()).filter(Boolean)) {
+    await db.prepare(statement).run();
   }
 }
 
@@ -118,6 +126,34 @@ test('verified signup code stays available until Better Auth links the guest', a
     .toEqual({ account_type: 'email', display_name: 'New Player' });
   expect(await db.prepare('SELECT challenge_key FROM email_auth_challenges WHERE challenge_key = ?')
     .bind(`signup:${guest.user.id}`).first()).toBeNull();
+  expect(await ownedPlayerEmblems(db, 'guest-player')).toContain('beta-og');
+  expect(await db.prepare("SELECT mission_id FROM emblem_mission_completions WHERE player_id = 'guest-player'").first())
+    .toEqual({ mission_id: 'claim-account' });
+});
+
+test('backfills protected accounts once while preserving equipped emblems', async () => {
+  await db.batch([
+    db.prepare("INSERT INTO players (player_id, display_name, created_at, updated_at, account_type) VALUES ('google-player', 'Google', 1, 1, 'google')"),
+    db.prepare("INSERT INTO players (player_id, display_name, created_at, updated_at, account_type) VALUES ('email-player', 'Email', 1, 1, 'email')"),
+    db.prepare("INSERT INTO players (player_id, display_name, created_at, updated_at, account_type) VALUES ('guest-player', 'Guest', 1, 1, 'guest')"),
+    db.prepare("INSERT INTO players (player_id, display_name, created_at, updated_at, account_type) VALUES ('deleted-player', 'Deleted', 1, 1, NULL)"),
+    db.prepare("INSERT INTO player_emblems (player_id, emblem_id, awarded_at, source_kind, source_id) VALUES ('google-player', 'new-player', 1, 'mission', 'finish-tutorial')"),
+    db.prepare("UPDATE players SET equipped_emblem = 'new-player' WHERE player_id = 'google-player'"),
+  ]);
+  await applyBetaOgMigration();
+  await applyBetaOgMigration();
+  for (const playerId of ['google-player', 'email-player']) {
+    expect(await ownedPlayerEmblems(db, playerId)).toContain('beta-og');
+    expect(await db.prepare('SELECT COUNT(*) count FROM emblem_mission_completions WHERE player_id = ? AND mission_id = ?')
+      .bind(playerId, 'claim-account').first()).toEqual({ count: 1 });
+  }
+  expect(await db.prepare("SELECT equipped_emblem FROM players WHERE player_id = 'google-player'").first())
+    .toEqual({ equipped_emblem: 'new-player' });
+  expect(await db.prepare("SELECT equipped_emblem FROM players WHERE player_id = 'email-player'").first())
+    .toEqual({ equipped_emblem: 'beta-og' });
+  for (const playerId of ['guest-player', 'deleted-player']) {
+    expect(await ownedPlayerEmblems(db, playerId)).toEqual([]);
+  }
 });
 
 describe('account deletion D1 lifecycle', () => {

@@ -59,7 +59,7 @@ describe('Attack Block Mana rules', () => {
 
   test('gives Last Ditch escalating total Mana and publishes only its bonus', () => {
     let state = startedWith('last-ditch', 'lucky');
-    const totals = [2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 9];
+    const totals = [2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10];
     for (const [index, total] of totals.entries()) {
       state.players.p1.mana = 0; state.players.p2.mana = 0;
       state = playTurn(state, 'mana', 'mana');
@@ -535,7 +535,7 @@ describe('Attack Block Mana rules', () => {
     expect(resolution.events?.[0]?.payload).toMatchObject({ gamblerOutcomes: { p1: outcome } });
   });
 
-  test('lets Gambler exceed 3 Blocks and caps Mana outcomes at 9', () => {
+  test('lets Gambler exceed 3 Blocks and caps Mana outcomes at 99', () => {
     let blocks = startedWith('gambler', 'lucky');
     blocks.players.p1.blocks = 5;
     blocks = send(blocks, 'p1', { type: 'choose-move', move: 'block' });
@@ -543,14 +543,14 @@ describe('Attack Block Mana rules', () => {
     expect(blocks.players.p1.blocks).toBe(6);
 
     let mana = startedWith('gambler', 'lucky');
-    mana.players.p1.mana = 8;
+    mana.players.p1.mana = 98;
     mana = send(mana, 'p1', { type: 'choose-move', move: 'block' });
     mana = attackBlockManaRules.resolve(mana, 'p2', { type: 'choose-move', move: 'block' }, { ...context, random: () => 0 }).state;
-    expect(mana.players.p1.mana).toBe(9);
-    mana.players.p1.mana = 6;
+    expect(mana.players.p1.mana).toBe(99);
+    mana.players.p1.mana = 60;
     mana = send(mana, 'p1', { type: 'choose-move', move: 'block' });
     mana = attackBlockManaRules.resolve(mana, 'p2', { type: 'choose-move', move: 'block' }, { ...context, random: () => 0.30 }).state;
-    expect(mana.players.p1.mana).toBe(9);
+    expect(mana.players.p1.mana).toBe(99);
   });
 
   test('rolls simultaneous Gamblers in deterministic player order', () => {
@@ -578,9 +578,9 @@ describe('Attack Block Mana rules', () => {
     expect(state.investorBullPlayers).toEqual(['p1']);
 
     state = startedWith('investor', 'investor');
-    state.players.p1.mana = 8; state.players.p2.mana = 9;
+    state.players.p1.mana = 98; state.players.p2.mana = 99;
     state = playTurn(state, 'mana', 'mana');
-    expect(state.players).toMatchObject({ p1: { mana: 9 }, p2: { mana: 9 } });
+    expect(state.players).toMatchObject({ p1: { mana: 99 }, p2: { mana: 99 } });
     expect(state.investorBullPlayers).toEqual(['p1', 'p2']);
   });
 
@@ -623,7 +623,7 @@ describe('Attack Block Mana rules', () => {
 
   test('grows Duplicator Mana gains 1, 2, 4, 8 and marks only duplicated gains', () => {
     let state = startedWith('duplicator', 'duplicator');
-    for (const [mana, nextGain, proc] of [[2, 2, undefined], [4, 4, ['p1', 'p2']], [8, 8, ['p1', 'p2']], [9, 16, ['p1', 'p2']]] as const) {
+    for (const [mana, nextGain, proc] of [[2, 2, undefined], [4, 4, ['p1', 'p2']], [8, 8, ['p1', 'p2']], [16, 16, ['p1', 'p2']]] as const) {
       state = playTurn(state, 'mana', 'mana');
       expect(state.players.p1).toMatchObject({ mana, nextManaGain: nextGain });
       expect(state.players.p2).toMatchObject({ mana, nextManaGain: nextGain });
@@ -638,9 +638,9 @@ describe('Attack Block Mana rules', () => {
     state = playTurn(state, 'mana', 'mana');
     expect(state.players.p1).toMatchObject({ mana: 1, nextManaGain: 2 });
     expect(state.duplicatorProcPlayers).toBeUndefined();
-    state.players.p1.mana = 9;
+    state.players.p1.mana = 99;
     state = playTurn(state, 'mana', 'block');
-    expect(state.players.p1).toMatchObject({ mana: 9, nextManaGain: 4 });
+    expect(state.players.p1).toMatchObject({ mana: 99, nextManaGain: 4 });
     expect(state.duplicatorProcPlayers).toEqual(['p1']);
   });
 
@@ -680,7 +680,7 @@ describe('Attack Block Mana rules', () => {
     expect(mirror.players.p2.mana).toBe(2);
   });
 
-  test('applies Copywriter before move costs and caps the reward at 9 Mana', () => {
+  test('applies Copywriter before move costs and caps the reward at 99 Mana', () => {
     let state = startedWith('copywriter', 'lucky');
     state.players.p1.mana = 1;
     state.players.p2.recentMoves = ['block', 'block'];
@@ -688,10 +688,10 @@ describe('Attack Block Mana rules', () => {
     expect(state.players.p1.mana).toBe(1);
     expect(state.copywriterProcPlayers).toEqual(['p1']);
 
-    state.players.p1.mana = 9;
+    state.players.p1.mana = 99;
     state.players.p2.recentMoves = ['block', 'block'];
     state = playTurn(state, 'block', 'block');
-    expect(state.players.p1.mana).toBe(9);
+    expect(state.players.p1.mana).toBe(99);
   });
 
   test('records timeout Skip and forced Mana for Copywriter streaks', () => {
@@ -935,7 +935,7 @@ describe('Attack Block Mana rules', () => {
     expect(random).toHaveBeenCalledTimes(2);
   });
 
-  test('rolls Cheater Mana on timeout and caps successful gain at 9', () => {
+  test('rolls Cheater Mana on timeout and caps successful gain at 99', () => {
     let timeout = startedWith('cheater', 'lucky');
     timeout = send(timeout, 'p1', { type: 'choose-move', move: 'mana' }, 2_000);
     timeout = attackBlockManaRules.advanceDeadline!(timeout, { ...context, now: timeout.waitingDeadlineAt!, random: () => 0 })!.state;
@@ -943,10 +943,10 @@ describe('Attack Block Mana rules', () => {
     expect(timeout.cheaterProcPlayers).toEqual(['p1']);
 
     let capped = startedWith('cheater', 'lucky');
-    capped.players.p1.mana = 9;
+    capped.players.p1.mana = 99;
     capped = send(capped, 'p1', { type: 'choose-move', move: 'mana' });
     capped = attackBlockManaRules.resolve(capped, 'p2', { type: 'choose-move', move: 'block' }, { ...context, random: () => 0 }).state;
-    expect(capped.players.p1.mana).toBe(9);
+    expect(capped.players.p1.mana).toBe(99);
     expect(capped.cheaterProcPlayers).toEqual(['p1']);
   });
 
@@ -962,11 +962,12 @@ describe('Attack Block Mana rules', () => {
     expect(resolution.events?.[0]?.payload).toMatchObject({ cheaterProcPlayers: [] });
   });
 
-  test('doubles Stunner Attack cost through 2, 4, and capped 8', () => {
+  test('doubles Stunner Attack cost through 64, the largest doubled cost below the Mana cap', () => {
     let state = startedWith('stunner', 'lucky');
-    state.players.p1.mana = 9;
-    state.players.p2.mana = 9;
-    for (const cost of [2, 4, 8, 8]) {
+    state.players.p1.mana = 99;
+    state.players.p2.mana = 99;
+    state.players.p2.blocks = 10;
+    for (const cost of [2, 4, 8, 16, 32, 64, 64]) {
       state = playTurn(state, 'attack', 'block');
       expect(state.players.p2.attackCost).toBe(cost);
       expect(state.stunnedPlayers).toEqual(['p2']);
@@ -1022,16 +1023,16 @@ describe('Attack Block Mana rules', () => {
     expect(state.stunnedPlayers).toBeUndefined();
   });
 
-  test('caps ordinary, Advantaged, forced, and stolen Mana at 9', () => {
+  test('caps ordinary, Advantaged, forced, and stolen Mana at 99', () => {
     let ordinary = startedWith('lucky', 'lucky');
-    ordinary.players.p1.mana = 9;
+    ordinary.players.p1.mana = 99;
     ordinary = playTurn(ordinary, 'mana', 'block');
-    expect(ordinary.players.p1.mana).toBe(9);
+    expect(ordinary.players.p1.mana).toBe(99);
 
     let advantaged = startedWith('advantaged', 'lucky');
-    advantaged.players.p1.mana = 8;
+    advantaged.players.p1.mana = 98;
     advantaged = playTurn(advantaged, 'mana', 'block');
-    expect(advantaged.players.p1.mana).toBe(9);
+    expect(advantaged.players.p1.mana).toBe(99);
 
     let forced = startedWith('advantaged', 'lucky');
     forced.players.p1.mana = 0; forced.players.p2.mana = 0;
@@ -1039,10 +1040,10 @@ describe('Attack Block Mana rules', () => {
     expect(forced.players.p1.mana).toBe(2);
 
     let thief = thiefTurnFive();
-    thief.players.p1.mana = 9; thief.players.p2.mana = 2;
+    thief.players.p1.mana = 99; thief.players.p2.mana = 2;
     thief = send(thief, 'p1', { type: 'choose-move', move: 'block', ability: 'steal' });
     thief = send(thief, 'p2', { type: 'choose-move', move: 'block' });
-    expect(thief.players.p1.mana).toBe(9);
+    expect(thief.players.p1.mana).toBe(99);
     expect(thief.players.p2.mana).toBe(1);
   });
 
@@ -1409,10 +1410,10 @@ describe('Attack Block Mana rules', () => {
 
     let capped = startedWith('cupid', 'lucky');
     capped.players.p1.goldenArrowTurns = 5;
-    capped.players.p1.mana = 9;
+    capped.players.p1.mana = 99;
     capped.players.p2.mana = 1;
     capped = playTurn(capped, 'attack', 'attack');
-    expect(capped.players.p1.mana).toBe(8);
+    expect(capped.players.p1.mana).toBe(98);
 
     let mana = startedWith('cupid', 'lucky');
     mana.players.p1.goldenArrowTurns = 5;

@@ -14,10 +14,10 @@ export interface EmblemMissionDefinition {
 }
 
 export const EMBLEM_MISSIONS: readonly EmblemMissionDefinition[] = [
-  { id: 'finish-tutorial', title: 'Finish The Tutorial', detail: 'Complete one tutorial match.', rewardKind: 'emblem', rewardReference: 'new-player', sortOrder: 10, requiresPrestigeContest: false },
-  { id: 'claim-account', title: 'Claim Your Account', detail: 'Protect your guest account.', rewardKind: 'emblem', rewardReference: 'beta-og', sortOrder: 20, requiresPrestigeContest: false },
-  { id: 'win-online-match', title: 'Win Online', detail: 'Win one online match.', rewardKind: 'feature', rewardReference: 'custom-emblem', sortOrder: 30, requiresPrestigeContest: false },
-  { id: 'prestige', title: 'Prestige', detail: 'Complete progression and prestige.', rewardKind: 'emblem', rewardReference: 'prestige', sortOrder: 40, requiresPrestigeContest: false },
+  { id: 'finish-tutorial', title: 'Finish the Tutorial', detail: "I promise it's short", rewardKind: 'emblem', rewardReference: 'new-player', sortOrder: 10, requiresPrestigeContest: false },
+  { id: 'claim-account', title: 'Create an Account', detail: "Only available during the Beta. This Emblem's gonna be so rare one day", rewardKind: 'emblem', rewardReference: 'beta-og', sortOrder: 20, requiresPrestigeContest: false },
+  { id: 'win-online-match', title: 'Win Online', detail: 'Just a single victory online and you can draw your own Emblem!', rewardKind: 'feature', rewardReference: 'custom-emblem', sortOrder: 30, requiresPrestigeContest: false },
+  { id: 'prestige', title: 'Prestige', detail: "Unlock all classes to complete the game's content (for now!)", rewardKind: 'emblem', rewardReference: 'prestige', sortOrder: 40, requiresPrestigeContest: false },
   { id: 'prestige-contest', title: 'Prestige Contest', detail: 'Be among the first ten to prestige.', rewardKind: 'placement-emblem', rewardReference: 'first-prestige', sortOrder: 50, requiresPrestigeContest: true },
 ];
 

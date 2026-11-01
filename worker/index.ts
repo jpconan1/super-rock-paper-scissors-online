@@ -352,8 +352,8 @@ export class MatchmakerObject extends DurableObject<Env> {
     const id = this.env.MATCHES.newUniqueId();
     const matchId = id.toString();
     const initialized = await this.env.MATCHES.get(id).initialize(matchId, {
-      p1: { name: opponent.name, platform: 'Web', rating: opponent.rating, level: progressionForTotal(opponent.totalProgressUnits ?? 0).level, prestigeCount: opponent.prestigeCount, emblem: opponent.equippedEmblem, customEmblem: opponent.customEmblem },
-      p2: { name, platform: 'Web', rating: player.rating, level: progressionForTotal(player.totalProgressUnits).level, prestigeCount: player.prestigeCount, emblem: player.equippedEmblem, customEmblem: player.customEmblem },
+      p1: { name: opponent.name, platform: 'Web', rating: opponent.rating, level: progressionForTotal(opponent.totalProgressUnits ?? 0).level, testMode: opponent.unlockAllClasses ?? false, prestigeCount: opponent.prestigeCount, emblem: opponent.equippedEmblem, customEmblem: opponent.customEmblem },
+      p2: { name, platform: 'Web', rating: player.rating, level: progressionForTotal(player.totalProgressUnits).level, testMode: player.unlockAllClasses, prestigeCount: player.prestigeCount, emblem: player.equippedEmblem, customEmblem: player.customEmblem },
     }, { p1: opponent.guestId, p2: guestId }, 'abm-only', {
       p1: opponent.totalProgressUnits ?? 0, p2: player.totalProgressUnits,
     }, {
@@ -1314,6 +1314,7 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
           if (!created) {
             const accountType = await accountTypeForSession(env.DB, authSession.user.id, Boolean((authSession.user as { isAnonymous?: boolean }).isAnonymous));
             const newPlayerId = await createPlayerRow(env, authSession.user.id, displayName, accountType);
+            if (accountType !== 'guest') await completeEmblemMission(env.DB, newPlayerId, 'claim-account', now);
             if (await requestHasTesterPass(request, env)) {
               await env.DB.prepare('INSERT OR IGNORE INTO test_players (player_id, created_at) VALUES (?, ?)').bind(newPlayerId, now).run();
             }
@@ -1346,10 +1347,15 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
       try {
         const authSession = await createAuth(env).api.getSession({ headers: request.headers });
         if (!authSession) return json({ error: 'Authentication required.' }, 401);
-        const body = await readJsonBody<{ unlockAllClasses?: unknown }>(request, 1_000);
-        if (typeof body.unlockAllClasses !== 'boolean') return json({ error: 'unlockAllClasses must be a boolean.' }, 400);
-        await env.DB.prepare('UPDATE players SET unlock_all_classes = ?, updated_at = ? WHERE auth_user_id = ?')
-          .bind(body.unlockAllClasses ? 1 : 0, Date.now(), authSession.user.id).run();
+        const body = await readJsonBody<{ unlockAllClasses?: unknown; testPrestigeStep?: unknown }>(request, 1_000);
+        if (body.testPrestigeStep === true) {
+          await env.DB.prepare('UPDATE players SET total_progress_units = ?, updated_at = ? WHERE auth_user_id = ?')
+            .bind(200_000, Date.now(), authSession.user.id).run();
+        } else {
+          if (typeof body.unlockAllClasses !== 'boolean') return json({ error: 'unlockAllClasses must be a boolean.' }, 400);
+          await env.DB.prepare('UPDATE players SET unlock_all_classes = ?, updated_at = ? WHERE auth_user_id = ?')
+            .bind(body.unlockAllClasses ? 1 : 0, Date.now(), authSession.user.id).run();
+        }
         const player = await env.DB.prepare('SELECT player_id, display_name, rating, total_progress_units, unlock_all_classes, equipped_emblem, account_type, prestige_count FROM players WHERE auth_user_id = ?')
           .bind(authSession.user.id).first<PlayerProfileRow>();
         if (!player) return json({ error: 'Player not found.' }, 404);

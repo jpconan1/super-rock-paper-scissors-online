@@ -73,6 +73,7 @@ import {
 } from '../src/layout/gameLayout';
 import { FIREBALL_WAR_LAYOUTS, FIREBALL_WAR_MOVE_ART } from '../src/variants/fireballWar/fireballWarScreen';
 import { getLayoutDocument } from '../src/layout/layoutDocuments';
+import { createPlayerEmblemCard } from '../src/ui/playerEmblemCard';
 
 class FakeClassList {
   readonly values = new Set<string>();
@@ -179,6 +180,30 @@ describe('shared game layout contract', () => {
     expect(element.attributes.get('aria-label')).toBe('Veteran, level 4, prestige 3, no emblem');
     expect(element.children[2]!.children[1]!.textContent).toBe('Lv 4');
     expect(element.children[3]).toMatchObject({ textContent: 'P. 3', hidden: false });
+  });
+
+  test('replaces online player levels with Test Mode on either side', () => {
+    useFakeDocument();
+    for (const side of ['p1', 'p2'] as const) {
+      const card = createPlayerInfo({ heading: 'Long player name', rating: '', platform: '', level: 7, testMode: true }, side, {} as never);
+      const element = card.element as unknown as FakeElement;
+      expect(element.classList.values.has('player-emblem-card--test-mode')).toBe(true);
+      expect(element.children[2]!.children[1]!.textContent).toBe('Test Mode');
+      expect(element.attributes.get('aria-label')).toBe('Long player name, Test Mode, no emblem');
+    }
+  });
+
+  test('updates the shared lobby card when Test Mode changes', () => {
+    useFakeDocument();
+    const card = createPlayerEmblemCard({ name: 'JP', level: 8 }, {} as never);
+    const element = card.element as unknown as FakeElement;
+    expect(element.children[2]!.children[1]!.textContent).toBe('Lv 8');
+    card.setTestMode(true);
+    expect(element.classList.values.has('player-emblem-card--test-mode')).toBe(true);
+    expect(element.children[2]!.children[1]!.textContent).toBe('Test Mode');
+    expect(element.attributes.get('aria-label')).toBe('JP, Test Mode, no emblem');
+    card.setTestMode(false);
+    expect(element.children[2]!.children[1]!.textContent).toBe('Lv 8');
   });
 
   test('slices equipped custom emblem sheets into their three authored frames', () => {

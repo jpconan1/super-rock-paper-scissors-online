@@ -1098,7 +1098,7 @@
     {
       "id": "roster-toggle",
       "type": "toggle",
-      "layer": 21,
+      "layer": 51,
       "protected": true,
       "behavior": "toggle-roster",
       "assets": {
@@ -1307,7 +1307,7 @@
     {
       "id": "roster",
       "type": "group",
-      "layer": 20,
+      "layer": 50,
       "protected": true,
       "layouts": {
         "landscape": {
