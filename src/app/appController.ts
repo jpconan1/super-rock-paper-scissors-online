@@ -193,6 +193,7 @@ export class AppController {
     if (this.destination === 'lobby' && destination !== 'lobby') {
       this.setMatchmaking(false);
       this.options.session.leaveLobby();
+      this.whiteboard = createEmptyWhiteboard();
     }
     const revision = ++this.loadRevision;
     this.lifecycle?.abort();
@@ -479,6 +480,7 @@ export class AppController {
       this.screenCleanup = title;
       this.screenReady = title.ready;
     } else if (destination === 'lobby') {
+      options.session.resumeLobby();
       this.screenReady = Promise.resolve();
       this.modalCleanup?.();
       this.modalCleanup = undefined;

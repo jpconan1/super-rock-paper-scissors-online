@@ -70,6 +70,7 @@ export interface ShellSessionAdapter {
   signOut(): Promise<void>;
   enterLobby(playerName: string): Promise<PlayerProfile>;
   getOnlinePlayerCount(): Promise<number | null>;
+  resumeLobby(): void;
   leaveLobby(): void;
   disconnectOnline(): void;
   setLobbyPresence(presence: LobbyPresence): void;
@@ -99,6 +100,7 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
   private whiteboardSocket?: WebSocket;
   private whiteboardReconnect?: ReturnType<typeof setTimeout>;
   private whiteboardActive = false;
+  private whiteboardAwaitingSnapshot = false;
   private readonly whiteboardPending = new Map<string, WhiteboardClientMessage>();
   private whiteboardSequence = 0;
   private lobbyVisitId = '';
@@ -496,7 +498,15 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
     this.whiteboardActive = false;
     if (this.whiteboardReconnect) clearTimeout(this.whiteboardReconnect);
     this.whiteboardReconnect = undefined;
+    this.whiteboardAwaitingSnapshot = false;
     this.whiteboardSocket?.close(); this.whiteboardSocket = undefined;
+  }
+  resumeLobby(): void {
+    if (!this.onlineActive) return;
+    this.whiteboardActive = true;
+    this.updateLobbyConnectionState();
+    this.connectLobbyPresence();
+    this.connectWhiteboard();
   }
   disconnectOnline(): void {
     this.onlineActive = false;
@@ -573,6 +583,7 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
     const url = new URL(`${this.baseUrl}/whiteboard`); url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
     url.searchParams.set('visit', this.lobbyVisitId);
     const socket = new WebSocket(url, WHITEBOARD_SOCKET_PROTOCOL); this.whiteboardSocket = socket;
+    this.whiteboardAwaitingSnapshot = true;
     let syncInterval: ReturnType<typeof setInterval> | undefined;
     let syncTimeout: ReturnType<typeof setTimeout> | undefined;
     const stopSync = () => {
@@ -605,6 +616,7 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
       try {
         const message = JSON.parse(String(event.data));
         if (!isWhiteboardServerMessage(message)) return;
+        if (message.type === 'snapshot' || message.type === 'reset') this.whiteboardAwaitingSnapshot = false;
         if (message.type === 'snapshot' || message.type === 'reset') this.whiteboardSequence = message.board.sequence;
         else if (message.type === 'operation') this.whiteboardSequence = Math.max(this.whiteboardSequence, message.operation.sequence);
         if (message.type === 'synced' || message.type === 'snapshot' || message.type === 'reset') {
@@ -619,6 +631,7 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
           for (const operation of message.board.operations) if (operation.clientOperationId) this.whiteboardPending.delete(operation.clientOperationId);
         }
         this.listener?.whiteboard?.(message);
+        if (message.type === 'snapshot' || message.type === 'reset') this.updateLobbyConnectionState();
       } catch { /* ignore malformed server data */ }
     });
     socket.addEventListener('close', () => {
@@ -632,7 +645,7 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
 
   private updateLobbyConnectionState(): void {
     if (!this.onlineActive || !this.whiteboardActive) return;
-    const ready = this.lobbySocket?.readyState === WebSocket.OPEN && this.whiteboardSocket?.readyState === WebSocket.OPEN;
+    const ready = this.lobbySocket?.readyState === WebSocket.OPEN && this.whiteboardSocket?.readyState === WebSocket.OPEN && !this.whiteboardAwaitingSnapshot;
     this.listener?.connection(ready ? 'connected' : 'reconnecting');
   }
 
@@ -794,6 +807,7 @@ export class LocalShellSessionAdapter implements ShellSessionAdapter {
     return { playerId: 'anchor-chill-pizza-turtle-00', accountType: 'guest', displayName: playerName, rating: 1500, prestigeCount: 0, unlockAllClasses: this.unlockAllClasses, equippedEmblem: this.equippedEmblem, ownedEmblems: [...this.ownedEmblems], ...progressionForTotal(0) };
   }
   async getOnlinePlayerCount(): Promise<number | null> { return 1; }
+  resumeLobby(): void {}
   leaveLobby(): void {}
   disconnectOnline(): void {}
   setLobbyPresence(_presence: LobbyPresence): void {}

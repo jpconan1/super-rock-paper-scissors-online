@@ -1113,8 +1113,8 @@ export function soundForAbmMoves(moves: Readonly<Record<'p1' | 'p2', AbmMove>>):
 export function playAbmEventSounds(events: readonly TimedSemanticEvent[], serverTime: number, played: Set<string>): void {
   for (const event of events) {
     if (!['move-reveal', 'move-timeout'].includes(event.type) || event.startsAt > serverTime || event.endsAt <= serverTime || played.has(event.id)) continue;
-    const payload = event.payload as { moves?: Record<'p1' | 'p2', AbmMove>; luckyProcPlayer?: 'p1' | 'p2'; advantagedProcPlayers?: ('p1' | 'p2')[] };
-    const sound = payload.luckyProcPlayer ? 'abm-lucky' : payload.advantagedProcPlayers?.length ? 'abm-charge'
+    const payload = event.payload as { moves?: Record<'p1' | 'p2', AbmMove>; luckyProcPlayer?: 'p1' | 'p2'; fireborneProcPlayer?: 'p1' | 'p2'; advantagedProcPlayers?: ('p1' | 'p2')[] };
+    const sound = payload.luckyProcPlayer || payload.fireborneProcPlayer ? 'abm-lucky' : payload.advantagedProcPlayers?.length ? 'abm-charge'
       : event.type === 'move-reveal' && payload.moves ? soundForAbmMoves(payload.moves) : undefined;
     if (!sound) continue;
     played.add(event.id);

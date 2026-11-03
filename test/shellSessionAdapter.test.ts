@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { LocalShellSessionAdapter, serializeVariantCommand, WebSocketShellSessionAdapter } from '../src/app/shellSessionAdapter';
 import { DEFAULT_CUSTOM_EMBLEM_DOCUMENT } from '../src/core/customEmblem';
+import { createEmptyWhiteboard, type WhiteboardClientMessage } from '../src/whiteboard/protocol';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -19,16 +20,20 @@ describe('matchmaking session adapters', () => {
       .rejects.toThrow('Invalid custom emblem document.');
   });
   test('marks the lobby reconnecting when either socket drops and restores it after both recover', () => {
-    const sockets: Array<{ readyState: number; emit(type: string): void }> = [];
+    const sockets: Array<{ readyState: number; emit(type: string, data?: string): void }> = [];
     class SocketMock {
       static OPEN = 1;
       readyState = 0;
-      private listeners = new Map<string, Array<() => void>>();
+      private listeners = new Map<string, Array<(event: { data?: string }) => void>>();
       constructor() { sockets.push(this); }
-      addEventListener(type: string, listener: () => void) { this.listeners.set(type, [...this.listeners.get(type) ?? [], listener]); }
+      addEventListener(type: string, listener: (event: { data?: string }) => void) { this.listeners.set(type, [...this.listeners.get(type) ?? [], listener]); }
       send() {}
       close() {}
-      emit(type: string) { this.readyState = type === 'open' ? 1 : 3; for (const listener of this.listeners.get(type) ?? []) listener(); }
+      emit(type: string, data?: string) {
+        if (type === 'open') this.readyState = 1;
+        if (type === 'close') this.readyState = 3;
+        for (const listener of this.listeners.get(type) ?? []) listener({ data });
+      }
     }
     vi.stubGlobal('WebSocket', SocketMock);
     const connection = vi.fn();
@@ -38,11 +43,14 @@ describe('matchmaking session adapters', () => {
     internals.onlineActive = true; internals.whiteboardActive = true;
     internals.connectLobbyPresence(); internals.connectWhiteboard();
     sockets[0]!.emit('open'); sockets[1]!.emit('open');
+    expect(connection).toHaveBeenLastCalledWith('reconnecting');
+    sockets[1]!.emit('message', JSON.stringify({ type: 'snapshot', board: createEmptyWhiteboard() }));
     expect(connection).toHaveBeenLastCalledWith('connected');
     sockets[1]!.emit('close');
     expect(connection).toHaveBeenLastCalledWith('reconnecting');
     vi.runOnlyPendingTimers();
     sockets[2]!.emit('open');
+    sockets[2]!.emit('message', JSON.stringify({ type: 'snapshot', board: createEmptyWhiteboard() }));
     expect(connection).toHaveBeenLastCalledWith('connected');
     adapter.destroy();
   });
@@ -81,6 +89,61 @@ describe('matchmaking session adapters', () => {
     expect(connection).toHaveBeenLastCalledWith('reconnecting');
     vi.advanceTimersByTime(1_000);
     expect(sockets).toHaveLength(2);
+    adapter.destroy();
+  });
+  test('resumes whiteboard after a match and reconciles queued drawings with the server', () => {
+    const sockets: Array<SocketMock> = [];
+    class SocketMock {
+      static OPEN = 1;
+      readyState = 0;
+      sent: string[] = [];
+      private listeners = new Map<string, Array<(event: { data?: string }) => void>>();
+      constructor(readonly url: URL) { sockets.push(this); }
+      addEventListener(type: string, listener: (event: { data?: string }) => void) {
+        this.listeners.set(type, [...this.listeners.get(type) ?? [], listener]);
+      }
+      send(data: string) { this.sent.push(data); }
+      close() { this.readyState = 3; this.emit('close'); }
+      emit(type: string, data?: string) {
+        if (type === 'open') this.readyState = 1;
+        for (const listener of this.listeners.get(type) ?? []) listener({ data });
+      }
+    }
+    vi.stubGlobal('WebSocket', SocketMock);
+    const connection = vi.fn();
+    const whiteboard = vi.fn();
+    const adapter = new WebSocketShellSessionAdapter('https://example.test');
+    adapter.subscribe({ connection, matchFound: vi.fn(), snapshot: vi.fn(), whiteboard });
+    const internals = adapter as unknown as { onlineActive: boolean; lobbyVisitId: string; connectLobbyPresence(): void; connectWhiteboard(): void; whiteboardPending: Map<string, unknown> };
+    internals.onlineActive = true;
+    adapter.resumeLobby();
+    expect(sockets).toHaveLength(2);
+    sockets[0]!.emit('open'); sockets[1]!.emit('open');
+    sockets[1]!.emit('message', JSON.stringify({ type: 'snapshot', board: createEmptyWhiteboard() }));
+    expect(connection).toHaveBeenLastCalledWith('connected');
+    const visit = sockets[1]!.url.searchParams.get('visit');
+    adapter.leaveLobby();
+    const chat: WhiteboardClientMessage = { type: 'chat', clientOperationId: 'chat-1', displayName: 'JP', text: 'hello', color: 'black' };
+    const stroke: WhiteboardClientMessage = { type: 'stroke', clientOperationId: 'stroke-1', color: 'red', points: [{ x: 1, y: 1 }, { x: 2, y: 2 }] };
+    adapter.sendWhiteboard(chat);
+    adapter.sendWhiteboard(stroke);
+    adapter.resumeLobby();
+    adapter.resumeLobby();
+    expect(sockets).toHaveLength(3);
+    expect(connection).toHaveBeenLastCalledWith('reconnecting');
+    expect(sockets[2]!.url.searchParams.get('visit')).toBe(visit);
+    sockets[2]!.emit('open');
+    expect(connection).toHaveBeenLastCalledWith('reconnecting');
+    expect(sockets[2]!.sent.map((message) => JSON.parse(message).clientOperationId)).toEqual(['chat-1', 'stroke-1']);
+    const operation = { kind: 'stroke', id: 'server-stroke', sequence: 9, clientOperationId: 'stroke-1', color: 'red', width: 5, points: stroke.points };
+    const board = { ...createEmptyWhiteboard(), sequence: 9, operations: [operation] };
+    sockets[2]!.emit('message', JSON.stringify({ type: 'snapshot', board }));
+    expect(connection).toHaveBeenLastCalledWith('connected');
+    expect(whiteboard).toHaveBeenLastCalledWith({ type: 'snapshot', board });
+    expect(internals.whiteboardPending.has('stroke-1')).toBe(false);
+    expect(internals.whiteboardPending.has('chat-1')).toBe(true);
+    sockets[2]!.emit('message', JSON.stringify({ type: 'operation', operation: { kind: 'text', id: 'server-chat', sequence: 10, clientOperationId: 'chat-1', displayName: 'JP', text: 'hello', color: 'black', rowY: 68, rowSpan: 1 } }));
+    expect(internals.whiteboardPending.size).toBe(0);
     adapter.destroy();
   });
   test('preserves ABM command envelopes while unwrapping legacy move commands', () => {

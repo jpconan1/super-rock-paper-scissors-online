@@ -41,10 +41,17 @@ export function mountWhiteboard(options: {
   let frame: BoilFrame = 0;
   let enabled = true;
   let receivedInitialSnapshot = false;
+  let initialScrollPending = false;
   let scrollFrame: number | undefined;
   const cleanups: Array<() => void> = [];
 
   const scrollToBottom = () => { scroll.scrollTop = scroll.scrollHeight; };
+  const initialScrollObserver = new ResizeObserver(() => {
+    if (!initialScrollPending || scroll.clientHeight === 0 || drawCanvas.clientHeight === 0) return;
+    scrollToBottom();
+    initialScrollPending = false;
+    initialScrollObserver.disconnect();
+  });
 
   const redraw = () => {
     const board = model.snapshot();
@@ -113,7 +120,12 @@ export function mountWhiteboard(options: {
     receive(message) {
       const nearBottom = scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 45;
       const initialSnapshot = message.type === 'snapshot' && !receivedInitialSnapshot;
-      if (message.type === 'snapshot') receivedInitialSnapshot = true;
+      if (initialSnapshot) {
+        receivedInitialSnapshot = true;
+        initialScrollPending = true;
+        initialScrollObserver.observe(scroll);
+        initialScrollObserver.observe(drawCanvas);
+      }
       if (message.type === 'snapshot' || message.type === 'reset') model.setSnapshot(message.board);
       else if (message.type === 'operation') model.append(message.operation);
       else if (message.type === 'prune') model.prune(message.throughSequence);
@@ -131,16 +143,16 @@ export function mountWhiteboard(options: {
       redraw();
       if ((initialSnapshot || nearBottom) && message.type !== 'error') {
         if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame);
-        scrollToBottom();
         scrollFrame = requestAnimationFrame(() => {
           scrollFrame = undefined;
-          scrollToBottom();
+          if (scroll.clientHeight > 0 && drawCanvas.clientHeight > 0) scrollToBottom();
         });
       }
     },
     setEnabled(next) { enabled = next; },
     destroy() {
       if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame);
+      initialScrollObserver.disconnect();
       for (const cleanup of cleanups) cleanup();
       scroll.remove();
     },

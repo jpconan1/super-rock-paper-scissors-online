@@ -41,6 +41,15 @@ describe('ABM sound mapping', () => {
     expect(sound.playCatalogSound).toHaveBeenCalledWith('abm-lucky');
   });
 
+  it.each(['move-reveal', 'move-timeout'] as const)('plays Lucky sound when Fireborne survives an attack in %s', (type) => {
+    const event: TimedSemanticEvent = {
+      id: `fireborne-${type}`, type, startsAt: 100, endsAt: 900,
+      payload: { moves: { p1: 'mana', p2: 'attack' }, fireborneProcPlayer: 'p1' },
+    };
+    playAbmEventSounds([event], 150, new Set());
+    expect(sound.playCatalogSound).toHaveBeenCalledWith('abm-lucky');
+  });
+
   it.each(['move-reveal', 'move-timeout'] as const)('plays charge for an Advantaged %s proc', (type) => {
     const event: TimedSemanticEvent = {
       id: `advantaged-${type}`, type, startsAt: 100, endsAt: 900,
