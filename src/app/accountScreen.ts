@@ -9,7 +9,7 @@ import { generateRandomName } from '../title/randomName';
 import type { AccountState } from './shellSessionAdapter';
 import { normalizePlayerDisplayName } from '../protocol/playerProfile';
 import type { AlertButtonSheets, AlertSystem, ResponsiveAlertGeometry } from '../ui/alertSystem';
-import { isCompleteEmailCode, normalizeEmailCode } from '../auth/emailCodeChallenge';
+import { showCodeAlert } from '../auth/codeAlert';
 import { showPasswordAlert } from '../auth/passwordAlert';
 import type { PlayerAccountType } from '../protocol/playerId';
 import { showGuestLogoutDialog } from '../title/guestLogoutDialog';
@@ -55,53 +55,45 @@ export function getAccountProviderVisibility(accountType: PlayerAccountType) {
 }
 
 export function showDeleteAccountAlert(alerts: AlertSystem, clock: BoilClock,
-  onRequestCode: () => Promise<void>, onDelete: (code?: string) => Promise<void>): void {
+  onRequestCode: () => Promise<void>, onDelete: (code?: string) => Promise<void>,
+  accountType: PlayerAccountType = 'email', onConfirmGoogle: () => Promise<void> = async () => {}, email = ''): void {
   const content = document.createElement('section'); content.className = 'delete-account-dialog';
   const warning = document.createElement('p');
   warning.textContent = 'Your login, profile, and progression will be removed. Completed matches will keep an anonymized player record.';
   const instruction = document.createElement('p');
-  instruction.textContent = "We'll send you a code to delete your account.";
-  const entry = createTextEntry({
-    label: 'Six-digit deletion code',
-    placeholder: '123 456', autocomplete: 'one-time-code', maxLength: 7,
-    sheet: '/interactive-elements/text-entry/text-frame-sheet.webp', clock,
-    validate: isCompleteEmailCode,
-  });
-  entry.element.hidden = true; entry.input.inputMode = 'numeric'; entry.input.disabled = true;
-  entry.element.classList.add('delete-account-dialog__entry');
-  content.append(warning, instruction, entry.element);
-  let codeSent = false;
+  instruction.textContent = accountType === 'google' ? 'Confirm with Google to delete your account.' : "We'll send you a code to delete your account.";
+  content.append(warning, instruction);
+  let googleConfirmed = false;
   let handle: ReturnType<AlertSystem['show']>;
   handle = alerts.show({
     ariaLabel: 'Delete account confirmation', title: 'Delete Account?', geometry: DELETE_ALERT_GEOMETRY, content, className: 'delete-account-alert',
     dismissible: true, dismissValue: false,
-    actions: [
-      { label: 'Continue', value: true, sheets: CONFIRM_SHEETS, onActivate: async () => {
-        if (!codeSent) {
-          await onRequestCode();
-          codeSent = true;
-          entry.element.hidden = false;
-          entry.input.disabled = false;
+    actions: [{ label: 'Continue', value: true, sheets: CONFIRM_SHEETS, onActivate: async () => {
+      if (accountType === 'google') {
+        if (!googleConfirmed) {
+          await onConfirmGoogle();
+          googleConfirmed = true;
+          await handle.setActionSheets(0, DELETE_ACCOUNT_BUTTON_SHEETS);
           handle.setActionLabel(0, 'Delete Account');
-          handle.setActionDisabled(0, true);
-          instruction.textContent = 'Enter the code sent to your account email.';
-          queueMicrotask(() => entry.focus());
+          instruction.textContent = 'Google account confirmed. Click Delete Account to finish.';
           return false;
         }
-        if (!entry.validate()) { entry.focus(); return false; }
-        entry.input.disabled = true;
-        try { await onDelete(normalizeEmailCode(entry.value())); }
-        catch (reason) { entry.input.disabled = false; throw reason; }
-      } },
-    ],
+        await onDelete(); return;
+      }
+      await onRequestCode();
+      void showCodeAlert(alerts, clock, email, {
+        verify: async (code) => { await onDelete(code); handle.close(true); },
+        resend: onRequestCode,
+      });
+      return false;
+    } }],
   });
-  entry.input.addEventListener('input', () => handle.setActionDisabled(0, !codeSent || !isCompleteEmailCode(entry.value())));
-  void handle.result.finally(() => entry.destroy());
 }
 
 export function mountAccountScreen(container: HTMLElement, clock: BoilClock, alerts: AlertSystem, initial: AccountState,
   onChangeName: (name: string) => Promise<AccountState>, onClaim: () => void, onLogout: () => void,
   onBack: () => void, onRequestDeleteCode: () => Promise<void>, onDelete: (code?: string) => Promise<void>,
+  onConfirmGoogleDeletion: () => Promise<void>,
   onRequestPasswordCode: (email: string) => Promise<void> = async () => {},
   onUpdatePassword: (email: string, code: string, password?: string, remove?: boolean) => Promise<void> = async () => {},
   onSignUp: (displayName: string) => Promise<AccountState | undefined> = async () => undefined): AccountScreenMount {
@@ -170,7 +162,7 @@ export function mountAccountScreen(container: HTMLElement, clock: BoilClock, ale
     deleteAccount.element.hidden = guest;
   };
   const deleteAccount = button('Delete Account', '/account/delete-account-button', () => {
-    showDeleteAccountAlert(alerts, clock, onRequestDeleteCode, onDelete);
+    showDeleteAccountAlert(alerts, clock, onRequestDeleteCode, onDelete, account.accountType, onConfirmGoogleDeletion, account.email);
   }, 'account-screen__delete');
   const decoration = (id: string, className: string) => createBoilingSprite({ src: layout.elements.find((item) => item.id === id)!.assets!.src!, clock, className, alt: '' });
   const openCurtain = decoration('curtain-open', 'account-screen__curtain-open');

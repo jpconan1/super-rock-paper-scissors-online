@@ -1,3 +1,5 @@
+import { randomId } from '../core/randomId';
+
 const BROWSER_KEY = 'super-abm-browser-id';
 let endpoint = '';
 let visitId = '';
@@ -5,9 +7,9 @@ let browserId = '';
 
 export function startAnalytics(baseUrl: string): void {
   endpoint = baseUrl;
-  browserId = localStorage.getItem(BROWSER_KEY) ?? crypto.randomUUID();
+  browserId = localStorage.getItem(BROWSER_KEY) ?? randomId();
   localStorage.setItem(BROWSER_KEY, browserId);
-  visitId = crypto.randomUUID();
+  visitId = randomId();
   void send('title-view', `title:${visitId}`);
 }
 

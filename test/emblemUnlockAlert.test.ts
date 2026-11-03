@@ -23,7 +23,7 @@ describe('emblem unlock alert', () => {
       title: 'You Unlocked an Emblem!', className: 'emblem-unlock-alert', dismissible: true,
     }));
     expect(append).toHaveBeenCalledWith({ mission });
-    expect(createRow).toHaveBeenCalledWith(mission, expect.anything(), 'You earned:');
+    expect(createRow).toHaveBeenCalledWith(mission, expect.anything(), 'You earned:', true);
     expect(play).toHaveBeenCalledTimes(1);
     expect(play).toHaveBeenCalledWith('emblem-unlock');
     close(); await finished;
@@ -40,5 +40,18 @@ describe('emblem unlock alert', () => {
     await showEmblemUnlockAlert({ show } as never, {} as never, { id: 'finish-tutorial' } as never);
     const tutorialContent = show.mock.calls[1]![0].content as { children: unknown[] };
     expect(tutorialContent.children).toHaveLength(1);
+  });
+
+  test('offers Neat and Change your Emblem actions', async () => {
+    vi.stubGlobal('document', { createElement: () => ({ className: '', append: vi.fn() }) });
+    const onChangeEmblem = vi.fn();
+    const show = vi.fn((_options: { actions: Array<{ label: string; sheets: { up: string }; onActivate?: () => void }> }) => ({ result: Promise.resolve() }));
+    await showEmblemUnlockAlert({ show } as never, {} as never, { id: 'finish-tutorial' } as never, onChangeEmblem);
+    const actions = show.mock.calls[0]![0].actions;
+    expect(actions.map((action: { label: string }) => action.label)).toEqual(['Neat', 'Change your Emblem']);
+    expect(actions[0]!.sheets.up).toBe('/interactive-elements/neat-button-up-sheet.webp');
+    expect(actions[1]!.sheets.up).toBe('/interactive-elements/emblem-button-up-sheet.webp');
+    actions[1]!.onActivate?.();
+    expect(onChangeEmblem).toHaveBeenCalledOnce();
   });
 });

@@ -1,4 +1,5 @@
 import './editor.css';
+import { assetUrl } from '../assets/assetUrl';
 import { BoilClock } from '../animation/boilClock';
 import { createProgressAward } from '../core/progression';
 import { ABM_TUTORIAL_SLIDES } from '../app/tutorialSlideshow';
@@ -145,7 +146,7 @@ function makeNode(config: LayoutElement): HTMLElement {
   const className = `abm-editor__node abm-editor__node--${config.type}${config.className ? ` ${config.className}` : ''}`;
   if (screen === 'lobby' && config.id === 'whiteboard' && config.assets?.src) {
     const wrapper = document.createElement('div'); wrapper.className = `${className} abm-editor__whiteboard-preview`;
-    const image = document.createElement('img'); image.src = config.assets.src; image.alt = ''; image.draggable = false; wrapper.append(image);
+    const image = document.createElement('img'); image.src = assetUrl(config.assets.src); image.alt = ''; image.draggable = false; wrapper.append(image);
     cleanups.push(() => wrapper.remove()); return wrapper;
   }
   if (screen === 'lobby' && config.id === 'player-name') {
@@ -173,7 +174,7 @@ function makeNode(config: LayoutElement): HTMLElement {
     cleanups.push(() => progress.destroy()); return progress.element;
   }
   if (config.id === 'card-flip' && config.assets?.src) {
-    const image = document.createElement('img'); image.className = className; image.src = config.assets.src; image.alt = config.alt ?? '';
+    const image = document.createElement('img'); image.className = className; image.src = assetUrl(config.assets.src); image.alt = config.alt ?? '';
     image.draggable = false; cleanups.push(() => image.remove()); return image;
   }
   if ((config.type === 'sprite' || config.type === 'decoration') && config.assets?.src) {

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { convertV4MiniflareOptions, Miniflare } from 'miniflare';
 import { accountDeletionChallengeStatus, accountDeletionCodeHash, consumeAccountDeletionChallenge, purgeAccountData } from '../worker/accountDeletion';
 import { consumeEmailChallenge, emailChallengeHash, verifySignupChallengeForLink } from '../worker/emailAccounts';
@@ -19,11 +19,13 @@ import migration13 from '../worker/migrations/0013_email_accounts.sql?raw';
 import migration14 from '../worker/migrations/0014_emblems.sql?raw';
 import migration15 from '../worker/migrations/0015_legacy_emblem_entitlements.sql?raw';
 import migration16 from '../worker/migrations/0016_beta_og_protected_accounts.sql?raw';
+import migration17 from '../worker/migrations/0017_google_deletion_confirmation.sql?raw';
+import { beginGoogleDeletion, consumeGoogleDeletion, finishGoogleDeletion } from '../worker/googleDeletion';
 import { completeEmblemMission, grantPlayerEmblem, hasCustomEmblemAccess, ownedPlayerEmblems, prestigePlayer, revokePlayerEmblem } from '../worker/playerEmblems';
 import { MAX_PROGRESS_UNITS } from '../src/core/progression';
 import { finalizeMatch } from '../worker/matchPersistence';
 
-const migrations = [migration1, migration2, migration3, migration4, migration5, migration6, migration7, migration8, migration9, migration10, migration11, migration12, migration13, migration14, migration15, migration16];
+const migrations = [migration1, migration2, migration3, migration4, migration5, migration6, migration7, migration8, migration9, migration10, migration11, migration12, migration13, migration14, migration15, migration16, migration17];
 let miniflare: Miniflare;
 let db: Awaited<ReturnType<Miniflare['getD1Database']>>;
 
@@ -94,9 +96,58 @@ beforeEach(async () => {
 
 afterEach(async () => { await miniflare.dispose(); });
 
+test('Google deletion needs a matching fresh confirmation in the same session', async () => {
+  const now = Date.now();
+  await db.batch([
+    db.prepare(`INSERT INTO user (id, name, email, createdAt, updatedAt) VALUES ('google-user', 'Google', 'g@example.com', ?, ?)`)
+      .bind(now, now),
+    db.prepare(`INSERT INTO account (id, accountId, providerId, userId, createdAt, updatedAt)
+      VALUES ('google-account', 'google-subject', 'google', 'google-user', ?, ?)`).bind(now, now),
+    db.prepare(`INSERT INTO session (id, expiresAt, token, createdAt, updatedAt, userId)
+      VALUES ('google-session', ?, 'google-token', ?, ?, 'google-user')`).bind(now + 60_000, now, now),
+  ]);
+  const env = { DB: db, BETTER_AUTH_URL: 'https://game.example', GOOGLE_CLIENT_ID: 'client', GOOGLE_CLIENT_SECRET: 'secret', BETTER_AUTH_SECRET: 'test' };
+  const session = { user: { id: 'google-user' }, session: { id: 'google-session' } };
+  const otherSession = { user: { id: 'google-user' }, session: { id: 'other-session' } };
+  const nonce = 'abcde-12345-abcde-12345';
+  const authorization = new URL(await beginGoogleDeletion(env, session, nonce, 'https://game.example'));
+  const callback = new URL('https://game.example/account-deletion/google/callback');
+  callback.searchParams.set('state', authorization.searchParams.get('state')!);
+  callback.searchParams.set('code', 'test-code');
+  expect(await db.prepare('SELECT state FROM google_deletion_confirmations WHERE state = ?')
+    .bind(callback.searchParams.get('state')).first()).not.toBeNull();
+  expect(await consumeGoogleDeletion(env, session)).toBe(false);
+  const retry = new URL(await beginGoogleDeletion(env, session, nonce, 'https://game.example'));
+  callback.searchParams.set('state', retry.searchParams.get('state')!);
+  const originalFetch = globalThis.fetch;
+  const fetchMock = vi.fn(async (input: string | URL | Request) => String(input).includes('/token')
+    ? new Response(JSON.stringify({ access_token: 'access' }))
+    : new Response(JSON.stringify({ sub: 'wrong-subject' })));
+  vi.stubGlobal('fetch', fetchMock);
+  try {
+    expect((await finishGoogleDeletion(env, callback)).headers.get('location')).toContain('result=error');
+    expect(await consumeGoogleDeletion(env, session)).toBe(false);
+    const next = new URL(await beginGoogleDeletion(env, session, nonce, 'https://game.example'));
+    callback.searchParams.set('state', next.searchParams.get('state')!);
+    fetchMock.mockImplementation(async (input: string | URL | Request) => String(input).includes('/token')
+      ? new Response(JSON.stringify({ access_token: 'access' }))
+      : new Response(JSON.stringify({ sub: 'google-subject' })));
+    expect((await finishGoogleDeletion(env, callback)).headers.get('location')).toContain('result=success');
+    expect(await consumeGoogleDeletion(env, otherSession)).toBe(false);
+    expect(await consumeGoogleDeletion(env, session)).toBe(true);
+    expect(await consumeGoogleDeletion(env, session)).toBe(false);
+    const expired = new URL(await beginGoogleDeletion(env, session, nonce, 'https://game.example'));
+    await db.prepare('UPDATE google_deletion_confirmations SET expires_at = ? WHERE state = ?')
+      .bind(Date.now() - 1, expired.searchParams.get('state')).run();
+    callback.searchParams.set('state', expired.searchParams.get('state')!);
+    expect((await finishGoogleDeletion(env, callback)).headers.get('location')).toContain('result=error');
+    expect(await consumeGoogleDeletion(env, session)).toBe(false);
+  } finally { vi.stubGlobal('fetch', originalFetch); vi.unstubAllGlobals(); }
+});
+
 test('verified signup code stays available until Better Auth links the guest', async () => {
   const auth = createAuth({ DB: db, BETTER_AUTH_SECRET: 'test-secret', BETTER_AUTH_URL: 'http://localhost:8787',
-    GOOGLE_CLIENT_ID: 'unused', GOOGLE_CLIENT_SECRET: 'unused', DEV_AUTH_EMAIL_CODE: '123456' });
+    GOOGLE_CLIENT_ID: 'unused', GOOGLE_CLIENT_SECRET: 'unused', DEV_AUTH_EMAIL_CODE: 'ab12' });
   const guestResponse = await auth.handler(new Request('http://localhost:8787/api/auth/sign-in/anonymous', {
     method: 'POST', headers: { origin: 'http://localhost:8787' },
   }));
@@ -107,14 +158,14 @@ test('verified signup code stays available until Better Auth links the guest', a
   const now = Date.now();
   await db.prepare(`INSERT INTO players (player_id, display_name, created_at, updated_at, auth_user_id, account_type)
     VALUES ('guest-player', 'Guest', ?, ?, ?, 'guest')`).bind(now, now, guest.user.id).run();
-  const hash = await emailChallengeHash('test-secret', 'signup', guest.user.id, '123456');
+  const hash = await emailChallengeHash('test-secret', 'signup', guest.user.id, 'ab12');
   await db.prepare(`INSERT INTO email_auth_challenges
     (challenge_key, purpose, user_id, email, code_hash, context_json, expires_at, requested_at, last_sent_at)
     VALUES (?, 'signup', ?, 'new@example.com', ?, ?, ?, ?, ?)`)
     .bind(`signup:${guest.user.id}`, guest.user.id, hash,
       JSON.stringify({ available: true, displayName: 'New Player', termsVersion: 'v1', privacyVersion: 'v1', acceptedAt: now }), now + 600_000, now, now).run();
   expect(await verifySignupChallengeForLink(db, 'test-secret', `signup:${guest.user.id}`, guest.user.id,
-    'new@example.com', '123456', now)).not.toBeNull();
+    'new@example.com', 'ab12', now)).not.toBeNull();
   expect(await db.prepare('SELECT challenge_key FROM email_auth_challenges WHERE challenge_key = ?')
     .bind(`signup:${guest.user.id}`).first()).not.toBeNull();
   const signupResponse = await auth.handler(new Request('http://localhost:8787/api/auth/sign-up/email', {
@@ -244,12 +295,12 @@ describe('account deletion D1 lifecycle', () => {
     expect(await db.prepare("SELECT result_id FROM local_progress_awards WHERE player_id = 'player-a'").first()).toEqual({ result_id: 'award-user-a' });
   });
 
-  test('uses a keyed, user-bound hash instead of storing the six-digit code', async () => {
-    const first = await accountDeletionCodeHash('secret', 'user-a', '123456');
-    expect(first).not.toContain('123456');
+  test('uses a keyed, user-bound hash instead of storing the four-character code', async () => {
+    const first = await accountDeletionCodeHash('secret', 'user-a', 'ab12');
+    expect(first).not.toContain('ab12');
     expect(first).toMatch(/^[a-f0-9]{64}$/);
-    expect(await accountDeletionCodeHash('secret', 'user-a', '123456')).toBe(first);
-    expect(await accountDeletionCodeHash('secret', 'user-b', '123456')).not.toBe(first);
+    expect(await accountDeletionCodeHash('secret', 'user-a', 'ab12')).toBe(first);
+    expect(await accountDeletionCodeHash('secret', 'user-b', 'ab12')).not.toBe(first);
   });
 
   test('rejects missing, expired, exhausted, and replaced deletion codes', () => {
@@ -261,7 +312,7 @@ describe('account deletion D1 lifecycle', () => {
   });
 
   test('atomically exhausts a deletion code under parallel wrong guesses', async () => {
-    const hash = await accountDeletionCodeHash('secret', 'user-a', '123456');
+    const hash = await accountDeletionCodeHash('secret', 'user-a', 'ab12');
     await db.prepare(`INSERT INTO account_deletion_challenges
       (user_id, code_hash, expires_at, failed_attempts, requested_at, last_sent_at) VALUES ('user-a', ?, 999999, 0, 1, 1)`)
       .bind(hash).run();
@@ -271,17 +322,17 @@ describe('account deletion D1 lifecycle', () => {
 
     expect(guesses.every((valid) => !valid)).toBe(true);
     expect(await db.prepare("SELECT user_id FROM account_deletion_challenges WHERE user_id = 'user-a'").first()).toBeNull();
-    expect(await consumeAccountDeletionChallenge(db, 'secret', 'user-a', '123456', 10)).toBe(false);
+    expect(await consumeAccountDeletionChallenge(db, 'secret', 'user-a', 'ab12', 10)).toBe(false);
   });
 
   test('atomically consumes an email code only once under parallel verification', async () => {
-    const hash = await emailChallengeHash('secret', 'password', 'user-a', '123456');
+    const hash = await emailChallengeHash('secret', 'password', 'user-a', 'ab12');
     await db.prepare(`INSERT INTO email_auth_challenges
       (challenge_key, purpose, user_id, email, code_hash, context_json, expires_at, failed_attempts, requested_at, last_sent_at)
       VALUES ('password:user-a', 'password', 'user-a', 'a@example.com', ?, '{}', 999999, 0, 1, 1)`).bind(hash).run();
 
     const results = await Promise.all(Array.from({ length: 10 }, () =>
-      consumeEmailChallenge(db, 'secret', 'password:user-a', 'password', 'user-a', 'a@example.com', '123456', 10)));
+      consumeEmailChallenge(db, 'secret', 'password:user-a', 'password', 'user-a', 'a@example.com', 'ab12', 10)));
 
     expect(results.filter(Boolean)).toHaveLength(1);
     expect(await db.prepare("SELECT challenge_key FROM email_auth_challenges WHERE challenge_key = 'password:user-a'").first()).toBeNull();

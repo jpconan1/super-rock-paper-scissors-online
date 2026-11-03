@@ -1,4 +1,5 @@
 import type { BoilClock } from '../animation/boilClock';
+import { assetUrl } from '../assets/assetUrl';
 
 export const BOIL_FRAME_COUNT = 3;
 
@@ -88,6 +89,7 @@ export function createBoilingSprite(options: BoilingSpriteOptions): BoilingSprit
 
   let frame = 0;
   let frameCount = defaultFrameCount;
+  let currentSource: string | undefined;
   let clockInitialized = false;
   let artworkVisible = true;
   let sourceRevision = 0;
@@ -125,7 +127,7 @@ export function createBoilingSprite(options: BoilingSpriteOptions): BoilingSprit
       } catch (error) { reject(error); }
     };
     outlineImage.onerror = () => reject(new Error(`Could not load outline: ${outline.src}`));
-    outlineImage.src = outline.src;
+    outlineImage.src = assetUrl(outline.src);
   });
   }
   setOutline(options.outline);
@@ -160,7 +162,9 @@ export function createBoilingSprite(options: BoilingSpriteOptions): BoilingSprit
   }
 
   function setSource(src: string, nextFrameCount = BOIL_FRAME_COUNT): void {
+    if (currentSource === src && frameCount === nextFrameCount) return;
     const revision = ++sourceRevision;
+    currentSource = src;
     frameCount = nextFrameCount;
     frame = 0;
     const sourceReady = new Promise<void>((resolve, reject) => {
@@ -177,14 +181,18 @@ export function createBoilingSprite(options: BoilingSpriteOptions): BoilingSprit
           if (decoding) void decoding.catch(() => {}).finally(resolve);
           else resolve();
         } catch (error) {
+          currentSource = undefined;
           element.style.removeProperty('aspect-ratio');
           reject(error);
         }
       };
       image.onerror = () => {
-        if (revision === sourceRevision) reject(new Error(`Could not load sprite: ${src}`));
+        if (revision === sourceRevision) {
+          currentSource = undefined;
+          reject(new Error(`Could not load sprite: ${src}`));
+        }
       };
-      image.src = src;
+      image.src = assetUrl(src);
     });
     ready = Promise.all([sourceReady, outlineReady]).then(() => { drawFrame(); });
   }

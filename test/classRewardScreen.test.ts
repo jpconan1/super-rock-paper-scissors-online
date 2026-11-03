@@ -5,6 +5,7 @@ import {
   classFlipFrames,
   classUnlockFrames,
   createClassRewardFlow,
+  nextUnlockProgressCopy,
   playClassUnlockAnimation,
 } from '../src/app/classRewardScreen';
 import { createProgressAward } from '../src/core/progression';
@@ -20,6 +21,10 @@ describe('class reward flow', () => {
 
   test('omits the preview after the final class unlock', () => {
     expect(createClassRewardFlow(createProgressAward(199_500, 'win', { opponent: 'human' }))).toEqual({ unlockedClassIds: ['joe'] });
+  });
+
+  test('shows remaining progress toward the next unlock after the award', () => {
+    expect(nextUnlockProgressCopy(createProgressAward(9_000, 'win', { opponent: 'human' }))).toBe('10% left!');
   });
 
   test('plays seven ordered flip frames for the previewed class', () => {

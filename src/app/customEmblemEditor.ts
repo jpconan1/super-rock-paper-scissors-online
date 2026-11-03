@@ -1,4 +1,5 @@
 import type { BoilClock } from '../animation/boilClock';
+import { assetUrl } from '../assets/assetUrl';
 import { splitChromaOutlinePixels } from '../renderer/boilingSprite';
 import {
   CUSTOM_EMBLEM_FRAME_COUNT, CUSTOM_EMBLEM_HEIGHT, CUSTOM_EMBLEM_WIDTH, nextCustomEmblemBorder,
@@ -52,7 +53,7 @@ export function mountCustomEmblemEditor(options: {
   };
   const point = (event: PointerEvent): WhiteboardPoint => {
     const rect = canvas.getBoundingClientRect();
-    return { x: Math.max(0, Math.min(760, (event.clientX - rect.left) / rect.width * 760)), y: Math.max(0, Math.min(450, (event.clientY - rect.top) / rect.height * 450)) };
+    return { x: Math.round(Math.max(0, Math.min(760, (event.clientX - rect.left) / rect.width * 760))), y: Math.round(Math.max(0, Math.min(450, (event.clientY - rect.top) / rect.height * 450))) };
   };
   const preview = () => {
     drawOperations(canvas, documentState.operations, boilFrame);
@@ -108,7 +109,9 @@ export function mountCustomEmblemEditor(options: {
   void drawVisibleBorder(frameCanvas, documentState.borderNumber); render();
 
   return {
-    document: () => structuredClone(documentState),
+    document: () => ({ ...structuredClone(documentState), operations: documentState.operations.map((operation) => ({
+      ...operation, points: operation.points.map((point) => ({ x: Math.round(point.x), y: Math.round(point.y) })),
+    })) }),
     cycleFrame: () => {
       documentState.borderNumber = nextCustomEmblemBorder(documentState.borderNumber);
       void drawVisibleBorder(frameCanvas, documentState.borderNumber); options.changed();
@@ -121,7 +124,7 @@ export function mountCustomEmblemEditor(options: {
 }
 
 async function drawVisibleBorder(canvas: HTMLCanvasElement, borderNumber: number): Promise<void> {
-  const image = new Image(); image.src = `/emblems/borders/${borderNumber}.webp`; await image.decode();
+  const image = new Image(); image.src = assetUrl(`/emblems/borders/${borderNumber}.webp`); await image.decode();
   if (!canvas.isConnected) return;
   const context = canvas.getContext('2d')!;
   const work = document.createElement('canvas'); work.width = image.naturalWidth; work.height = image.naturalHeight;

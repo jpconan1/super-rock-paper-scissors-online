@@ -10,7 +10,7 @@ import {
 import type { MatchCommandPayload, MatchPlayer } from '../src/protocol/protocol';
 import {
   createEmptyWhiteboard, pruneWhiteboardOperationPrefix, shouldPruneWhiteboardOperations, WHITEBOARD_COLORS, WHITEBOARD_MAX_HEIGHT,
-  type WhiteboardClientMessage, type WhiteboardColor,
+  type WhiteboardClientMessage, type WhiteboardRequest, type WhiteboardColor,
   type WhiteboardOperation, type WhiteboardPoint, type WhiteboardServerMessage, type WhiteboardSnapshot,
 } from '../src/whiteboard/protocol';
 import { isLobbyPresence, type LobbyPlayer, type LobbyPresence, type LobbyServerMessage } from '../src/lobby/protocol';
@@ -35,6 +35,7 @@ import { EMBLEM_MISSIONS, type EmblemMissionStatus } from '../src/core/emblemMis
 import { createAuth, PRIVACY_VERSION, TERMS_VERSION, type AuthEnv } from './auth';
 import { createResendMailer, type AuthMailer } from './resendMailer';
 import { accountDeletionCodeHash, consumeAccountDeletionChallenge, purgeAccountData } from './accountDeletion';
+import { beginGoogleDeletion, consumeGoogleDeletion, finishGoogleDeletion } from './googleDeletion';
 import { adminRoute } from './admin';
 import { claimLegacyGoogleEmblem, completeEmblemMission, hasCustomEmblemAccess, isActiveOwnableEmblem, ownedPlayerEmblems, recordUnlockAllClassesFinish } from './playerEmblems';
 import { finalizeMatch } from './matchPersistence';
@@ -604,7 +605,14 @@ export class WhiteboardObject extends DurableObject<Env> {
     if (!attachment || !allowSocketMessage(socket, attachment, Date.now())) return;
     if (typeof raw !== 'string' || new TextEncoder().encode(raw).byteLength > 16_000) { this.error(socket, 'message-too-large', 'Message too large.'); return; }
     try {
-      const message = JSON.parse(raw) as WhiteboardClientMessage;
+      const message = JSON.parse(raw) as WhiteboardRequest;
+      if (message?.type === 'sync') {
+        if (!Number.isSafeInteger(message.sequence) || message.sequence < 0) throw new Error('Invalid whiteboard sequence.');
+        this.send(socket, message.sequence === this.board.sequence
+          ? { type: 'synced', sequence: this.board.sequence }
+          : { type: 'snapshot', board: this.board });
+        return;
+      }
       if (!message || !['chat', 'status', 'stroke', 'erase'].includes(message.type) || !validClientId(message.clientOperationId)) throw new Error('Invalid whiteboard message.');
       const duplicate = this.board.operations.find((operation) => operation.clientOperationId === message.clientOperationId);
       if (duplicate) { this.send(socket, { type: 'operation', operation: duplicate }); return; }
@@ -827,7 +835,7 @@ async function accountTypeForSession(db: D1Database, userId: string, anonymous: 
 }
 
 function emailSignupEnabled(env: Env): boolean {
-  return Boolean(env.RESEND_API_KEY) || (env.BETTER_AUTH_URL.startsWith('http://localhost') && /^\d{6}$/.test(env.DEV_AUTH_EMAIL_CODE ?? ''));
+  return Boolean(env.RESEND_API_KEY) || (env.BETTER_AUTH_URL.startsWith('http://localhost') && /^[a-z0-9]{4}$/.test(env.DEV_AUTH_EMAIL_CODE ?? ''));
 }
 
 async function rateKey(prefix: string, value: string): Promise<string> {
@@ -855,14 +863,14 @@ async function anonymousSignupSession(request: Request, env: Env) {
 
 function emailMailer(env: Env): AuthMailer | undefined {
   if (env.RESEND_API_KEY) return createResendMailer(env.RESEND_API_KEY);
-  if (env.BETTER_AUTH_URL.startsWith('http://localhost') && /^\d{6}$/.test(env.DEV_AUTH_EMAIL_CODE ?? '')) {
+  if (env.BETTER_AUTH_URL.startsWith('http://localhost') && /^[a-z0-9]{4}$/.test(env.DEV_AUTH_EMAIL_CODE ?? '')) {
     return { sendSignupCode: async () => {}, sendSignInCode: async () => {}, sendPasswordCode: async () => {}, sendDeletionCode: async () => {} };
   }
   return undefined;
 }
 
 function challengeCode(env: Env): string {
-  return env.BETTER_AUTH_URL.startsWith('http://localhost') && /^\d{6}$/.test(env.DEV_AUTH_EMAIL_CODE ?? '')
+  return env.BETTER_AUTH_URL.startsWith('http://localhost') && /^[a-z0-9]{4}$/.test(env.DEV_AUTH_EMAIL_CODE ?? '')
     ? env.DEV_AUTH_EMAIL_CODE! : generateEmailCode();
 }
 
@@ -943,8 +951,8 @@ async function verifyEmailSignup(request: Request, env: Env, url: URL, clientKey
   try {
     const body = await readJsonBody<{ email?: unknown; code?: unknown; password?: unknown }>(request, 4_000);
     const email = normalizeAuthEmail(body.email);
-    const code = typeof body.code === 'string' ? body.code.replace(/\s/g, '') : '';
-    if (!email || !/^\d{6}$/.test(code)) return json({ error: 'Enter the six-digit code.' }, 400);
+    const code = typeof body.code === 'string' ? body.code.replace(/\s/g, '').toLowerCase() : '';
+    if (!email || !/^[a-z0-9]{4}$/.test(code)) return json({ error: 'Enter the four-character code.' }, 400);
     if (body.password !== undefined && body.password !== '' && !validEmailPassword(body.password)) return json({ error: 'Password must be 8-128 characters.' }, 400);
     const current = await createAuth(env).api.getSession({ headers: request.headers });
     if (current && !(current.user as { isAnonymous?: boolean }).isAnonymous && current.user.email.toLowerCase() === email) {
@@ -1033,8 +1041,8 @@ async function requestEmailLogin(request: Request, env: Env, clientKey: string):
 async function verifyEmailLogin(request: Request, env: Env, url: URL, clientKey: string): Promise<Response> {
   try {
     const body = await readJsonBody<{ email?: unknown; code?: unknown }>(request, 1_000);
-    const email = normalizeAuthEmail(body.email); const code = typeof body.code === 'string' ? body.code.replace(/\s/g, '') : '';
-    if (!email || !/^\d{6}$/.test(code)) return json({ error: 'Code invalid or expired.' }, 400);
+    const email = normalizeAuthEmail(body.email); const code = typeof body.code === 'string' ? body.code.replace(/\s/g, '').toLowerCase() : '';
+    if (!email || !/^[a-z0-9]{4}$/.test(code)) return json({ error: 'Code invalid or expired.' }, 400);
     const ipKey = await rateKey('login-verify-ip', clientKey);
     if (!await allowed(env.SIGNUP_VERIFY_RATE, ipKey) || !await useSignupRateLimit(env.DB, ipKey, 20, Date.now())) return rateLimited(15 * 60);
     const player = await env.DB.prepare(`SELECT u.id FROM user u JOIN players p ON p.auth_user_id = u.id
@@ -1076,8 +1084,8 @@ async function requestPasswordCode(request: Request, env: Env, clientKey: string
 async function updateEmailPassword(request: Request, env: Env, clientKey: string): Promise<Response> {
   try {
     const body = await readJsonBody<{ email?: unknown; code?: unknown; password?: unknown; remove?: unknown }>(request, 3_000);
-    const email = normalizeAuthEmail(body.email); const code = typeof body.code === 'string' ? body.code.replace(/\s/g, '') : '';
-    if (!email || !/^\d{6}$/.test(code)) return json({ error: 'Code invalid or expired.' }, 400);
+    const email = normalizeAuthEmail(body.email); const code = typeof body.code === 'string' ? body.code.replace(/\s/g, '').toLowerCase() : '';
+    if (!email || !/^[a-z0-9]{4}$/.test(code)) return json({ error: 'Code invalid or expired.' }, 400);
     const ipKey = await rateKey('password-verify-ip', clientKey);
     if (!await allowed(env.SIGNUP_VERIFY_RATE, ipKey) || !await useSignupRateLimit(env.DB, ipKey, 20, Date.now())) return rateLimited(15 * 60);
     if (body.remove !== true && !validEmailPassword(body.password)) return json({ error: 'Password must be 8-128 characters.' }, 400);
@@ -1106,6 +1114,7 @@ async function updateEmailPassword(request: Request, env: Env, clientKey: string
 
 interface DeletionSession {
   user: { id: string; email: string; isAnonymous?: boolean };
+  session: { id: string };
 }
 
 async function deletionSession(request: Request, env: Env): Promise<DeletionSession | null> {
@@ -1114,21 +1123,22 @@ async function deletionSession(request: Request, env: Env): Promise<DeletionSess
 
 function deletionMailer(env: Env): AuthMailer | undefined {
   if (env.RESEND_API_KEY) return createResendMailer(env.RESEND_API_KEY);
-  if (env.BETTER_AUTH_URL.startsWith('http://localhost') && /^\d{6}$/.test(env.DEV_AUTH_EMAIL_CODE ?? '')) {
+  if (env.BETTER_AUTH_URL.startsWith('http://localhost') && /^[a-z0-9]{4}$/.test(env.DEV_AUTH_EMAIL_CODE ?? '')) {
     return { sendSignupCode: async () => {}, sendSignInCode: async () => {}, sendPasswordCode: async () => {}, sendDeletionCode: async () => {} };
   }
   return undefined;
 }
 
-function generateSixDigitCode(env: Env): string {
-  if (env.BETTER_AUTH_URL.startsWith('http://localhost') && /^\d{6}$/.test(env.DEV_AUTH_EMAIL_CODE ?? '')) return env.DEV_AUTH_EMAIL_CODE!;
-  return String(crypto.getRandomValues(new Uint32Array(1))[0]! % 1_000_000).padStart(6, '0');
+function generateDeletionCode(env: Env): string {
+  if (env.BETTER_AUTH_URL.startsWith('http://localhost') && /^[a-z0-9]{4}$/.test(env.DEV_AUTH_EMAIL_CODE ?? '')) return env.DEV_AUTH_EMAIL_CODE!;
+  return generateEmailCode();
 }
 
 async function requestAccountDeletion(request: Request, env: Env, clientKey: string): Promise<Response> {
   const session = await deletionSession(request, env);
   if (!session) return json({ error: 'Authentication required.' }, 401);
   if (session.user.isAnonymous) return json({ error: 'Guest accounts do not use email verification.' }, 400);
+  if (await accountTypeForSession(env.DB, session.user.id, false) !== 'email') return json({ error: 'Use Google sign-in to confirm deletion.' }, 400);
   const mailer = deletionMailer(env);
   if (!mailer) return json({ error: 'Account deletion email is unavailable.' }, 503);
   const now = Date.now();
@@ -1143,7 +1153,7 @@ async function requestAccountDeletion(request: Request, env: Env, clientKey: str
     useSignupRateLimit(env.DB, userKey, 3, now), useSignupRateLimit(env.DB, emailKey, 3, now), useSignupRateLimit(env.DB, ipKey, 10, now),
   ]);
   if (!userAllowed || !emailAllowed || !ipAllowed) return rateLimited(15 * 60);
-  const code = generateSixDigitCode(env);
+  const code = generateDeletionCode(env);
   const codeHash = await accountDeletionCodeHash(env.BETTER_AUTH_SECRET, session.user.id, code);
   await env.DB.prepare(`INSERT INTO account_deletion_challenges
     (user_id, code_hash, expires_at, failed_attempts, requested_at, last_sent_at) VALUES (?, ?, ?, 0, ?, ?)
@@ -1163,14 +1173,19 @@ async function deleteAccount(request: Request, env: Env): Promise<Response> {
   const session = await deletionSession(request, env);
   if (!session) return json({ error: 'Authentication required.' }, 401);
   if (!session.user.isAnonymous) {
-    let body: { code?: unknown };
-    try { body = await readJsonBody<{ code?: unknown }>(request, 1_000); }
-    catch (error) { return error instanceof RequestBodyError ? json({ error: error.message }, error.status) : json({ error: 'Invalid request.' }, 400); }
-    const code = typeof body.code === 'string' ? body.code.replace(/\s/g, '') : '';
-    if (!/^\d{6}$/.test(code)) return json({ error: 'Enter the six-digit code.' }, 400);
-    const valid = await consumeAccountDeletionChallenge(env.DB, env.BETTER_AUTH_SECRET, session.user.id, code,
-      Date.now(), ACCOUNT_DELETION_MAX_ATTEMPTS);
-    if (!valid) return json({ error: 'Code invalid or expired.' }, 400);
+    const accountType = await accountTypeForSession(env.DB, session.user.id, false);
+    if (accountType === 'google') {
+      if (!await consumeGoogleDeletion(env, session)) return json({ error: 'Confirm with Google before deleting.' }, 400);
+    } else if (accountType === 'email') {
+      let body: { code?: unknown };
+      try { body = await readJsonBody<{ code?: unknown }>(request, 1_000); }
+      catch (error) { return error instanceof RequestBodyError ? json({ error: error.message }, error.status) : json({ error: 'Invalid request.' }, 400); }
+      const code = typeof body.code === 'string' ? body.code.replace(/\s/g, '').toLowerCase() : '';
+      if (!/^[a-z0-9]{4}$/.test(code)) return json({ error: 'Enter the four-character code.' }, 400);
+      const valid = await consumeAccountDeletionChallenge(env.DB, env.BETTER_AUTH_SECRET, session.user.id, code,
+        Date.now(), ACCOUNT_DELETION_MAX_ATTEMPTS);
+      if (!valid) return json({ error: 'Code invalid or expired.' }, 400);
+    } else return json({ error: 'Unsupported account type.' }, 400);
   }
   await purgeAccountData(env.DB, session.user.id, session.user.email);
   return json({ success: true });
@@ -1193,6 +1208,7 @@ export default {
       env.DB.prepare('DELETE FROM verification WHERE expiresAt <= ?').bind(now),
       env.DB.prepare('DELETE FROM email_signup_rate_limits WHERE window_started_at <= ?').bind(now - EMAIL_RATE_WINDOW_MS),
       env.DB.prepare('DELETE FROM account_deletion_challenges WHERE expires_at <= ?').bind(now),
+      env.DB.prepare('DELETE FROM google_deletion_confirmations WHERE expires_at <= ?').bind(now),
       env.DB.prepare('DELETE FROM email_signup_pending WHERE anonymous_user_id NOT IN (SELECT id FROM user)'),
       env.DB.prepare(`INSERT INTO analytics_daily (day, event_type, event_count)
         SELECT substr(datetime(occurred_at / 1000, 'unixepoch'), 1, 10), event_type, COUNT(*) FROM analytics_events
@@ -1221,6 +1237,15 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
     }
     if (url.pathname === '/analytics/events' && request.method === 'POST') return ingestAnalytics(request, env);
     if (url.pathname === '/account-deletion/request' && request.method === 'POST') return requestAccountDeletion(request, env, clientKey);
+    if (url.pathname === '/account-deletion/google/start' && request.method === 'POST') {
+      const session = await deletionSession(request, env);
+      if (!session) return json({ error: 'Authentication required.' }, 401);
+      if (await accountTypeForSession(env.DB, session.user.id, false) !== 'google') return json({ error: 'Google account required.' }, 400);
+      const body: { nonce?: unknown } = await readJsonBody<{ nonce?: unknown }>(request, 1_000).catch(() => ({}));
+      if (typeof body.nonce !== 'string' || !/^[a-zA-Z0-9-]{16,80}$/.test(body.nonce)) return json({ error: 'Invalid confirmation request.' }, 400);
+      return json({ url: await beginGoogleDeletion(env, session, body.nonce, request.headers.get('Origin') ?? url.origin) });
+    }
+    if (url.pathname === '/account-deletion/google/callback' && request.method === 'GET') return finishGoogleDeletion(env, url);
     if (url.pathname === '/account-deletion' && request.method === 'DELETE') return deleteAccount(request, env);
     if (url.pathname === '/email-signup/request' && request.method === 'POST') return requestEmailSignup(request, env, clientKey);
     if (url.pathname === '/email-signup/verify' && request.method === 'POST') return verifyEmailSignup(request, env, url, clientKey);
@@ -1248,7 +1273,7 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
         .first<{ artwork_webp: ArrayBuffer | number[] }>();
       if (!row) return json({ error: 'Custom emblem not found.' }, 404);
       const artwork = row.artwork_webp instanceof ArrayBuffer ? new Uint8Array(row.artwork_webp) : Uint8Array.from(row.artwork_webp);
-      return new Response(artwork, { headers: { 'content-type': 'image/webp', 'content-length': String(artwork.byteLength), 'cache-control': 'public, max-age=31536000, immutable', 'x-content-type-options': 'nosniff' } });
+      return new Response(artwork, { headers: { 'content-type': pngDimensions(artwork.buffer.slice(artwork.byteOffset, artwork.byteOffset + artwork.byteLength)) ? 'image/png' : 'image/webp', 'content-length': String(artwork.byteLength), 'cache-control': 'public, max-age=31536000, immutable', 'x-content-type-options': 'nosniff' } });
     }
     if (url.pathname === '/auth-capabilities') return json({
       emailSignup: emailSignupEnabled(env), emailCodeLogin: emailSignupEnabled(env), password: emailSignupEnabled(env),
@@ -1412,16 +1437,17 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
         const form = await request.formData();
         const documentJson = form.get('document');
         const artwork = form.get('artwork');
-        if (typeof documentJson !== 'string' || new TextEncoder().encode(documentJson).byteLength > CUSTOM_EMBLEM_MAX_DOCUMENT_BYTES
-          || !(artwork instanceof File) || artwork.type !== 'image/webp' || artwork.size < 1 || artwork.size > CUSTOM_EMBLEM_MAX_IMAGE_BYTES) {
-          return json({ error: 'Invalid custom emblem payload.' }, 400);
-        }
+        if (typeof documentJson !== 'string') return json({ error: 'Drawing data is missing.' }, 400);
+        if (new TextEncoder().encode(documentJson).byteLength > CUSTOM_EMBLEM_MAX_DOCUMENT_BYTES) return json({ error: 'Drawing has too many points.' }, 400);
+        if (!(artwork instanceof File)) return json({ error: 'Emblem artwork is missing.' }, 400);
+        if (artwork.size < 1 || artwork.size > CUSTOM_EMBLEM_MAX_IMAGE_BYTES) return json({ error: 'Emblem artwork is too large or empty.' }, 400);
+        if (artwork.type !== 'image/webp' && artwork.type !== 'image/png') return json({ error: `Unsupported emblem image format: ${artwork.type || 'unknown'}.` }, 400);
         const document = JSON.parse(documentJson) as unknown;
         if (!isCustomEmblemDocument(document)) return json({ error: 'Invalid custom emblem document.' }, 400);
         const bytes = await artwork.arrayBuffer();
-        const dimensions = webpDimensions(bytes);
+        const dimensions = artwork.type === 'image/png' ? pngDimensions(bytes) : webpDimensions(bytes);
         if (!dimensions || dimensions.width !== CUSTOM_EMBLEM_WIDTH || dimensions.height !== CUSTOM_EMBLEM_HEIGHT * CUSTOM_EMBLEM_FRAME_COUNT) {
-          return json({ error: 'Artwork must be a 256 by 384 WebP sheet.' }, 400);
+          return json({ error: 'Artwork must be a 256 by 384 image sheet.' }, 400);
         }
         const previous = await env.DB.prepare('SELECT updated_at FROM custom_emblems WHERE player_id = ?').bind(player.playerId).first<{ updated_at: number }>();
         const version = Math.max(Date.now(), (previous?.updated_at ?? 0) + 1);
@@ -1591,6 +1617,15 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
       return url.pathname === '/lobby' ? env.LOBBY.getByName('global').fetch(request) : env.WHITEBOARD.getByName('global').fetch(request);
     }
     return json({ error: 'Not found.' }, 404);
+}
+
+function pngDimensions(buffer: ArrayBuffer): { width: number; height: number } | null {
+  const bytes = new Uint8Array(buffer);
+  if (bytes.length < 24 || bytes[0] !== 137 || bytes[1] !== 80 || bytes[2] !== 78 || bytes[3] !== 71
+    || bytes[4] !== 13 || bytes[5] !== 10 || bytes[6] !== 26 || bytes[7] !== 10
+    || bytes[12] !== 73 || bytes[13] !== 72 || bytes[14] !== 68 || bytes[15] !== 82) return null;
+  const view = new DataView(buffer);
+  return { width: view.getUint32(16), height: view.getUint32(20) };
 }
 
 function webpDimensions(buffer: ArrayBuffer): { width: number; height: number } | null {

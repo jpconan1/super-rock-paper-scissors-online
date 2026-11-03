@@ -46,7 +46,10 @@ export type WhiteboardClientMessage =
   | { type: 'stroke'; clientOperationId: string; color: WhiteboardColor; points: WhiteboardPoint[] }
   | { type: 'erase'; clientOperationId: string; points: WhiteboardPoint[] };
 
+export type WhiteboardRequest = WhiteboardClientMessage | { type: 'sync'; sequence: number };
+
 export type WhiteboardServerMessage =
+  | { type: 'synced'; sequence: number }
   | { type: 'snapshot'; board: WhiteboardSnapshot }
   | { type: 'operation'; operation: WhiteboardOperation }
   | { type: 'trim'; top: number }
@@ -78,5 +81,5 @@ export function shouldPruneWhiteboardOperations(
 
 export function isWhiteboardServerMessage(value: unknown): value is WhiteboardServerMessage {
   if (!value || typeof value !== 'object' || !('type' in value)) return false;
-  return ['snapshot', 'operation', 'trim', 'prune', 'reset', 'error'].includes(String(value.type));
+  return ['snapshot', 'operation', 'trim', 'prune', 'reset', 'error', 'synced'].includes(String(value.type));
 }

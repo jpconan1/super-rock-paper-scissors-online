@@ -1,4 +1,5 @@
 import type { BoilClock } from '../animation/boilClock';
+import { assetUrl } from '../assets/assetUrl';
 import { beats } from '../core/time';
 import { MAX_PROGRESS_UNITS, PROGRESS_UNITS_PER_LEVEL, progressGainForLevel, type ProgressAward } from '../core/progression';
 import { playCatalogSound } from '../audio/soundCatalog';
@@ -12,17 +13,24 @@ export const XP_BAR_DING_HOLD_MS = beats(1);
 export const PRESTIGE_CHALLENGE_COPY = 'Win with Joe to Prestige!';
 export const XP_COPY_BEATS = 2;
 export interface XpCopyStep { text: string; color: string }
+export function xpGainPercent(units: number): string {
+  return `${Number((units * 100 / PROGRESS_UNITS_PER_LEVEL).toFixed(2))}%`;
+}
 export function xpCopySteps(award: ProgressAward): readonly XpCopyStep[] {
   if (award.paused) return [{ text: 'Test Mode: +0 XP. Re-lock classes to earn XP!', color: '#821B92' }];
+  if (award.firstTutorialBonus) return [
+    { text: `First Time Tutorial Bonus: +${xpGainPercent(award.gainedProgressUnits)}`, color: '#181818' },
+    { text: `Total: +${xpGainPercent(award.gainedProgressUnits)}`, color: '#181818' },
+  ];
   const opponent = award.opponent ?? 'human';
   const base = award.baseProgressUnits ?? award.gainedProgressUnits;
   const bonus = award.bonusProgressUnits ?? 0;
   const versus = award.outcome === 'win' && award.baseProgressUnits !== undefined
     ? Math.min(base, progressGainForLevel(award.before.level, 'loss', opponent)) : base;
-  const steps: XpCopyStep[] = [{ text: `VS ${opponent === 'computer' ? 'Computer' : 'Player'}: +${versus.toLocaleString()}`, color: '#181818' }];
-  if (bonus > 0) steps.push({ text: `Class Bonus: +${bonus.toLocaleString()}`, color: '#2A5733' });
-  if (award.outcome === 'win' && base > versus) steps.push({ text: `Win Bonus: +${(base - versus).toLocaleString()}`, color: '#AC3235' });
-  steps.push({ text: `Total: +${award.gainedProgressUnits.toLocaleString()}`, color: '#181818' });
+  const steps: XpCopyStep[] = [{ text: `VS ${opponent === 'computer' ? 'Computer' : 'Player'}: +${xpGainPercent(versus)}`, color: '#181818' }];
+  if (bonus > 0) steps.push({ text: `Class Bonus: +${xpGainPercent(bonus)}`, color: '#2A5733' });
+  if (award.outcome === 'win' && base > versus) steps.push({ text: `Win Bonus: +${xpGainPercent(base - versus)}`, color: '#AC3235' });
+  steps.push({ text: `Total: +${xpGainPercent(award.gainedProgressUnits)}`, color: '#181818' });
   return steps;
 }
 const PRESTIGE_CHALLENGE_LINES = ['Win with Joe', 'to Prestige!'] as const;
@@ -56,7 +64,7 @@ export function xpAnimationSegment(start: number, end: number): { durationMs: nu
   };
 }
 
-export function createXpProgressBar(clock: BoilClock, award: ProgressAward, animate = true): XpProgressBar {
+export function createXpProgressBar(clock: BoilClock, award: ProgressAward, animate = true, staticCopy?: XpCopyStep): XpProgressBar {
   const element = document.createElement('div'); element.className = 'xp-progress-bar';
   element.dataset.copy = award.prestige ? 'prestige' : award.paused ? 'test-mode' : 'xp';
   const canvas = document.createElement('canvas'); canvas.width = WIDTH; canvas.height = HEIGHT; canvas.className = 'xp-progress-bar__canvas';
@@ -67,13 +75,13 @@ export function createXpProgressBar(clock: BoilClock, award: ProgressAward, anim
   const juice = createBoilingSprite({ src: '/interactive-elements/generic-buttons/button-juice-sheet.webp', clock, className: 'xp-progress-bar__juice', alt: '' });
   juice.element.hidden = true; element.append(canvas, count, juice.element);
   const empty = new Image(); const full = new Image();
-  empty.src = '/visual-elements/progress-bar-empty-sheet.webp'; full.src = '/visual-elements/progress-bar-full-sheet.webp';
+  empty.src = assetUrl('/visual-elements/progress-bar-empty-sheet.webp'); full.src = assetUrl('/visual-elements/progress-bar-full-sheet.webp');
   const prestige = award.prestige;
   let total = prestige ? 0 : award.before.totalProgressUnits; let showFull = false; let frame: 0 | 1 | 2 = 0; let animationFrame = 0;
   const abort = new AbortController(); let resolveFinished!: () => void;
   let climbPlayback: SoundPlayback | undefined;
   const finished = new Promise<void>((resolve) => { resolveFinished = resolve; });
-  const copySteps = prestige ? [] : xpCopySteps(award);
+  const copySteps = staticCopy ? [staticCopy] : prestige ? [] : xpCopySteps(award);
   let barFinished = false; let copyFinished = false;
   function completeWhenReady() { if (barFinished && copyFinished && !abort.signal.aborted) resolveFinished(); }
   if (prestige || !animate) { copyFinished = true; if (copySteps[0]) setCopy(copySteps.at(-1)!); }

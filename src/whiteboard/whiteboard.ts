@@ -40,7 +40,11 @@ export function mountWhiteboard(options: {
   let pendingTrim: number | undefined;
   let frame: BoilFrame = 0;
   let enabled = true;
+  let receivedInitialSnapshot = false;
+  let scrollFrame: number | undefined;
   const cleanups: Array<() => void> = [];
+
+  const scrollToBottom = () => { scroll.scrollTop = scroll.scrollHeight; };
 
   const redraw = () => {
     const board = model.snapshot();
@@ -108,6 +112,8 @@ export function mountWhiteboard(options: {
     color: () => options.tools.color(),
     receive(message) {
       const nearBottom = scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 45;
+      const initialSnapshot = message.type === 'snapshot' && !receivedInitialSnapshot;
+      if (message.type === 'snapshot') receivedInitialSnapshot = true;
       if (message.type === 'snapshot' || message.type === 'reset') model.setSnapshot(message.board);
       else if (message.type === 'operation') model.append(message.operation);
       else if (message.type === 'prune') model.prune(message.throughSequence);
@@ -123,10 +129,21 @@ export function mountWhiteboard(options: {
         return;
       }
       redraw();
-      if (nearBottom && message.type !== 'error') requestAnimationFrame(() => { scroll.scrollTop = scroll.scrollHeight; });
+      if ((initialSnapshot || nearBottom) && message.type !== 'error') {
+        if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame);
+        scrollToBottom();
+        scrollFrame = requestAnimationFrame(() => {
+          scrollFrame = undefined;
+          scrollToBottom();
+        });
+      }
     },
     setEnabled(next) { enabled = next; },
-    destroy() { for (const cleanup of cleanups) cleanup(); scroll.remove(); },
+    destroy() {
+      if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame);
+      for (const cleanup of cleanups) cleanup();
+      scroll.remove();
+    },
   };
 }
 

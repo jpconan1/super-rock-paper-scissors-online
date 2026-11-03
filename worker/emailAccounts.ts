@@ -34,7 +34,13 @@ export function validEmailPassword(value: unknown): value is string {
 }
 
 export function generateEmailCode(): string {
-  return String(crypto.getRandomValues(new Uint32Array(1))[0]! % 1_000_000).padStart(6, '0');
+  const alphabet = '0123456789abcdefghijklmnopqrstuvwxyz';
+  const chars: string[] = [];
+  while (chars.length < 4) {
+    const bytes = crypto.getRandomValues(new Uint8Array(4));
+    for (const byte of bytes) if (byte < 252 && chars.length < 4) chars.push(alphabet[byte % alphabet.length]!);
+  }
+  return chars.join('');
 }
 
 export async function emailChallengeHash(secret: string, purpose: EmailChallengePurpose, binding: string, code: string): Promise<string> {

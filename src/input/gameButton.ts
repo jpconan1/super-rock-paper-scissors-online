@@ -27,6 +27,7 @@ export interface GameButton {
   readonly ready: Promise<void>;
   subscribeVisual(subscriber: (visual: GameButtonVisual) => void): () => void;
   setLabel(label: string): void;
+  setSheets(sheets: { up: string; between: string; depressed: string }): Promise<void>;
   setDisabled(disabled: boolean): void;
   setLockedDepressed(locked: boolean): void;
   destroy(): void;
@@ -50,7 +51,7 @@ export function createGameButton(options: GameButtonOptions): GameButton {
   element.className = 'game-button';
   element.setAttribute('aria-label', options.label);
 
-  const sheets: Record<GameButtonVisual, string> = {
+  let sheets: Record<GameButtonVisual, string> = {
     up: options.upSheet,
     between: options.betweenSheet,
     depressed: options.depressedSheet,
@@ -86,7 +87,7 @@ export function createGameButton(options: GameButtonOptions): GameButton {
   label.className = 'game-button__label';
   label.textContent = options.label;
   element.append(juice.element, art.element, label);
-  const artLease = assetLoader.retainUrls(Object.values(sheets));
+  let artLease = assetLoader.retainUrls(Object.values(sheets));
   let currentVisual: GameButtonVisual = 'up';
   const visualSubscribers = new Set<(visual: GameButtonVisual) => void>();
 
@@ -207,6 +208,18 @@ export function createGameButton(options: GameButtonOptions): GameButton {
     setLabel(nextLabel) {
       label.textContent = nextLabel;
       element.setAttribute('aria-label', nextLabel);
+    },
+    async setSheets(nextSheets) {
+      const nextLease = assetLoader.retainUrls(Object.values(nextSheets));
+      try { await nextLease.ready; }
+      catch (error) { nextLease.release(); throw error; }
+      if (destroyed) { nextLease.release(); return; }
+      artLease.release();
+      artLease = nextLease;
+      sheets = nextSheets;
+      frameGeometry = null;
+      art.setSource(sheets[currentVisual]);
+      applyDetectedAnchor(currentVisual);
     },
     setDisabled(nextDisabled) {
       if (requestedDisabled === nextDisabled) return;

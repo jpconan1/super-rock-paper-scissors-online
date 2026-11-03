@@ -28,7 +28,7 @@ import { MusicDirector } from '../audio/musicDirector';
 import { destroySoundCatalog, MATCH_FOUND_SOUND_MS, playCatalogSound } from '../audio/soundCatalog';
 import { LocalAbmMatch, type TutorialEnding } from './localAbmMatch';
 import { randomId } from '../core/randomId';
-import { hasSeenAbmNewsletter, mountAbmLetterModal } from './abmLetterModal';
+import { mountAbmLetterModal } from './abmLetterModal';
 import { mountAccountScreen } from './accountScreen';
 import { mountProgressScreen } from './progressScreen';
 import type { ProgressAward } from '../core/progression';
@@ -77,6 +77,7 @@ export class AppController {
   private knownMissionIds: Set<string> | null = null;
   private emblemAlerts: EmblemMissionStatus[] = [];
   private emblemAlertOpen = false;
+  private openingEmblemPickerFromAlert = false;
   private emblemSyncing = false;
   private emblemResyncRequested = false;
   private emblemAlertReady = false;
@@ -101,6 +102,7 @@ export class AppController {
   private pendingProgressAward?: ProgressAward;
   private progressAwardMatchId?: string;
   private rewardTransitionStarted = false;
+  private returnToLobbyStarted = false;
   private tutorialPending = false;
   private tutorialSlideshow?: TutorialSlideshow;
   private googleSignIn?: AbortController;
@@ -173,6 +175,7 @@ export class AppController {
         if (baseline.playerId === restoredAccount.playerId && Array.isArray(baseline.missionIds)) this.knownMissionIds = new Set(baseline.missionIds);
       } catch { /* Ignore stale claim state. */ }
     }
+    if (googlePlayer && options.session.hasPendingGoogleName()) this.queueGoogleSignupEmblemAlert();
     this.playerName = googlePlayer?.displayName ?? restoredAccount.displayName;
     this.transitionLayer.replaceChildren(...this.screenLayer.childNodes);
     await this.navigate(googlePlayer || options.session.hasPendingGoogleName() ? 'lobby' : 'title', false);
@@ -243,13 +246,30 @@ export class AppController {
   }
 
   private showNextEmblemAlert(): void {
-    if (this.emblemAlertOpen || !this.emblemAlertReady || !this.alertSystem || (this.destination !== 'lobby' && this.destination !== 'account')) return;
+    if (this.emblemAlertOpen || this.openingEmblemPickerFromAlert || !this.emblemAlertReady || !this.alertSystem || (this.destination !== 'lobby' && this.destination !== 'account')) return;
     const mission = this.emblemAlerts.shift();
     if (!mission) return;
     this.emblemAlertOpen = true;
-    void showEmblemUnlockAlert(this.alertSystem, this.options.clock, mission).finally(() => {
+    void showEmblemUnlockAlert(this.alertSystem, this.options.clock, mission, () => this.openEmblemPickerFromAlert()).finally(() => {
       this.emblemAlertOpen = false;
       this.showNextEmblemAlert();
+    });
+  }
+
+  private openEmblemPickerFromAlert(): void {
+    this.openingEmblemPickerFromAlert = true;
+    queueMicrotask(() => {
+      void (async () => {
+        try {
+          if (this.destination !== 'lobby') await this.navigate('lobby');
+          await this.lobbyScreen?.openEmblemsFromMissions();
+        } catch (error) {
+          this.showError(error);
+        } finally {
+          this.openingEmblemPickerFromAlert = false;
+          this.showNextEmblemAlert();
+        }
+      })();
     });
   }
 
@@ -306,7 +326,15 @@ export class AppController {
     if (this.latestSnapshot?.matchId === snapshot.matchId && snapshot.revision < this.latestSnapshot.revision) return;
     this.latestSnapshot = snapshot;
     this.prepareProgressAward(snapshot, local);
-    if (isMatchProjection(snapshot.projection)) this.matchFlowDirector?.receiveSnapshot(snapshot as ServerSnapshot<MatchProjection>);
+    if (isMatchProjection(snapshot.projection)) {
+      // A slow socket can miss the brief match-found phase entirely.
+      // Any authoritative match snapshot means this queue attempt is over.
+      if (this.matchmakingActive) {
+        this.matchmakingActive = false;
+        this.lobbyScreen?.setMatchmaking(false);
+      }
+      this.matchFlowDirector?.receiveSnapshot(snapshot as ServerSnapshot<MatchProjection>);
+    }
     if (this.mounted) {
       this.mounted.render(variantProjection(snapshot.projection), snapshot.events, snapshot.serverTime, this.pendingProgressAward);
       this.timeline?.schedule(snapshot.events, snapshot.serverTime);
@@ -482,6 +510,10 @@ export class AppController {
         ),
         { whiteboardDisabled: isStreamerModeEnabled(), testMode: account.unlockAllClasses, loadMissions: () => options.session.getEmblemMissions(), customEmblemEditor: {
           load: () => options.session.getCustomEmblem(),
+          showError: (message) => this.alertSystem?.show({
+            ariaLabel: 'Custom emblem save failed', title: 'Custom emblem save failed', content: message,
+            geometry: STANDARD_CONFIRMATION_GEOMETRY, dismissible: true, actions: [],
+          }),
           save: async (document, artwork) => {
             await options.session.saveCustomEmblem(document, artwork);
             const meta = options.session.accountState().customEmblem;
@@ -496,7 +528,6 @@ export class AppController {
       lobby.setConnectionState(this.connectionState);
       this.lobbyScreen = lobby;
       this.screenCleanup = lobby;
-      if (!options.session.hasPendingGoogleName() && !hasSeenAbmNewsletter()) this.openAbmLetter();
     } else if (destination === 'account') {
       this.screenReady = Promise.resolve();
       const account = mountAccountScreen(this.screenLayer, options.clock, this.alertSystem!, options.session.accountState(), async (name) => {
@@ -508,7 +539,7 @@ export class AppController {
         await options.session.deleteAccount(code);
         this.playerName = '';
         void this.navigate('title');
-      }, (email) => options.session.requestPasswordCode(email),
+      }, () => this.confirmGoogleDeletion(), (email) => options.session.requestPasswordCode(email),
       (email, code, password, remove) => options.session.updateEmailPassword(email, code, password, remove),
       async (displayName) => {
         if (!this.alertSystem) return undefined;
@@ -557,14 +588,15 @@ export class AppController {
     } else if (destination === 'progress') {
       const award = this.pendingProgressAward ?? this.matchProjection?.progressAward;
       if (!award) throw new Error('Progress award is unavailable.');
-      const progress = mountProgressScreen(this.screenLayer, options.clock, award, () => this.finishReturnToLobby());
+      const progress = mountProgressScreen(this.screenLayer, options.clock, award);
+      void progress.finished.then(() => { if (this.destination === 'progress') void this.completeMatchProgressFlow(); });
       this.screenCleanup = () => progress.destroy();
     } else if (destination === 'reward') {
       const award = this.pendingProgressAward;
       if (!award?.unlockedClassIds.length) throw new Error('Class reward is unavailable.');
       const flow = createClassRewardFlow(award);
       const reward = mountClassRewardScreen(this.screenLayer, this.screenLayer, options.clock, award, flow.unlockedClassIds, flow.nextClassId, () => {
-        this.pendingProgressAward = undefined; this.progressAwardMatchId = undefined; this.rewardTransitionStarted = false; void this.navigate('lobby');
+        this.pendingProgressAward = undefined; this.progressAwardMatchId = undefined; this.rewardTransitionStarted = false; this.returnToLobbyStarted = false; void this.navigate('lobby');
       });
       this.screenCleanup = () => reward.destroy();
     } else if (destination === 'prestige') {
@@ -741,6 +773,7 @@ export class AppController {
       }
       const player = await this.options.session.finishGoogleSignIn();
       if (!player) throw new Error('Google sign-in completed without a player session.');
+      if (this.options.session.hasPendingGoogleName()) this.queueGoogleSignupEmblemAlert();
       this.playerName = player.displayName;
       await this.navigate(successDestination ?? (flow === 'claim' ? 'account' : 'lobby'));
       this.showPendingGoogleName();
@@ -756,6 +789,19 @@ export class AppController {
     }
   }
 
+  private async confirmGoogleDeletion(): Promise<void> {
+    const popup = window.open('', 'super-rps-google-deletion', 'popup,width=520,height=720');
+    if (!popup) throw new Error('Allow popups to confirm with Google.');
+    const nonce = randomId();
+    const controller = new AbortController();
+    try {
+      const url = await this.options.session.requestGoogleDeletion(nonce);
+      popup.location.replace(url);
+      const result = await waitForGoogleAuthPopup(popup, nonce, location.origin, controller.signal);
+      if (result.result !== 'success') throw new Error('Google account was not confirmed.');
+    } finally { if (!popup.closed) popup.close(); controller.abort(); }
+  }
+
   private showPendingGoogleName(): void {
     if (this.destination !== 'lobby' || !this.alertSystem || !this.options.session.hasPendingGoogleName()) return;
     void showGuestNameDialog(this.alertSystem, this.options.clock, {
@@ -769,6 +815,12 @@ export class AppController {
       if (!name || this.destination !== 'lobby') return;
       void this.navigate('lobby', false);
     });
+  }
+
+  private queueGoogleSignupEmblemAlert(): void {
+    this.emblemPlayerId = this.options.session.accountState().playerId;
+    this.knownMissionIds = new Set(this.knownMissionIds ?? []);
+    this.knownMissionIds.delete('claim-account');
   }
 
   private showExistingAccountAlert(): void {
@@ -1066,6 +1118,7 @@ export class AppController {
     this.pendingProgressAward = undefined;
     this.progressAwardMatchId = undefined;
     this.rewardTransitionStarted = false;
+    this.returnToLobbyStarted = false;
     void this.navigate('lobby');
   }
 
@@ -1079,6 +1132,8 @@ export class AppController {
   }
 
   private async returnToLobbyFromMatch(): Promise<void> {
+    if (this.returnToLobbyStarted) return;
+    this.returnToLobbyStarted = true;
     this.terminalCleanup?.();
     this.terminalCleanup = undefined;
     let award = this.matchProjection?.progressAward;
@@ -1098,7 +1153,7 @@ export class AppController {
             (this.matchProjection.variant as AbmProjection | undefined)?.roundWinningClassIds?.[this.matchProjection.self],
           );
         }
-      } catch (error) { this.showError(error); return; }
+      } catch (error) { this.returnToLobbyStarted = false; this.showError(error); return; }
     }
     if (award) {
       this.options.session.applyProgressAward(award);
@@ -1113,6 +1168,7 @@ export class AppController {
     this.releaseCompletedMatch();
     this.pendingProgressAward = undefined;
     this.progressAwardMatchId = undefined; this.rewardTransitionStarted = false;
+    this.returnToLobbyStarted = false;
     void this.navigate('lobby');
   }
 }

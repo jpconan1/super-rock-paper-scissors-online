@@ -348,10 +348,11 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   const config = (id: string) => layoutDocument.elements.find((element) => element.id === id)!;
   const sprites: BoilingSprite[] = [];
   const buttons: GameButton[] = [];
-  let selected = 0;
   const ownPickerEntries = getAbmPickerEntries(unlockedClassIds ?? ABM_CLASSES.map(({ id }) => id));
   const ownUnlockedClassIds = ownPickerEntries.flatMap((entry) => entry.kind === 'class' ? [entry.definition.id] : []);
   const ownBonusClassId = bonusClassId ?? ownUnlockedClassIds.at(-1);
+  let selected = ownPickerEntries.findIndex((entry) => entry.kind === 'class' && entry.definition.id === ownBonusClassId);
+  if (selected < 0) selected = 0;
   const opponentPickerEntries = getAbmPickerEntries([], true);
   const pickerEntries = () => projection?.phase === 'counter-picking' && projection.counterPicker !== projection.self
     ? opponentPickerEntries : ownPickerEntries;

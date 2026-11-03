@@ -1,6 +1,7 @@
 import letterSource from '../../abm-letter.txt?raw';
 import alphaPatchNotesSource from '../../alpha-patch-notes.md?raw';
 import type { BoilClock } from '../animation/boilClock';
+import { assetUrl } from '../assets/assetUrl';
 import { createGameButton } from '../input/gameButton';
 import { createBoilingSprite, type BoilingSprite } from '../renderer/boilingSprite';
 import { createTextbox } from '../ui/textbox';
@@ -116,7 +117,7 @@ export function renderAbmLetter(clock: BoilClock, post: AbmNewsletterPost = ABM_
     if (block.type === 'image') {
       if (!block.boils) {
         const image = document.createElement('img');
-        image.src = block.src; image.alt = block.alt; image.className = `abm-letter__static-image ${block.className}`;
+        image.src = assetUrl(block.src); image.alt = block.alt; image.className = `abm-letter__static-image ${block.className}`;
         article.append(image);
         continue;
       }

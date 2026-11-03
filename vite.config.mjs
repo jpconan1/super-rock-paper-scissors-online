@@ -1,11 +1,15 @@
 import { readFileSync, readdirSync, writeFileSync, renameSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { defineConfig } from 'vite';
 
 const virtualAssetBundles = 'virtual:asset-bundles';
 const resolvedVirtualAssetBundles = `\0${virtualAssetBundles}`;
+const virtualAssetVersions = 'virtual:asset-versions';
+const resolvedVirtualAssetVersions = `\0${virtualAssetVersions}`;
 const imageExtensions = /\.(?:avif|gif|jpe?g|png|svg|webp)$/i;
+const cacheableExtensions = /\.(?:avif|gif|jpe?g|png|svg|webp|mp3|m4a|ttf|woff2?)$/i;
 const writableLayoutFiles = {
   account: 'src/layout/documents/account.json',
   title: 'src/layout/documents/title.json',
@@ -38,10 +42,26 @@ function classifyAssetUrls(paths) {
   return bundles;
 }
 
+function assetVersions() {
+  const directory = resolve(import.meta.dirname, 'assets');
+  return Object.fromEntries(listAssetPaths(directory).filter((path) => cacheableExtensions.test(path)).map((path) => [
+    `/${path.replaceAll('\\', '/')}`,
+    createHash('sha256').update(readFileSync(resolve(directory, path))).digest('hex').slice(0, 12),
+  ]));
+}
+
+function versionCssUrls(code, versions) {
+  return code.replace(/url\((['"]?)(\/[^'"()]+)\1\)/g, (match, quote, path) => {
+    const version = versions[path];
+    return version ? `url(${quote}${path}?v=${version}${quote})` : match;
+  });
+}
+
 export default defineConfig({
   publicDir: 'assets',
   plugins: [{
     name: 'asset-bundle-manifest',
+    enforce: 'pre',
     configureServer(server) {
       const assetsDirectory = resolve(import.meta.dirname, 'assets');
       const refreshManifest = (file) => {
@@ -56,11 +76,21 @@ export default defineConfig({
     },
     resolveId(id) {
       if (id === virtualAssetBundles) return resolvedVirtualAssetBundles;
+      if (id === virtualAssetVersions) return resolvedVirtualAssetVersions;
     },
     load(id) {
+      if (id === resolvedVirtualAssetVersions) return `export default ${JSON.stringify(assetVersions())};`;
       if (id !== resolvedVirtualAssetBundles) return;
       const bundles = classifyAssetUrls(listAssetPaths(resolve(import.meta.dirname, 'assets')));
       return `export default ${JSON.stringify(bundles)};`;
+    },
+    transform(code, id) {
+      if (!id.split('?')[0].endsWith('.css')) return;
+      return versionCssUrls(code, assetVersions());
+    },
+    writeBundle(outputOptions) {
+      const path = resolve(import.meta.dirname, outputOptions.dir ?? 'dist', 'legal.css');
+      writeFileSync(path, versionCssUrls(readFileSync(path, 'utf8'), assetVersions()));
     },
   }, {
     name: 'layout-editor-api',

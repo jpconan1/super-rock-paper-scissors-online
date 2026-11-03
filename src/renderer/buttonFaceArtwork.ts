@@ -1,4 +1,5 @@
 import type { BoilClock, BoilFrame } from '../animation/boilClock';
+import { assetUrl } from '../assets/assetUrl';
 import type { GameButton } from '../input/gameButton';
 import type { GameButtonVisual } from '../input/gameButtonState';
 import type { BoilingSprite } from './boilingSprite';
@@ -54,7 +55,7 @@ export function createButtonFaceArtwork(options: ButtonFaceArtworkOptions): Butt
   const artworkCanvas = source;
 
   const masks = Object.fromEntries(Object.entries(options.sheets).map(([visual, src]) => {
-    const image = new Image(); image.onload = () => draw(); image.src = src;
+    const image = new Image(); image.onload = () => draw(); image.src = assetUrl(src);
     return [visual, image];
   })) as Record<GameButtonVisual, HTMLImageElement>;
   const maskCanvas = document.createElement('canvas');

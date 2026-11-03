@@ -48,6 +48,7 @@ export interface AlertHandle<T> {
   close(value?: T): void;
   setActionDisabled(index: number, disabled: boolean): void;
   setActionLabel(index: number, label: string): void;
+  setActionSheets(index: number, sheets: AlertButtonSheets): Promise<void>;
 }
 
 const CLOSE_BUTTON_SHEETS: AlertButtonSheets = {
@@ -156,6 +157,7 @@ export class AlertSystem {
         buttons[index].setDisabled(busy || disabled);
       },
       setActionLabel(index, label) { buttons[index]?.setLabel(label); },
+      async setActionSheets(index, sheets) { await buttons[index]?.setSheets(sheets); },
     };
 
     for (const [index, action] of options.actions.entries()) {

@@ -1,7 +1,10 @@
 import { describe, expect, test } from 'vitest';
-import { emailChallengeHash, emailChallengeStatus, normalizeAuthEmail, validEmailPassword } from '../worker/emailAccounts';
+import { emailChallengeHash, emailChallengeStatus, generateEmailCode, normalizeAuthEmail, validEmailPassword } from '../worker/emailAccounts';
 
 describe('email accounts', () => {
+  test('generates four lowercase alphanumeric characters', () => {
+    for (let index = 0; index < 100; index++) expect(generateEmailCode()).toMatch(/^[a-z0-9]{4}$/);
+  });
   test('normalizes valid addresses and rejects malformed input', () => {
     expect(normalizeAuthEmail(' Player@Example.COM ')).toBe('player@example.com');
     expect(normalizeAuthEmail('missing-at.example.com')).toBeNull();
@@ -16,11 +19,11 @@ describe('email accounts', () => {
   });
 
   test('binds challenge hashes to purpose and subject', async () => {
-    const signup = await emailChallengeHash('secret', 'signup', 'user-a', '123456');
+    const signup = await emailChallengeHash('secret', 'signup', 'user-a', 'ab12');
     expect(signup).toMatch(/^[a-f0-9]{64}$/);
-    expect(signup).not.toContain('123456');
-    expect(await emailChallengeHash('secret', 'login', 'user-a', '123456')).not.toBe(signup);
-    expect(await emailChallengeHash('secret', 'signup', 'user-b', '123456')).not.toBe(signup);
+    expect(signup).not.toContain('ab12');
+    expect(await emailChallengeHash('secret', 'login', 'user-a', 'ab12')).not.toBe(signup);
+    expect(await emailChallengeHash('secret', 'signup', 'user-b', 'ab12')).not.toBe(signup);
   });
 
   test('rejects expired, exhausted, missing, and replaced codes', () => {

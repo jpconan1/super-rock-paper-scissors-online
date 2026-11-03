@@ -8,5 +8,5 @@
     "skipLibCheck": true,
     "types": ["@cloudflare/workers-types"]
   },
-  "include": ["./**/*.ts", "../src/core/**/*.ts", "../src/protocol/**/*.ts"]
+  "include": ["./**/*.ts", "../src/core/**/*.ts", "../src/protocol/**/*.ts", "../src/assets/virtual-asset-versions.d.ts"]
 }

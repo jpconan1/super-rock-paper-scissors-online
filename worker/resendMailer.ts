@@ -8,7 +8,7 @@ export interface AuthMailer {
 }
 
 export function formatSignInCode(code: string): string {
-  return `${code.slice(0, 3)} ${code.slice(3)}`;
+  return code;
 }
 
 function codeEmailContent(subject: string, message: string, code: string): { subject: string; html: string; text: string } {

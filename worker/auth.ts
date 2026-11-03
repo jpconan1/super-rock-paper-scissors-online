@@ -2,6 +2,7 @@ import { betterAuth } from 'better-auth';
 import type { D1Database } from '@cloudflare/workers-types';
 import { anonymous, emailOTP } from 'better-auth/plugins';
 import { createResendMailer, type AuthMailer } from './resendMailer';
+import { generateEmailCode } from './emailAccounts';
 import { completeEmblemMission } from './playerEmblems';
 
 export const TERMS_VERSION = '2026-09-13';
@@ -15,20 +16,22 @@ export interface AuthEnv {
   GOOGLE_CLIENT_SECRET: string;
   RESEND_API_KEY?: string;
   DEV_AUTH_EMAIL_CODE?: string;
+  ALLOWED_ORIGINS?: string;
 }
 
 export type { AuthMailer } from './resendMailer';
 
 export function createAuth(env: AuthEnv, mailer: AuthMailer | undefined = env.RESEND_API_KEY
   ? createResendMailer(env.RESEND_API_KEY)
-  : env.BETTER_AUTH_URL.startsWith('http://localhost') && /^\d{6}$/.test(env.DEV_AUTH_EMAIL_CODE ?? '')
+  : env.BETTER_AUTH_URL.startsWith('http://localhost') && /^[a-z0-9]{4}$/.test(env.DEV_AUTH_EMAIL_CODE ?? '')
     ? { sendSignupCode: async () => {}, sendSignInCode: async () => {}, sendPasswordCode: async () => {}, sendDeletionCode: async () => {} }
     : undefined) {
   return betterAuth({
     database: env.DB,
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.BETTER_AUTH_URL,
-    trustedOrigins: ['http://localhost:5173', 'http://localhost:8787', 'https://abm.jpconan.ca'],
+    trustedOrigins: ['http://localhost:5173', 'http://localhost:8787', 'https://abm.jpconan.ca',
+      ...env.ALLOWED_ORIGINS?.split(',').map((origin) => origin.trim()).filter(Boolean) ?? []],
     advanced: { useSecureCookies: env.BETTER_AUTH_URL.startsWith('https://') },
     session: { freshAge: 5 * 60 },
     account: { encryptOAuthTokens: true, accountLinking: { disableImplicitLinking: true, allowDifferentEmails: true } },
@@ -42,14 +45,13 @@ export function createAuth(env: AuthEnv, mailer: AuthMailer | undefined = env.RE
     },
     plugins: [emailOTP({
       expiresIn: 10 * 60,
-      otpLength: 6,
+      otpLength: 4,
       allowedAttempts: 3,
       storeOTP: 'hashed',
       resendStrategy: 'rotate',
       disableSignUp: true,
-      generateOTP: env.BETTER_AUTH_URL.startsWith('http://localhost') && /^\d{6}$/.test(env.DEV_AUTH_EMAIL_CODE ?? '')
-        ? () => env.DEV_AUTH_EMAIL_CODE
-        : undefined,
+      generateOTP: () => env.BETTER_AUTH_URL.startsWith('http://localhost') && /^[a-z0-9]{4}$/.test(env.DEV_AUTH_EMAIL_CODE ?? '')
+        ? env.DEV_AUTH_EMAIL_CODE! : generateEmailCode(),
       sendVerificationOTP: async ({ email, otp, type }) => {
         if (!mailer || type !== 'sign-in') throw new Error('Email login is unavailable.');
         await mailer.sendSignInCode({ email, code: otp });

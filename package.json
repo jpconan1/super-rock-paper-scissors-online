@@ -10,6 +10,7 @@
     "test": "vitest run",
     "worker:check": "tsc -p worker/tsconfig.json",
     "worker:dev": "wrangler dev",
+    "phone-test": "node scripts/phone-test.mjs",
     "worker:deploy": "npm run build && wrangler deploy",
     "d1:migrate:local": "wrangler d1 migrations apply super-rps-online --local",
     "d1:migrate:remote": "wrangler d1 migrations apply super-rps-online --remote",

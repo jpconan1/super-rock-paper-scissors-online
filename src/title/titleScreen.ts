@@ -96,10 +96,13 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onEnt
   const termsLink = document.createElement('a');
   termsLink.href = '/terms.html';
   termsLink.textContent = 'Terms of Service';
+  const supportLink = document.createElement('a');
+  supportLink.href = 'mailto:jeanpaulconan@gmail.com';
+  supportLink.textContent = 'Support';
   const legalLinks = document.createElement('nav');
   legalLinks.className = 'title-screen__legal-links';
   legalLinks.setAttribute('aria-label', 'Legal');
-  legalLinks.append(privacyLink, termsLink);
+  legalLinks.append(privacyLink, termsLink, supportLink);
   const onlineCount = document.createElement('p');
   onlineCount.className = 'title-screen__online-count'; onlineCount.setAttribute('aria-live', 'polite');
   onlineCount.textContent = formatOnlinePlayerCount(null);
@@ -191,6 +194,7 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onEnt
   const emailCodeButton = authButton('email-sign-in', 'Sign in with email', () => setEmailCodeMode(true));
   const google = authButton('google-sign-in', 'Sign in with Google', onGoogleSignIn);
   const apple = authButton('apple-sign-in', 'Sign in with Apple', () => {});
+  apple.setDisabled(true);
   const providers = [passwordButton, emailCodeButton, google, apple];
   const accountStatus = document.createElement('p');
   accountStatus.className = 'title-screen__account-status';

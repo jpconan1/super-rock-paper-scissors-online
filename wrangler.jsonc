@@ -24,6 +24,8 @@
       "/email-password/request",
       "/email-password/update",
       "/account-deletion/request",
+      "/account-deletion/google/start",
+      "/account-deletion/google/callback",
       "/account-deletion",
       "/online-status",
       "/analytics/events",

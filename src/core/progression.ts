@@ -19,6 +19,7 @@ export interface PlayerProgression {
 
 export interface ProgressAward {
   outcome: ProgressOutcome;
+  firstTutorialBonus?: boolean;
   opponent?: ProgressOpponent;
   paused?: boolean;
   gainedProgressUnits: number;
@@ -121,6 +122,7 @@ export function createTutorialProgressAward(totalProgressUnits: number, outcome:
   return {
     outcome,
     opponent: 'computer',
+    firstTutorialBonus: firstCompletion,
     gainedProgressUnits,
     before,
     after,

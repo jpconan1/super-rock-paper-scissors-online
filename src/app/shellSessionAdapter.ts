@@ -64,6 +64,7 @@ export interface ShellSessionAdapter {
   requestPasswordCode(email: string): Promise<void>;
   updateEmailPassword(email: string, code: string, password?: string, remove?: boolean): Promise<void>;
   requestAccountDeletionCode(): Promise<void>;
+  requestGoogleDeletion(nonce: string): Promise<string>;
   deleteAccount(code?: string): Promise<void>;
   refreshOnlineIdentity(): Promise<void>;
   signOut(): Promise<void>;
@@ -99,6 +100,7 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
   private whiteboardReconnect?: ReturnType<typeof setTimeout>;
   private whiteboardActive = false;
   private readonly whiteboardPending = new Map<string, WhiteboardClientMessage>();
+  private whiteboardSequence = 0;
   private lobbyVisitId = '';
   private lobbySocket?: WebSocket;
   private lobbyReconnect?: ReturnType<typeof setTimeout>;
@@ -217,7 +219,10 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
   async saveCustomEmblem(document: CustomEmblemDocument, artwork: Blob): Promise<void> {
     const form = new FormData(); form.set('document', JSON.stringify(document)); form.set('artwork', artwork, 'custom-emblem.webp');
     const response = await fetch(`${this.baseUrl}/custom-emblem`, { method: 'PUT', credentials: 'include', body: form });
-    if (!response.ok) throw new Error(`Custom emblem save failed: ${response.status}`);
+    if (!response.ok) {
+      const result = await response.json().catch(() => ({})) as { error?: string };
+      throw new Error(result.error || `Custom emblem save failed: ${response.status}`);
+    }
     const player = await response.json() as PlayerProfile;
     if (!isPlayerProfile(player) || player.equippedEmblem !== 'custom' || !isCustomEmblemMeta(player.customEmblem)) throw new Error('Custom emblem save returned invalid data.');
     this.equippedEmblem = player.equippedEmblem; this.ownedEmblems = player.ownedEmblems; this.customEmblem = player.customEmblem ?? null;
@@ -354,6 +359,14 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
       const result = await response.json().catch(() => ({})) as { error?: string };
       throw new Error(result.error || 'Could not send deletion code.');
     }
+  }
+  async requestGoogleDeletion(nonce: string): Promise<string> {
+    const response = await fetch(`${this.baseUrl}/account-deletion/google/start`, {
+      method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ nonce }),
+    });
+    const result = await response.json() as { url?: string; error?: string };
+    if (!response.ok || !result.url) throw new Error(result.error || 'Could not start Google confirmation.');
+    return result.url;
   }
   async deleteAccount(code?: string): Promise<void> {
     const response = await fetch(`${this.baseUrl}/account-deletion`, {
@@ -560,14 +573,45 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
     const url = new URL(`${this.baseUrl}/whiteboard`); url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
     url.searchParams.set('visit', this.lobbyVisitId);
     const socket = new WebSocket(url, WHITEBOARD_SOCKET_PROTOCOL); this.whiteboardSocket = socket;
+    let syncInterval: ReturnType<typeof setInterval> | undefined;
+    let syncTimeout: ReturnType<typeof setTimeout> | undefined;
+    const stopSync = () => {
+      if (syncInterval !== undefined) clearInterval(syncInterval);
+      if (syncTimeout !== undefined) clearTimeout(syncTimeout);
+      syncInterval = undefined; syncTimeout = undefined;
+    };
+    const recover = () => {
+      if (this.whiteboardSocket !== socket) return;
+      stopSync();
+      this.whiteboardSocket = undefined;
+      socket.close();
+      this.updateLobbyConnectionState();
+      if (this.whiteboardActive) this.whiteboardReconnect = setTimeout(() => {
+        this.whiteboardReconnect = undefined; this.connectWhiteboard();
+      }, 1_000);
+    };
     socket.addEventListener('open', () => {
+      if (this.whiteboardSocket !== socket) return;
       for (const message of this.whiteboardPending.values()) socket.send(JSON.stringify(message));
       this.updateLobbyConnectionState();
+      syncInterval = setInterval(() => {
+        if (syncTimeout !== undefined || this.whiteboardSocket !== socket) return;
+        socket.send(JSON.stringify({ type: 'sync', sequence: this.whiteboardSequence }));
+        syncTimeout = setTimeout(recover, 8_000);
+      }, 10_000);
     });
     socket.addEventListener('message', (event) => {
+      if (this.whiteboardSocket !== socket) return;
       try {
         const message = JSON.parse(String(event.data));
         if (!isWhiteboardServerMessage(message)) return;
+        if (message.type === 'snapshot' || message.type === 'reset') this.whiteboardSequence = message.board.sequence;
+        else if (message.type === 'operation') this.whiteboardSequence = Math.max(this.whiteboardSequence, message.operation.sequence);
+        if (message.type === 'synced' || message.type === 'snapshot' || message.type === 'reset') {
+          if (syncTimeout !== undefined) clearTimeout(syncTimeout);
+          syncTimeout = undefined;
+        }
+        if (message.type === 'synced') return;
         if (message.type === 'operation' && message.operation.clientOperationId) this.whiteboardPending.delete(message.operation.clientOperationId);
         if (message.type === 'error' && message.clientOperationId) this.whiteboardPending.delete(message.clientOperationId);
         if (message.type === 'reset') this.whiteboardPending.clear();
@@ -578,6 +622,7 @@ export class WebSocketShellSessionAdapter implements ShellSessionAdapter {
       } catch { /* ignore malformed server data */ }
     });
     socket.addEventListener('close', () => {
+      stopSync();
       if (this.whiteboardSocket !== socket) return;
       this.whiteboardSocket = undefined;
       this.updateLobbyConnectionState();
@@ -741,6 +786,7 @@ export class LocalShellSessionAdapter implements ShellSessionAdapter {
   async updateEmailPassword(_email: string, _code: string, _password?: string, _remove?: boolean): Promise<void> {}
   async requestAccountDeletionCode(): Promise<void> {}
   async deleteAccount(_code?: string): Promise<void> {}
+  async requestGoogleDeletion(_nonce: string): Promise<string> { return ''; }
   async refreshOnlineIdentity(): Promise<void> {}
   async signOut(): Promise<void> {}
   async enterLobby(playerName: string): Promise<PlayerProfile> {

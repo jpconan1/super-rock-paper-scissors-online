@@ -1,4 +1,5 @@
 import type { BoilClock } from '../animation/boilClock';
+import { assetUrl } from '../assets/assetUrl';
 import { AnimationPlayer } from '../animation/animationPlayer';
 import { createGameButton, type GameButton } from '../input/gameButton';
 import { createMenuCanvas } from '../layout/menuLayout';
@@ -9,8 +10,8 @@ import { createBoilingSprite, type BoilingSprite } from '../renderer/boilingSpri
 import { createTextbox } from '../ui/textbox';
 import { ABM_CLASS_BY_ID } from '../variants/attackBlockMana/attackBlockManaCatalog';
 import type { AbmClassId } from '../variants/attackBlockMana/attackBlockManaTypes';
-import type { ProgressAward } from '../core/progression';
-import { createXpProgressBar, type XpProgressBar } from './xpProgressBar';
+import { PROGRESS_UNITS_PER_LEVEL, type ProgressAward } from '../core/progression';
+import { createXpProgressBar, xpGainPercent, type XpProgressBar } from './xpProgressBar';
 
 const FLIP_FRAME_MS = 84;
 export const CLASS_UNLOCK_FRAME_MS = 100;
@@ -24,6 +25,9 @@ const REWARD_HEADERS = {
 export interface ClassRewardFlow { unlockedClassIds: readonly AbmClassId[]; nextClassId?: AbmClassId }
 export function createClassRewardFlow(award: ProgressAward): ClassRewardFlow {
   return { unlockedClassIds: award.unlockedClassIds, ...(award.after.nextUnlock ? { nextClassId: award.after.nextUnlock } : {}) };
+}
+export function nextUnlockProgressCopy(award: ProgressAward): string {
+  return `${xpGainPercent(PROGRESS_UNITS_PER_LEVEL - award.after.progressUnitsInLevel)} left!`;
 }
 export function classFlipFrames(classId: AbmClassId): readonly string[] {
   return Array.from({ length: 7 }, (_, frame) => `/rewards/class-flips/${classId}/frame-${String(frame + 1).padStart(2, '0')}.webp`);
@@ -88,7 +92,7 @@ function preloadImages(sources: readonly string[]): Promise<void> {
     const image = new Image();
     image.onload = () => resolve();
     image.onerror = () => resolve();
-    image.src = source;
+    image.src = assetUrl(source);
   }))).then(() => undefined);
 }
 const buttonSheets = (name: 'next' | 'continue') => {
@@ -118,7 +122,7 @@ export function mountClassRewardScreen(container: HTMLElement, transitionHost: H
     cleanupContent();
     headerSprite = createBoilingSprite({ src: REWARD_HEADERS.next, clock, className: 'class-reward-screen__header class-reward-screen__header--next', alt: 'Next Unlock' });
     const art = document.createElement('img'); art.className = 'class-reward-screen__flip'; art.alt = definition.name;
-    progress = createXpProgressBar(clock, award, false); progress.element.classList.add('class-reward-screen__next-progress');
+    progress = createXpProgressBar(clock, award, false, { text: nextUnlockProgressCopy(award), color: '#181818' }); progress.element.classList.add('class-reward-screen__next-progress');
     button = createGameButton({ label: 'Continue', clock, onActivate: onDone, ...buttonSheets('continue') });
     button.element.classList.add('class-reward-screen__button', 'game-button--baked-label'); button.element.hidden = true;
     menu.composition.append(headerSprite.element, art, progress.element, button.element);
@@ -129,9 +133,9 @@ export function mountClassRewardScreen(container: HTMLElement, transitionHost: H
     ];
     applyLayout();
     const frames = classFlipFrames(classId);
-    for (const source of frames) { const image = new Image(); image.src = source; }
-    flipPlayer = new AnimationPlayer<string>({ commit: (source) => { art.src = source; } });
-    art.src = CARD_BACK;
+    for (const source of frames) { const image = new Image(); image.src = assetUrl(source); }
+    flipPlayer = new AnimationPlayer<string>({ commit: (source) => { art.src = assetUrl(source); } });
+    art.src = assetUrl(CARD_BACK);
     return () => {
       if (destroyed) return;
       void flipPlayer?.play(frames.map((value) => ({ value, durationMs: FLIP_FRAME_MS })), frames[6]!).then(() => {

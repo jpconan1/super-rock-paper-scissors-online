@@ -11,11 +11,11 @@ import { resolveInitialSignupDisplayName } from '../src/title/signUpDialog';
 import { isCompleteEmailCode, normalizeEmailCode } from '../src/auth/emailCodeChallenge';
 
 describe('account screen deletion', () => {
-  test('accepts a complete six-digit email challenge with optional spacing', () => {
-    expect(isCompleteEmailCode('123456')).toBe(true);
-    expect(isCompleteEmailCode('123 456')).toBe(true);
-    expect(isCompleteEmailCode('12345')).toBe(false);
-    expect(normalizeEmailCode(' 123 456 ')).toBe('123456');
+  test('accepts four case-insensitive alphanumeric characters', () => {
+    expect(isCompleteEmailCode('ab12')).toBe(true);
+    expect(isCompleteEmailCode('AB 12')).toBe(true);
+    expect(isCompleteEmailCode('abc')).toBe(false);
+    expect(normalizeEmailCode(' AB 12 ')).toBe('ab12');
   });
 
   test('uses the account delete button artwork', () => {

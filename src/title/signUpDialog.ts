@@ -3,6 +3,7 @@ import { createGameButton, type GameButton } from '../input/gameButton';
 import { createTextEntry, type TextEntry } from '../input/textEntry';
 import type { AlertSystem, ResponsiveAlertGeometry } from '../ui/alertSystem';
 import { generateRandomName } from './randomName';
+import { showCodeAlert } from '../auth/codeAlert';
 
 const SIGN_UP_GEOMETRY: ResponsiveAlertGeometry = {
   landscape: { x: 130, y: 5, width: 700, height: 530 },
@@ -115,34 +116,14 @@ export function showSignUpDialog(alerts: AlertSystem, clock: BoilClock, actions:
   };
 
   const renderCode = () => {
-    destroyControls(); busy = false;
-    const instruction = document.createElement('p'); instruction.className = 'sign-up-dialog__instruction'; instruction.textContent = `Enter the code sent to ${emailAddress}.`;
-    const code = createTextEntry({ label: 'Six-digit code', type: 'text', placeholder: '123 456', required: true, autocomplete: 'one-time-code', maxLength: 7, sheet, clock,
-      validate: (value) => /^\d{3}\s?\d{3}$/.test(value.trim()) });
-    entries = [code]; code.input.inputMode = 'numeric';
-    const verify = document.createElement('button'); verify.type = 'submit'; verify.textContent = 'Verify'; verify.className = 'sign-up-dialog__plain-button';
-    const resend = document.createElement('button'); resend.type = 'button'; resend.textContent = 'Resend'; resend.className = 'sign-up-dialog__plain-button';
-    const change = document.createElement('button'); change.type = 'button'; change.textContent = 'Change email'; change.className = 'sign-up-dialog__plain-button';
-    const controls = document.createElement('div'); controls.className = 'sign-up-dialog__controls'; controls.append(verify, resend, change);
-    const form = document.createElement('form'); form.className = 'sign-up-dialog__form'; form.append(instruction, code.element, controls);
-    form.addEventListener('submit', (event) => {
-      event.preventDefault();
-      if (busy || !code.validate()) return;
-      status.textContent = ''; setBusy(verify, true); resend.disabled = true; change.disabled = true;
-      void actions.verify(emailAddress, code.value().replace(/\s/g, ''), chosenPassword || undefined).then(() => handle.close(true)).catch((reason) => {
-        status.textContent = reason instanceof Error ? reason.message : 'Could not verify code. Try again.';
-        setBusy(verify, false); resend.disabled = false; change.disabled = false;
-      });
+    busy = false;
+    void showCodeAlert(alerts, clock, emailAddress, {
+      verify: (code) => actions.verify(emailAddress, code, chosenPassword || undefined),
+      resend: () => actions.resend(chosenDisplayName, emailAddress),
+    }).then((complete) => {
+      if (complete) handle.close(true);
+      else { status.textContent = ''; renderRequest(); }
     });
-    resend.addEventListener('click', () => {
-      if (busy) return;
-      status.textContent = ''; setBusy(resend, true); verify.disabled = true; change.disabled = true;
-      void actions.resend(chosenDisplayName, emailAddress).then(() => { status.textContent = 'New code sent.'; code.setValue(''); })
-        .catch((reason) => { status.textContent = reason instanceof Error ? reason.message : 'Could not send code. Try again.'; })
-        .finally(() => { setBusy(resend, false); verify.disabled = false; change.disabled = false; });
-    });
-    change.addEventListener('click', () => { if (!busy) { status.textContent = ''; renderRequest(); } });
-    content.replaceChildren(form, status); queueMicrotask(() => code.focus());
   };
 
   renderRequest();

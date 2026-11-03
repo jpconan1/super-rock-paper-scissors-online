@@ -1,4 +1,5 @@
 import type { BoilClock } from '../../animation/boilClock';
+import { assetUrl } from '../../assets/assetUrl';
 import { createGameButton, type GameButton } from '../../input/gameButton';
 import { createGameLayout } from '../../layout/gameLayout';
 import type { ResponsiveScaleBoxLayout } from '../../layout/scaleBox';
@@ -77,7 +78,7 @@ export function mountFireballWarScreen(
       const item = document.createElement('span');
       item.className = 'fireball-war__resource';
       const icon = document.createElement('img');
-      icon.src = '/visual-elements/resource-counters/charge-icon.webp';
+      icon.src = assetUrl('/visual-elements/resource-counters/charge-icon.webp');
       icon.alt = '';
       icon.hidden = index >= value;
       item.append(resourceSlot.element, icon);

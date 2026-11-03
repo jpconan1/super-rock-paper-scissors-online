@@ -34,7 +34,7 @@ const effects = new Map<SoundId, SoundEffect>();
 export function playCatalogSound(id: SoundId, options?: SoundPlaybackOptions): SoundPlayback {
   let effect = effects.get(id);
   if (!effect) {
-    effect = createSoundEffect(SOUND_CATALOG[id], id === 'match-found' ? { maximumGain: getMusicVolume } : id === 'emblem-unlock' ? { volumeMultiplier: 0.5 } : undefined);
+    effect = createSoundEffect(SOUND_CATALOG[id], id === 'match-found' ? { maximumGain: () => getMusicVolume() * 0.5, volumeMultiplier: 0.5 } : id === 'emblem-unlock' ? { volumeMultiplier: 0.5 } : undefined);
     effects.set(id, effect);
   }
   return effect.play(options);

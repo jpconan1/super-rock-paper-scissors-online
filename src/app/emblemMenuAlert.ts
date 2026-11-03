@@ -42,7 +42,7 @@ export function showEmblemMenuAlert(
   onChoose: (emblem: EquippedPlayerEmblem | null) => Promise<void>,
   onChosen: (emblem: EquippedPlayerEmblem | null) => void,
   onEditCustom: () => void,
-): void {
+): Promise<void> {
   const content = document.createElement('section'); content.className = 'emblem-menu';
   const collectionSection = document.createElement('section'); collectionSection.className = 'emblem-menu__section emblem-menu__section--collection';
   const collectionHeading = document.createElement('h3'); collectionHeading.textContent = 'Emblems';
@@ -165,19 +165,22 @@ export function showEmblemMenuAlert(
       sprites.push(...row.sprites); missions.append(row.element);
     }
   }).catch(() => { missionStatus.textContent = 'Could not load missions.'; });
-  void handle.result.finally(() => {
+  return handle.result.then(() => {
     faceArtworks.forEach((artwork) => artwork.destroy());
     controls.forEach((control) => control.destroy()); sprites.forEach((sprite) => sprite.destroy());
   });
 }
 
-export function createEmblemMissionRow(mission: EmblemMissionStatus, clock: BoilClock, rewardText = 'Reward:'): { element: HTMLLIElement; sprites: ReturnType<typeof createBoilingSprite>[] } {
+export function createEmblemMissionRow(mission: EmblemMissionStatus, clock: BoilClock, rewardText = 'Reward:', compact = false): { element: HTMLLIElement; sprites: ReturnType<typeof createBoilingSprite>[] } {
   const item = document.createElement('li'); item.className = 'emblem-menu__mission'; item.dataset.completed = String(mission.completed);
   const mark = document.createElement('span'); mark.className = 'emblem-menu__mission-mark'; mark.textContent = mission.completed ? '✓' : '';
   const copy = document.createElement('span');
   const title = document.createElement('strong'); title.textContent = mission.title;
-  const detail = document.createElement('small'); detail.textContent = mission.detail;
-  copy.append(title, detail);
+  copy.append(title);
+  if (!compact) {
+    const detail = document.createElement('small'); detail.textContent = mission.detail;
+    copy.append(detail);
+  }
   const rewardId = mission.rewardKind === 'feature' ? null : mission.rewardEmblemId;
   const rewardDefinition = rewardId ? PLAYER_EMBLEM_BY_ID.get(rewardId) : undefined;
   const rewardSource = rewardDefinition ? emblemArtworkSource(rewardDefinition)
@@ -189,7 +192,8 @@ export function createEmblemMissionRow(mission: EmblemMissionStatus, clock: Boil
     const rewardArt = document.createElement('span'); rewardArt.className = 'emblem-menu__reward-art';
     const reward = createBoilingSprite({ src: rewardSource, frameCount: rewardDefinition ? emblemArtworkFrameCount(rewardDefinition) : 3,
       clock, className: 'emblem-menu__reward-emblem', alt: rewardDefinition?.name ?? 'Custom Emblem' });
-    sprites.push(reward); rewardArt.append(reward.element); copy.append(rewardLabel, rewardArt);
+    sprites.push(reward); rewardArt.append(reward.element);
+    copy.append(rewardLabel, rewardArt);
   }
   item.append(mark, copy);
   return { element: item, sprites };

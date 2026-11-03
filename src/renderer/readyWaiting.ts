@@ -1,4 +1,5 @@
 import type { BoilClock } from '../animation/boilClock';
+import { assetUrl } from '../assets/assetUrl';
 import type { TimedSemanticEvent } from '../protocol/protocol';
 import type { PlayerId } from '../core/variant';
 import { createBoilingSprite, type BoilingSprite } from './boilingSprite';
@@ -62,7 +63,7 @@ export function mountReadyWaiting(container: HTMLElement, clock: BoilClock): Rea
     const nextReady = `/visual-elements/ready-waiting/${visual.readyAsset}_sheet.webp`;
     const nextSplit = `/variants/dummy/scenes/split-scenes/dummy-scene-${early === 'p1' ? 'right' : 'left'}-ready.webp`;
     if (readySource !== nextReady) ready.setSource(readySource = nextReady);
-    if (splitSource !== nextSplit) split.src = splitSource = nextSplit;
+    if (splitSource !== nextSplit) { splitSource = nextSplit; split.src = assetUrl(nextSplit); }
     split.hidden = !visual.split;
     dots.element.hidden = visual.dots === undefined;
     if (visual.dots !== undefined) {
@@ -86,7 +87,8 @@ export function mountReadyWaiting(container: HTMLElement, clock: BoilClock): Rea
       if (early && early !== shownEarly) {
         shownEarly = early;
         void playStarburstWipe(container, clock, () => {
-          split.src = splitSource = `/variants/dummy/scenes/split-scenes/dummy-scene-${early === 'p1' ? 'right' : 'left'}-ready.webp`;
+          splitSource = `/variants/dummy/scenes/split-scenes/dummy-scene-${early === 'p1' ? 'right' : 'left'}-ready.webp`;
+          split.src = assetUrl(splitSource);
           split.hidden = false;
         }, wipeAbort.signal);
       }

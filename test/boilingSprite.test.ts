@@ -1,5 +1,6 @@
-import { describe, expect, test } from 'vitest';
-import { getVerticalSheetFrameSize, nextLoopFrame, splitChromaOutlinePixels } from '../src/renderer/boilingSprite';
+import { describe, expect, test, vi } from 'vitest';
+import type { BoilClock } from '../src/animation/boilClock';
+import { createBoilingSprite, getVerticalSheetFrameSize, nextLoopFrame, splitChromaOutlinePixels } from '../src/renderer/boilingSprite';
 
 describe('vertical boiling sheet dimensions', () => {
   test.each([
@@ -54,5 +55,45 @@ describe('emblem outline chroma key', () => {
       252, 1, 252, 0,
       38, 0, 38, 0,
     ]);
+  });
+});
+
+describe('boiling sprite source changes', () => {
+  test('repeated renders keep the existing image load and animation frame', () => {
+    const originalDocument = globalThis.document;
+    const originalImage = globalThis.Image;
+    let loads = 0;
+    class TestImage {
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      complete = false;
+      naturalWidth = 100;
+      naturalHeight = 300;
+      set src(_value: string) { loads++; this.complete = true; this.onload?.(); }
+      decode() { return Promise.resolve(); }
+    }
+    const context = { clearRect: vi.fn(), drawImage: vi.fn() };
+    const element = () => ({
+      className: '', style: { aspectRatio: '', removeProperty: vi.fn() }, width: 0, height: 0,
+      setAttribute: vi.fn(), append: vi.fn(), remove: vi.fn(),
+      getContext: () => context,
+    });
+    vi.stubGlobal('document', { createElement: element });
+    vi.stubGlobal('Image', TestImage);
+    try {
+      const clock = { subscribe: (subscriber: (frame: 0 | 1 | 2) => void) => { subscriber(0); return () => {}; }, isEnabled: () => true } as BoilClock;
+      const sprite = createBoilingSprite({ src: '/same.webp', clock });
+      sprite.setFrame(2);
+      const draws = context.drawImage.mock.calls.length;
+      sprite.setSource('/same.webp');
+      expect(loads).toBe(1);
+      expect(context.drawImage).toHaveBeenCalledTimes(draws);
+      sprite.setSource('/other.webp');
+      expect(loads).toBe(2);
+      sprite.destroy();
+    } finally {
+      vi.stubGlobal('document', originalDocument);
+      vi.stubGlobal('Image', originalImage);
+    }
   });
 });

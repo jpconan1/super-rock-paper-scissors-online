@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { CUSTOM_EMBLEM_BORDER_NUMBER, DEFAULT_CUSTOM_EMBLEM_DOCUMENT, customEmblemImageUrl, isCustomEmblemDocument, nextCustomEmblemBorder, setCustomEmblemImageBaseUrl } from '../src/core/customEmblem';
+import { CUSTOM_EMBLEM_BORDER_NUMBER, CUSTOM_EMBLEM_MAX_DOCUMENT_BYTES, DEFAULT_CUSTOM_EMBLEM_DOCUMENT, customEmblemImageUrl, isCustomEmblemDocument, nextCustomEmblemBorder, setCustomEmblemImageBaseUrl } from '../src/core/customEmblem';
 import { clampCustomEmblemCrop } from '../src/app/customEmblemEditor';
 
 describe('custom emblems', () => {
@@ -9,6 +9,13 @@ describe('custom emblems', () => {
     expect(isCustomEmblemDocument({ ...DEFAULT_CUSTOM_EMBLEM_DOCUMENT, borderNumber: 29 })).toBe(false);
     expect(isCustomEmblemDocument({ ...DEFAULT_CUSTOM_EMBLEM_DOCUMENT, crop: { x: 700, y: 0, width: 200, height: 100 } })).toBe(false);
     expect(isCustomEmblemDocument({ ...DEFAULT_CUSTOM_EMBLEM_DOCUMENT, operations: [{ kind: 'stroke', color: 'black', points: [{ x: 0, y: 0 }, { x: 761, y: 1 }] }] })).toBe(false);
+  });
+
+  test('upload size accommodates the maximum drawing allowed by the editor', () => {
+    const points = Array.from({ length: 180 }, (_, index) => ({ x: Math.min(760, index * 5), y: Math.min(450, index * 3) }));
+    const document = { ...DEFAULT_CUSTOM_EMBLEM_DOCUMENT, operations: Array.from({ length: 300 }, () => ({ kind: 'stroke' as const, color: 'black' as const, points })) };
+    expect(isCustomEmblemDocument(document)).toBe(true);
+    expect(new TextEncoder().encode(JSON.stringify(document)).byteLength).toBeLessThan(CUSTOM_EMBLEM_MAX_DOCUMENT_BYTES);
   });
 
   test('clamps move and resize while preserving the 2:1 frame', () => {

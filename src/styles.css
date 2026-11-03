@@ -191,6 +191,25 @@ body::before {
 .alert-system__box--titled.email-login-alert { padding: 70px 24px 24px; }
 .email-login-alert .alert-system__content { width: 100%; color: #171412; }
 .email-login-alert .alert-system__actions:empty { display: none; }
+.alert-system__box.code-entry-alert { gap: 0; padding: 70px 24px 24px; }
+.code-entry-alert .alert-system__content { width: 100%; color: #171412; }
+.code-entry-alert .alert-system__actions:empty { display: none; }
+.code-alert, .code-alert__form { display: grid; width: 100%; justify-items: center; gap: 16px; }
+.code-alert__instruction, .code-alert__status { margin: 0; font-size: 17px; line-height: 1.25; text-align: center; overflow-wrap: anywhere; }
+.code-alert__status { min-height: 22px; color: #ac3235; font-weight: 900; }
+.code-alert__field { position: relative; display: block; width: 320px; height: 80px; }
+.code-alert__box { position: absolute; inset: 0; }
+.code-alert__placeholders { position: absolute; inset: 0 16px; display: grid; grid-template-columns: repeat(4, 1fr); align-items: center; justify-items: center; pointer-events: none; }
+.code-alert__slot { position: relative; display: grid; width: 100%; height: 100%; place-items: center; }
+.code-alert__glyph { position: absolute; color: #171412; font: 900 48px Inter, Arial, sans-serif; }
+.code-alert__field:focus-within .code-alert__slot[data-cursor]::after { content: ''; position: absolute; left: 22%; top: 18px; width: 3px; height: 44px; background: #171412; animation: code-caret-blink 1s steps(1) infinite; }
+.code-alert__field:focus-within .code-alert__slot[data-cursor-end]::after { left: 75%; }
+@keyframes code-caret-blink { 50% { opacity: 0; } }
+.code-alert__star { width: 46px; height: 46px; opacity: .22; }
+.code-alert__star[hidden] { display: none; }
+.code-alert__input { position: absolute; inset: 0; box-sizing: border-box; width: 100%; height: 100%; padding: 0 18px; border: 0; outline: 0; background: transparent; color: transparent; font: 900 48px Inter, Arial, sans-serif; caret-color: transparent; }
+.code-alert__buttons { display: flex; align-items: center; justify-content: center; gap: 14px; }
+.game-button.code-alert__button { width: 140px; flex: none; }
 .email-login-dialog, .email-login-dialog__form { display: grid; width: 100%; justify-items: center; gap: 16px; }
 .email-login-dialog__instruction, .email-login-dialog__status { margin: 0; font-size: 17px; line-height: 1.25; }
 .email-login-dialog__status { min-height: 22px; color: #ac3235; font-weight: 900; }
@@ -1408,7 +1427,7 @@ input {
 .abm-picker__portrait { z-index: 1; width: 176px; height: 176px; }
 .abm-picker__portrait .boiling-sprite__canvas { object-fit: contain; }
 .abm-picker__copy { display: grid; align-content: center; justify-items: center; gap: 5px; width: 176px; height: 176px; padding: 10px 12px; overflow: hidden; text-align: center; }
-.abm-picker__name { color: #ac3235; font-size: 22px; line-height: 1; }
+.abm-picker__name { color: #000; font-size: 22px; line-height: 1; }
 .abm-picker__bonus-xp-heading { color: #ac3235; font-size: 12px; line-height: 1.05; }
 .abm-picker__bonus-xp-heading[hidden] { display: none; }
 .abm-class-badge { position: absolute; z-index: 4; overflow: visible; transform: translateY(5px); }
@@ -1655,25 +1674,16 @@ input {
   top: 50%;
   box-sizing: border-box;
   width: min(650px, 86%);
-  max-height: calc(100% - 48px);
-  padding: 22px 28px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 8px;
   text-align: center;
-  transform: translate(-50%, -50%) rotate(-.25deg);
+  transform: translate(-50%, -50%);
 }
 
-.progress-screen__panel h1,
-.progress-screen__panel p { margin: 0; }
-.progress-screen__breakdown { display: grid; gap: 2px; font-size: 16px; }
-.progress-screen__bonus { font-weight: 800; }
-.progress-screen__gain { font-size: 24px; font-weight: 900; }
 .progress-screen__bar { width: min(480px, 88%); height: auto; aspect-ratio: 2; }
-.progress-screen__unlocks { min-height: 1.4em; font-size: 20px; }
-.progress-screen__continue { width: 165px; height: 82px; }
 
 .abm-controls__match-progress { width: 100%; height: 100%; display: grid; place-items: center; }
 .abm-controls__match-progress[hidden] { display: none; }
@@ -1709,9 +1719,10 @@ input {
 .class-reward-screen__copy strong { color: #ac3235; font-size: 32px; }
 .class-reward-screen__copy p { margin: 0; font-size: 22px; line-height: 1.15; }
 .class-reward-screen__flip { object-fit: contain; }
+.class-reward-screen__next-progress .xp-progress-bar__count-value { font-size: 110cqh; }
 
 @media (orientation: portrait) {
-  .progress-screen__panel { width: 84%; max-height: calc(100% - 40px); padding: 20px 16px; }
+  .progress-screen__panel { width: 84%; }
 }
 
 @media (prefers-reduced-motion: reduce) {

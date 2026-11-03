@@ -1,5 +1,6 @@
 import { getAssetBundle } from './assetBundleRegistry';
 import type { AssetBundleId } from './assetBundleTypes';
+import { assetUrl } from './assetUrl';
 
 export interface AssetLease {
   readonly ready: Promise<void>;
@@ -113,7 +114,7 @@ export async function loadDecodedImage(url: string): Promise<HTMLImageElement> {
     const timer = setTimeout(() => reject(new Error(`Image timed out: ${url}`)), IMAGE_TIMEOUT_MS);
     image.addEventListener('load', () => { clearTimeout(timer); resolve(); }, { once: true });
     image.addEventListener('error', () => { clearTimeout(timer); reject(new Error(`Could not load image: ${url}`)); }, { once: true });
-    image.src = url;
+    image.src = assetUrl(url);
     if (image.complete) { clearTimeout(timer); image.naturalWidth ? resolve() : reject(new Error(`Could not load image: ${url}`)); }
   });
   if (image.decode) {

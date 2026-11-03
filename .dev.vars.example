@@ -5,4 +5,4 @@ GOOGLE_CLIENT_SECRET=replace-with-google-web-client-secret
 # Optional. Email signup stays hidden when omitted.
 RESEND_API_KEY=replace-with-resend-api-key
 # Localhost-only fake mailer. The code is never logged or returned by the API.
-DEV_AUTH_EMAIL_CODE=123456
+DEV_AUTH_EMAIL_CODE=ab12

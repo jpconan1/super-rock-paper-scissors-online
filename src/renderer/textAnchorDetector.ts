@@ -1,3 +1,5 @@
+import { assetUrl } from '../assets/assetUrl';
+
 export interface TextAnchor {
   xPercent: number;
   yPercent: number;
@@ -127,6 +129,6 @@ function loadImage(src: string): Promise<HTMLImageElement> {
     const image = new Image();
     image.onload = () => resolve(image);
     image.onerror = () => reject(new Error(`Could not load button sheet: ${src}`));
-    image.src = src;
+    image.src = assetUrl(src);
   });
 }

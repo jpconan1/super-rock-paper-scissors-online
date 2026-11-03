@@ -1,4 +1,5 @@
 import type { ClientVariantDescriptor } from '../core/variant';
+import { assetUrl } from '../assets/assetUrl';
 import type { SlotId } from '../core/slots';
 import type { BoilClock } from '../animation/boilClock';
 import { createMenuCanvas } from '../layout/menuLayout';
@@ -43,6 +44,7 @@ export type LobbyScreenMount = ScreenCleanup & {
   setTestMode(enabled: boolean): void;
   setStreamerMode(enabled: boolean): void;
   openCustomEmblemEditor(): void;
+  openEmblemsFromMissions(): Promise<void>;
 };
 
 export interface LobbyClassCardDefinition {
@@ -139,9 +141,9 @@ export function createLobbyMissionCard(
   return card;
 }
 
-export async function openLobbyMissions(setFace: (face: LobbyFace) => Promise<void>, open: () => void): Promise<void> {
+export async function openLobbyMissions(setFace: (face: LobbyFace) => Promise<void>, open: () => unknown): Promise<void> {
   await setFace('progression');
-  open();
+  await open();
 }
 
 export function setLobbyRosterOpen(roster: HTMLElement, missions: HTMLElement, open: boolean): void {
@@ -191,7 +193,7 @@ export function mountLobbyScreen(
   equippedEmblem: EquippedPlayerEmblem | null = null,
   ownedEmblems: readonly OwnablePlayerEmblem[] = [],
   customEmblem: CustomEmblemMeta | null = null,
-  onOpenEmblems: (options: { equipped: EquippedPlayerEmblem | null; owned: readonly OwnablePlayerEmblem[]; customEmblem: CustomEmblemMeta | null; onChosen(emblem: EquippedPlayerEmblem | null, custom?: CustomEmblemMeta | null): void }) => void = () => {},
+  onOpenEmblems: (options: { equipped: EquippedPlayerEmblem | null; owned: readonly OwnablePlayerEmblem[]; customEmblem: CustomEmblemMeta | null; onChosen(emblem: EquippedPlayerEmblem | null, custom?: CustomEmblemMeta | null): void }) => void | Promise<void> = () => {},
   faceOptions: {
     initialFace?: LobbyFace;
     whiteboardDisabled?: boolean;
@@ -200,6 +202,7 @@ export function mountLobbyScreen(
     customEmblemEditor?: {
       load(): Promise<CustomEmblemState | null>;
       save(document: CustomEmblemDocument, artwork: Blob): Promise<CustomEmblemMeta>;
+      showError?(message: string): void;
     };
   } = {},
   bonusClassId: AbmClassId = ABM_CLASS_IDS[Math.max(0, Math.min(ABM_CLASS_IDS.length - 1, playerLevel - 1))]!,
@@ -288,9 +291,9 @@ export function mountLobbyScreen(
     const cardSprite = createBoilingSprite({ src: definition.asset, className: 'lobby-screen__class-card', alt: item.label ?? '', clock });
     const heldImage = document.createElement('img');
     heldImage.className = 'lobby-screen__class-card-held'; heldImage.alt = ''; heldImage.draggable = false; heldImage.hidden = true;
-    heldImage.src = definition.faceUp
+    heldImage.src = assetUrl(definition.faceUp
       ? `/rewards/class-flips/${definition.classId}/frame-07.webp`
-      : `/lobby/class-cards/held/${definition.classId}-back.webp`;
+      : `/lobby/class-cards/held/${definition.classId}-back.webp`);
     const nextLabel = document.createElement('span'); nextLabel.className = 'lobby-screen__class-card-next'; nextLabel.textContent = 'Next:'; nextLabel.hidden = !definition.next;
     cardSprite.element.append(heldImage, nextLabel);
     sprites.push(cardSprite);
@@ -318,7 +321,7 @@ export function mountLobbyScreen(
   whiteboardFill.className = 'lobby-screen__whiteboard-fill';
   const whiteboardArt = document.createElement('img');
   whiteboardArt.className = 'lobby-screen__whiteboard-art';
-  whiteboardArt.src = '/lobby/whiteboard.webp';
+  whiteboardArt.src = assetUrl('/lobby/whiteboard.webp');
   whiteboardArt.alt = '';
   whiteboard.append(whiteboardFill, whiteboardArt);
   const flipArt = document.createElement('img');
@@ -398,13 +401,14 @@ export function mountLobbyScreen(
   roster.className = 'textbox lobby-screen__roster';
   roster.hidden = true;
   renderLobbyRoster(roster, [], '');
-  const missions = createLobbyMissionCard(faceOptions.loadMissions, () => openLobbyMissions(setLobbyFace, () => {
-    onOpenEmblems({ equipped: activeEmblem, owned: ownedEmblems, customEmblem: activeCustomEmblem, onChosen: (next, nextCustom) => {
-      activeEmblem = next;
-      activeCustomEmblem = nextCustom ?? activeCustomEmblem;
-      emblemCard.setEmblem(next, nextCustom);
-    } });
-  }));
+  const openEmblemsFromMissions = () => openLobbyMissions(setLobbyFace, () => onOpenEmblems({ equipped: activeEmblem, owned: ownedEmblems, customEmblem: activeCustomEmblem, onChosen: (next, nextCustom) => {
+    activeEmblem = next;
+    activeCustomEmblem = nextCustom ?? activeCustomEmblem;
+    emblemCard.setEmblem(next, nextCustom);
+  } }));
+  const missions = createLobbyMissionCard(faceOptions.loadMissions, () => {
+    void openEmblemsFromMissions();
+  });
   const rosterToggle = createToggleButton({
     label: layoutDocument.copy!.showPlayers!,
     pressed: false,
@@ -471,8 +475,8 @@ export function mountLobbyScreen(
   const toolController = mountWhiteboardTools({ board: whiteboard, composition: whiteboardFace, buttons: toolButtons, clock, isPortrait: () => layoutName === 'portrait' });
   const whiteboardController = mountWhiteboard({ board: whiteboard, tools: toolController, clock, send: sendWhiteboard });
   const rotationLease = assetLoader.retainUrls([...WHITEBOARD_ROTATION_FRAMES, ...PAPER_ROTATION_FRAMES]);
-  const progressEmpty = new Image(); progressEmpty.src = '/visual-elements/progress-bar-empty-sheet.webp';
-  const progressFull = new Image(); progressFull.src = '/visual-elements/progress-bar-full-sheet.webp';
+  const progressEmpty = new Image(); progressEmpty.src = assetUrl('/visual-elements/progress-bar-empty-sheet.webp');
+  const progressFull = new Image(); progressFull.src = assetUrl('/visual-elements/progress-bar-full-sheet.webp');
   const drawProgress = (frame: 0 | 1 | 2) => {
     if (!progressEmpty.complete || !progressEmpty.naturalWidth || !progressFull.complete || !progressFull.naturalWidth) return;
     const context = progressBar.getContext('2d'); if (!context) return;
@@ -492,7 +496,7 @@ export function mountLobbyScreen(
     if (paper) {
       if (paperFlipSource !== frame.source) paperFlip.setSource(frame.source);
       paperFlipSource = frame.source;
-    } else flipArt.src = frame.source;
+    } else flipArt.src = assetUrl(frame.source);
     const face = lobbyElement('whiteboard').layouts[layoutName];
     const blank = lobbyElement('whiteboard-blank-face').layouts[layoutName];
     const progress = paper ? 1 : frame.progress;
@@ -597,7 +601,9 @@ export function mountLobbyScreen(
       return finishEmblemEditing();
     }).catch((reason) => {
       emblemSaving = false;
-      emblemStatus.textContent = reason instanceof Error ? reason.message : 'Could not save emblem.';
+      const message = reason instanceof Error ? reason.message : 'Could not save emblem.';
+      emblemStatus.textContent = message;
+      config.showError?.(message);
       applyFaceState();
     });
   };
@@ -654,9 +660,9 @@ export function mountLobbyScreen(
     const definitions = lobbyClassCardDefinitions(count, bonusClassId); classCardDefinitions = definitions;
     for (let index = 0; index < classCards.length; index++) {
       const card = classCards[index]!; const definition = definitions[index]!;
-      card.heldImage.src = definition.faceUp
+      card.heldImage.src = assetUrl(definition.faceUp
         ? `/rewards/class-flips/${definition.classId}/frame-07.webp`
-        : `/lobby/class-cards/held/${definition.classId}-back.webp`;
+        : `/lobby/class-cards/held/${definition.classId}-back.webp`);
       card.nextLabel.hidden = !definition.next;
       card.sprite.setSource(definition.asset);
     }
@@ -670,6 +676,7 @@ export function mountLobbyScreen(
     if (enabled && activeFace === 'whiteboard' && !emblemEditing) void setLobbyFace('progression');
   };
   cleanup.openCustomEmblemEditor = () => { void openCustomEmblemEditor(); };
+  cleanup.openEmblemsFromMissions = openEmblemsFromMissions;
   return cleanup;
 }
 
@@ -704,7 +711,7 @@ export function mountSlotPickerScreen(
     button.dataset.slot = slot;
     if (variant.thumbnail) {
       const image = document.createElement('img');
-      image.src = variant.thumbnail;
+      image.src = assetUrl(variant.thumbnail);
       image.alt = '';
       button.prepend(image);
     }

@@ -1,4 +1,5 @@
 import type { BoilClock } from '../animation/boilClock';
+import { assetUrl } from '../assets/assetUrl';
 import { createGameButton, type GameButton } from '../input/gameButton';
 import { createBoilingSprite, type BoilingSprite } from '../renderer/boilingSprite';
 import type { PlayerId } from '../core/variant';
@@ -179,7 +180,7 @@ export function createGameLayout<TLayoutName extends string>(
     if (artwork.boiling === false) {
       const image = document.createElement('img');
       image.className = className;
-      image.src = artwork.src;
+      image.src = assetUrl(artwork.src);
       image.alt = artwork.alt;
       image.draggable = false;
       slots[slot].append(image);

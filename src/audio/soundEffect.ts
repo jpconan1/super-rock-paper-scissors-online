@@ -1,5 +1,6 @@
 import { musicManifest, type MusicBase } from './musicManifest';
 import { MusicTransport, type ScheduledMusicTransition } from './musicTransport';
+import { assetUrl } from '../assets/assetUrl';
 
 export interface SoundEffect {
   play(options?: SoundPlaybackOptions): SoundPlayback;
@@ -204,7 +205,7 @@ function loadSound(src: string, audioContext: AudioContext): CachedSound {
 
   sound = {};
   sounds.set(src, sound);
-  sound.loading = fetch(src)
+  sound.loading = fetch(assetUrl(src))
     .then((response) => {
       if (!response.ok) throw new Error(`Could not load sound: ${src}`);
       return response.arrayBuffer();

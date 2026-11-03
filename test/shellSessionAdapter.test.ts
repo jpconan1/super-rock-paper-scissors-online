@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { LocalShellSessionAdapter, serializeVariantCommand, WebSocketShellSessionAdapter } from '../src/app/shellSessionAdapter';
+import { DEFAULT_CUSTOM_EMBLEM_DOCUMENT } from '../src/core/customEmblem';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -9,6 +10,14 @@ function deferred<T>() {
 
 describe('matchmaking session adapters', () => {
   let storageValues: Map<string, string>;
+  test('shows the server reason when a custom emblem save is rejected', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: 'Invalid custom emblem document.' }), {
+      status: 400, headers: { 'content-type': 'application/json' },
+    })));
+    const adapter = new WebSocketShellSessionAdapter('https://example.test');
+    await expect(adapter.saveCustomEmblem(DEFAULT_CUSTOM_EMBLEM_DOCUMENT, new Blob(['art'], { type: 'image/webp' })))
+      .rejects.toThrow('Invalid custom emblem document.');
+  });
   test('marks the lobby reconnecting when either socket drops and restores it after both recover', () => {
     const sockets: Array<{ readyState: number; emit(type: string): void }> = [];
     class SocketMock {
@@ -35,6 +44,43 @@ describe('matchmaking session adapters', () => {
     vi.runOnlyPendingTimers();
     sockets[2]!.emit('open');
     expect(connection).toHaveBeenLastCalledWith('connected');
+    adapter.destroy();
+  });
+  test('checks whiteboard sequence and reconnects when a silent socket stops responding', () => {
+    const sockets: Array<{ readyState: number; sent: string[]; emit(type: string, data?: string): void }> = [];
+    class SocketMock {
+      static OPEN = 1;
+      readyState = 0;
+      sent: string[] = [];
+      private listeners = new Map<string, Array<(event: { data?: string }) => void>>();
+      constructor() { sockets.push(this); }
+      addEventListener(type: string, listener: (event: { data?: string }) => void) {
+        this.listeners.set(type, [...this.listeners.get(type) ?? [], listener]);
+      }
+      send(data: string) { this.sent.push(data); }
+      close() { this.readyState = 3; }
+      emit(type: string, data?: string) {
+        this.readyState = type === 'open' ? 1 : this.readyState;
+        for (const listener of this.listeners.get(type) ?? []) listener({ data });
+      }
+    }
+    vi.stubGlobal('WebSocket', SocketMock);
+    const connection = vi.fn();
+    const adapter = new WebSocketShellSessionAdapter('https://example.test');
+    adapter.subscribe({ connection, matchFound: vi.fn(), snapshot: vi.fn() });
+    const internals = adapter as unknown as { onlineActive: boolean; whiteboardActive: boolean; connectWhiteboard(): void };
+    internals.onlineActive = true; internals.whiteboardActive = true;
+    internals.connectWhiteboard();
+    sockets[0]!.emit('open');
+    vi.advanceTimersByTime(10_000);
+    expect(JSON.parse(sockets[0]!.sent.at(-1)!)).toEqual({ type: 'sync', sequence: 0 });
+    sockets[0]!.emit('message', JSON.stringify({ type: 'synced', sequence: 0 }));
+    vi.advanceTimersByTime(10_000);
+    expect(sockets[0]!.sent).toHaveLength(2);
+    vi.advanceTimersByTime(8_000);
+    expect(connection).toHaveBeenLastCalledWith('reconnecting');
+    vi.advanceTimersByTime(1_000);
+    expect(sockets).toHaveLength(2);
     adapter.destroy();
   });
   test('preserves ABM command envelopes while unwrapping legacy move commands', () => {
@@ -400,19 +446,20 @@ describe('matchmaking session adapters', () => {
         playerId: 'torch-bold-bagel-badger-11', accountType: 'google', displayName: 'Player', rating: 1500, equippedEmblem: 'beta-og',
       }), { status: 200 }));
       if (url.endsWith('/auth-capabilities')) return Promise.resolve(new Response(JSON.stringify({ emailSignup: true, emailCodeLogin: true, password: true }), { status: 200 }));
+      if (url.endsWith('/account-deletion/google/start')) return Promise.resolve(new Response(JSON.stringify({ url: 'https://accounts.google.com/test' }), { status: 200 }));
       return Promise.resolve(new Response(JSON.stringify({ success: true }), { status: 200 }));
     });
     vi.stubGlobal('fetch', fetchMock);
     const adapter = new WebSocketShellSessionAdapter('https://example.test');
     await adapter.prepareTitle();
 
-    await adapter.requestAccountDeletionCode();
-    await adapter.deleteAccount('123456');
+    await expect(adapter.requestGoogleDeletion('abcde-12345-abcde-12345')).resolves.toBe('https://accounts.google.com/test');
+    await adapter.deleteAccount();
 
-    expect(fetchMock).toHaveBeenCalledWith('https://example.test/account-deletion/request', expect.objectContaining({ method: 'POST', credentials: 'include' }));
     expect(fetchMock).toHaveBeenCalledWith('https://example.test/account-deletion', expect.objectContaining({
-      method: 'DELETE', credentials: 'include', body: JSON.stringify({ code: '123456' }),
+      method: 'DELETE', credentials: 'include', body: JSON.stringify({}),
     }));
+    expect(fetchMock).toHaveBeenCalledWith('https://example.test/account-deletion/google/start', expect.objectContaining({ method: 'POST' }));
     expect(adapter.accountState()).toMatchObject({ signedIn: false, accountType: 'guest', playerId: '', emailSignupAvailable: true, emailAuthAvailable: true });
   });
 
@@ -614,12 +661,12 @@ describe('matchmaking session adapters', () => {
 
     await adapter.requestEmailLogin('player@example.com');
     await adapter.requestPasswordCode('player@example.com');
-    await adapter.updateEmailPassword('player@example.com', '123456', 'password123');
+    await adapter.updateEmailPassword('player@example.com', 'ab12', 'password123');
 
     expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
       'https://example.test/email-login/request', 'https://example.test/email-password/request', 'https://example.test/email-password/update',
     ]);
-    expect(JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body))).toEqual({ email: 'player@example.com', code: '123456', password: 'password123' });
+    expect(JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body))).toEqual({ email: 'player@example.com', code: 'ab12', password: 'password123' });
     expect(adapter.accountState().hasPassword).toBe(true);
   });
 });

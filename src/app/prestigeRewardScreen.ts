@@ -1,4 +1,5 @@
 import type { BoilClock } from '../animation/boilClock';
+import { assetUrl } from '../assets/assetUrl';
 import { getSfxVolume, isSoundEnabled, subscribeAudioState } from '../audio/soundEffect';
 import { createGameButton } from '../input/gameButton';
 import { createMenuCanvas } from '../layout/menuLayout';
@@ -73,7 +74,7 @@ export function mountPrestigeRewardScreen(options: PrestigeRewardScreenOptions):
 
   const images = Array.from({ length: SHEET_COUNT }, (_, index) => {
     const image = new Image();
-    image.src = `/lobby/prestige-animation-${index + 1}.webp`;
+    image.src = assetUrl(`/lobby/prestige-animation-${index + 1}.webp`);
     return image;
   });
   const sound = new Audio('/audio/prestige-sound-full.mp3');

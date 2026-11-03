@@ -9,17 +9,19 @@ npm run worker:dev
 
 Run `npm run dev` in another terminal for the browser client. The ignored `.env.development.local` points development builds to the Worker at `http://localhost:8787`; production builds still use their own origin.
 
-Copy `.dev.vars.example` to `.dev.vars`, generate `BETTER_AUTH_SECRET` with `npx auth@latest secret`, and add the Google web OAuth client credentials. Google's local callback is `http://localhost:8787/api/auth/callback/google`; production uses `https://abm.jpconan.ca/api/auth/callback/google`.
+For phone testing on the same Wi-Fi, first run `npm run d1:migrate:local`, then run `npm run phone-test`. Open the printed `http://<computer-ip>:8787` address on each phone. This command builds the client and serves it with the local Worker, D1, and Durable Objects. If the wrong network interface is selected, pass the computer's Wi-Fi IPv4 address: `npm run phone-test -- 192.168.1.10`. Restart the command after code changes. Phones cannot use `localhost` to reach the computer. Google sign-in requires a separately registered callback for the LAN address; guest accounts and the local email test code work without it. Keep this server on a trusted local network.
+
+Copy `.dev.vars.example` to `.dev.vars`, generate `BETTER_AUTH_SECRET` with `npx auth@latest secret`, and add the Google web OAuth client credentials. Register both local Google callbacks: `http://localhost:8787/api/auth/callback/google` and `http://localhost:8787/account-deletion/google/callback`. Register both production callbacks: `https://abm.jpconan.ca/api/auth/callback/google` and `https://abm.jpconan.ca/account-deletion/google/callback`.
 
 The private dashboard lives at `/admin`. Set `ADMIN_EMAILS` to a comma-separated, case-insensitive email allowlist in `.dev.vars` locally and as a Worker secret in production (`npx wrangler secret put ADMIN_EMAILS`). The dashboard uses Google sign-in and never joins the player lobby.
 
 Maintenance mode is controlled from the dashboard Overview. Enabling it blocks new public game/API/WebSocket entry while existing sockets finish naturally. “Grant pass & open test game” issues a signed four-hour browser pass, signs the admin account out, and opens the production game for isolated signup testing. Tester-created records remain visible with a TEST label but are excluded from normal metrics.
 
-Player accounts support guests, fixed Google accounts, and fixed email accounts. Email accounts always support verified email-code login and may optionally use an 8-128 character password. Signup, login, password management, and protected-account deletion use purpose-bound six-digit codes. Account email is permanent; Apple login remains disabled. Provider linking and login-method removal are unavailable.
+Player accounts support guests, fixed Google accounts, and fixed email accounts. Email accounts always support verified email-code login and may optionally use an 8-128 character password. Signup, login, password management, and protected-account deletion use purpose-bound four-character codes. Account email is permanent; Apple login remains disabled. Provider linking and login-method removal are unavailable.
 
-Protected-account deletion uses a separate six-digit email challenge entered in the game. Guest deletion does not send mail. Apply every D1 migration before deploying code that exposes the deletion endpoints.
+Email-account deletion uses a separate four-character email challenge entered in the game. Google-account deletion requires a fresh Google confirmation followed by a final Delete Account click. Guest deletion does not send mail. Apply every D1 migration before deploying code that exposes the deletion endpoints.
 
-Local development may set `DEV_AUTH_EMAIL_CODE=123456` instead of a Resend key. The fake mailer sends nothing and is accepted only when `BETTER_AUTH_URL` starts with `http://localhost`.
+Local development may set `DEV_AUTH_EMAIL_CODE=ab12` instead of a Resend key. The fake mailer sends nothing and is accepted only when `BETTER_AUTH_URL` starts with `http://localhost`.
 
 Before the first remote deployment:
 
