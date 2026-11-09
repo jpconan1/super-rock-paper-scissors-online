@@ -91,6 +91,7 @@ export async function awardPrestigeCompletion(db: EmblemDatabase, playerId: stri
 }
 
 async function placePrestigeContest(db: EmblemDatabase, playerId: string, prestigeCount: number, now: number): Promise<void> {
+  if (prestigeCount !== 1) return;
   if (await db.prepare('SELECT 1 present FROM test_players WHERE player_id = ?').bind(playerId).first()) return;
   const contest = await db.prepare("SELECT contest_id, capacity FROM emblem_contests WHERE contest_id = 'first-prestige' AND status = 'active'")
     .first<{ contest_id: string; capacity: number }>();

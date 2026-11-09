@@ -1,0 +1,9 @@
+{
+  "version": "0.02",
+  "posts": [
+    { "id": "version-0-02", "file": "patch-notes-v0-02.md" },
+    { "id": "beta-patch-notes-2026-11-03", "file": "2026-11-03-beta-patch-notes.md" },
+    { "id": "super-abm-alpha", "file": "2026-09-12-super-abm-alpha.md" },
+    { "id": "community-letter-2026-09-01", "file": "2026-09-01-community-letter.md" }
+  ]
+}

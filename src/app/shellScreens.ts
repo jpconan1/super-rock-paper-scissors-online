@@ -242,7 +242,7 @@ export function mountLobbyScreen(
     sprites.push(value);
     return value.element;
   };
-  const menuButton = (label: string, assetName: string, className: string, run = () => {}) => {
+  const menuButton = (label: string, assetName: string, className: string, run = () => {}, silent = false) => {
     const root = `/interactive-elements/menu-buttons/${assetName}`;
     const button = createGameButton({
       label,
@@ -251,6 +251,7 @@ export function mountLobbyScreen(
       betweenSheet: `${root}-between-sheet.webp`,
       depressedSheet: `${root}-depressed-sheet.webp`,
       clock,
+      silent,
     });
     button.element.classList.add(className, 'game-button--baked-label');
     gameButtons.push(button);
@@ -354,7 +355,7 @@ export function mountLobbyScreen(
   });
   chatEntry.input.name = 'message';
   chatEntry.element.classList.add('lobby-screen__chat-input');
-  const chatButton = menuButton('Chat', 'chat-button', 'lobby-screen__chat-button');
+  const chatButton = menuButton('Chat', 'chat-button', 'lobby-screen__chat-button', undefined, true);
   chat.append(chatEntry.element, chatButton);
   const emblemSave = createGameButton({ label: 'Save Emblem', clock,
     upSheet: '/interactive-elements/save-emblem-button-up-sheet.webp', betweenSheet: '/interactive-elements/save-emblem-button-between-sheet.webp',

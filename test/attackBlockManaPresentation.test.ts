@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { ABM_CLASSES, startingResourcesForClass } from '../src/variants/attackBlockMana/attackBlockManaCatalog';
-import { ABM_BONUS_XP_ART, ABM_COUNTERPICK_ENTRANCE_TICKS_PER_STAGE, ABM_LAYOUTS, ABM_OPENING_NUMBER_FRAME_COUNT, ABM_OPENING_READY_ART, ABM_RESULT_SCENES, ABM_SELECT_ART, ABM_TAG_CATEGORIES, ABM_TAG_ORDERS, abmTagSlotId, blockSegments, displayedAbmMove, getAbmAttackCostDisplay, getAbmClassBadgeGeometry, getAbmClassReadyFrame, getAbmClassResourceControlGeometry, getAbmClassResourceGeometry, getAbmClassSelectChrome, getAbmCounterpickCloudPlayer, getAbmCounterpickEntranceVisibility, getAbmLimitedResource, getAbmObservedCounterpickClass, getAbmOpeningStateAfterCountdown, getAbmPickerEntries, getAbmPickerStatus, getAbmPlayerResourceGeometry, getAbmResultScene, getAbmWaitingLayoutIds, getAbmWaitingVisual, initialManaForClass, isInitialClassSelectionTransition, latestClassPreview, reconcileAbmArmedAbility, sceneForMoves, shouldShowAbmBonusXp, shouldShowAbmClassPicker, shouldShowAbmContinuingRoundProcTags, shouldShowAbmRules, shouldShowAbmYouTag, shouldShowClassBadge, shouldShowClassReadyOpponentTag, tutorialBlockTagSource, winArtwork } from '../src/variants/attackBlockMana/attackBlockManaPresentation';
+import { ABM_BONUS_XP_ART, ABM_COUNTERPICK_ENTRANCE_TICKS_PER_STAGE, ABM_LAYOUTS, ABM_OPENING_NUMBER_FRAME_COUNT, ABM_OPENING_READY_ART, ABM_RESULT_SCENES, ABM_SELECT_ART, ABM_TAG_CATEGORIES, ABM_TAG_ORDERS, abmTagSlotId, blockSegments, displayedAbmMove, getAbmAttackCostDisplay, getAbmClassBadgeGeometry, getAbmClassReadyFrame, getAbmClassResourceControlGeometry, getAbmClassResourceGeometry, getAbmClassSelectChrome, getAbmCounterpickCloudPlayer, getAbmCounterpickEntranceVisibility, getAbmLimitedResource, getAbmObservedCounterpickClass, getAbmOpeningStateAfterCountdown, getAbmPickerEntries, getAbmPickerStatus, getAbmResultScene, getAbmWaitingLayoutIds, getAbmWaitingVisual, initialManaForClass, isInitialClassSelectionTransition, latestClassPreview, reconcileAbmArmedAbility, sceneForMoves, shouldShowAbmBonusXp, shouldShowAbmClassPicker, shouldShowAbmContinuingRoundProcTags, shouldShowAbmRules, shouldShowAbmYouTag, shouldShowClassBadge, shouldShowClassReadyOpponentTag, tutorialBlockTagSource, winArtwork } from '../src/variants/attackBlockMana/attackBlockManaPresentation';
 import type { AbmProjection } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 import { ABM_CLASS_IDS } from '../src/variants/attackBlockMana/attackBlockManaTypes';
 import { ABM_SCENE_URLS, resolveAbmProcBackgrounds, resolveAbmScene, resolveAbmSplitScene, resolveAbmTags, resolveConjureScene, resolveJoeScene, resolveNullScene } from '../src/variants/attackBlockMana/attackBlockManaScenes';
@@ -215,25 +215,15 @@ describe('Attack Block Mana presentation data', () => {
     }, 'portrait').x).toBe(222);
   });
 
-  test.each(['landscape', 'portrait'] as const)('moves only the block group up when a player has no class resource in %s', (orientation) => {
+  test.each(['landscape', 'portrait'] as const)('keeps fixed block, mana, and class resource rows in %s', (orientation) => {
     const document = getLayoutDocument('variant-abm');
-    const p1Blocks = document.elements.find(({ id }) => id === 'p1-block-group')!;
-    const p2Blocks = document.elements.find(({ id }) => id === 'p2-block-group')!;
-    const p1Limited = document.elements.find(({ id }) => id === 'p1-limited-group')!;
-    const p2Limited = document.elements.find(({ id }) => id === 'p2-limited-group')!;
-    const p1Mana = document.elements.find(({ id }) => id === 'p1-mana-icon')!;
-
-    expect(getAbmPlayerResourceGeometry(p1Blocks, orientation, true, p1Limited)).toEqual(p1Blocks.layouts[orientation]);
-    expect(getAbmPlayerResourceGeometry(p2Blocks, orientation, true, p2Limited)).toEqual(p2Blocks.layouts[orientation]);
-    expect(p1Blocks.layouts[orientation].y).toBeGreaterThan(p1Limited.layouts[orientation].y);
-    expect(p2Blocks.layouts[orientation].y).toBeGreaterThan(p2Limited.layouts[orientation].y);
-    expect(getAbmPlayerResourceGeometry(p1Blocks, orientation, false, p1Limited)).toEqual({
-      ...p1Blocks.layouts[orientation], y: p1Limited.layouts[orientation].y,
-    });
-    expect(getAbmPlayerResourceGeometry(p2Blocks, orientation, false, p2Limited)).toEqual({
-      ...p2Blocks.layouts[orientation], y: p2Limited.layouts[orientation].y,
-    });
-    expect(getAbmPlayerResourceGeometry(p1Mana, orientation, false, p1Limited)).toEqual(p1Mana.layouts[orientation]);
+    for (const player of ['p1', 'p2'] as const) {
+      const row = (name: string) => document.elements.find(({ id }) => id === `${player}-${name}-group`)!.layouts[orientation];
+      expect(row('block').y).toBeLessThan(row('mana').y);
+      expect(row('mana').y).toBeLessThan(row('limited').y);
+      expect(row('block').y + (orientation === 'portrait' ? 30 : 26)).toBeLessThan(row('mana').y);
+      expect(row('mana').y + 35).toBeLessThanOrEqual(row('limited').y);
+    }
   });
 
   test.each(['p1', 'p2'] as const)('authors normalized %s class-resource artwork at its group origin', (player) => {

@@ -28,7 +28,7 @@ import { MusicDirector } from '../audio/musicDirector';
 import { destroySoundCatalog, MATCH_FOUND_SOUND_MS, playCatalogSound } from '../audio/soundCatalog';
 import { LocalAbmMatch, type TutorialEnding } from './localAbmMatch';
 import { randomId } from '../core/randomId';
-import { mountAbmLetterModal } from './abmLetterModal';
+import { mountAbmLetterModal } from './abmNewsletterModal';
 import { mountAccountScreen } from './accountScreen';
 import { mountProgressScreen } from './progressScreen';
 import type { ProgressAward } from '../core/progression';
@@ -47,6 +47,8 @@ import { showTitleSettingsAlert } from '../title/settingsAlert';
 
 export type ConnectionState = 'connected' | 'reconnecting' | 'offline';
 export type ShellDestination = 'title' | 'lobby' | 'account' | 'match-found' | 'slot-picker' | 'scoreboard' | 'gameplay' | 'progress' | 'reward' | 'prestige';
+
+const MARKER_SOUNDS = ['marker-1', 'marker-2', 'marker-3', 'marker-4', 'marker-5', 'marker-6', 'marker-7', 'marker-8', 'marker-9'] as const;
 
 export interface AppControllerOptions {
   readonly clock: BoilClock;
@@ -93,6 +95,8 @@ export class AppController {
   private whiteboard: WhiteboardSnapshot = createEmptyWhiteboard();
   private lobbyPlayers: LobbyPlayer[] = [];
   private lobbySelfId = '';
+  private lobbyRosterInitialized = false;
+  private lastMarkerSound?: typeof MARKER_SOUNDS[number];
   private terminalCleanup?: () => void;
   private localMatch?: LocalAbmMatch;
   private localMatchAwardMode: 'none' | 'computer' | 'tutorial' = 'none';
@@ -145,10 +149,7 @@ export class AppController {
       matchFound: () => {},
       snapshot: (snapshot) => this.receiveSnapshot(snapshot),
       whiteboard: (message) => this.receiveWhiteboard(message),
-      roster: (players, selfId) => {
-        this.lobbyPlayers = players; this.lobbySelfId = selfId;
-        this.lobbyScreen?.updateRoster(players, selfId);
-      },
+      roster: (players, selfId) => this.receiveRoster(players, selfId),
       matchmakingRejected: () => {
         this.matchmakingActive = false;
         this.lobbyScreen?.setMatchmaking(false);
@@ -194,6 +195,7 @@ export class AppController {
       this.setMatchmaking(false);
       this.options.session.leaveLobby();
       this.whiteboard = createEmptyWhiteboard();
+      this.lobbyRosterInitialized = false;
     }
     const revision = ++this.loadRevision;
     this.lifecycle?.abort();
@@ -347,6 +349,7 @@ export class AppController {
   setConnectionState(state: ConnectionState): void {
     const recovered = this.connectionState !== 'connected' && state === 'connected';
     this.connectionState = state;
+    if (state !== 'connected') this.lobbyRosterInitialized = false;
     if (state !== 'connected') this.closeUniversalMenu();
     if (state !== 'connected') this.alertSystem?.closeAll();
     this.modalCleanup?.();
@@ -614,12 +617,32 @@ export class AppController {
     }
   }
 
+  private receiveRoster(players: LobbyPlayer[], selfId: string): void {
+    if (this.lobbyRosterInitialized && this.destination === 'lobby') {
+      const previousIds = new Set(this.lobbyPlayers.map((player) => player.playerId));
+      for (const player of players) {
+        if (player.playerId !== selfId && !previousIds.has(player.playerId)) playCatalogSound('lobby-entry');
+      }
+    }
+    this.lobbyRosterInitialized = true;
+    this.lobbyPlayers = players;
+    this.lobbySelfId = selfId;
+    this.lobbyScreen?.updateRoster(players, selfId);
+  }
+
   private receiveWhiteboard(message: WhiteboardServerMessage): void {
     if (message.type === 'snapshot' || message.type === 'reset') this.whiteboard = message.board;
     else if (message.type === 'operation') {
       if (this.whiteboard.operations.some((operation) => operation.id === message.operation.id)) return;
+      const fresh = message.operation.sequence > this.whiteboard.sequence;
       this.whiteboard = { ...this.whiteboard, sequence: Math.max(this.whiteboard.sequence, message.operation.sequence), operations: [...this.whiteboard.operations, message.operation] };
       if (message.operation.kind === 'text') this.whiteboard.nextY = Math.max(this.whiteboard.nextY, message.operation.rowY + message.operation.rowSpan * this.whiteboard.rowHeight);
+      if (fresh && this.destination === 'lobby' && (message.operation.kind === 'stroke' || (message.operation.kind === 'text' && !message.operation.system))) {
+        const choices = MARKER_SOUNDS.filter((sound) => sound !== this.lastMarkerSound);
+        const marker = choices[Math.floor(Math.random() * choices.length)] ?? MARKER_SOUNDS[0];
+        this.lastMarkerSound = marker;
+        playCatalogSound(marker);
+      }
     } else if (message.type === 'trim') this.whiteboard = {
       ...this.whiteboard, top: message.top,
       operations: this.whiteboard.operations.filter((operation) => operation.kind === 'text'
@@ -708,10 +731,6 @@ export class AppController {
         this.lobbyScreen?.setUnlockedClassCount(account.unlockedClassIds.length);
         this.lobbyScreen?.setTutorialDisabled(account.unlockAllClasses);
         this.lobbyScreen?.setTestMode(account.unlockAllClasses);
-      }, onSetPrestigeStepForTesting: async () => {
-        await this.options.session.setPrestigeStepForTesting();
-        this.closeUniversalMenu();
-        await this.navigate('lobby');
       }, onStreamerModeChange: (enabled) => this.lobbyScreen?.setStreamerMode(enabled),
     };
     this.universalMenu = mountUniversalMenu(scaleContent ?? this.screenLayer, background, this.options.clock, menuOptions);

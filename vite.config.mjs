@@ -59,7 +59,25 @@ function versionCssUrls(code, versions) {
 
 export default defineConfig({
   publicDir: 'assets',
+  build: {
+    rollupOptions: {
+      input: {
+        game: resolve(import.meta.dirname, 'index.html'),
+        patchNotes: resolve(import.meta.dirname, 'patch-notes.html'),
+      },
+    },
+  },
   plugins: [{
+    name: 'patch-notes-route',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use((request, response, next) => {
+        if (request.url?.split('?')[0] !== '/patch-notes') return next();
+        response.writeHead(302, { Location: '/patch-notes.html' });
+        response.end();
+      });
+    },
+  }, {
     name: 'asset-bundle-manifest',
     enforce: 'pre',
     configureServer(server) {
@@ -144,7 +162,7 @@ export default defineConfig({
     },
   }],
   test: {
-    include: ['test/**/*.test.ts', 'test/**/*.integration.test.ts'],
+    include: ['test/**/*.test.ts', 'test/**/*.test.js', 'test/**/*.integration.test.ts'],
   },
 });
 

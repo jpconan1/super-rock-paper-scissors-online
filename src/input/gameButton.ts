@@ -20,6 +20,7 @@ export interface GameButtonOptions {
   clock: BoilClock;
   depressedSound?: string;
   releasedSound?: string;
+  silent?: boolean;
 }
 
 export interface GameButton {
@@ -44,8 +45,8 @@ export function getButtonFrameAspectRatio(size: SheetDimensions | null): number 
 }
 
 export function createGameButton(options: GameButtonOptions): GameButton {
-  const depressedSound = options.depressedSound ? createSoundEffect(options.depressedSound) : catalogSound('button-down');
-  const releasedSound = options.releasedSound ? createSoundEffect(options.releasedSound) : catalogSound('button-up');
+  const depressedSound = options.silent ? undefined : options.depressedSound ? createSoundEffect(options.depressedSound) : catalogSound('button-down');
+  const releasedSound = options.silent ? undefined : options.releasedSound ? createSoundEffect(options.releasedSound) : catalogSound('button-up');
   const element = document.createElement('button');
   element.type = 'button';
   element.className = 'game-button';
@@ -105,7 +106,7 @@ export function createGameButton(options: GameButtonOptions): GameButton {
     interactiveWhenLockedDepressed: options.interactiveWhenLockedDepressed,
     activateAtReleaseStart: options.activateAtReleaseStart,
     activate() {
-      releasedSound.play();
+      releasedSound?.play();
       options.onActivate();
     },
     render(view) {
@@ -144,7 +145,7 @@ export function createGameButton(options: GameButtonOptions): GameButton {
 
   const onPointerDown = (event: PointerEvent) => {
     if (isDisabled() || activePointer !== null || event.button !== 0 || !state.press()) return;
-    depressedSound.play();
+    depressedSound?.play();
     activePointer = event.pointerId;
     element.setPointerCapture(event.pointerId);
     event.preventDefault();
@@ -172,7 +173,7 @@ export function createGameButton(options: GameButtonOptions): GameButton {
     if (isDisabled() || (event.key !== ' ' && event.key !== 'Enter') || event.repeat || keyboardHeld) return;
     keyboardHeld = state.press();
     if (keyboardHeld) {
-      depressedSound.play();
+      depressedSound?.play();
       event.preventDefault();
     }
   };
@@ -240,8 +241,8 @@ export function createGameButton(options: GameButtonOptions): GameButton {
       visualSubscribers.clear();
       artLease.release();
       state.destroy();
-      depressedSound.destroy();
-      releasedSound.destroy();
+      depressedSound?.destroy();
+      releasedSound?.destroy();
       art.destroy();
       juice.destroy();
       element.remove();

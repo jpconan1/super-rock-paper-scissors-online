@@ -1509,13 +1509,13 @@
       "layouts": {
         "landscape": {
           "x": 0,
-          "y": 0,
+          "y": 40,
           "width": 160,
           "height": 39
         },
         "portrait": {
           "x": 0,
-          "y": 0,
+          "y": 35,
           "width": 120,
           "height": 30
         }
@@ -1586,13 +1586,13 @@
       "layouts": {
         "landscape": {
           "x": 5,
-          "y": 80,
+          "y": 0,
           "width": 130,
           "height": 60
         },
         "portrait": {
           "x": -20,
-          "y": 70,
+          "y": 0,
           "width": 130,
           "height": 80
         }
@@ -1745,13 +1745,13 @@
       "layouts": {
         "landscape": {
           "x": 25,
-          "y": 40,
+          "y": 80,
           "width": 110,
           "height": 32
         },
         "portrait": {
           "x": 15,
-          "y": 35,
+          "y": 70,
           "width": 90,
           "height": 30
         }
@@ -1850,13 +1850,13 @@
       "layouts": {
         "landscape": {
           "x": 0,
-          "y": 0,
+          "y": 40,
           "width": 160,
           "height": 39
         },
         "portrait": {
           "x": 0,
-          "y": 0,
+          "y": 35,
           "width": 120,
           "height": 30
         }
@@ -1926,13 +1926,13 @@
       "layouts": {
         "landscape": {
           "x": 25,
-          "y": 80,
+          "y": 0,
           "width": 130,
           "height": 60
         },
         "portrait": {
           "x": 10,
-          "y": 70,
+          "y": 0,
           "width": 130,
           "height": 80
         }
@@ -2084,13 +2084,13 @@
       "layouts": {
         "landscape": {
           "x": 25,
-          "y": 40,
+          "y": 80,
           "width": 110,
           "height": 32
         },
         "portrait": {
           "x": 5,
-          "y": 35,
+          "y": 70,
           "width": 60,
           "height": 30
         }

@@ -23,8 +23,53 @@ export interface WhiteboardText extends OperationBase {
   text: string;
   color: WhiteboardColor;
   system?: boolean;
+  occurredAt?: number;
+  separator?: boolean;
   rowY: number;
   rowSpan: number;
+}
+
+export type WhiteboardSystemEvent = 'arrival' | 'ready';
+export const WHITEBOARD_SEPARATOR_GAP_MS = 30 * 60_000;
+const localTimeFormatter = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+const localDateTimeFormatter = new Intl.DateTimeFormat('en-US', {
+  year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+});
+
+export function needsWhiteboardSeparator(previousMessageAt: number | undefined, occurredAt: number): boolean {
+  return previousMessageAt !== undefined && occurredAt - previousMessageAt > WHITEBOARD_SEPARATOR_GAP_MS;
+}
+
+export function whiteboardSeparatorLabel(occurredAt: number, timeZone?: string): string {
+  const formatter = timeZone
+    ? new Intl.DateTimeFormat('en-US', {
+      year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone,
+    })
+    : localDateTimeFormatter;
+  const parts = Object.fromEntries(formatter.formatToParts(occurredAt).map(({ type, value }) => [type, value]));
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;
+}
+
+export function whiteboardSystemMessage(displayName: string, event: WhiteboardSystemEvent): string {
+  return `${displayName} ${event === 'arrival' ? 'arrived!' : 'is ready!'}`;
+}
+
+export function whiteboardSystemRowSpan(text: string, separator = false): number {
+  return Math.max(1, Math.min(3, Math.ceil((text.length + 8) / 37))) + Number(separator);
+}
+
+export function whiteboardChatRowSpan(displayName: string, text: string, separator = false): number {
+  return Math.max(1, Math.min(3, Math.ceil((displayName.length + text.length + 2) / 37))) + Number(separator);
+}
+
+export function whiteboardTextLabel(operation: WhiteboardText, timeZone?: string): string {
+  if (!operation.system) return `${operation.displayName}: ${operation.text}`;
+  if (operation.occurredAt === undefined) return operation.text;
+  const formatter = timeZone
+    ? new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone })
+    : localTimeFormatter;
+  const time = formatter.format(operation.occurredAt);
+  return `${operation.text} (${time})`;
 }
 
 export type WhiteboardOperation = WhiteboardStroke | WhiteboardText;

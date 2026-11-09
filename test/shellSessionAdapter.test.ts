@@ -553,23 +553,6 @@ describe('matchmaking session adapters', () => {
     expect(adapter.accountState().unlockedClassIds).toHaveLength(21);
   });
 
-  test('sets the prestige test step to 200,000 XP', async () => {
-    const player = { playerId: 'wheel-fresh-toast-owl-14', accountType: 'guest', displayName: 'Player', rating: 1500,
-      totalProgressUnits: 200_000, unlockAllClasses: false, equippedEmblem: null, ownedEmblems: [], level: 21, prestigeCount: 0,
-      progressUnitsInLevel: 10_000, unlockedClassIds: [
-        'lucky', 'advantaged', 'thief', 'juggernaut', 'stunner', 'duplicator', 'sumo', 'cheater', 'investor', 'gambler',
-        'taxman', 'copywriter', 'conjurer', 'fireborne', 'retired', 'parrymaster', 'cupid', 'defender', 'last-ditch', 'null', 'joe',
-      ] };
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(player), { status: 200 }));
-    vi.stubGlobal('fetch', fetchMock);
-    const adapter = new WebSocketShellSessionAdapter('https://example.test');
-
-    await adapter.setPrestigeStepForTesting();
-
-    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ testPrestigeStep: true });
-    expect(adapter.accountState()).toMatchObject({ totalProgressUnits: 200_000, level: 21 });
-  });
-
   test('persists a server-authoritative equipped emblem', async () => {
     const player = { playerId: 'wheel-fresh-toast-owl-14', accountType: 'guest', displayName: 'Player', rating: 1500,
       totalProgressUnits: 0, unlockAllClasses: false, equippedEmblem: 'beta-og', ownedEmblems: ['beta-og'], level: 1, progressUnitsInLevel: 0,

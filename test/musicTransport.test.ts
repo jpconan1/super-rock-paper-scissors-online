@@ -17,6 +17,7 @@ const manifest: MusicManifest = {
     'title-loop': track('/title', 100), 'lobby-loop': track('/lobby', 400),
     'class-select': track('/class', 200), battle: track('/battle', 200),
     'battle-intro': track('/battle-intro', 400), 'battle-main': track('/battle-main', 400),
+    'slinky-intro-loop': track('/slinky-intro', 400), 'slinky-loop': track('/slinky-main', 400),
   },
   stings: { win: track('/win', 50) }, preloadGroups: { menu: ['/title', '/lobby'] },
 };
@@ -132,6 +133,17 @@ describe('MusicTransport', () => {
     context.currentTime = 0.9;
     const timing = await transport.scheduleBaseAtNextMeasure('battle-main', 100, 200);
     expect(timing).toEqual({ boundaryDelayMs: 1150, wipeDelayMs: 950 });
+    transport.destroy();
+  });
+
+  it('uses the slower song measure and skips a boundary too close for the wipe', async () => {
+    const { context, transport, sources } = setup();
+    await transport.startPreloaded('slinky-intro-loop', 'menu'); await flush();
+    context.currentTime = 1.15;
+    const timing = await transport.scheduleBaseAtNextMeasure('slinky-loop', 125, 200);
+    expect(timing?.boundaryDelayMs).toBeCloseTo(1400);
+    expect(timing?.wipeDelayMs).toBeCloseTo(1200);
+    expect((sources.at(-1)!.buffer as AudioBuffer & { id: string }).id).toBe('/slinky-main');
     transport.destroy();
   });
 

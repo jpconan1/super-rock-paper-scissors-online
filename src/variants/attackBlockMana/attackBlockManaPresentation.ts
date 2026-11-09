@@ -176,17 +176,6 @@ export function getAbmClassResourceGeometry(element: LayoutElement, orientation:
     ?? getAbmClassResourceControlGeometry(element.id, orientation, element.layouts[orientation]);
 }
 
-export function getAbmPlayerResourceGeometry(
-  element: LayoutElement,
-  orientation: LayoutOrientation,
-  hasLimitedResource: boolean,
-  limitedResourceGroup: LayoutElement,
-): LayoutGeometry {
-  const geometry = element.layouts[orientation];
-  if (hasLimitedResource || !element.id.endsWith('-block-group')) return geometry;
-  return { ...geometry, y: limitedResourceGroup.layouts[orientation].y };
-}
-
 export function getAbmClassBadgeGeometry(
   player: 'p1' | 'p2',
   base: LayoutGeometry,
@@ -373,7 +362,6 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   let openingCountdownPlayer: AnimationPlayer<number> | undefined;
   let armedAbility: AbmAbilityId | undefined;
   let usingClassResourceControls = false;
-  let playerHasLimitedResource: Record<'p1' | 'p2', boolean> = { p1: false, p2: false };
   const transitionAbort = new AbortController();
 
   const moveStatus = (player: 'p1' | 'p2') => {
@@ -387,11 +375,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
   const classReadyOpponentTag = createBoilingSprite({ src: '/visual-elements/oppponent-tag-sheet.webp', clock, className: 'abm-class-ready__opponent-tag', alt: 'Opponent' });
   classReadyArt.element.hidden = true; classReadyOpponentTag.element.hidden = true; sprites.push(classReadyArt, classReadyOpponentTag);
   const p1Resources = resourceDisplay('P1', 'p1', clock, sprites); const p2Resources = resourceDisplay('P2', 'p2', clock, sprites);
-  const resourceBindingPlayers = new Map<string, 'p1' | 'p2'>([
-    ...p1Resources.bindings.map(([id]) => [id, 'p1'] as const),
-    ...p2Resources.bindings.map(([id]) => [id, 'p2'] as const),
-  ]);
-
+  const resourceBindingIds = new Set([...p1Resources.bindings, ...p2Resources.bindings].map(([id]) => id));
   const controls = element('div', 'abm-controls');
   const arrows = ['arrow-attack-block', 'arrow-block-mana', 'arrow-mana-attack'].map((id) => {
     const arrow = createBoilingSprite({ src: config(id).assets!.src!, clock, className: 'abm-arrow', alt: '' });
@@ -692,15 +676,7 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     for (const [id, target] of bindings) {
       const definition = config(id);
       applyConfiguredElement(target, definition, orientation);
-      const resourcePlayer = resourceBindingPlayers.get(id);
-      if (resourcePlayer) {
-        applyLayoutGeometry(target, getAbmPlayerResourceGeometry(
-          definition,
-          orientation,
-          playerHasLimitedResource[resourcePlayer],
-          config(`${resourcePlayer}-limited-group`),
-        ));
-      } else if (usingClassResourceControls) {
+      if (usingClassResourceControls && !resourceBindingIds.has(id)) {
         applyLayoutGeometry(target, getAbmClassResourceGeometry(definition, orientation));
       }
     }
@@ -732,11 +708,6 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     className.textContent = definition?.name ?? 'Locked'; description.textContent = definition?.description ?? `${entry.kind === 'locked' ? entry.count : 0} classes still locked!`;
     if (projection && (projection.phase === 'selecting-classes' || projection.phase === 'waiting-for-class' || projection.phase === 'counter-picking')) {
       const previewResources = startingResourcesForClass(definition?.id);
-      const hasLimitedResource = Boolean(definition && getAbmLimitedResource(projection.players.p1, definition.id));
-      if (playerHasLimitedResource.p1 !== hasLimitedResource || playerHasLimitedResource.p2 !== hasLimitedResource) {
-        playerHasLimitedResource = { p1: hasLimitedResource, p2: hasLimitedResource };
-        applyVariantLayout();
-      }
       renderResources(p1Resources, projection, 'p1', previewResources, definition?.id ?? null);
       renderResources(p2Resources, projection, 'p2', previewResources, definition?.id ?? null);
     }
@@ -798,7 +769,8 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     openingGo.element.hidden = true;
     // The final three frames of the authored countdown sheet already display
     // GO. Hand off to the looping GO sprite at that exact visual boundary.
-    void openingCountdownPlayer.play(Array.from({ length: ABM_OPENING_NUMBER_FRAME_COUNT }, (_, frame) => ({ value: frame, durationMs: BATTLE_COUNTDOWN_FRAME_MS }))).then(() => {
+    const frameMs = music?.firstBattleCountdownFrameMs() ?? BATTLE_COUNTDOWN_FRAME_MS;
+    void openingCountdownPlayer.play(Array.from({ length: ABM_OPENING_NUMBER_FRAME_COUNT }, (_, frame) => ({ value: frame, durationMs: frameMs }))).then(() => {
       if (transitionAbort.signal.aborted) return;
       openingState = newestProjection ? getAbmOpeningStateAfterCountdown(newestProjection) : 'go';
       openingGateActive = false;
@@ -855,20 +827,8 @@ function mountAttackBlockManaScreen(container: HTMLElement, clock: BoilClock, se
     selected = Math.min(selected, entries.length - 1);
     const selectedEntry = entries[selected]!;
     const previewClassId = selectedEntry.kind === 'class' ? selectedEntry.definition.id : undefined;
-    const nextPlayerHasLimitedResource = picking
-      ? {
-          p1: Boolean(previewClassId && getAbmLimitedResource(nextProjection.players.p1, previewClassId)),
-          p2: Boolean(previewClassId && getAbmLimitedResource(nextProjection.players.p2, previewClassId)),
-        }
-      : {
-          p1: Boolean(getAbmLimitedResource(nextProjection.players.p1)),
-          p2: Boolean(getAbmLimitedResource(nextProjection.players.p2)),
-        };
-    if (usingClassResourceControls !== nextClassResourceControls
-      || playerHasLimitedResource.p1 !== nextPlayerHasLimitedResource.p1
-      || playerHasLimitedResource.p2 !== nextPlayerHasLimitedResource.p2) {
+    if (usingClassResourceControls !== nextClassResourceControls) {
       usingClassResourceControls = nextClassResourceControls;
-      playerHasLimitedResource = nextPlayerHasLimitedResource;
       applyVariantLayout();
     }
     const abilityFeedback = thiefFeedback || Boolean(nextProjection.taxmanCollectPlayers?.length);
@@ -1155,7 +1115,7 @@ function resourceDisplay(label: string, player: 'p1' | 'p2', clock: BoilClock, s
   const manaGroup = element('span', 'abm-resource-group abm-resource-group--mana');
   const blockGroup = element('span', 'abm-resource-group abm-resource-group--blocks');
   const limitedGroup = element('span', 'abm-resource-group abm-resource-group--limited');
-  output.append(manaGroup, blockGroup, limitedGroup);
+  output.append(blockGroup, manaGroup, limitedGroup);
   const make = (parent: HTMLElement, kind: string, src: string) => {
     const item = element('span', `abm-resource abm-resource--${kind}`);
     const sprite = createBoilingSprite({ src, clock, className: 'abm-resource__art', alt: '' }); sprites.push(sprite);

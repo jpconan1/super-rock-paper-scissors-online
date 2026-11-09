@@ -1,6 +1,6 @@
 import '../admin/admin.css';
 import { createGameAuthClient } from '../auth/authClient';
-import type { WhiteboardOperation } from '../whiteboard/protocol';
+import { whiteboardSeparatorLabel, whiteboardTextLabel, type WhiteboardOperation } from '../whiteboard/protocol';
 
 type Json = Record<string, any>;
 const COLORS = { black: '#171412', red: '#ac3235', blue: '#315fa4', purple: '#772b8f', green: '#39734a' } as const;
@@ -193,7 +193,19 @@ async function matches(host: HTMLElement, baseUrl: string): Promise<void> {
 function renderBoard(canvas: HTMLCanvasElement, operations: WhiteboardOperation[]): void {
   const ctx = canvas.getContext('2d')!; ctx.fillStyle = '#f5efd9'; ctx.fillRect(0, 0, 760, 450); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   const maxY = Math.max(450, ...operations.flatMap((op) => op.kind === 'text' ? [op.rowY + op.rowSpan * 60] : op.points.map((p) => p.y))); const top = Math.max(0, maxY - 450);
-  for (const op of operations) { if (op.kind === 'text') { ctx.fillStyle = COLORS[op.color]; ctx.font = '24px "Architects Daughter"'; ctx.fillText(`${op.displayName ? `${op.displayName}: ` : ''}${op.text}`, 12, op.rowY - top + 30); continue; }
+  for (const op of operations) { if (op.kind === 'text') {
+    if (op.separator && op.occurredAt !== undefined) {
+      const label = whiteboardSeparatorLabel(op.occurredAt); const y = op.rowY - top + 30;
+      ctx.fillStyle = '#706d67'; ctx.font = '22px "Architects Daughter"'; ctx.textAlign = 'center';
+      ctx.fillText(label, 380, y);
+      const gap = ctx.measureText(label).width / 2 + 14;
+      ctx.strokeStyle = '#706d67'; ctx.lineWidth = 2;
+      for (const side of [-1, 1]) { ctx.beginPath(); ctx.moveTo(380 + side * gap, y - 8); ctx.lineTo(380 + side * 358, y - 8); ctx.stroke(); }
+      ctx.textAlign = 'start';
+    }
+    ctx.fillStyle = COLORS[op.color]; ctx.font = '24px "Architects Daughter"';
+    ctx.fillText(whiteboardTextLabel(op), 12, op.rowY - top + 30 + (op.separator ? 60 : 0)); continue;
+  }
     ctx.save(); ctx.globalCompositeOperation = op.kind === 'erase' ? 'destination-out' : 'source-over'; ctx.strokeStyle = op.kind === 'erase' ? '#000' : COLORS[op.color ?? 'black']; ctx.lineWidth = op.width; ctx.beginPath(); op.points.forEach((p, i) => i ? ctx.lineTo(p.x, p.y - top) : ctx.moveTo(p.x, p.y - top)); ctx.stroke(); ctx.restore(); }
 }
 

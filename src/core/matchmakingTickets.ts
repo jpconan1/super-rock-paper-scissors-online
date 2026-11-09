@@ -11,6 +11,17 @@ export function matchmakingTicketKey(guestId: string, attemptId: string): string
   return `ticket:${guestId}:${attemptId}`;
 }
 
+export function activeMatchKey(guestId: string): string {
+  return `active-match:${guestId}`;
+}
+
+export async function hasActiveMatch(
+  matchId: string | undefined,
+  isComplete: (matchId: string) => Promise<boolean>,
+): Promise<boolean> {
+  return Boolean(matchId && !await isComplete(matchId));
+}
+
 export function recoverableMatchTicket(ticket: MatchTicket | undefined, now: number): MatchTicket | undefined {
   return ticket && ticket.expiresAt > now ? ticket : undefined;
 }

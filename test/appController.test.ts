@@ -1,12 +1,57 @@
 import { describe, expect, test, vi } from 'vitest';
+const sound = vi.hoisted(() => ({ playCatalogSound: vi.fn() }));
+vi.mock('../src/audio/soundCatalog', async (importOriginal) => ({ ...await importOriginal<typeof import('../src/audio/soundCatalog')>(), ...sound }));
 import { AppController, GOOGLE_AUTH_POPUP_MESSAGE, completedEmblemMissionIds, googlePopupCallbackUrl, isExistingGoogleAccountError, isGoogleAuthPopupMessage, isTutorialMoveCommand, newEmblemMissionAlerts } from '../src/app/appController';
 import type { EmblemMissionStatus } from '../src/core/emblemMission';
 import type { VariantPresentation } from '../src/core/variant';
 import { PROTOCOL_VERSION } from '../src/protocol/protocol';
+import { createEmptyWhiteboard, type WhiteboardOperation } from '../src/whiteboard/protocol';
+import type { LobbyPlayer } from '../src/lobby/protocol';
 
 const lease = () => ({ ready: Promise.resolve(), release: vi.fn() });
 
 describe('AppController', () => {
+  test('sounds only for other players newly joining after the first roster', () => {
+    const controller = new AppController({} as HTMLElement, new Map());
+    const state = controller as unknown as { destination: string; receiveRoster(players: LobbyPlayer[], selfId: string): void; setConnectionState(state: 'connected' | 'reconnecting'): void };
+    const self: LobbyPlayer = { playerId: 'self', displayName: 'Self', presence: 'idle' };
+    const other: LobbyPlayer = { playerId: 'other', displayName: 'Other', presence: 'idle' };
+    state.destination = 'lobby';
+    sound.playCatalogSound.mockClear();
+    state.receiveRoster([self, other], 'self');
+    state.receiveRoster([self, { ...other, presence: 'ready' }], 'self');
+    expect(sound.playCatalogSound).not.toHaveBeenCalled();
+    const newcomer: LobbyPlayer = { playerId: 'new', displayName: 'New', presence: 'idle' };
+    state.receiveRoster([self, other, newcomer], 'self');
+    expect(sound.playCatalogSound).toHaveBeenCalledExactlyOnceWith('lobby-entry');
+    sound.playCatalogSound.mockClear();
+    state.setConnectionState('reconnecting');
+    state.setConnectionState('connected');
+    state.receiveRoster([self, other, newcomer], 'self');
+    expect(sound.playCatalogSound).not.toHaveBeenCalled();
+  });
+
+  test('sounds once for confirmed whiteboard chat and strokes only', () => {
+    const controller = new AppController({} as HTMLElement, new Map());
+    const state = controller as unknown as { destination: string; receiveWhiteboard(message: { type: 'snapshot'; board: ReturnType<typeof createEmptyWhiteboard> } | { type: 'operation'; operation: WhiteboardOperation }): void };
+    state.destination = 'lobby';
+    const text = (sequence: number, system = false): WhiteboardOperation => ({ kind: 'text', id: `text-${sequence}`, sequence, displayName: 'JP', text: 'Hi', color: 'black', rowY: 68, rowSpan: 1, system });
+    const stroke = (sequence: number, kind: 'stroke' | 'erase'): WhiteboardOperation => ({ kind, id: `${kind}-${sequence}`, sequence, color: 'black', width: 5, points: [{ x: 1, y: 1 }, { x: 2, y: 2 }] });
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    sound.playCatalogSound.mockClear();
+    state.receiveWhiteboard({ type: 'snapshot', board: { ...createEmptyWhiteboard(), sequence: 1, operations: [text(1)] } });
+    state.receiveWhiteboard({ type: 'operation', operation: text(1) });
+    state.receiveWhiteboard({ type: 'operation', operation: text(2, true) });
+    state.receiveWhiteboard({ type: 'operation', operation: stroke(3, 'erase') });
+    expect(sound.playCatalogSound).not.toHaveBeenCalled();
+    state.receiveWhiteboard({ type: 'operation', operation: text(4) });
+    state.receiveWhiteboard({ type: 'operation', operation: stroke(5, 'stroke') });
+    state.receiveWhiteboard({ type: 'operation', operation: stroke(5, 'stroke') });
+    expect(sound.playCatalogSound).toHaveBeenCalledTimes(2);
+    expect(sound.playCatalogSound).toHaveBeenNthCalledWith(1, 'marker-5');
+    expect(sound.playCatalogSound).toHaveBeenNthCalledWith(2, 'marker-6');
+    vi.restoreAllMocks();
+  });
   test('queues newly completed emblem and feature missions once', () => {
     const mission = (id: string, rewardKind: EmblemMissionStatus['rewardKind'], completed: boolean): EmblemMissionStatus => ({
       id, title: id, detail: id, rewardKind, rewardReference: null, completed,

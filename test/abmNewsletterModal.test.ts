@@ -1,11 +1,14 @@
 import { describe, expect, test, vi } from 'vitest';
-import letterSource from '../abm-letter.txt?raw';
-import alphaPatchNotesSource from '../alpha-patch-notes.md?raw';
-import { ABM_NEWSLETTER_POSTS, ABM_NEWSLETTER_SEEN_KEY, hasSeenAbmNewsletter, markAbmNewsletterSeen, parseAbmLetter } from '../src/app/abmLetterModal';
+import letterSource from '../newsletter/2026-09-01-community-letter.md?raw';
+import alphaPatchNotesSource from '../newsletter/2026-09-12-super-abm-alpha.md?raw';
+import betaPatchNotesSource from '../newsletter/2026-11-03-beta-patch-notes.md?raw';
+import currentPatchNotesSource from '../newsletter/patch-notes-v0-02.md?raw';
+import release from '../src/release.json';
+import { ABM_NEWSLETTER_POSTS, ABM_NEWSLETTER_SEEN_KEY, hasSeenAbmNewsletter, markAbmNewsletterSeen, parseAbmLetter } from '../src/app/abmNewsletterModal';
 
 describe('ABM community letter', () => {
   test('preserves copy while mapping finished and unfinished visual markers', () => {
-    const blocks = parseAbmLetter(letterSource, ABM_NEWSLETTER_POSTS[1]!.visuals);
+    const blocks = parseAbmLetter(letterSource, ABM_NEWSLETTER_POSTS[3]!.visuals);
     expect(blocks[0]).toEqual({ type: 'paragraph', text: 'Tuesday, September 1, 2026', placeholder: false });
     expect(blocks).toContainEqual({ type: 'heading', level: 1, text: 'Dear ABM Community,' });
     expect(blocks).toContainEqual(expect.objectContaining({ type: 'image', marker: '(s-rps-o logo)', src: '/community-letter/s-rps-o-logo.webp', boils: true }));
@@ -23,8 +26,10 @@ describe('ABM community letter', () => {
   });
 
   test('orders the alpha patch first and parses its Markdown and RIP logo', () => {
-    expect(ABM_NEWSLETTER_POSTS.map(({ id }) => id)).toEqual(['super-abm-alpha', 'community-letter-2026-09-01']);
-    const blocks = parseAbmLetter(alphaPatchNotesSource, ABM_NEWSLETTER_POSTS[0]!.visuals);
+    expect(release.version).toBe('0.02');
+    expect(ABM_NEWSLETTER_POSTS.map(({ id }) => id)).toEqual(['version-0-02', 'beta-patch-notes-2026-11-03', 'super-abm-alpha', 'community-letter-2026-09-01']);
+    expect(ABM_NEWSLETTER_POSTS[0]!.source).toBe(currentPatchNotesSource);
+    const blocks = parseAbmLetter(alphaPatchNotesSource, ABM_NEWSLETTER_POSTS[2]!.visuals);
     expect(blocks.slice(0, 4)).toEqual([
       { type: 'paragraph', text: 'Saturday, September 12, 2026', placeholder: false },
       { type: 'heading', level: 1, text: 'Super ABM Alpha!' },
@@ -43,6 +48,23 @@ describe('ABM community letter', () => {
       type: 'image', marker: '[rip logo]', src: '/community-letter/rip-s-rps-o-sheet.webp', boils: true,
     }));
     expect(blocks).toContainEqual({ type: 'heading', level: 3, text: '-JP' });
+  });
+
+  test('parses the Beta post and its animated contest preview', () => {
+    const blocks = parseAbmLetter(betaPatchNotesSource, ABM_NEWSLETTER_POSTS[1]!.visuals);
+    expect(blocks.slice(0, 3)).toEqual([
+      { type: 'paragraph', text: 'Tuesday, November 3, 2026', placeholder: false },
+      { type: 'heading', level: 1, text: 'Beta Patch Notes' },
+      { type: 'heading', level: 2, text: 'Major Features:' },
+    ]);
+    expect(blocks).toContainEqual({ type: 'heading', level: 2, text: 'Announcing the first ever ABM Contest!' });
+    expect(blocks).toContainEqual({ type: 'heading', level: 2, text: 'About the Progression System:' });
+    expect(blocks).toContainEqual({ type: 'heading', level: 2, text: 'The Future' });
+    expect(blocks).toContainEqual(expect.objectContaining({
+      type: 'image', marker: '[1st place contest emblem preview]',
+      src: '/emblems/first-place-sheet.webp', boils: true, frameCount: 18,
+    }));
+    expect(blocks).toContainEqual({ type: 'paragraph', text: '-JP Conan', placeholder: false });
   });
 
   test('records and reads the versioned browser flag', () => {

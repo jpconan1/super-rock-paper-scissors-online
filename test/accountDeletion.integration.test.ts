@@ -417,4 +417,17 @@ describe('emblem ownership D1 lifecycle', () => {
     expect(await ownedPlayerEmblems(db, 'player-a')).toEqual(['prestige', 'first-place']);
   });
 
+  test('prestige before contest launch cannot claim a place on later prestige', async () => {
+    await seedPlayer('player-a', MAX_PROGRESS_UNITS);
+    await seedPlayer('player-b', MAX_PROGRESS_UNITS);
+    expect(await prestigePlayer(db, 'player-a', 1)).toBe(1);
+    await db.prepare("UPDATE emblem_contests SET status = 'active', activated_at = 2 WHERE contest_id = 'first-prestige'").run();
+    await db.prepare("UPDATE players SET total_progress_units = ? WHERE player_id = 'player-a'").bind(MAX_PROGRESS_UNITS).run();
+    expect(await prestigePlayer(db, 'player-a', 3)).toBe(2);
+    expect(await db.prepare("SELECT placement FROM emblem_contest_placements WHERE player_id = 'player-a'").first()).toBeNull();
+    expect(await prestigePlayer(db, 'player-b', 4)).toBe(1);
+    expect(await db.prepare("SELECT placement, emblem_id FROM emblem_contest_placements WHERE player_id = 'player-b'").first())
+      .toEqual({ placement: 1, emblem_id: 'first-place' });
+  });
+
 });

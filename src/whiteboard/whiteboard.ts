@@ -3,7 +3,7 @@ import { WhiteboardModel } from './model';
 import { randomId } from '../core/randomId';
 import type { WhiteboardTool, WhiteboardToolController } from './toolController';
 import {
-  WHITEBOARD_COLORS, type WhiteboardClientMessage, type WhiteboardColor, type WhiteboardOperation,
+  WHITEBOARD_COLORS, whiteboardSeparatorLabel, whiteboardTextLabel, type WhiteboardClientMessage, type WhiteboardColor, type WhiteboardOperation,
   type WhiteboardPoint, type WhiteboardServerMessage, type WhiteboardSnapshot,
 } from './protocol';
 
@@ -43,17 +43,34 @@ export function mountWhiteboard(options: {
   let receivedInitialSnapshot = false;
   let initialScrollPending = false;
   let scrollFrame: number | undefined;
+  let toolHeld = false;
+  let heldScrollTop = 0;
   const cleanups: Array<() => void> = [];
 
   const scrollToBottom = () => { scroll.scrollTop = scroll.scrollHeight; };
+  const cancelScrollFrame = () => {
+    if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame);
+    scrollFrame = undefined;
+  };
+  const applyPendingTrim = () => {
+    if (pendingTrim === undefined || active || toolHeld) return;
+    const previousTop = model.snapshot().top;
+    const previousScrollTop = scroll.scrollTop;
+    const pixelsPerUnit = drawCanvas.clientHeight / Math.max(1, drawCanvas.height);
+    model.trim(pendingTrim);
+    pendingTrim = undefined;
+    redraw();
+    scroll.scrollTop = Math.max(0, previousScrollTop - (model.snapshot().top - previousTop) * pixelsPerUnit);
+  };
   const initialScrollObserver = new ResizeObserver(() => {
-    if (!initialScrollPending || scroll.clientHeight === 0 || drawCanvas.clientHeight === 0) return;
+    if (!initialScrollPending || toolHeld || scroll.clientHeight === 0 || drawCanvas.clientHeight === 0) return;
     scrollToBottom();
     initialScrollPending = false;
     initialScrollObserver.disconnect();
   });
 
   const redraw = () => {
+    const previousScrollTop = toolHeld ? heldScrollTop : undefined;
     const board = model.snapshot();
     const height = Math.ceil(Math.max(board.viewHeight, board.nextY - board.top));
     for (const canvas of [textCanvas, drawCanvas]) {
@@ -63,6 +80,7 @@ export function mountWhiteboard(options: {
     }
     drawText(textCanvas, board);
     drawStrokes(drawCanvas, board, frame, options.clock.isEnabled(), active);
+    if (previousScrollTop !== undefined) scroll.scrollTop = previousScrollTop;
   };
 
   function point(event: PointerEvent): WhiteboardPoint {
@@ -103,13 +121,26 @@ export function mountWhiteboard(options: {
         ? { type: 'erase', clientOperationId, points: stroke.points }
         : { type: 'stroke', clientOperationId, color: stroke.tool, points: stroke.points });
     }
-    if (pendingTrim !== undefined) { model.trim(pendingTrim); pendingTrim = undefined; }
+    applyPendingTrim();
     redraw();
   }
 
   drawCanvas.addEventListener('pointerdown', begin); drawCanvas.addEventListener('pointermove', move);
   drawCanvas.addEventListener('pointerup', finish); drawCanvas.addEventListener('pointercancel', finish);
-  const unsubscribeTool = options.tools.subscribe((tool) => { drawCanvas.dataset.tool = tool; });
+  const unsubscribeTool = options.tools.subscribe((tool) => {
+    drawCanvas.dataset.tool = tool;
+    const wasHeld = toolHeld;
+    toolHeld = tool !== 'scroll';
+    scroll.classList.toggle('is-tool-held', toolHeld);
+    if (toolHeld) {
+      if (!wasHeld) heldScrollTop = scroll.scrollTop;
+      cancelScrollFrame();
+      if (initialScrollPending) { initialScrollPending = false; initialScrollObserver.disconnect(); }
+    } else if (wasHeld) {
+      scroll.scrollTop = heldScrollTop;
+      applyPendingTrim();
+    }
+  });
   const unsubscribeClock = options.clock.subscribe((next) => { frame = next; redraw(); });
   cleanups.push(unsubscribeClock, unsubscribeTool,
     () => drawCanvas.removeEventListener('pointerdown', begin), () => drawCanvas.removeEventListener('pointermove', move),
@@ -126,12 +157,12 @@ export function mountWhiteboard(options: {
         initialScrollObserver.observe(scroll);
         initialScrollObserver.observe(drawCanvas);
       }
-      if (message.type === 'snapshot' || message.type === 'reset') model.setSnapshot(message.board);
+      if (message.type === 'snapshot' || message.type === 'reset') { pendingTrim = undefined; model.setSnapshot(message.board); }
       else if (message.type === 'operation') model.append(message.operation);
       else if (message.type === 'prune') model.prune(message.throughSequence);
       else if (message.type === 'error' && message.clientOperationId) model.reject(message.clientOperationId);
       else if (message.type === 'trim') {
-        if (active) { pendingTrim = message.top; return; }
+        if (active || toolHeld) { pendingTrim = message.top; return; }
         const previousTop = model.snapshot().top; const previousScrollTop = scroll.scrollTop;
         model.trim(message.top); redraw();
         if (previousScrollTop > 0) {
@@ -141,17 +172,17 @@ export function mountWhiteboard(options: {
         return;
       }
       redraw();
-      if ((initialSnapshot || nearBottom) && message.type !== 'error') {
-        if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame);
+      if (!toolHeld && (initialSnapshot || nearBottom) && message.type !== 'error') {
+        cancelScrollFrame();
         scrollFrame = requestAnimationFrame(() => {
           scrollFrame = undefined;
-          if (scroll.clientHeight > 0 && drawCanvas.clientHeight > 0) scrollToBottom();
+          if (!toolHeld && scroll.clientHeight > 0 && drawCanvas.clientHeight > 0) scrollToBottom();
         });
       }
     },
     setEnabled(next) { enabled = next; },
     destroy() {
-      if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame);
+      cancelScrollFrame();
       initialScrollObserver.disconnect();
       for (const cleanup of cleanups) cleanup();
       scroll.remove();
@@ -165,10 +196,30 @@ function drawText(canvas: HTMLCanvasElement, board: WhiteboardSnapshot): void {
   for (const operation of board.operations) {
     if (operation.kind === 'text') {
       context.save(); context.fillStyle = COLORS[operation.color]; context.font = '38px "Architects Daughter", cursive'; context.textBaseline = 'top';
-      const lines = wrapText(context, operation.system ? operation.text : `${operation.displayName}: ${operation.text}`, operation.rowSpan, board.width - 36);
-      lines.forEach((line, index) => context.fillText(line, 18, operation.rowY - board.top + index * 48, board.width - 36)); context.restore();
+      if (operation.separator && operation.occurredAt !== undefined) drawSeparator(context, whiteboardSeparatorLabel(operation.occurredAt), operation.rowY - board.top, board.width, board.rowHeight);
+      const textY = operation.rowY - board.top + (operation.separator ? board.rowHeight : 0);
+      const lines = wrapText(context, whiteboardTextLabel(operation), operation.rowSpan - Number(operation.separator), board.width - 36);
+      lines.forEach((line, index) => context.fillText(line, 18, textY + index * 48, board.width - 36)); context.restore();
     } else if (operation.kind === 'erase') drawPath(context, operation, board.top, 0, false);
   }
+}
+
+function drawSeparator(context: CanvasRenderingContext2D, label: string, y: number, width: number, rowHeight: number): void {
+  context.save();
+  context.font = '26px "Architects Daughter", cursive';
+  context.textAlign = 'center'; context.textBaseline = 'middle';
+  context.fillStyle = '#706d67';
+  const center = width / 2; const middle = y + rowHeight / 2;
+  const gap = context.measureText(label).width / 2 + 16;
+  context.fillText(label, center, middle);
+  context.strokeStyle = '#706d67'; context.lineWidth = 2.5; context.lineCap = 'round';
+  for (const side of [-1, 1]) {
+    const inner = center + side * gap; const outer = center + side * (width / 2 - 22);
+    context.beginPath(); context.moveTo(inner, middle + 1);
+    context.quadraticCurveTo((inner + outer) / 2, middle - 2, outer, middle + 1);
+    context.stroke();
+  }
+  context.restore();
 }
 
 function drawStrokes(canvas: HTMLCanvasElement, board: WhiteboardSnapshot, frame: BoilFrame, boil: boolean,

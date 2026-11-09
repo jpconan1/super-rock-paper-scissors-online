@@ -1,4 +1,4 @@
-export type MusicBase = 'title-loop' | 'lobby-loop' | 'class-select' | 'battle' | 'battle-intro' | 'battle-main';
+export type MusicBase = 'title-loop' | 'lobby-loop' | 'class-select' | 'battle' | 'battle-intro' | 'battle-main' | 'slinky-intro-loop' | 'slinky-loop';
 
 export interface MusicTrackDefinition {
   src: string;
@@ -23,6 +23,14 @@ export const BATTLE_MEASURE_SAMPLES = BATTLE_INTRO_SAMPLES / 4;
 export const BATTLE_LOOP_SAMPLES = 2_963_520;
 export const BATTLE_COUNTDOWN_FRAMES = 12;
 export const BATTLE_COUNTDOWN_FRAME_MS = 160;
+export const SLINKY_INTRO_SAMPLES = 432_000;
+export const SLINKY_MEASURE_SAMPLES = SLINKY_INTRO_SAMPLES / 4;
+export const SLINKY_LOOP_SAMPLES = SLINKY_MEASURE_SAMPLES * 39;
+
+export const BATTLE_SONGS = [
+  { intro: 'battle-intro', main: 'battle-main', preloadGroup: 'online-battle', measureSamples: BATTLE_MEASURE_SAMPLES, countdownFrameMs: BATTLE_COUNTDOWN_FRAME_MS },
+  { intro: 'slinky-intro-loop', main: 'slinky-loop', preloadGroup: 'slinky-battle', measureSamples: SLINKY_MEASURE_SAMPLES, countdownFrameMs: SLINKY_MEASURE_SAMPLES / 44_100 / BATTLE_COUNTDOWN_FRAMES * 1_000 },
+] as const;
 
 export const musicManifest: MusicManifest = {
   sampleRate: 44_100,
@@ -34,6 +42,8 @@ export const musicManifest: MusicManifest = {
     battle: { src: '/audio/music-loops/battle.mp3', startSample: 528, lengthSamples: 460_174 },
     'battle-intro': { src: '/audio/music-loops/battle-intro.mp3', startSample: 528, lengthSamples: BATTLE_INTRO_SAMPLES },
     'battle-main': { src: '/audio/music-loops/battle-main.mp3', startSample: 528, lengthSamples: BATTLE_LOOP_SAMPLES },
+    'slinky-intro-loop': { src: '/audio/music-loops/slinky-intro-loop.mp3', startSample: 528, lengthSamples: SLINKY_INTRO_SAMPLES },
+    'slinky-loop': { src: '/audio/music-loops/slinky-loop.mp3', startSample: 528, lengthSamples: SLINKY_LOOP_SAMPLES },
   },
   stings: {
     lose: { src: '/audio/lose_jingle.mp3', startSample: 0, lengthSamples: 68_936, sampleRate: 48_000 },
@@ -43,6 +53,7 @@ export const musicManifest: MusicManifest = {
     menu: ['/audio/music-loops/title-loop.mp3', '/audio/music-loops/lobby-loop.mp3'],
     match: ['/audio/music-loops/class-select.mp3', '/audio/music-loops/battle.mp3', '/audio/lose_jingle.mp3', '/audio/win_sound.mp3'],
     'online-battle': ['/audio/music-loops/battle-intro.mp3', '/audio/music-loops/battle-main.mp3'],
+    'slinky-battle': ['/audio/music-loops/slinky-intro-loop.mp3', '/audio/music-loops/slinky-loop.mp3'],
   },
 };
 

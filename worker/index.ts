@@ -10,6 +10,7 @@ import {
 import type { MatchCommandPayload, MatchPlayer } from '../src/protocol/protocol';
 import {
   createEmptyWhiteboard, pruneWhiteboardOperationPrefix, shouldPruneWhiteboardOperations, WHITEBOARD_COLORS, WHITEBOARD_MAX_HEIGHT,
+  needsWhiteboardSeparator, whiteboardChatRowSpan, whiteboardSystemMessage, whiteboardSystemRowSpan,
   type WhiteboardClientMessage, type WhiteboardRequest, type WhiteboardColor,
   type WhiteboardOperation, type WhiteboardPoint, type WhiteboardServerMessage, type WhiteboardSnapshot,
 } from '../src/whiteboard/protocol';
@@ -23,7 +24,7 @@ import { consumeSlidingWindow, messageFitsUtf8Limit, readJsonBody, RequestBodyEr
 import { corsHeadersForOrigin, isAllowedRequestOrigin } from '../src/protocol/originPolicy';
 import { refreshMatchmakingQueue, type MatchmakingQueueEntry } from '../src/core/matchmakingQueue';
 import {
-  createMatchTicketRecords, matchmakingTicketKey, recoverableMatchTicket, type MatchTicket,
+  activeMatchKey, createMatchTicketRecords, hasActiveMatch, matchmakingTicketKey, recoverableMatchTicket, type MatchTicket,
 } from '../src/core/matchmakingTickets';
 import {
   PLAYER_NAME_MAX_LENGTH, normalizePlayerDisplayName, playerProfile,
@@ -133,6 +134,10 @@ export class MatchObject extends DurableObject<Env> {
       await this.scheduleAlarm();
     }
     return { matchId: this.record.matchId, seats: this.record.tokens };
+  }
+
+  isComplete(): boolean {
+    return this.record?.phase === 'complete';
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -314,6 +319,22 @@ const MATCHMAKING_QUEUE_TTL_MS = 5_000;
 const MATCH_TICKET_TTL_MS = 30_000;
 
 export class MatchmakerObject extends DurableObject<Env> {
+  private pendingQueueOperation: Promise<void> = Promise.resolve();
+
+  private serializeQueueOperation<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.pendingQueueOperation.then(operation);
+    this.pendingQueueOperation = result.then(() => {}, () => {});
+    return result;
+  }
+
+  private async hasActiveMatch(guestId: string): Promise<boolean> {
+    const key = activeMatchKey(guestId);
+    const matchId = await this.ctx.storage.get<string>(key);
+    if (await hasActiveMatch(matchId, async (id) => this.env.MATCHES.get(this.env.MATCHES.idFromString(id)).isComplete())) return true;
+    await this.ctx.storage.delete(key);
+    return false;
+  }
+
   async getAdminSnapshot(): Promise<{ players: Array<MatchmakingQueueEntry & { startedAt: number; isTest: boolean }>; longestWaitMs: number }> {
     const now = Date.now();
     const active = ((await this.ctx.storage.get<MatchmakingQueueEntry[]>('queue')) ?? []).filter((entry) => now - entry.queuedAt < MATCHMAKING_QUEUE_TTL_MS);
@@ -327,6 +348,10 @@ export class MatchmakerObject extends DurableObject<Env> {
   }
 
   async enqueue(guestId: string, attemptId: string): Promise<{ status: 'waiting' | 'owned-elsewhere' } | ({ status: 'matched' } & MatchTicket)> {
+    return this.serializeQueueOperation(() => this.enqueueExclusive(guestId, attemptId));
+  }
+
+  private async enqueueExclusive(guestId: string, attemptId: string): Promise<{ status: 'waiting' | 'owned-elsewhere' } | ({ status: 'matched' } & MatchTicket)> {
     const player = await getPlayer(this.env.DB, guestId);
     const name = player.displayName;
     const now = Date.now();
@@ -337,6 +362,7 @@ export class MatchmakerObject extends DurableObject<Env> {
     if (ticket) {
       await this.ctx.storage.delete(ticketKey);
     }
+    if (await this.hasActiveMatch(guestId)) return { status: 'owned-elsewhere' };
     const queue = (await this.ctx.storage.get<MatchmakingQueueEntry[]>('queue')) ?? [];
     const refreshed = refreshMatchmakingQueue(queue, guestId, attemptId, name, player.rating, now, MATCHMAKING_QUEUE_TTL_MS, player.totalProgressUnits, player.unlockAllClasses, player.equippedEmblem, player.customEmblem, player.prestigeCount);
     if (refreshed.ownedElsewhere) return { status: 'owned-elsewhere' };
@@ -368,6 +394,10 @@ export class MatchmakerObject extends DurableObject<Env> {
       p2: { guestId, attemptId },
     }, expiresAt);
     await this.ctx.storage.put(ticketRecords);
+    await this.ctx.storage.put({
+      [activeMatchKey(opponent.guestId)]: matchId,
+      [activeMatchKey(guestId)]: matchId,
+    });
     await this.env.DB.batch([
       this.env.DB.prepare(`UPDATE matchmaking_attempts SET ended_at = ?, outcome = 'matched', match_id = ? WHERE attempt_id = ? AND ended_at IS NULL`).bind(now, matchId, attemptId),
       this.env.DB.prepare(`UPDATE matchmaking_attempts SET ended_at = ?, outcome = 'matched', match_id = ? WHERE attempt_id = ? AND ended_at IS NULL`).bind(now, matchId, opponent.attemptId),
@@ -379,6 +409,10 @@ export class MatchmakerObject extends DurableObject<Env> {
   }
 
   async cancel(guestId: string, attemptId: string): Promise<void> {
+    return this.serializeQueueOperation(() => this.cancelExclusive(guestId, attemptId));
+  }
+
+  private async cancelExclusive(guestId: string, attemptId: string): Promise<void> {
     const queue = (await this.ctx.storage.get<MatchmakingQueueEntry[]>('queue')) ?? [];
     await this.ctx.storage.put('queue', queue.filter((entry) => entry.guestId !== guestId || entry.attemptId !== attemptId));
     await this.ctx.storage.delete(matchmakingTicketKey(guestId, attemptId));
@@ -389,6 +423,10 @@ export class MatchmakerObject extends DurableObject<Env> {
   }
 
   async alarm(): Promise<void> {
+    return this.serializeQueueOperation(() => this.cleanupExclusive());
+  }
+
+  private async cleanupExclusive(): Promise<void> {
     const now = Date.now();
     const storedQueue = (await this.ctx.storage.get<MatchmakingQueueEntry[]>('queue')) ?? [];
     const expired = storedQueue.filter((entry) => now - entry.queuedAt >= MATCHMAKING_QUEUE_TTL_MS);
@@ -541,16 +579,20 @@ const WHITEBOARD_MAX_OPERATION_BYTES = 2.5 * 1024 * 1024;
 export class WhiteboardObject extends DurableObject<Env> {
   private board: WhiteboardSnapshot = createEmptyWhiteboard();
   private operationBytes = 0;
+  private lastMessageAt: number | undefined;
   private readonly rateLimiter = new WhiteboardRateLimiter();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     ctx.blockConcurrencyWhile(async () => {
       const meta = await ctx.storage.get<Omit<WhiteboardSnapshot, 'operations'>>('board:meta');
+      this.lastMessageAt = await ctx.storage.get<number>('board:last-message-at');
       const stored = await ctx.storage.list<WhiteboardOperation>({ prefix: 'board:operation:' });
       if (meta) {
         const normalized: Omit<WhiteboardSnapshot, 'operations'> = { ...meta, maxHeight: WHITEBOARD_MAX_HEIGHT };
         this.board = { ...normalized, operations: [...stored.values()].sort((a, b) => a.sequence - b.sequence) };
+        const lastMessage = [...this.board.operations].reverse().find((operation) => operation.kind === 'text');
+        if (this.lastMessageAt === undefined && lastMessage?.kind === 'text') this.lastMessageAt = lastMessage.occurredAt;
         this.operationBytes = this.board.operations.reduce((total, operation) => total + operationByteLength(operation), 0);
         const removed: WhiteboardOperation[] = [];
         while (this.board.operations.length > WHITEBOARD_MAX_OPERATIONS || this.operationBytes > WHITEBOARD_MAX_OPERATION_BYTES) {
@@ -588,10 +630,11 @@ export class WhiteboardObject extends DurableObject<Env> {
     const visit = url.searchParams.get('visit');
     if (visit && validClientId(visit) && !this.board.operations.some((operation) => operation.clientOperationId === `join:${visit}`)) {
       if (this.rateLimiter.allow(guestId, 'text', Date.now())) {
-        const operation = this.createSystemText(`${displayName} entered the lobby!`, `join:${visit}`);
+        const operation = this.createSystemText(whiteboardSystemMessage(displayName, 'arrival'), `join:${visit}`);
         const prune = this.pruneIfNeeded(operation);
         this.board.operations.push(operation); this.operationBytes += operationByteLength(operation);
         this.board.sequence = operation.sequence; this.board.nextY = operation.rowY + operation.rowSpan * this.board.rowHeight;
+        this.lastMessageAt = operation.occurredAt;
         await this.persistOperation(operation, prune); this.broadcastPrune(prune);
         await this.archiveOperation(operation, guestId, displayName, accountType, isTest);
         this.broadcast({ type: 'operation', operation }); await this.trimIfNeeded();
@@ -624,7 +667,10 @@ export class WhiteboardObject extends DurableObject<Env> {
       }
       const prune = this.pruneIfNeeded(operation);
       this.board.operations.push(operation); this.operationBytes += operationByteLength(operation); this.board.sequence = operation.sequence;
-      if (operation.kind === 'text') this.board.nextY = operation.rowY + operation.rowSpan * this.board.rowHeight;
+      if (operation.kind === 'text') {
+        this.board.nextY = operation.rowY + operation.rowSpan * this.board.rowHeight;
+        this.lastMessageAt = operation.occurredAt;
+      }
       await this.persistOperation(operation, prune);
       await this.archiveOperation(operation, attachment.guestId, attachment.displayName, attachment.accountType, attachment.isTest);
       this.broadcastPrune(prune);
@@ -637,14 +683,16 @@ export class WhiteboardObject extends DurableObject<Env> {
     const common = { id: crypto.randomUUID(), sequence: this.board.sequence + 1, clientOperationId: message.clientOperationId };
     if (message.type === 'status') {
       if (message.status !== 'ready') return;
-      return this.createSystemText(`${displayName} is ready to play!`, message.clientOperationId);
+      return this.createSystemText(whiteboardSystemMessage(displayName, 'ready'), message.clientOperationId);
     }
     if (message.type === 'chat') {
       const text = sanitizeText(message.text, 200);
       if (!text) return;
       const color = normalizeColor(message.color);
-      const rowSpan = Math.max(1, Math.min(3, Math.ceil((displayName.length + text.length + 2) / 37)));
-      return { ...common, kind: 'text', displayName, text, color, rowY: this.board.nextY, rowSpan };
+      const occurredAt = Date.now();
+      const separator = needsWhiteboardSeparator(this.lastMessageAt, occurredAt);
+      const rowSpan = whiteboardChatRowSpan(displayName, text, separator);
+      return { ...common, kind: 'text', displayName, text, color, occurredAt, separator, rowY: this.board.nextY, rowSpan };
     }
     const points = sanitizePoints(message.points, this.board.top, this.board.top + this.board.maxHeight);
     if (points.length < 2) return;
@@ -654,9 +702,11 @@ export class WhiteboardObject extends DurableObject<Env> {
   }
 
   private createSystemText(text: string, clientOperationId: string): Extract<WhiteboardOperation, { kind: 'text' }> {
-    const rowSpan = Math.max(1, Math.min(3, Math.ceil(text.length / 37)));
+    const occurredAt = Date.now();
+    const separator = needsWhiteboardSeparator(this.lastMessageAt, occurredAt);
+    const rowSpan = whiteboardSystemRowSpan(text, separator);
     return { kind: 'text', id: crypto.randomUUID(), sequence: this.board.sequence + 1, clientOperationId,
-      displayName: '', text, color: 'black', system: true, rowY: this.board.nextY, rowSpan };
+      displayName: '', text, color: 'black', system: true, occurredAt, separator, rowY: this.board.nextY, rowSpan };
   }
 
   private async persistOperation(operation: WhiteboardOperation, prune?: WhiteboardPrune): Promise<void> {
@@ -664,6 +714,7 @@ export class WhiteboardObject extends DurableObject<Env> {
       if (prune) await storage.delete(prune.removed.map((item) => operationKey(item.sequence)));
       await storage.put(operationKey(operation.sequence), operation);
       await storage.put('board:meta', boardMeta(this.board));
+      if (operation.kind === 'text' && operation.occurredAt !== undefined) await storage.put('board:last-message-at', operation.occurredAt);
     });
   }
 
@@ -1194,6 +1245,9 @@ async function deleteAccount(request: Request, env: Env): Promise<Response> {
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+    if (url.pathname === '/patch-notes' && (request.method === 'GET' || request.method === 'HEAD')) {
+      return Response.redirect(new URL('/patch-notes.html', url), 302);
+    }
     const origin = request.headers.get('Origin');
     if (!isAllowedRequestOrigin(origin, url.origin, env.ALLOWED_ORIGINS)) return json({ error: 'Origin not allowed.' }, 403);
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: origin ? corsHeadersForOrigin(origin) : undefined });
@@ -1372,15 +1426,10 @@ async function routeRequest(request: Request, env: Env, url: URL): Promise<Respo
       try {
         const authSession = await createAuth(env).api.getSession({ headers: request.headers });
         if (!authSession) return json({ error: 'Authentication required.' }, 401);
-        const body = await readJsonBody<{ unlockAllClasses?: unknown; testPrestigeStep?: unknown }>(request, 1_000);
-        if (body.testPrestigeStep === true) {
-          await env.DB.prepare('UPDATE players SET total_progress_units = ?, updated_at = ? WHERE auth_user_id = ?')
-            .bind(200_000, Date.now(), authSession.user.id).run();
-        } else {
-          if (typeof body.unlockAllClasses !== 'boolean') return json({ error: 'unlockAllClasses must be a boolean.' }, 400);
-          await env.DB.prepare('UPDATE players SET unlock_all_classes = ?, updated_at = ? WHERE auth_user_id = ?')
-            .bind(body.unlockAllClasses ? 1 : 0, Date.now(), authSession.user.id).run();
-        }
+        const body = await readJsonBody<{ unlockAllClasses?: unknown }>(request, 1_000);
+        if (typeof body.unlockAllClasses !== 'boolean') return json({ error: 'unlockAllClasses must be a boolean.' }, 400);
+        await env.DB.prepare('UPDATE players SET unlock_all_classes = ?, updated_at = ? WHERE auth_user_id = ?')
+          .bind(body.unlockAllClasses ? 1 : 0, Date.now(), authSession.user.id).run();
         const player = await env.DB.prepare('SELECT player_id, display_name, rating, total_progress_units, unlock_all_classes, equipped_emblem, account_type, prestige_count FROM players WHERE auth_user_id = ?')
           .bind(authSession.user.id).first<PlayerProfileRow>();
         if (!player) return json({ error: 'Player not found.' }, 404);
@@ -1653,7 +1702,8 @@ async function beginAdminGoogleLogin(request: Request, env: Env, url: URL): Prom
   if (!callback) return json({ error: 'Missing callback.' }, 400);
   let callbackUrl: URL;
   try { callbackUrl = new URL(callback); } catch { return json({ error: 'Invalid callback.' }, 400); }
-  const allowedCallbacks = new Set(['http://localhost:5173', 'http://127.0.0.1:5173', 'https://abm.jpconan.ca']);
+  const allowedCallbacks = new Set(['http://localhost:5173', 'http://127.0.0.1:5173',
+    'http://localhost:8787', 'http://127.0.0.1:8787', 'https://abm.jpconan.ca']);
   if (!allowedCallbacks.has(callbackUrl.origin) || (callbackUrl.pathname !== '/admin' && callbackUrl.pathname !== '/admin/')) return json({ error: 'Invalid callback.' }, 400);
   const headers = new Headers(request.headers);
   // This starts a fresh admin login. Forwarding the tester pass or old guest

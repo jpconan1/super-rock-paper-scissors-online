@@ -15,6 +15,7 @@ import { createVolumeSlider } from './volumeSlider';
 import { getLayoutDocument } from '../layout/layoutDocuments';
 import { applyDocumentLayout } from '../layout/layoutRuntime';
 import { applyLayoutGeometry } from '../layout/layoutDocument';
+import release from '../release.json';
 
 const TITLE_LAYOUT = getLayoutDocument('title');
 const titleElement = (id: string) => TITLE_LAYOUT.elements.find((element) => element.id === id)!;
@@ -99,10 +100,21 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onEnt
   const supportLink = document.createElement('a');
   supportLink.href = 'mailto:jeanpaulconan@gmail.com';
   supportLink.textContent = 'Support';
+  const patchNotesLink = document.createElement('a');
+  patchNotesLink.href = '/patch-notes';
+  patchNotesLink.textContent = `Patch Notes (v. ${release.version})`;
   const legalLinks = document.createElement('nav');
   legalLinks.className = 'title-screen__legal-links';
   legalLinks.setAttribute('aria-label', 'Legal');
-  legalLinks.append(privacyLink, termsLink, supportLink);
+  for (const [index, link] of [privacyLink, termsLink, supportLink, patchNotesLink].entries()) {
+    if (index) {
+      const separator = document.createElement('span');
+      separator.textContent = '|';
+      separator.setAttribute('aria-hidden', 'true');
+      legalLinks.append(separator);
+    }
+    legalLinks.append(link);
+  }
   const onlineCount = document.createElement('p');
   onlineCount.className = 'title-screen__online-count'; onlineCount.setAttribute('aria-live', 'polite');
   onlineCount.textContent = formatOnlinePlayerCount(null);
@@ -115,11 +127,11 @@ export function mountTitleScreen(container: HTMLElement, clock: BoilClock, onEnt
   const countTimer = window.setInterval(() => void updateCount(), 7_000);
 
   const logo = createGameButton({
-    label: 'Open ABM newsletter',
+    label: 'Open Super ABM patch notes',
     onActivate: () => onOpenLetter(logo.element),
     upSheet: titleElement('logo').assets!.src!,
-    betweenSheet: '/title/abm-logo-v2-between-sheet.webp',
-    depressedSheet: '/title/abm-logo-v2-depressed-sheet.webp',
+    betweenSheet: '/title/super-abm-logo-beta-between-sheet.webp',
+    depressedSheet: '/title/super-abm-logo-beta-depressed-sheet.webp',
     clock,
   });
   logo.element.classList.add('title-screen__logo', 'game-button--baked-label');

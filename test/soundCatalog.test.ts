@@ -6,6 +6,7 @@ describe('sound catalog', () => {
     expect(Object.keys(SOUND_CATALOG)).toEqual([
       'button-down', 'button-up', 'ready', 'abm-charge', 'abm-block', 'abm-collision', 'abm-lucky',
       'win', 'lose', 'match-found', 'starburst', 'curtain-close', 'curtain-open', 'unlock-jingle', 'xp-climb', 'xp-ding', 'emblem-unlock',
+      'lobby-entry', 'marker-1', 'marker-2', 'marker-3', 'marker-4', 'marker-5', 'marker-6', 'marker-7', 'marker-8', 'marker-9',
     ]);
     for (const src of Object.values(SOUND_CATALOG)) expect(src).toMatch(/^\/audio\/.+\.(mp3|m4a)$/);
   });

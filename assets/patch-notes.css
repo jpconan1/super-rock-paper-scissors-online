@@ -1,0 +1,21 @@
+main { width: min(900px, 100%); }
+.patch-notes-index { display: flex; flex-wrap: wrap; justify-content: center; gap: .5rem 1.25rem; margin: 1.5rem 0 2.5rem; }
+.patch-notes-index a { font-size: clamp(1rem, 2.5vw, 1.15rem); }
+.patch-notes-post { padding: 2rem 0 2.5rem; border-top: 2px solid rgba(91, 65, 44, .35); scroll-margin-top: 1rem; overflow-wrap: anywhere; }
+.patch-notes-post:first-child { border-top: 0; padding-top: 0; }
+.patch-notes-post > :first-child { margin-top: 0; }
+.patch-notes-post__title { margin-top: .25em; }
+.patch-notes-post ul, .patch-notes-post ol { padding-left: 1.7em; }
+.patch-notes-post li { margin: .35em 0; }
+.patch-notes-post h3 { margin-top: 1.25em; }
+.patch-notes-post .abm-letter__placeholder { padding: 1rem; border: 2px dashed rgba(91, 65, 44, .42); }
+.patch-notes-post .abm-letter__static-image { display: block; max-width: 100%; height: auto; margin: 1.25rem auto; object-fit: contain; }
+.boiling-sprite { position: relative; display: block; width: min(100%, 420px); margin: 1.25rem auto; overflow: hidden; }
+.boiling-sprite__canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+.abm-letter__contest-emblem { width: min(256px, 70%); }
+.abm-letter__s-rps-o-logo { width: min(360px, 80%); }
+.abm-letter__variant-grid { width: 100%; }
+@media (max-width: 600px) {
+  .patch-notes-index { display: grid; justify-content: start; }
+  .patch-notes-post { padding-bottom: 1.5rem; }
+}

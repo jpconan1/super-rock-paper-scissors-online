@@ -1,5 +1,4 @@
-import letterSource from '../../abm-letter.txt?raw';
-import alphaPatchNotesSource from '../../alpha-patch-notes.md?raw';
+import release from '../release.json';
 import type { BoilClock } from '../animation/boilClock';
 import { assetUrl } from '../assets/assetUrl';
 import { createGameButton } from '../input/gameButton';
@@ -13,6 +12,7 @@ interface NewsletterVisual {
   alt: string;
   className: string;
   boils: boolean;
+  frameCount?: number;
 }
 
 export interface AbmNewsletterPost {
@@ -51,17 +51,34 @@ const ALPHA_PATCH_VISUALS: Readonly<Record<string, NewsletterVisual>> = {
   },
 };
 
-export const ABM_NEWSLETTER_POSTS: readonly AbmNewsletterPost[] = [
-  { id: 'super-abm-alpha', source: alphaPatchNotesSource, visuals: ALPHA_PATCH_VISUALS },
-  { id: 'community-letter-2026-09-01', source: letterSource, visuals: LETTER_VISUALS },
-];
+const BETA_PATCH_VISUALS: Readonly<Record<string, NewsletterVisual>> = {
+  '[1st place contest emblem preview]': {
+    src: '/emblems/first-place-sheet.webp',
+    alt: 'Animated first-place contest Emblem preview',
+    className: 'abm-letter__contest-emblem',
+    boils: true,
+    frameCount: 18,
+  },
+};
+
+const postSources = import.meta.glob('../../newsletter/*.md', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
+const postVisuals: Readonly<Record<string, Readonly<Record<string, NewsletterVisual>>>> = {
+  'beta-patch-notes-2026-11-03': BETA_PATCH_VISUALS,
+  'super-abm-alpha': ALPHA_PATCH_VISUALS,
+  'community-letter-2026-09-01': LETTER_VISUALS,
+};
+export const ABM_NEWSLETTER_POSTS: readonly AbmNewsletterPost[] = release.posts.map(({ id, file }) => {
+  const source = postSources[`../../newsletter/${file}`];
+  if (!source) throw new Error(`Missing newsletter post: ${file}`);
+  return { id, source, visuals: postVisuals[id] ?? {} };
+});
 
 export type AbmLetterBlock =
   | { type: 'heading'; level: 1 | 2 | 3; text: string }
   | { type: 'paragraph'; text: string; placeholder: boolean }
   | { type: 'list'; ordered: boolean; items: string[] }
   | { type: 'link'; text: string; href: string }
-  | { type: 'image'; marker: string; src: string; alt: string; className: string; boils: boolean };
+  | { type: 'image'; marker: string; src: string; alt: string; className: string; boils: boolean; frameCount?: number };
 
 export function parseAbmLetter(source = ABM_NEWSLETTER_POSTS[0]!.source,
   visuals: Readonly<Record<string, NewsletterVisual>> = ABM_NEWSLETTER_POSTS[0]!.visuals): AbmLetterBlock[] {
@@ -121,7 +138,7 @@ export function renderAbmLetter(clock: BoilClock, post: AbmNewsletterPost = ABM_
         article.append(image);
         continue;
       }
-      const sprite = createBoilingSprite({ src: block.src, alt: block.alt, className: `abm-letter__image ${block.className}`, clock });
+      const sprite = createBoilingSprite({ src: block.src, alt: block.alt, className: `abm-letter__image ${block.className}`, frameCount: block.frameCount, clock });
       sprites.push(sprite);
       article.append(sprite.element);
       continue;

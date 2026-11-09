@@ -16,7 +16,7 @@
     }
   },
   "copy": {
-    "heading": "Super Rock Paper Scissors Online"
+    "heading": "Super ABM"
   },
   "elements": [
     {
@@ -25,9 +25,9 @@
       "layer": 1,
       "protected": true,
       "assets": {
-        "src": "/title/abm-logo-v2-up-sheet.webp"
+        "src": "/title/super-abm-logo-beta-up-sheet.webp"
       },
-      "alt": "Super Rock Paper Scissors Online",
+      "alt": "Super ABM Patch Notes",
       "layouts": {
         "landscape": {
           "x": 335,

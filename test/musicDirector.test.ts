@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const audio = vi.hoisted(() => ({
   playMusicInterrupt: vi.fn(async () => true), preloadMusic: vi.fn(async () => {}),
@@ -18,7 +18,8 @@ const projection = (overrides: Partial<AbmProjection> = {}): AbmProjection => ({
 });
 
 describe('MusicDirector', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => { vi.clearAllMocks(); vi.spyOn(Math, 'random').mockReturnValue(0); });
+  afterEach(() => vi.restoreAllMocks());
 
   it('starts title only after both menu tracks preload', () => {
     const director = new MusicDirector(); director.enterTitle();
@@ -66,6 +67,26 @@ describe('MusicDirector', () => {
     expect(await director.scheduleFirstBattleTransition()).toEqual({ boundaryDelayMs: 1_000, wipeDelayMs: 420 });
     director.updateAbm(projection({ phase: 'counter-picking' }));
     expect(audio.setMusicBaseAtCurrentLoopPhase).not.toHaveBeenCalled();
+  });
+
+  it('selects slinky for a match and keeps it on online re-entry', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.9);
+    const director = new MusicDirector(); director.enterOnlineMatchFound(); director.enterOnlineAbm();
+    expect(audio.preloadMusic).toHaveBeenCalledWith('slinky-battle');
+    expect(audio.startPreloadedMusic).toHaveBeenCalledWith('slinky-intro-loop', 'slinky-battle');
+    expect(director.firstBattleCountdownFrameMs()).toBeCloseTo(204.08163);
+    await director.scheduleFirstBattleTransition();
+    expect(audio.scheduleMusicBaseAtNextMeasure).toHaveBeenCalledWith('slinky-loop', 108_000, FIRST_BATTLE_WIPE_OPEN_MS);
+    director.leaveAbm(); director.enterOnlineAbm();
+    expect(audio.setMusicBaseImmediately).toHaveBeenCalledWith('slinky-loop');
+  });
+
+  it('chooses a fresh song when preparing each practice match', () => {
+    const director = new MusicDirector(); director.preparePracticeAbm(); director.enterPracticeAbm();
+    expect(director.firstBattleCountdownFrameMs()).toBe(160);
+    director.leaveAbm(); vi.spyOn(Math, 'random').mockReturnValue(0.9);
+    director.preparePracticeAbm(); director.enterPracticeAbm();
+    expect(audio.startPreloadedMusic).toHaveBeenLastCalledWith('slinky-intro-loop', 'slinky-battle');
   });
 
   it('fails open when the battle intro cannot load', async () => {

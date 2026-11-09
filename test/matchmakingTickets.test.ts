@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
-  createMatchTicketRecords, matchmakingTicketKey, recoverableMatchTicket,
+  activeMatchKey, createMatchTicketRecords, hasActiveMatch, matchmakingTicketKey, recoverableMatchTicket,
 } from '../src/core/matchmakingTickets';
 
 describe('recoverable matchmaking tickets', () => {
@@ -38,5 +38,13 @@ describe('recoverable matchmaking tickets', () => {
     const remaining = { ...records };
     delete remaining[key];
     expect(recoverableMatchTicket(remaining[key], 10_000)).toBeUndefined();
+  });
+
+  test('a matched player cannot enter another match after the ticket is consumed or expires', async () => {
+    const ownership = new Map([[activeMatchKey('waiting-player'), 'match-1']]);
+    const ticket = records[matchmakingTicketKey('waiting-player', 'waiting-attempt')];
+    expect(recoverableMatchTicket(ticket, expiresAt)).toBeUndefined();
+    expect(await hasActiveMatch(ownership.get(activeMatchKey('waiting-player')), async () => false)).toBe(true);
+    expect(await hasActiveMatch(ownership.get(activeMatchKey('waiting-player')), async () => true)).toBe(false);
   });
 });
